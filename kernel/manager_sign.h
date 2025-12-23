@@ -23,10 +23,15 @@
 #define EXPECTED_HASH_KOWX712                                                  \
 	"484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588"
 
-// ShirkNeko/KernelSU
-#define EXPECTED_SIZE_SHIRKNEKO 0x35c
-#define EXPECTED_HASH_SHIRKNEKO                                                \
-	"947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef"
+// First Manager
+#define EXPECTED_SIZE_FIRST 0x302
+#define EXPECTED_HASH_FIRST                                                \
+    "3376ac8050cdcefc57160449254012a1ef0b0b3885834c12ad952abf01004fa7"
+
+// Second Manager
+#define EXPECTED_SIZE_SECOND 0x2d6
+#define EXPECTED_HASH_SECOND                                                \
+    "8487f808fd8651138c5d718b2c6ffcb713454d6d175b258b11e1225b503b33f9"
 
 // Neko/KernelSU
 #define EXPECTED_SIZE_NEKO 0x29c
