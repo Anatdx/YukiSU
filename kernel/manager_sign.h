@@ -3,40 +3,15 @@
 
 #include <linux/types.h>
 
-// rsuntk/KernelSU
-#define EXPECTED_SIZE_RSUNTK 0x396
-#define EXPECTED_HASH_RSUNTK                                                   \
-	"f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b"
-
-// 5ec1cff/KernelSU
-#define EXPECTED_SIZE_5EC1CFF 384
-#define EXPECTED_HASH_5EC1CFF                                                  \
-	"7e0c6d7278a3bb8e364e0fcba95afaf3666cf5ff3c245a3b63c8833bd0445cc4"
-
-// tiann/KernelSU
-#define EXPECTED_SIZE_OFFICIAL 0x033b
-#define EXPECTED_HASH_OFFICIAL                                                 \
-	"c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6"
-
-// KOWX712/KernelSU
-#define EXPECTED_SIZE_KOWX712 0x375
-#define EXPECTED_HASH_KOWX712                                                  \
-	"484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588"
-
 // First Manager
-#define EXPECTED_SIZE_FIRST 0x302
+#define EXPECTED_SIZE_FIRST 0x16b
 #define EXPECTED_HASH_FIRST                                                \
-    "3376ac8050cdcefc57160449254012a1ef0b0b3885834c12ad952abf01004fa7"
+    "03b53b8bd866c029f2bb34798376977c43874dd589ddaf594080bcef0267a45b"
 
 // Second Manager
-#define EXPECTED_SIZE_SECOND 0x2d6
+#define EXPECTED_SIZE_SECOND 0x1c8
 #define EXPECTED_HASH_SECOND                                                \
-    "8487f808fd8651138c5d718b2c6ffcb713454d6d175b258b11e1225b503b33f9"
-
-// Neko/KernelSU
-#define EXPECTED_SIZE_NEKO 0x29c
-#define EXPECTED_HASH_NEKO                                                     \
-	"946b0557e450a6430a0ba6b6bccee5bc12953ec8735d55e26139b0ec12303b21"
+    "e76c912ef2def3470f7293b73f983cfc795d7d61c46f85a7013d1fb745deaf89"
 
 typedef struct {
 	u32 size;
