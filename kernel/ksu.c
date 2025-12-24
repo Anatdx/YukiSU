@@ -21,6 +21,7 @@
 #include "ksud.h"
 #include "supercalls.h"
 #include "ksu.h"
+#include "superkey.h"
 
 struct cred* ksu_cred;
 
@@ -48,6 +49,8 @@ int __init kernelsu_init(void)
 {
 	pr_info("Initialized on: %s (%s) with driver version: %u\n",
 		UTS_RELEASE, UTS_MACHINE, KSU_VERSION);
+
+	superkey_init();
 		
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");

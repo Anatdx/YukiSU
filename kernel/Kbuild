@@ -4,6 +4,7 @@ kernelsu-objs += dynamic_manager.o
 kernelsu-objs += app_profile.o
 kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
+kernelsu-objs += superkey.o
 
 ifeq ($(CONFIG_KSU_SUSFS)$(CONFIG_KSU_MANUAL_HOOK), nn)
 kernelsu-objs += syscall_hook_manager.o
