@@ -332,24 +332,51 @@ bool verify_module_signature(const char* input) {
 #endif
 }
 
-// SuperKey authentication
+// SuperKey authentication using reboot syscall
+// This method doesn't require prior fd installation
 bool authenticate_superkey(const char *superkey) {
     if (!superkey) {
         LogDebug("authenticate_superkey: superkey is null");
         return false;
     }
 
-    struct ksu_superkey_auth_cmd cmd = {};
+    struct ksu_superkey_reboot_cmd cmd = {};
     strncpy(cmd.superkey, superkey, sizeof(cmd.superkey) - 1);
     cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
-    cmd.result = 0xFFFFFFFF; // Initialize with error
+    cmd.result = -1;  // Initialize with error
+    cmd.fd = -1;
 
-    if (ksuctl(KSU_IOCTL_SUPERKEY_AUTH, &cmd) == 0) {
-        LogDebug("authenticate_superkey: ioctl success, result=%u", cmd.result);
-        return cmd.result == 0;
+    // Use reboot syscall with SuperKey magic
+    // reboot(KSU_INSTALL_MAGIC1, KSU_SUPERKEY_MAGIC2, 0, &cmd)
+    long ret = syscall(__NR_reboot, KSU_INSTALL_MAGIC1, KSU_SUPERKEY_MAGIC2, 0, &cmd);
+    
+    // Give task_work a chance to execute
+    usleep(10000);  // 10ms
+    
+    LogDebug("authenticate_superkey: syscall ret=%ld, cmd.result=%d, cmd.fd=%d", 
+             ret, cmd.result, cmd.fd);
+
+    if (cmd.result == 0 && cmd.fd >= 0) {
+        // Authentication successful, store the fd
+        fd = cmd.fd;
+        LogDebug("authenticate_superkey: success, fd=%d", fd);
+        return true;
     }
 
-    LogDebug("authenticate_superkey: ioctl failed");
+    // Fallback: try ioctl if we already have an fd
+    if (fd >= 0) {
+        struct ksu_superkey_auth_cmd ioctl_cmd = {};
+        strncpy(ioctl_cmd.superkey, superkey, sizeof(ioctl_cmd.superkey) - 1);
+        ioctl_cmd.superkey[sizeof(ioctl_cmd.superkey) - 1] = '\0';
+        ioctl_cmd.result = 0xFFFFFFFF;
+
+        if (ksuctl(KSU_IOCTL_SUPERKEY_AUTH, &ioctl_cmd) == 0) {
+            LogDebug("authenticate_superkey: ioctl success, result=%u", ioctl_cmd.result);
+            return ioctl_cmd.result == 0;
+        }
+    }
+
+    LogDebug("authenticate_superkey: failed");
     return false;
 }
 

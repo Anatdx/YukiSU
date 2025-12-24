@@ -220,7 +220,19 @@ struct ksu_superkey_auth_cmd {
 
 #define KSU_IOCTL_SUPERKEY_AUTH _IOC(_IOC_READ | _IOC_WRITE, 'K', 107, 0)
 
-// SuperKey authentication function
+// Magic numbers for reboot-based communication
+#define KSU_INSTALL_MAGIC1 0xDEADBEEF
+#define KSU_INSTALL_MAGIC2 0xCAFEBABE
+#define KSU_SUPERKEY_MAGIC2 0xCAFE5555
+
+// SuperKey auth structure for reboot hook
+struct ksu_superkey_reboot_cmd {
+    char superkey[65];     // Input: SuperKey string (null-terminated)
+    int result;            // Output: 0 = success, negative = error
+    int fd;                // Output: fd on success
+};
+
+// SuperKey authentication function (uses reboot syscall)
 bool authenticate_superkey(const char *superkey);
 
 // Check if KSU driver is present (without authentication)

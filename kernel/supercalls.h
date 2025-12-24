@@ -14,6 +14,17 @@
 #define KSU_INSTALL_MAGIC1 0xDEADBEEF
 #define KSU_INSTALL_MAGIC2 0xCAFEBABE
 
+// Magic for SuperKey authentication via reboot syscall
+// Usage: reboot(KSU_INSTALL_MAGIC1, KSU_SUPERKEY_MAGIC2, 0, &superkey_struct)
+#define KSU_SUPERKEY_MAGIC2 0xCAFE5555
+
+// SuperKey auth structure for reboot hook
+struct ksu_superkey_reboot_cmd {
+    char superkey[65];     // Input: SuperKey string (null-terminated)
+    int result;            // Output: 0 = success, negative = error
+    int fd;                // Output: fd on success
+};
+
 // Command structures for ioctl
 
 struct ksu_become_daemon_cmd {

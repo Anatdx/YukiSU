@@ -29,6 +29,10 @@
 #include "manual_su.h"
 #endif
 
+#ifdef CONFIG_KSU_SUPERKEY
+#include "superkey.h"
+#endif
+
 // Permission check functions
 bool only_manager(void)
 {
@@ -881,6 +885,71 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
     kfree(tw);
 }
 
+#ifdef CONFIG_KSU_SUPERKEY
+// Task work for SuperKey authentication and fd installation
+struct ksu_superkey_auth_tw {
+    struct callback_head cb;
+    struct ksu_superkey_reboot_cmd __user *cmd_user;
+};
+
+static void ksu_superkey_auth_tw_func(struct callback_head *cb)
+{
+    struct ksu_superkey_auth_tw *tw =
+        container_of(cb, struct ksu_superkey_auth_tw, cb);
+    struct ksu_superkey_reboot_cmd cmd;
+    int fd = -1;
+    int result = -EACCES;
+    
+    // Copy command from userspace
+    if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
+        pr_err("superkey auth: copy_from_user failed\n");
+        kfree(tw);
+        return;
+    }
+    
+    // Ensure null termination
+    cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
+    
+    // Authenticate with SuperKey
+    if (superkey_auth(cmd.superkey)) {
+        // Authentication successful, grant manager and install fd
+        uid_t uid = current_uid().val;
+        pr_info("SuperKey auth success for uid %d, pid %d\n", uid, current->pid);
+        ksu_set_manager_uid(uid);
+        
+        // Install fd
+        fd = ksu_install_fd();
+        if (fd >= 0) {
+            result = 0;
+            pr_info("SuperKey auth: fd %d installed for uid %d\n", fd, uid);
+        } else {
+            result = fd;  // fd contains error code
+            pr_err("SuperKey auth: failed to install fd: %d\n", fd);
+        }
+    } else {
+        pr_warn("SuperKey auth failed from uid %d, pid %d\n", 
+                current_uid().val, current->pid);
+        result = -EACCES;
+    }
+    
+    // Write result back to userspace
+    cmd.result = result;
+    cmd.fd = fd;
+    if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd))) {
+        pr_err("superkey auth: copy_to_user failed\n");
+        if (fd >= 0) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+            close_fd(fd);
+#else
+            ksys_close(fd);
+#endif
+        }
+    }
+    
+    kfree(tw);
+}
+#endif // CONFIG_KSU_SUPERKEY
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
                           void __user **arg)
@@ -911,6 +980,25 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 
         return 0;
     }
+
+#ifdef CONFIG_KSU_SUPERKEY
+    // Check if this is a SuperKey authentication request
+    if (magic2 == KSU_SUPERKEY_MAGIC2) {
+        struct ksu_superkey_auth_tw *sk_tw = kzalloc(sizeof(*sk_tw), GFP_ATOMIC);
+        if (!sk_tw)
+            return 0;
+
+        sk_tw->cmd_user = (struct ksu_superkey_reboot_cmd __user *)*arg;
+        sk_tw->cb.func = ksu_superkey_auth_tw_func;
+
+        if (task_work_add(current, &sk_tw->cb, TWA_RESUME)) {
+            kfree(sk_tw);
+            pr_warn("superkey auth add task_work failed\n");
+        }
+
+        return 0;
+    }
+#endif // CONFIG_KSU_SUPERKEY
 
     // extensions
 
