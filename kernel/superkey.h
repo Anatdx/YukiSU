@@ -27,10 +27,10 @@ static inline u64 hash_superkey(const char *key)
 {
     u64 hash = 1000000007ULL;
     int i;
-    
+
     if (!key)
         return 0;
-        
+
     for (i = 0; key[i]; i++) {
         hash = hash * 31ULL + (u64)key[i];
     }
@@ -47,11 +47,11 @@ static inline bool verify_superkey(const char *key)
 {
     if (!key || !key[0])
         return false;
-    
+
     // 如果 hash 为 0，说明没有设置超级密码
     if (ksu_superkey_hash == 0)
         return false;
-    
+
     return hash_superkey(key) == ksu_superkey_hash;
 }
 

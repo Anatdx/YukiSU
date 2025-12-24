@@ -44,7 +44,7 @@ static struct sdesc *init_sdesc(struct crypto_shash *alg)
 }
 
 static int calc_hash(struct crypto_shash *alg, const unsigned char *data,
-             unsigned int datalen, unsigned char *digest)
+                     unsigned int datalen, unsigned char *digest)
 {
     struct sdesc *sdesc;
     int ret;
@@ -61,7 +61,7 @@ static int calc_hash(struct crypto_shash *alg, const unsigned char *data,
 }
 
 static int ksu_sha256(const unsigned char *data, unsigned int datalen,
-              unsigned char *digest)
+                      unsigned char *digest)
 {
     struct crypto_shash *alg;
     char *hash_alg_name = "sha256";
@@ -102,10 +102,10 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset)
         pr_info("cert length overlimit: %u\n", *size4);
         return false;
     }
-    
+
     *offset += *size4;
     kernel_read(fp, cert, *size4, pos);
-    
+
     unsigned char digest[SHA256_DIGEST_SIZE];
     if (ksu_sha256(cert, *size4, digest) < 0) {
         pr_info("sha256 calculation error\n");
@@ -115,9 +115,9 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset)
     char hash_str[SHA256_DIGEST_SIZE * 2 + 1];
     hash_str[SHA256_DIGEST_SIZE * 2] = '\0';
     bin2hex(hash_str, digest, SHA256_DIGEST_SIZE);
-    
+
     pr_info("APK cert SHA256: %s (size: %u)\n", hash_str, *size4);
-    
+
     // 遍历允许的哈希列表
     for (i = 0; allowed_cert_hashes[i] != NULL; i++) {
         if (strcmp(allowed_cert_hashes[i], hash_str) == 0) {
@@ -125,7 +125,7 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset)
             return true;
         }
     }
-    
+
     pr_err("Certificate NOT in whitelist!\n");
     return false;
 }
@@ -152,8 +152,7 @@ static bool has_v1_signature_file(struct file *fp)
 
     loff_t pos = 0;
 
-    while (kernel_read(fp, &header,
-                      sizeof(struct zip_entry_header), &pos) ==
+    while (kernel_read(fp, &header, sizeof(struct zip_entry_header), &pos) ==
            sizeof(struct zip_entry_header)) {
         if (header.signature != 0x04034b50) {
             // ZIP magic: 'PK'
@@ -162,13 +161,11 @@ static bool has_v1_signature_file(struct file *fp)
         // Read the entry file name
         if (header.file_name_length == sizeof(MANIFEST) - 1) {
             char fileName[sizeof(MANIFEST)];
-            kernel_read(fp, fileName,
-                           header.file_name_length, &pos);
+            kernel_read(fp, fileName, header.file_name_length, &pos);
             fileName[header.file_name_length] = '\0';
 
             // Check if the entry matches META-INF/MANIFEST.MF
-            if (strncmp(MANIFEST, fileName, sizeof(MANIFEST) - 1) ==
-                0) {
+            if (strncmp(MANIFEST, fileName, sizeof(MANIFEST) - 1) == 0) {
                 return true;
             }
         } else {
@@ -246,7 +243,7 @@ static __always_inline bool check_v2_signature(char *path)
         uint32_t id;
         uint32_t offset;
         kernel_read(fp, &size8, 0x8,
-                       &pos); // sequence length
+                    &pos); // sequence length
         if (size8 == size_of_block) {
             break;
         }
@@ -254,8 +251,7 @@ static __always_inline bool check_v2_signature(char *path)
         offset = 4;
         if (id == 0x7109871au) {
             v2_signing_blocks++;
-            v2_signing_valid =
-                check_block(fp, &size4, &pos, &offset);
+            v2_signing_valid = check_block(fp, &size4, &pos, &offset);
         } else if (id == 0xf05368c0u) {
             // http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
             v3_signing_exist = true;
@@ -272,8 +268,7 @@ static __always_inline bool check_v2_signature(char *path)
 
     if (v2_signing_blocks != 1) {
 #ifdef CONFIG_KSU_DEBUG
-        pr_err("Unexpected v2 signature count: %d\n",
-               v2_signing_blocks);
+        pr_err("Unexpected v2 signature count: %d\n", v2_signing_blocks);
 #endif
         v2_signing_valid = false;
     }
@@ -319,7 +314,7 @@ static struct kernel_param_ops expected_size_ops = {
 };
 
 module_param_cb(ksu_debug_manager_appid, &expected_size_ops,
-        &ksu_debug_manager_appid, S_IRUSR | S_IWUSR);
+                &ksu_debug_manager_appid, S_IRUSR | S_IWUSR);
 
 #endif
 

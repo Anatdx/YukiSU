@@ -17,25 +17,26 @@
 // SuperKey hash - 由 ksud 在修补 LKM 时写入 (非 GKI 模式)
 // 使用特殊的 section 使其可被定位和修改
 // 魔数标记用于 ksud 定位这个变量
-#define SUPERKEY_MAGIC 0x5355504552ULL  // "SUPER" in hex
+#define SUPERKEY_MAGIC 0x5355504552ULL // "SUPER" in hex
 
 // SuperKey 数据结构，方便 ksud 定位
 // 使用 packed 确保没有填充，aligned(8) 确保 8 字节对齐
 struct superkey_data {
-    volatile u64 magic;      // SUPERKEY_MAGIC
-    volatile u64 hash;       // SuperKey hash
-    volatile u64 reserved;   // 保留
+    volatile u64 magic; // SUPERKEY_MAGIC
+    volatile u64 hash; // SuperKey hash
+    volatile u64 reserved; // 保留
 } __attribute__((packed, aligned(8)));
 
 // 导出的超级密码 hash 存储 (用于 LKM 修补模式)
 // ksud 会搜索 SUPERKEY_MAGIC 并修改紧随其后的 hash 值
 // 使用 used 属性防止被链接器优化掉
 // 使用 volatile 防止编译器优化
-static volatile struct superkey_data __attribute__((used, section(".data"))) superkey_store = {
-    .magic = SUPERKEY_MAGIC,
-    .hash = 0,  // 默认为 0，表示未设置 (LKM 修补模式会覆盖这个值)
-    .reserved = 0,
-};
+static volatile struct superkey_data
+    __attribute__((used, section(".data"))) superkey_store = {
+        .magic = SUPERKEY_MAGIC,
+        .hash = 0, // 默认为 0，表示未设置 (LKM 修补模式会覆盖这个值)
+        .reserved = 0,
+    };
 
 // 外部可访问的 hash 变量
 u64 ksu_superkey_hash __read_mostly = 0;
@@ -62,21 +63,23 @@ static DEFINE_SPINLOCK(superkey_lock);
 void superkey_init(void)
 {
     const char *compile_key = COMPILE_TIME_SUPERKEY;
-    
+
     // 优先使用编译时配置的 SuperKey (GKI 模式)
     if (compile_key && compile_key[0]) {
         ksu_superkey_hash = hash_superkey(compile_key);
-        pr_info("superkey: using compile-time configured key, hash: 0x%llx\n", ksu_superkey_hash);
+        pr_info("superkey: using compile-time configured key, hash: 0x%llx\n",
+                ksu_superkey_hash);
         return;
     }
-    
+
     // 其次使用 LKM 修补时注入的 hash (非 GKI 模式)
     if (superkey_store.magic == SUPERKEY_MAGIC && superkey_store.hash != 0) {
         ksu_superkey_hash = superkey_store.hash;
-        pr_info("superkey: loaded hash from LKM patch: 0x%llx\n", ksu_superkey_hash);
+        pr_info("superkey: loaded hash from LKM patch: 0x%llx\n",
+                ksu_superkey_hash);
         return;
     }
-    
+
     pr_info("superkey: no superkey configured\n");
 }
 
@@ -89,33 +92,33 @@ void superkey_init(void)
  */
 int superkey_authenticate(const char __user *user_key)
 {
-    char key[SUPERKEY_MAX_LEN + 1] = {0};
+    char key[SUPERKEY_MAX_LEN + 1] = { 0 };
     long len;
-    
+
     if (!user_key)
         return -EINVAL;
-    
+
     len = strncpy_from_user(key, user_key, SUPERKEY_MAX_LEN);
     if (len <= 0) {
         pr_err("superkey: failed to copy key from user\n");
         return -EFAULT;
     }
-    
+
     key[SUPERKEY_MAX_LEN] = '\0';
-    
+
     if (!verify_superkey(key)) {
-        pr_warn("superkey: authentication failed for uid %d\n", 
+        pr_warn("superkey: authentication failed for uid %d\n",
                 current_uid().val);
         return -EINVAL;
     }
-    
+
     spin_lock(&superkey_lock);
     authenticated_manager_uid = current_uid().val % 100000; // Per-user range
     spin_unlock(&superkey_lock);
-    
-    pr_info("superkey: authenticated manager uid: %d\n", 
+
+    pr_info("superkey: authenticated manager uid: %d\n",
             authenticated_manager_uid);
-    
+
     return 0;
 }
 
@@ -128,18 +131,18 @@ bool superkey_is_manager(void)
 {
     uid_t current_appid;
     bool result;
-    
+
     // 如果没有设置 superkey，返回 false
     if (!superkey_is_set())
         return false;
-    
+
     current_appid = current_uid().val % 100000;
-    
+
     spin_lock(&superkey_lock);
-    result = (authenticated_manager_uid != (uid_t)-1 && 
+    result = (authenticated_manager_uid != (uid_t)-1 &&
               authenticated_manager_uid == current_appid);
     spin_unlock(&superkey_lock);
-    
+
     return result;
 }
 
@@ -151,7 +154,7 @@ void superkey_invalidate(void)
     spin_lock(&superkey_lock);
     authenticated_manager_uid = -1;
     spin_unlock(&superkey_lock);
-    
+
     pr_info("superkey: manager authentication invalidated\n");
 }
 
@@ -163,10 +166,10 @@ void superkey_invalidate(void)
 uid_t superkey_get_manager_uid(void)
 {
     uid_t uid;
-    
+
     spin_lock(&superkey_lock);
     uid = authenticated_manager_uid;
     spin_unlock(&superkey_lock);
-    
+
     return uid;
 }

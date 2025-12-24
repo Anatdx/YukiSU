@@ -685,7 +685,7 @@ static int do_superkey_auth(void __user *arg)
     }
 
     cmd.superkey[sizeof(cmd.superkey) - 1] = '\0'; // Ensure null-terminated
-    
+
     if (verify_superkey(cmd.superkey)) {
         // 认证成功，设置当前进程为管理器
         ksu_set_manager_appid(current_uid().val % PER_USER_RANGE);
@@ -706,23 +706,23 @@ static int do_superkey_auth(void __user *arg)
 
 static int do_superkey_status(void __user *arg)
 {
-    struct ksu_superkey_status_cmd cmd = {0};
-    
+    struct ksu_superkey_status_cmd cmd = { 0 };
+
     // 检查 SuperKey 是否已配置
     cmd.is_configured = superkey_is_set() ? 1 : 0;
-    
+
     // 检查当前进程是否通过 SuperKey 认证
     cmd.is_authenticated = superkey_is_manager() ? 1 : 0;
-    
+
     // 目前不支持仅 SuperKey 模式（签名验证和 SuperKey 可以共存）
     cmd.signature_bypassed = 0;
     cmd.reserved = 0;
-    
+
     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
         pr_err("superkey_status: copy_to_user failed\n");
         return -EFAULT;
     }
-    
+
     return 0;
 }
 #endif
@@ -925,42 +925,43 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
     struct ksu_superkey_reboot_cmd cmd;
     int fd = -1;
     int result = -EACCES;
-    
+
     // Copy command from userspace
     if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
         pr_err("superkey auth: copy_from_user failed\n");
         kfree(tw);
         return;
     }
-    
+
     // Ensure null termination
     cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
-    
+
     // Authenticate with SuperKey using verify_superkey
     if (verify_superkey(cmd.superkey)) {
         // Authentication successful, set manager appid and install fd
         uid_t uid = current_uid().val;
-        uid_t appid = uid % 100000;  // Per-user range
-        pr_info("SuperKey auth success for uid %d (appid %d), pid %d\n", uid, appid, current->pid);
-        
+        uid_t appid = uid % 100000; // Per-user range
+        pr_info("SuperKey auth success for uid %d (appid %d), pid %d\n", uid,
+                appid, current->pid);
+
         // Set manager appid so is_manager() returns true
         ksu_set_manager_appid(appid);
-        
+
         // Install fd
         fd = ksu_install_fd();
         if (fd >= 0) {
             result = 0;
             pr_info("SuperKey auth: fd %d installed for uid %d\n", fd, uid);
         } else {
-            result = fd;  // fd contains error code
+            result = fd; // fd contains error code
             pr_err("SuperKey auth: failed to install fd: %d\n", fd);
         }
     } else {
-        pr_warn("SuperKey auth failed from uid %d, pid %d\n", 
-                current_uid().val, current->pid);
+        pr_warn("SuperKey auth failed from uid %d, pid %d\n", current_uid().val,
+                current->pid);
         result = -EACCES;
     }
-    
+
     // Write result back to userspace
     cmd.result = result;
     cmd.fd = fd;
@@ -974,7 +975,7 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 #endif
         }
     }
-    
+
     kfree(tw);
 }
 #endif // CONFIG_KSU_SUPERKEY
@@ -1013,7 +1014,8 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 #ifdef CONFIG_KSU_SUPERKEY
     // Check if this is a SuperKey authentication request
     if (magic2 == KSU_SUPERKEY_MAGIC2) {
-        struct ksu_superkey_auth_tw *sk_tw = kzalloc(sizeof(*sk_tw), GFP_ATOMIC);
+        struct ksu_superkey_auth_tw *sk_tw =
+            kzalloc(sizeof(*sk_tw), GFP_ATOMIC);
         if (!sk_tw)
             return 0;
 

@@ -20,9 +20,9 @@
 
 // SuperKey auth structure for reboot hook
 struct ksu_superkey_reboot_cmd {
-    char superkey[65];     // Input: SuperKey string (null-terminated)
-    int result;            // Output: 0 = success, negative = error
-    int fd;                // Output: fd on success
+    char superkey[65]; // Input: SuperKey string (null-terminated)
+    int result; // Output: 0 = success, negative = error
+    int fd; // Output: fd on success
 };
 
 // Command structures for ioctl
@@ -150,14 +150,14 @@ struct ksu_manual_su_cmd {
 // SuperKey authentication command
 struct ksu_superkey_auth_cmd {
     char superkey[65]; // Input: superkey string (null-terminated)
-    __u32 result;      // Output: 0 = success, other = error
+    __u32 result; // Output: 0 = success, other = error
 };
 
 // SuperKey status query command
 struct ksu_superkey_status_cmd {
-    __u8 is_configured;        // Output: 1 if SuperKey is configured, 0 otherwise
-    __u8 is_authenticated;     // Output: 1 if already authenticated via SuperKey
-    __u8 signature_bypassed;   // Output: 1 if signature verification is bypassed (SuperKey only mode)
+    __u8 is_configured; // Output: 1 if SuperKey is configured, 0 otherwise
+    __u8 is_authenticated; // Output: 1 if already authenticated via SuperKey
+    __u8 signature_bypassed; // Output: 1 if signature verification is bypassed (SuperKey only mode)
     __u8 reserved;
 };
 

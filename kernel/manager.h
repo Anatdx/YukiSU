@@ -18,7 +18,7 @@ static inline bool ksu_is_manager_appid_valid()
 {
 #ifdef CONFIG_KSU_SUPERKEY
     // 超级密码模式：检查是否有已认证的管理器
-    return superkey_get_manager_uid() != (uid_t)-1 || 
+    return superkey_get_manager_uid() != (uid_t)-1 ||
            ksu_manager_appid != KSU_INVALID_APPID;
 #else
     return ksu_manager_appid != KSU_INVALID_APPID;
