@@ -25,7 +25,10 @@ obj-$(CONFIG_KPM) += kpm/
 
 kernelsu-objs := $(ksu_obj-y)
 
-# SuperKey 编译时配置
+# SuperKey 支持（始终启用）
+ccflags-y += -DCONFIG_KSU_SUPERKEY
+
+# SuperKey 编译时配置 (GKI 模式)
 # 使用方法: make ... KSU_SUPERKEY="your_secret_key"
 ifdef KSU_SUPERKEY
 ccflags-y += -DKSU_SUPERKEY=\"$(KSU_SUPERKEY)\"
