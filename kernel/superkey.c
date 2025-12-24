@@ -17,15 +17,18 @@
 #define SUPERKEY_MAGIC 0x5355504552ULL  // "SUPER" in hex
 
 // SuperKey 数据结构，方便 ksud 定位
+// 使用 packed 确保没有填充，aligned(8) 确保 8 字节对齐
 struct superkey_data {
-    u64 magic;      // SUPERKEY_MAGIC
-    u64 hash;       // SuperKey hash
-    u64 reserved;   // 保留
-};
+    volatile u64 magic;      // SUPERKEY_MAGIC
+    volatile u64 hash;       // SuperKey hash
+    volatile u64 reserved;   // 保留
+} __attribute__((packed, aligned(8)));
 
 // 导出的超级密码 hash 存储
 // ksud 会搜索 SUPERKEY_MAGIC 并修改紧随其后的 hash 值
-static struct superkey_data __attribute__((section(".data"))) superkey_store = {
+// 使用 used 属性防止被链接器优化掉
+// 使用 volatile 防止编译器优化
+static volatile struct superkey_data __attribute__((used, section(".data"))) superkey_store = {
     .magic = SUPERKEY_MAGIC,
     .hash = 0,  // 默认为 0，表示未设置
     .reserved = 0,
