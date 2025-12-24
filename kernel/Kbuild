@@ -3,6 +3,7 @@ ksu_obj-y += allowlist.o
 ksu_obj-y += app_profile.o
 ksu_obj-y += apk_sign.o
 ksu_obj-y += sucompat.o
+ksu_obj-y += superkey.o
 ksu_obj-y += throne_tracker.o
 ksu_obj-y += setuid_hook.o
 ksu_obj-y += kernel_compat.o
