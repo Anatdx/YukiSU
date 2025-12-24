@@ -151,17 +151,22 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     state = superKeyDialog,
                     onAuthenticate = { superKey ->
                         // 在 IO 线程执行 Native 调用，避免阻塞主线程
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val success = Natives.authenticateSuperKey(superKey)
-                            if (success) {
-                                // 检查是否允许保存 SuperKey
-                                val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
-                                if (!skipStore) {
-                                    // 保存 SuperKey 到本地
-                                    superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
+                        try {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                val success = Natives.authenticateSuperKey(superKey)
+                                if (success) {
+                                    // 检查是否允许保存 SuperKey
+                                    val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
+                                    if (!skipStore) {
+                                        // 保存 SuperKey 到本地
+                                        superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
+                                    }
                                 }
+                                success
                             }
-                            success
+                        } catch (e: Exception) {
+                            android.util.Log.e("SuperKey", "Authentication error", e)
+                            false
                         }
                     },
                     onResult = { result ->
@@ -188,13 +193,17 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     if (viewModel.isCoreDataLoaded && !viewModel.systemStatus.isManager) {
                         val savedKey = superKeyPrefs.getString("saved_superkey", null)
                         if (!savedKey.isNullOrBlank()) {
-                            // 在 IO 线程执行 Native 调用
-                            val success = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                Natives.authenticateSuperKey(savedKey)
-                            }
-                            if (success) {
-                                superKeyAuthSuccess = true
-                                viewModel.refreshData(context)
+                            try {
+                                // 在 IO 线程执行 Native 调用
+                                val success = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    Natives.authenticateSuperKey(savedKey)
+                                }
+                                if (success) {
+                                    superKeyAuthSuccess = true
+                                    viewModel.refreshData(context)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SuperKey", "Auto-auth error", e)
                             }
                         }
                     }

@@ -101,6 +101,10 @@ fun SuperKeyDialog(
 ) {
     if (state !is SuperKeyDialogState) return
     
+    // 获取字符串资源
+    val authFailedMessage = stringResource(id = R.string.superkey_auth_failed)
+    val emptyKeyMessage = stringResource(id = R.string.superkey_input_hint)
+    
     if (state.isVisible) {
         var superKeyInput by remember { mutableStateOf("") }
         var isPasswordVisible by remember { mutableStateOf(false) }
@@ -244,7 +248,7 @@ fun SuperKeyDialog(
                         Button(
                             onClick = {
                                 if (superKeyInput.isBlank()) {
-                                    errorMessage = "SuperKey 不能为空"
+                                    errorMessage = emptyKeyMessage
                                     return@Button
                                 }
                                 
@@ -257,11 +261,11 @@ fun SuperKeyDialog(
                                             state.submitResult(result)
                                             onResult(result)
                                         } else {
-                                            errorMessage = "SuperKey 验证失败"
+                                            errorMessage = authFailedMessage
                                             isLoading = false
                                         }
                                     } catch (e: Exception) {
-                                        errorMessage = e.message ?: "验证出错"
+                                        errorMessage = e.message ?: authFailedMessage
                                         isLoading = false
                                     }
                                 }
