@@ -36,6 +36,12 @@ kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
 
+# SuperKey 编译时配置
+# 使用方法: make ... KSU_SUPERKEY="your_secret_key"
+ifdef KSU_SUPERKEY
+ccflags-y += -DKSU_SUPERKEY=\"$(KSU_SUPERKEY)\"
+endif
+
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable -Wno-missing-braces
 ccflags-y += -Wno-int-to-pointer-cast -Wno-declaration-after-statement

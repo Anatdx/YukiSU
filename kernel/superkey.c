@@ -2,16 +2,19 @@
 /*
  * SukiSU SuperKey Authentication Implementation
  * 
- * APatch 风格：修补时写入 hash，运行时比对
+ * 支持两种模式：
+ * 1. 编译时配置: 通过 KSU_SUPERKEY="your_key" 编译参数写死
+ * 2. 修补时注入: ksud 修补 LKM 时写入 hash (用于非 GKI)
  */
 
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
+#include <linux/string.h>
 #include "superkey.h"
 #include "klog.h"
 
-// SuperKey hash - 由 ksud 在修补 LKM 时写入
+// SuperKey hash - 由 ksud 在修补 LKM 时写入 (非 GKI 模式)
 // 使用特殊的 section 使其可被定位和修改
 // 魔数标记用于 ksud 定位这个变量
 #define SUPERKEY_MAGIC 0x5355504552ULL  // "SUPER" in hex
@@ -24,13 +27,13 @@ struct superkey_data {
     volatile u64 reserved;   // 保留
 } __attribute__((packed, aligned(8)));
 
-// 导出的超级密码 hash 存储
+// 导出的超级密码 hash 存储 (用于 LKM 修补模式)
 // ksud 会搜索 SUPERKEY_MAGIC 并修改紧随其后的 hash 值
 // 使用 used 属性防止被链接器优化掉
 // 使用 volatile 防止编译器优化
 static volatile struct superkey_data __attribute__((used, section(".data"))) superkey_store = {
     .magic = SUPERKEY_MAGIC,
-    .hash = 0,  // 默认为 0，表示未设置
+    .hash = 0,  // 默认为 0，表示未设置 (LKM 修补模式会覆盖这个值)
     .reserved = 0,
 };
 
@@ -41,18 +44,40 @@ u64 ksu_superkey_hash __read_mostly = 0;
 static uid_t authenticated_manager_uid = -1;
 static DEFINE_SPINLOCK(superkey_lock);
 
+// 编译时 SuperKey 计算宏
+// 由于 C 语言限制，我们在运行时初始化时计算
+#ifdef KSU_SUPERKEY
+#define COMPILE_TIME_SUPERKEY KSU_SUPERKEY
+#else
+#define COMPILE_TIME_SUPERKEY NULL
+#endif
+
 /**
  * superkey_init - 初始化 superkey 系统
- * 在模块加载时从 superkey_store 读取 hash
+ * 
+ * 优先级:
+ * 1. 编译时配置的 KSU_SUPERKEY (GKI 模式)
+ * 2. LKM 修补时注入的 hash (非 GKI 模式)
  */
 void superkey_init(void)
 {
+    const char *compile_key = COMPILE_TIME_SUPERKEY;
+    
+    // 优先使用编译时配置的 SuperKey (GKI 模式)
+    if (compile_key && compile_key[0]) {
+        ksu_superkey_hash = hash_superkey(compile_key);
+        pr_info("superkey: using compile-time configured key, hash: 0x%llx\n", ksu_superkey_hash);
+        return;
+    }
+    
+    // 其次使用 LKM 修补时注入的 hash (非 GKI 模式)
     if (superkey_store.magic == SUPERKEY_MAGIC && superkey_store.hash != 0) {
         ksu_superkey_hash = superkey_store.hash;
-        pr_info("superkey: loaded hash from store: 0x%llx\n", ksu_superkey_hash);
-    } else {
-        pr_info("superkey: no superkey configured\n");
+        pr_info("superkey: loaded hash from LKM patch: 0x%llx\n", ksu_superkey_hash);
+        return;
     }
+    
+    pr_info("superkey: no superkey configured\n");
 }
 
 /**
