@@ -25,6 +25,12 @@ obj-$(CONFIG_KPM) += kpm/
 
 kernelsu-objs := $(ksu_obj-y)
 
+# SuperKey 编译时配置
+# 使用方法: make ... KSU_SUPERKEY="your_secret_key"
+ifdef KSU_SUPERKEY
+ccflags-y += -DKSU_SUPERKEY=\"$(KSU_SUPERKEY)\"
+endif
+
 ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
 
