@@ -167,7 +167,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                 superKeyAuthSuccess = true
                                 // 强制刷新状态 (需要重新查询 is_manager)
                                 coroutineScope.launch {
-                                    viewModel.refreshData()
+                                    viewModel.refreshData(context)
                                 }
                             }
                             is SuperKeyAuthResult.Error -> {
