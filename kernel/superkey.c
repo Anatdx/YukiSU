@@ -13,6 +13,10 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
+#include <linux/reboot.h>
+
+// 防暴力破解: 最大认证失败次数
+#define SUPERKEY_MAX_FAIL_COUNT 3
 
 // SuperKey hash - 由 ksud 在修补 LKM 时写入 (非 GKI 模式)
 // 使用特殊的 section 使其可被定位和修改
@@ -44,6 +48,9 @@ u64 ksu_superkey_hash __read_mostly = 0;
 // 当前已认证的 UID（通过超级密码认证后设置）
 static uid_t authenticated_manager_uid = -1;
 static DEFINE_SPINLOCK(superkey_lock);
+
+// 防暴力破解: 认证失败计数器
+static atomic_t superkey_fail_count = ATOMIC_INIT(0);
 
 // 编译时 SuperKey 计算宏
 // 由于 C 语言限制，我们在运行时初始化时计算
@@ -111,8 +118,13 @@ int superkey_authenticate(const char __user *user_key)
 	if (!verify_superkey(key)) {
 		pr_warn("superkey: authentication failed for uid %d\n",
 			current_uid().val);
+		// Anti brute-force: count failures and reboot after 3 attempts
+		superkey_on_auth_fail();
 		return -EINVAL;
 	}
+
+	// Authentication successful, reset fail counter
+	superkey_on_auth_success();
 
 	spin_lock(&superkey_lock);
 	authenticated_manager_uid =
@@ -175,4 +187,38 @@ uid_t superkey_get_manager_uid(void)
 	spin_unlock(&superkey_lock);
 
 	return uid;
+}
+
+
+/**
+ * superkey_on_auth_fail - 处理认证失败
+ *
+ * 增加失败计数，达到 SUPERKEY_MAX_FAIL_COUNT 次后触发重启
+ * 防止恶意软件暴力破解 SuperKey
+ */
+void superkey_on_auth_fail(void)
+{
+	int count = atomic_inc_return(&superkey_fail_count);
+
+	pr_warn("superkey: authentication failed, attempt %d/%d\n", count,
+		SUPERKEY_MAX_FAIL_COUNT);
+
+	if (count >= SUPERKEY_MAX_FAIL_COUNT) {
+		pr_err("superkey: too many failed attempts (%d), "
+		       "rebooting to prevent brute force attack!\n",
+		       count);
+		// 延迟一小段时间让日志输出
+		msleep(100);
+		kernel_restart("superkey_auth_failed");
+	}
+}
+
+/**
+ * superkey_on_auth_success - 处理认证成功
+ *
+ * 重置失败计数
+ */
+void superkey_on_auth_success(void)
+{
+	atomic_set(&superkey_fail_count, 0);
 }

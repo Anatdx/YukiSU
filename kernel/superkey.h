@@ -70,4 +70,9 @@ bool superkey_is_manager(void);
 void superkey_invalidate(void);
 uid_t superkey_get_manager_uid(void);
 
+// 防暴力破解: 认证失败时调用，达到 3 次后重启
+void superkey_on_auth_fail(void);
+// 认证成功时重置失败计数
+void superkey_on_auth_success(void);
+
 #endif /* __KSU_SUPERKEY_H */
