@@ -3,6 +3,7 @@
 
 #include <linux/cred.h>
 #include <linux/types.h>
+#include "superkey.h"
 
 #define KSU_INVALID_UID -1
 
@@ -21,12 +22,16 @@ static inline bool ksu_is_manager_uid_valid(void)
 #ifndef CONFIG_KSU_SUSFS
 static inline bool is_manager(void)
 {
+	if (superkey_is_manager())
+		return true;
 	return unlikely(ksu_is_any_manager(current_uid().val) || 
 			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val));
 }
 #else
 static inline bool is_manager()
 {
+	if (superkey_is_manager())
+		return true;
 	return unlikely((ksu_manager_uid == current_uid().val % 100000) || 
 			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val % 100000));
 }
