@@ -36,10 +36,12 @@ struct non_root_profile {
 };
 
 struct app_profile {
-	// It may be utilized for backward compatibility, although we have never explicitly made any promises regarding this.
+	// It may be utilized for backward compatibility, although we have never
+	// explicitly made any promises regarding this.
 	u32 version;
 
-	// this is usually the package of the app, but can be other value for special apps
+	// this is usually the package of the app, but can be other value for
+	// special apps
 	char key[KSU_MAX_PACKAGE_NAME];
 	int32_t current_uid;
 	bool allow_su;

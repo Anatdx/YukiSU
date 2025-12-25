@@ -1,9 +1,9 @@
 #ifndef __KSU_H_KERNEL_UMOUNT
 #define __KSU_H_KERNEL_UMOUNT
 
-#include <linux/types.h>
 #include <linux/list.h>
 #include <linux/rwsem.h>
+#include <linux/types.h>
 
 void ksu_kernel_umount_init(void);
 void ksu_kernel_umount_exit(void);

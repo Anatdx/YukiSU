@@ -37,8 +37,9 @@ static inline bool is_manager(void)
 	if (superkey_is_manager())
 		return true;
 #endif
-	return unlikely(ksu_is_any_manager(current_uid().val) || 
-			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val));
+	return unlikely(ksu_is_any_manager(current_uid().val) ||
+			(ksu_manager_uid != KSU_INVALID_UID &&
+			 ksu_manager_uid == current_uid().val));
 }
 #else
 static inline bool is_manager()
@@ -48,8 +49,9 @@ static inline bool is_manager()
 	if (superkey_is_manager())
 		return true;
 #endif
-	return unlikely((ksu_manager_uid == current_uid().val % 100000) || 
-			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val % 100000));
+	return unlikely((ksu_manager_uid == current_uid().val % 100000) ||
+			(ksu_manager_uid != KSU_INVALID_UID &&
+			 ksu_manager_uid == current_uid().val % 100000));
 }
 #endif
 

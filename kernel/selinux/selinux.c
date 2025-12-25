@@ -1,10 +1,10 @@
+#include "../klog.h" // IWYU pragma: keep
+#include "../ksu.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
 #include "linux/security.h"
 #include "linux/version.h"
 #include "selinux_defs.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "../ksu.h"
 
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
@@ -12,7 +12,7 @@ static int transive_to_domain(const char *domain, struct cred *cred)
 	int error;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
 	struct task_security_struct *tsec;
-#else 
+#else
 	struct cred_security_struct *tsec;
 #endif
 	tsec = cred->security;
@@ -57,7 +57,6 @@ is_ksu_transition(const struct task_security_struct *old_tsec,
 }
 #endif
 
-
 void setup_selinux(const char *domain)
 {
 	if (transive_to_domain(domain, (struct cred *)__task_cred(current))) {
@@ -87,8 +86,8 @@ bool getenforce(void)
 	return __is_selinux_enforcing();
 }
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&						 \
-	!defined(KSU_COMPAT_HAS_CURRENT_SID)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \
+    !defined(KSU_COMPAT_HAS_CURRENT_SID)
 /*
  * get the subjective security ID of the current task
  */
@@ -127,8 +126,8 @@ bool is_task_ksu_domain(const struct cred *cred)
 		return false;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct * tsec;
-#else 
+	const struct task_security_struct *tsec;
+#else
 	const struct cred_security_struct *tsec;
 #endif
 	tsec = cred->security;
@@ -158,8 +157,8 @@ bool is_context(const struct cred *cred, const char *context)
 		return false;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct * tsec;
-#else 
+	const struct task_security_struct *tsec;
+#else
 	const struct cred_security_struct *tsec;
 #endif
 	tsec = cred->security;
@@ -188,8 +187,8 @@ bool is_init(const struct cred *cred)
 u32 ksu_get_ksu_file_sid()
 {
 	u32 ksu_file_sid = 0;
-	int err = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT),
-					   &ksu_file_sid);
+	int err = security_secctx_to_secid(
+	    KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT), &ksu_file_sid);
 	if (err) {
 		pr_info("get ksufile sid err %d\n", err);
 	}
@@ -208,22 +207,25 @@ u32 susfs_priv_app_sid = 0;
 static inline void susfs_set_sid(const char *secctx_name, u32 *out_sid)
 {
 	int err;
-	
+
 	if (!secctx_name || !out_sid) {
 		pr_err("secctx_name || out_sid is NULL\n");
 		return;
 	}
 
-	err = security_secctx_to_secid(secctx_name, strlen(secctx_name),
-					   out_sid);
+	err =
+	    security_secctx_to_secid(secctx_name, strlen(secctx_name), out_sid);
 	if (err) {
-		pr_err("failed setting sid for '%s', err: %d\n", secctx_name, err);
+		pr_err("failed setting sid for '%s', err: %d\n", secctx_name,
+		       err);
 		return;
 	}
-	pr_info("sid '%u' is set for secctx_name '%s'\n", *out_sid, secctx_name);
+	pr_info("sid '%u' is set for secctx_name '%s'\n", *out_sid,
+		secctx_name);
 }
 
-bool susfs_is_sid_equal(void *sec, u32 sid2) {
+bool susfs_is_sid_equal(void *sec, u32 sid2)
+{
 	struct task_security_struct *tsec = (struct task_security_struct *)sec;
 	if (!tsec) {
 		return false;
@@ -235,21 +237,23 @@ u32 susfs_get_sid_from_name(const char *secctx_name)
 {
 	u32 out_sid = 0;
 	int err;
-	
+
 	if (!secctx_name) {
 		pr_err("secctx_name is NULL\n");
 		return 0;
 	}
 	err = security_secctx_to_secid(secctx_name, strlen(secctx_name),
-					   &out_sid);
+				       &out_sid);
 	if (err) {
-		pr_err("failed getting sid from secctx_name: %s, err: %d\n", secctx_name, err);
+		pr_err("failed getting sid from secctx_name: %s, err: %d\n",
+		       secctx_name, err);
 		return 0;
 	}
 	return out_sid;
 }
 
-u32 susfs_get_current_sid(void) {
+u32 susfs_get_current_sid(void)
+{
 	return current_sid();
 }
 
@@ -258,7 +262,8 @@ void susfs_set_zygote_sid(void)
 	susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
 }
 
-bool susfs_is_current_zygote_domain(void) {
+bool susfs_is_current_zygote_domain(void)
+{
 	return unlikely(current_sid() == susfs_zygote_sid);
 }
 
@@ -267,7 +272,8 @@ void susfs_set_ksu_sid(void)
 	susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
 }
 
-bool susfs_is_current_ksu_domain(void) {
+bool susfs_is_current_ksu_domain(void)
+{
 	return unlikely(current_sid() == susfs_ksu_sid);
 }
 
@@ -276,7 +282,8 @@ void susfs_set_init_sid(void)
 	susfs_set_sid(KERNEL_INIT_DOMAIN, &susfs_init_sid);
 }
 
-bool susfs_is_current_init_domain(void) {
+bool susfs_is_current_init_domain(void)
+{
 	return unlikely(current_sid() == susfs_init_sid);
 }
 

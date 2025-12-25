@@ -1,11 +1,11 @@
 #ifndef __KSU_H_DYNAMIC_MANAGER
 #define __KSU_H_DYNAMIC_MANAGER
 
-#include <linux/types.h>
 #include "ksu.h"
+#include <linux/types.h>
 
 #define DYNAMIC_MANAGER_FILE_MAGIC 0x7f445347 // 'DSG', u32
-#define DYNAMIC_MANAGER_FILE_VERSION 1 // u32
+#define DYNAMIC_MANAGER_FILE_VERSION 1	      // u32
 #define KERNEL_SU_DYNAMIC_MANAGER "/data/adb/ksu/.dynamic_manager"
 #define DYNAMIC_SIGN_INDEX 100
 
@@ -14,10 +14,10 @@ struct dynamic_sign_key {
 	const char *hash;
 };
 
-#define DYNAMIC_SIGN_DEFAULT_CONFIG { \
-	.size = 0x300, \
-	.hash = "0000000000000000000000000000000000000000000000000000000000000000" \
-}
+#define DYNAMIC_SIGN_DEFAULT_CONFIG                                            \
+	{.size = 0x300,                                                        \
+	 .hash = "00000000000000000000000000000000000000000000000000000000000" \
+		 "00000"}
 
 struct dynamic_manager_config {
 	unsigned int size;

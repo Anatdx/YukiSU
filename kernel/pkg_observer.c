@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/module.h>
-#include <linux/fs.h>
-#include <linux/namei.h>
-#include <linux/fsnotify.h>
-#include <linux/slab.h>
-#include <linux/string.h>
-#include <linux/rculist.h>
-#include <linux/version.h>
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
-#include "throne_tracker.h"
 #include "throne_comm.h"
+#include "throne_tracker.h"
+#include <linux/fs.h>
+#include <linux/fsnotify.h>
+#include <linux/module.h>
+#include <linux/namei.h>
+#include <linux/rculist.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/version.h>
 
 #define MASK_SYSTEM (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
 
@@ -31,9 +31,9 @@ static KSU_DECL_FSNOTIFY_OPS(ksu_handle_generic_event)
 		return 0;
 
 	if (ksu_fname_len(file_name) == 13 &&
-		!memcmp(ksu_fname_arg(file_name), "packages.list", 13)) {
-			pr_info("packages.list detected: %d\n", mask);
-			if (ksu_uid_scanner_enabled) {
+	    !memcmp(ksu_fname_arg(file_name), "packages.list", 13)) {
+		pr_info("packages.list detected: %d\n", mask);
+		if (ksu_uid_scanner_enabled) {
 			ksu_request_userspace_scan();
 		}
 		track_throne(false);
@@ -43,9 +43,9 @@ static KSU_DECL_FSNOTIFY_OPS(ksu_handle_generic_event)
 
 static const struct fsnotify_ops ksu_ops = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-	.handle_inode_event = ksu_handle_generic_event,
+    .handle_inode_event = ksu_handle_generic_event,
 #else
-	.handle_event = ksu_handle_generic_event,
+    .handle_event = ksu_handle_generic_event,
 #endif
 };
 
@@ -57,7 +57,7 @@ static void __maybe_unused m_free(struct fsnotify_mark *m)
 }
 
 static int add_mark_on_inode(struct inode *inode, u32 mask,
-				 struct fsnotify_mark **out)
+			     struct fsnotify_mark **out)
 {
 	struct fsnotify_mark *m;
 	int ret;
@@ -128,10 +128,7 @@ static void unwatch_one_dir(struct watch_dir *wd)
 	}
 }
 
-static struct watch_dir g_watch = {
-	.path = "/data/system",
-	.mask = MASK_SYSTEM
-};
+static struct watch_dir g_watch = {.path = "/data/system", .mask = MASK_SYSTEM};
 
 int ksu_observer_init(void)
 {

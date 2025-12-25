@@ -1,9 +1,9 @@
+#include <generated/compile.h>
+#include <generated/utsrelease.h>
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
-#include <generated/utsrelease.h>
-#include <generated/compile.h>
 #include <linux/version.h> /* LINUX_VERSION_CODE, KERNEL_VERSION macros */
 
 #ifdef CONFIG_KSU_SUSFS
@@ -11,25 +11,25 @@
 #endif
 
 #include "allowlist.h"
-#include "ksu.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
+#include "ksu.h"
 #include "throne_tracker.h"
 #ifndef CONFIG_KSU_SUSFS
 #include "syscall_hook_manager.h"
 #endif
+#include "ksu.h"
 #include "ksud.h"
 #include "supercalls.h"
-#include "ksu.h"
 #include "superkey.h"
 
-struct cred* ksu_cred;
+struct cred *ksu_cred;
 
+#include "dynamic_manager.h"
+#include "setuid_hook.h"
+#include "sucompat.h"
 #include "sulog.h"
 #include "throne_comm.h"
-#include "dynamic_manager.h"
-#include "sucompat.h"
-#include "setuid_hook.h"
 
 void sukisu_custom_config_init(void)
 {
@@ -51,15 +51,22 @@ int __init kernelsu_init(void)
 		UTS_RELEASE, UTS_MACHINE, KSU_VERSION);
 
 	superkey_init();
-		
+
 #ifdef CONFIG_KSU_DEBUG
-	pr_alert("*************************************************************");
-	pr_alert("**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
-	pr_alert("**														 **");
-	pr_alert("**		 You are running KernelSU in DEBUG mode		  **");
-	pr_alert("**														 **");
-	pr_alert("**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
-	pr_alert("*************************************************************");
+	pr_alert(
+	    "*************************************************************");
+	pr_alert(
+	    "**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
+	pr_alert("**							"
+		 "							 **");
+	pr_alert(
+	    "**		 You are running KernelSU in DEBUG mode		  **");
+	pr_alert("**							"
+		 "							 **");
+	pr_alert(
+	    "**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
+	pr_alert(
+	    "*************************************************************");
 #endif
 
 	ksu_cred = prepare_creds();
@@ -119,7 +126,7 @@ void kernelsu_exit(void)
 	sukisu_custom_config_exit();
 
 	ksu_supercalls_exit();
-	
+
 	ksu_feature_exit();
 
 	if (ksu_cred) {

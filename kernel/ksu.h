@@ -1,8 +1,8 @@
 #ifndef __KSU_H_KSU
 #define __KSU_H_KSU
 
-#include <linux/types.h>
 #include <linux/cred.h>
+#include <linux/types.h>
 
 #define KERNEL_SU_VERSION KSU_VERSION
 #define KERNEL_SU_OPTION 0xDEADBEEF
@@ -14,7 +14,7 @@ extern bool ksu_uid_scanner_enabled;
 #define EVENT_MODULE_MOUNTED 3
 
 // SukiSU Ultra kernel su version full strings
-#ifndef KSU_VERSION_FULL 
+#ifndef KSU_VERSION_FULL
 #define KSU_VERSION_FULL "v3.x-00000000@unknown"
 #endif
 #define KSU_FULL_VERSION_STRING 255
@@ -43,6 +43,6 @@ struct manager_list_info {
 
 void ksu_lsm_hook_init(void);
 
-extern struct cred* ksu_cred;
+extern struct cred *ksu_cred;
 
 #endif

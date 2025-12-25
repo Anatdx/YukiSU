@@ -1,33 +1,27 @@
-#include <linux/export.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/fs.h>
-#include <linux/kernfs.h>
-#include <linux/file.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/uaccess.h>
-#include <linux/elf.h>
-#include <linux/kallsyms.h>
-#include <linux/version.h>
-#include <linux/list.h>
-#include <linux/spinlock.h>
-#include <linux/rcupdate.h>
-#include <asm/elf.h>
-#include <linux/vmalloc.h>
-#include <linux/mm.h>
-#include <linux/string.h>
-#include <asm/cacheflush.h>
-#include <linux/module.h>
-#include <linux/vmalloc.h>
-#include <linux/set_memory.h>
-#include <linux/version.h>
-#include <linux/export.h>
-#include <linux/slab.h>
-#include "kpm.h"
 #include "compact.h"
 #include "../allowlist.h"
 #include "../manager.h"
+#include "kpm.h"
+#include <asm/cacheflush.h>
+#include <asm/elf.h>
+#include <linux/elf.h>
+#include <linux/export.h>
+#include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/kallsyms.h>
+#include <linux/kernel.h>
+#include <linux/kernfs.h>
+#include <linux/list.h>
+#include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/rcupdate.h>
+#include <linux/set_memory.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/string.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
+#include <linux/vmalloc.h>
 
 static int sukisu_is_su_allow_uid(uid_t uid)
 {
@@ -68,25 +62,26 @@ struct CompactAddressSymbol {
 unsigned long sukisu_compact_find_symbol(const char *name);
 
 static struct CompactAddressSymbol address_symbol[] = {
-	{ "kallsyms_lookup_name", &kallsyms_lookup_name },
-	{ "compact_find_symbol", &sukisu_compact_find_symbol },
-	{ "is_run_in_sukisu_ultra", (void *)1 },
-	{ "is_su_allow_uid", &sukisu_is_su_allow_uid },
-	{ "get_ap_mod_exclude", &sukisu_get_ap_mod_exclude },
-	{ "is_uid_should_umount", &sukisu_is_uid_should_umount },
-	{ "is_current_uid_manager", &sukisu_is_current_uid_manager },
-	{ "get_manager_uid", &sukisu_get_manager_uid },
-	{ "sukisu_set_manager_uid", &sukisu_set_manager_uid }
-};
+    {"kallsyms_lookup_name", &kallsyms_lookup_name},
+    {"compact_find_symbol", &sukisu_compact_find_symbol},
+    {"is_run_in_sukisu_ultra", (void *)1},
+    {"is_su_allow_uid", &sukisu_is_su_allow_uid},
+    {"get_ap_mod_exclude", &sukisu_get_ap_mod_exclude},
+    {"is_uid_should_umount", &sukisu_is_uid_should_umount},
+    {"is_current_uid_manager", &sukisu_is_current_uid_manager},
+    {"get_manager_uid", &sukisu_get_manager_uid},
+    {"sukisu_set_manager_uid", &sukisu_set_manager_uid}};
 
-unsigned long sukisu_compact_find_symbol(const char* name)
+unsigned long sukisu_compact_find_symbol(const char *name)
 {
 	int i;
 	unsigned long addr;
 
-	for (i = 0; i < (sizeof(address_symbol) / sizeof(struct CompactAddressSymbol)); i++) {
+	for (i = 0;
+	     i < (sizeof(address_symbol) / sizeof(struct CompactAddressSymbol));
+	     i++) {
 		struct CompactAddressSymbol *symbol = &address_symbol[i];
-		
+
 		if (strcmp(name, symbol->symbol_name) == 0)
 			return (unsigned long)symbol->addr;
 	}

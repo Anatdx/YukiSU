@@ -5,8 +5,8 @@
 #else
 #include <asm/pgtable.h>
 #endif
-#include <linux/printk.h>
 #include <asm/current.h>
+#include <linux/printk.h>
 
 #include "util.h"
 
@@ -26,7 +26,10 @@ bool try_set_access_flag(unsigned long addr)
 	if (!mm)
 		return false;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 208) // should be 5.8, but Android only uses LTS kernel and this feature is backported to this version
+#if LINUX_VERSION_CODE >=                                                      \
+    KERNEL_VERSION(5, 4,                                                       \
+		   208) // should be 5.8, but Android only uses LTS kernel and
+			// this feature is backported to this version
 	if (!mmap_read_trylock(mm))
 #else
 	if (!down_read_trylock(&mm->mmap_sem))

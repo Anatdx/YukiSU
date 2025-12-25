@@ -1,8 +1,8 @@
 #ifndef __KSU_MANUAL_SU_H
 #define __KSU_MANUAL_SU_H
 
-#include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/types.h>
 #include <linux/version.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)

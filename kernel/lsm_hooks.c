@@ -1,22 +1,22 @@
-#include <linux/version.h>
-#include <linux/security.h>
-#include <linux/lsm_hooks.h>
-#include <linux/init.h>
-#include <linux/sched.h>
 #include <linux/cred.h>
-#include <linux/key.h>
-#include <linux/string.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/key.h>
+#include <linux/lsm_hooks.h>
+#include <linux/sched.h>
+#include <linux/security.h>
+#include <linux/string.h>
 #include <linux/uidgid.h>
+#include <linux/version.h>
 
 #include "kernel_compat.h"
 #include "ksu.h"
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) && defined(CONFIG_KSU_MANUAL_SU)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) &&                           \
+    defined(CONFIG_KSU_MANUAL_SU)
 #include "manual_su.h"
 
-static int ksu_task_alloc(struct task_struct *task,
-						  unsigned long clone_flags)
+static int ksu_task_alloc(struct task_struct *task, unsigned long clone_flags)
 {
 	ksu_try_escalate_for_uid(task_uid(task).val);
 	return 0;
@@ -24,11 +24,10 @@ static int ksu_task_alloc(struct task_struct *task,
 #endif
 
 // kernel 4.4 and 4.9
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||	\
-	defined(CONFIG_IS_HW_HISI) ||	\
-	defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
-				  unsigned perm)
+			      unsigned perm)
 {
 	if (init_session_keyring != NULL) {
 		return 0;
@@ -57,24 +56,25 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 #endif
 
 static struct security_hook_list ksu_hooks[] = {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) && defined(CONFIG_KSU_MANUAL_SU)
-	LSM_HOOK_INIT(task_alloc, ksu_task_alloc),
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) &&                           \
+    defined(CONFIG_KSU_MANUAL_SU)
+    LSM_HOOK_INIT(task_alloc, ksu_task_alloc),
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || \
-	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-	LSM_HOOK_INIT(key_permission, ksu_key_permission),
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+    LSM_HOOK_INIT(key_permission, ksu_key_permission),
 #endif
 
 #ifdef CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK
-	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+    LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
 #endif
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 const struct lsm_id ksu_lsmid = {
-	.name = "ksu",
-	.id = 912,
+    .name = "ksu",
+    .id = 912,
 };
 #endif
 

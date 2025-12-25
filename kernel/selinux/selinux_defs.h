@@ -1,8 +1,8 @@
 #ifndef __KSU_H_SELINUX_DEFS
 #define __KSU_H_SELINUX_DEFS
 
-#include "selinux.h"
 #include "objsec.h"
+#include "selinux.h"
 #ifdef SAMSUNG_SELINUX_PORTING
 #include "security.h" // Samsung SELinux Porting
 #endif
