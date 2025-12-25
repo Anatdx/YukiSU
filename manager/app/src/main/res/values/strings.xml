@@ -4,6 +4,7 @@
     <string name="home">Home</string>
     <string name="learn_more">Learn more</string>
     <string name="home_not_installed">Not installed</string>
+    <string name="home_not_installed_or_auth">Not installed or not authenticated</string>
     <string name="home_click_to_install">Click to install</string>
     <string name="home_working">Working</string>
     <string name="home_working_version">Version: %s</string>

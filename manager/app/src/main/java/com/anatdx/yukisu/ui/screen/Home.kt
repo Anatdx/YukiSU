@@ -217,22 +217,17 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 // 状态卡片
                 if (viewModel.isCoreDataLoaded) {
                     val isNotManager = !viewModel.systemStatus.isManager
-                    
-                    // 如果未认证为管理器，显示 SuperKey 认证卡片
-                    // 用户可以尝试输入 SuperKey 进行认证
-                    if (isNotManager && !superKeyAuthSuccess) {
-                        SuperKeyAuthCard(
-                            onAuthClick = {
-                                superKeyDialog.show()
-                            }
-                        )
-                    }
+                    val needsSuperKeyAuth = isNotManager && !superKeyAuthSuccess && viewModel.systemStatus.ksuVersion == null
                     
                     StatusCard(
                         systemStatus = viewModel.systemStatus,
                         isSuperKeyMode = isSuperKeyConfigured || superKeyAuthSuccess,
+                        needsSuperKeyAuth = needsSuperKeyAuth,
                         onClickInstall = {
                             navigator.navigate(InstallScreenDestination(preselectedKernelUri = null))
+                        },
+                        onSuperKeyAuth = {
+                            superKeyDialog.show()
                         }
                     )
 
@@ -442,12 +437,17 @@ private fun TopBar(
 private fun StatusCard(
     systemStatus: HomeViewModel.SystemStatus,
     isSuperKeyMode: Boolean = false,
-    onClickInstall: () -> Unit = {}
+    needsSuperKeyAuth: Boolean = false,
+    onClickInstall: () -> Unit = {},
+    onSuperKeyAuth: () -> Unit = {}
 ) {
     ElevatedCard(
         colors = getCardColors(
-            if (systemStatus.ksuVersion != null) MaterialTheme.colorScheme.secondaryContainer
-            else MaterialTheme.colorScheme.errorContainer
+            when {
+                systemStatus.ksuVersion != null -> MaterialTheme.colorScheme.secondaryContainer
+                needsSuperKeyAuth -> MaterialTheme.colorScheme.tertiaryContainer
+                else -> MaterialTheme.colorScheme.errorContainer
+            }
         ),
         elevation = getCardElevation(),
     ) {
@@ -455,8 +455,9 @@ private fun StatusCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    if (systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI()) {
-                        onClickInstall()
+                    when {
+                        needsSuperKeyAuth -> onSuperKeyAuth()
+                        systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI() -> onClickInstall()
                     }
                 }
                 .padding(24.dp),
@@ -568,6 +569,33 @@ private fun StatusCard(
                                 )
                             }
                         }
+                    }
+                }
+
+                // 需要 SuperKey 认证（未安装或未认证）
+                needsSuperKeyAuth -> {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .padding(horizontal = 4.dp),
+                    )
+
+                    Column(Modifier.padding(start = 20.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_not_installed_or_auth),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.superkey_auth_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
                     }
                 }
 
@@ -1000,52 +1028,6 @@ private fun IncompatibleKernelCard() {
         message = msg,
         color = MaterialTheme.colorScheme.error
     )
-}
-
-/**
- * SuperKey authentication card
- * Shown when KSU driver is detected but manager is not authenticated
- */
-@Composable
-private fun SuperKeyAuthCard(
-    onAuthClick: () -> Unit
-) {
-    ElevatedCard(
-        colors = getCardColors(MaterialTheme.colorScheme.tertiaryContainer),
-        elevation = getCardElevation(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onAuthClick() }
-                .padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Key,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier
-                    .size(28.dp)
-                    .padding(horizontal = 4.dp),
-            )
-
-            Column(Modifier.padding(start = 20.dp)) {
-                Text(
-                    text = stringResource(R.string.superkey_required),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.superkey_auth_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-        }
-    }
 }
 
 @Preview
