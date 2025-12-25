@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "DownloadUtil"
-private val CUSTOM_USER_AGENT = "SukiSU-Ultra/2.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
+private val CUSTOM_USER_AGENT = "YukiSU/2.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
 private const val MAX_RETRY_COUNT = 3
 private const val RETRY_DELAY_MS = 3000L
 
@@ -215,7 +215,7 @@ private fun monitorDownload(
 }
 
 fun checkNewVersion(): LatestVersionInfo {
-    val url = "https://api.github.com/repos/ShirkNeko/SukiSU-Ultra/releases/latest"
+    val url = "https://api.github.com/repos/Anatdx/YukiSU/releases/latest"
     val defaultValue = LatestVersionInfo()
     return runCatching {
         val client = okhttp3.OkHttpClient.Builder()
