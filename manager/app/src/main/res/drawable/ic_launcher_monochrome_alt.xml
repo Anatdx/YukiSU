@@ -3,36 +3,15 @@
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
-    android:viewportHeight="108"
-    android:tint="#000000">
-    <group android:translateX="54" android:translateY="54">
-        <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        <group android:rotation="60">
-            <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        </group>
-        <group android:rotation="120">
-            <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        </group>
-        <group android:rotation="180">
-            <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        </group>
-        <group android:rotation="240">
-            <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        </group>
-        <group android:rotation="300">
-            <path android:pathData="M0,0 L0,-30" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L-5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-            <path android:pathData="M0,-18 L5.5,-23.5" android:strokeWidth="4" android:strokeColor="@android:color/white" android:strokeLineCap="round"/>
-        </group>
-    </group>
+    android:viewportHeight="108">
+    <!-- 雪花图标 (alt) - M3 主题图标需要纯黑色 -->
+    <path
+        android:pathData="M54,24 L54,84 M54,30 L46,38 M54,30 L62,38 M54,78 L46,70 M54,78 L62,70
+                          M28.04,39 L79.96,69 M34.54,41.35 L31.88,50.65 M34.54,41.35 L43.84,38.69
+                          M73.46,66.65 L76.12,57.35 M73.46,66.65 L64.16,69.31
+                          M28.04,69 L79.96,39 M34.54,66.65 L43.84,69.31 M34.54,66.65 L31.88,57.35
+                          M73.46,41.35 L64.16,38.69 M73.46,41.35 L76.12,50.65"
+        android:strokeWidth="4"
+        android:strokeColor="#000000"
+        android:strokeLineCap="round"/>
 </vector>
