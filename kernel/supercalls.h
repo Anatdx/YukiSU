@@ -1,10 +1,10 @@
 #ifndef __KSU_H_SUPERCALLS
 #define __KSU_H_SUPERCALLS
 
-#include <linux/types.h>
-#include <linux/ioctl.h>
-#include "ksu.h"
 #include "app_profile.h"
+#include "ksu.h"
+#include <linux/ioctl.h>
+#include <linux/types.h>
 
 #ifdef CONFIG_KPM
 #include "kpm/kpm.h"
@@ -21,8 +21,8 @@ struct ksu_become_daemon_cmd {
 };
 
 struct ksu_get_info_cmd {
-	__u32 version; // Output: KERNEL_SU_VERSION
-	__u32 flags; // Output: flags (bit 0: MODULE mode)
+	__u32 version;	// Output: KERNEL_SU_VERSION
+	__u32 flags;	// Output: flags (bit 0: MODULE mode)
 	__u32 features; // Output: max feature ID supported
 };
 
@@ -31,7 +31,7 @@ struct ksu_report_event_cmd {
 };
 
 struct ksu_set_sepolicy_cmd {
-	__u64 cmd; // Input: sepolicy command
+	__u64 cmd;	   // Input: sepolicy command
 	__aligned_u64 arg; // Input: sepolicy argument pointer
 };
 
@@ -41,17 +41,17 @@ struct ksu_check_safemode_cmd {
 
 struct ksu_get_allow_list_cmd {
 	__u32 uids[128]; // Output: array of allowed/denied UIDs
-	__u32 count; // Output: number of UIDs in array
-	__u8 allow; // Input: true for allow list, false for deny list
+	__u32 count;	 // Output: number of UIDs in array
+	__u8 allow;	 // Input: true for allow list, false for deny list
 };
 
 struct ksu_uid_granted_root_cmd {
-	__u32 uid; // Input: target UID to check
+	__u32 uid;    // Input: target UID to check
 	__u8 granted; // Output: true if granted, false otherwise
 };
 
 struct ksu_uid_should_umount_cmd {
-	__u32 uid; // Input: target UID to check
+	__u32 uid;	    // Input: target UID to check
 	__u8 should_umount; // Output: true if should umount, false otherwise
 };
 
@@ -69,24 +69,24 @@ struct ksu_set_app_profile_cmd {
 
 struct ksu_get_feature_cmd {
 	__u32 feature_id; // Input: feature ID (enum ksu_feature_id)
-	__u64 value; // Output: feature value/state
+	__u64 value;	  // Output: feature value/state
 	__u8 supported; // Output: true if feature is supported, false otherwise
 };
 
 struct ksu_set_feature_cmd {
 	__u32 feature_id; // Input: feature ID (enum ksu_feature_id)
-	__u64 value; // Input: feature value/state to set
+	__u64 value;	  // Input: feature value/state to set
 };
 
 struct ksu_get_wrapper_fd_cmd {
-	__u32 fd; // Input: userspace fd
+	__u32 fd;    // Input: userspace fd
 	__u32 flags; // Input: flags of userspace fd
 };
 
 struct ksu_manage_mark_cmd {
 	__u32 operation; // Input: KSU_MARK_*
-	__s32 pid; // Input: target pid (0 for all processes)
-	__u32 result; // Output: for get operation - mark status or reg_count
+	__s32 pid;	 // Input: target pid (0 for all processes)
+	__u32 result;	 // Output: for get operation - mark status or reg_count
 };
 
 struct ksu_nuke_ext4_sysfs_cmd {
@@ -100,22 +100,24 @@ struct ksu_nuke_ext4_sysfs_cmd {
 
 struct ksu_add_try_umount_cmd {
 	__aligned_u64 arg; // char ptr, this is the mountpoint
-	__u32 flags; // this is the flag we use for it
-	__u8 mode; // denotes what to do with it 0:wipe_list 1:add_to_list 2:delete_entry
+	__u32 flags;	   // this is the flag we use for it
+	__u8 mode; // denotes what to do with it 0:wipe_list 1:add_to_list
+		   // 2:delete_entry
 };
 
 struct ksu_list_try_umount_cmd {
 	__aligned_u64 arg; // User buffer
-	__u32 buf_size; // Buffer size provided by userspace
+	__u32 buf_size;	   // Buffer size provided by userspace
 };
 
 #define KSU_UMOUNT_WIPE 0 // ignore everything and wipe list
-#define KSU_UMOUNT_ADD 1 // add entry (path + flags)
-#define KSU_UMOUNT_DEL 2 // delete entry, strcmp
+#define KSU_UMOUNT_ADD 1  // add entry (path + flags)
+#define KSU_UMOUNT_DEL 2  // delete entry, strcmp
 
 // Other command structures
 struct ksu_get_full_version_cmd {
-	char version_full[KSU_FULL_VERSION_STRING]; // Output: full version string
+	char version_full[KSU_FULL_VERSION_STRING]; // Output: full version
+						    // string
 };
 
 struct ksu_hook_type_cmd {
@@ -128,7 +130,8 @@ struct ksu_enable_kpm_cmd {
 
 #ifdef CONFIG_KSU_MANUAL_SU
 struct ksu_manual_su_cmd {
-	__u32 option; // Input: operation type (MANUAL_SU_OP_GENERATE_TOKEN, MANUAL_SU_OP_ESCALATE, MANUAL_SU_OP_ADD_PENDING)
+	__u32 option;	  // Input: operation type (MANUAL_SU_OP_GENERATE_TOKEN,
+			  // MANUAL_SU_OP_ESCALATE, MANUAL_SU_OP_ADD_PENDING)
 	__u32 target_uid; // Input: target UID
 	__u32 target_pid; // Input: target PID
 	char token_buffer[33]; // Input/Output: token buffer
@@ -176,10 +179,10 @@ struct ksu_ioctl_cmd_map {
 };
 
 #define KSU_IOCTL(CMD, NAME, HANDLER, PERM)                                    \
-	{                                                                      \
-		.cmd = KSU_IOCTL_##CMD, .name = NAME, .handler = HANDLER,      \
-		.perm_check = PERM                                             \
-	}
+	{.cmd = KSU_IOCTL_##CMD,                                               \
+	 .name = NAME,                                                         \
+	 .handler = HANDLER,                                                   \
+	 .perm_check = PERM}
 
 // Install KSU fd to current process
 int ksu_install_fd(void);

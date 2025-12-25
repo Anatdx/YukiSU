@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/namei.h>
 #include <linux/fsnotify_backend.h>
-#include <linux/slab.h>
+#include <linux/module.h>
+#include <linux/namei.h>
 #include <linux/rculist.h>
+#include <linux/slab.h>
 #include <linux/version.h>
 
 #define MASK_SYSTEM (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
@@ -36,9 +36,9 @@ static KSU_DECL_FSNOTIFY_OPS(ksu_handle_inode_event)
 
 static const struct fsnotify_ops ksu_ops = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-	.handle_inode_event = ksu_handle_inode_event,
+    .handle_inode_event = ksu_handle_inode_event,
 #else
-	.handle_event = ksu_handle_inode_event,
+    .handle_event = ksu_handle_inode_event,
 #endif
 };
 
@@ -120,8 +120,7 @@ static void unwatch_one_dir(struct watch_dir *wd)
 	}
 }
 
-static struct watch_dir g_watch = { .path = "/data/system",
-				    .mask = MASK_SYSTEM };
+static struct watch_dir g_watch = {.path = "/data/system", .mask = MASK_SYSTEM};
 
 int ksu_observer_init(void)
 {

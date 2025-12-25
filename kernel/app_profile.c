@@ -1,32 +1,32 @@
-#include <linux/version.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
-#include <linux/proc_ns.h>
 #include <linux/pid.h>
+#include <linux/proc_ns.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 #include <linux/sched/signal.h> // signal_struct
 #include <linux/sched/task.h>
 #endif
 #include <linux/sched.h>
 #include <linux/seccomp.h>
-#include <linux/slab.h>
-#include <linux/thread_info.h>
-#include <linux/uidgid.h>
-#include <linux/syscalls.h>
-#include <linux/spinlock.h>
-#include <linux/tty.h>
 #include <linux/security.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/syscalls.h>
+#include <linux/thread_info.h>
+#include <linux/tty.h>
+#include <linux/uidgid.h>
 
-#include "objsec.h"
 #include "allowlist.h"
 #include "app_profile.h"
 #include "arch.h"
 #include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
+#include "objsec.h"
 #include "selinux/selinux.h"
 #include "su_mount_ns.h"
 #ifdef CONFIG_KSU_SYSCALL_HOOK
@@ -37,10 +37,10 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 static struct group_info root_groups = {
-	.usage = REFCOUNT_INIT(2),
+    .usage = REFCOUNT_INIT(2),
 };
 #else
-static struct group_info root_groups = { .usage = ATOMIC_INIT(2) };
+static struct group_info root_groups = {.usage = ATOMIC_INIT(2)};
 #endif
 
 void setup_groups(struct root_profile *profile, struct cred *cred)
@@ -100,11 +100,12 @@ static void do_disable_seccomp(void)
 #endif
 
 	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that current->sighand->siglock is held during the operation.
+	// When disabling Seccomp, ensure that current->sighand->siglock is held
+	// during the operation.
 	spin_lock_irq(&current->sighand->siglock);
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) &&                                           \
-	LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+    LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 	clear_syscall_work(SECCOMP);
 #else
 	clear_thread_flag(TIF_SECCOMP);
@@ -186,10 +187,11 @@ void escape_with_root_profile(void)
 		     sizeof(kernel_cap_t));
 
 	// setup capabilities
-	// we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not accessible for non root process
-	// we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
+	// we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not
+	// accessible for non root process we add it here but don't add it to
+	// cap_inhertiable, it would be dropped automaticly after exec!
 	u64 cap_for_ksud =
-		profile->capabilities.effective | CAP_DAC_READ_SEARCH;
+	    profile->capabilities.effective | CAP_DAC_READ_SEARCH;
 	memcpy(&cred->cap_effective, &cap_for_ksud,
 	       sizeof(cred->cap_effective));
 	memcpy(&cred->cap_permitted, &profile->capabilities.effective,
@@ -209,7 +211,8 @@ void escape_with_root_profile(void)
 #endif
 
 #ifdef CONFIG_KSU_SYSCALL_HOOK
-	for_each_thread (current, t) {
+	for_each_thread(current, t)
+	{
 		ksu_set_task_tracepoint_flag(t);
 	}
 #endif
@@ -243,10 +246,11 @@ static void disable_seccomp_for_task(struct task_struct *tsk)
 #endif
 
 	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that tsk->sighand->siglock is held during the operation.
+	// When disabling Seccomp, ensure that tsk->sighand->siglock is held
+	// during the operation.
 	spin_lock_irq(&tsk->sighand->siglock);
 	// disable seccomp
-    clear_tsk_thread_flag(tsk, TIF_SECCOMP);
+	clear_tsk_thread_flag(tsk, TIF_SECCOMP);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) ||                          \
      defined(KSU_OPTIONAL_SECCOMP_FILTER_RELEASE))
@@ -295,11 +299,11 @@ static int __manual_su_handle_devpts(struct inode *inode)
 		return 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) ||                           \
-	defined(KSU_OPTIONAL_SELINUX_INODE)
+    defined(KSU_OPTIONAL_SELINUX_INODE)
 	struct inode_security_struct *sec = selinux_inode(inode);
 #else
 	struct inode_security_struct *sec =
-		(struct inode_security_struct *)inode->i_security;
+	    (struct inode_security_struct *)inode->i_security;
 #endif
 	if (ksu_file_sid && sec)
 		sec->sid = ksu_file_sid;
@@ -316,8 +320,9 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	struct task_struct *t;
 #endif // #ifndef CONFIG_KSU_SUSFS
 
-	pr_info("cmd_su: escape_to_root_for_cmd_su called for UID: %d, PID: %d\n",
-		target_uid, target_pid);
+	pr_info(
+	    "cmd_su: escape_to_root_for_cmd_su called for UID: %d, PID: %d\n",
+	    target_uid, target_pid);
 
 	// Find target task by PID
 	rcu_read_lock();
@@ -405,7 +410,8 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	ksu_sulog_report_su_grant(target_uid, "cmd_su", "manual_escalation");
 #endif
 #ifdef CONFIG_KSU_SYSCALL_HOOK
-	for_each_thread (target_task, t) {
+	for_each_thread(target_task, t)
+	{
 		ksu_set_task_tracepoint_flag(t);
 	}
 #endif // #ifndef CONFIG_KSU_SUSFS

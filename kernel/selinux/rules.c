@@ -1,12 +1,12 @@
-#include <linux/uaccess.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
 #include <linux/version.h>
 
-#include "../klog.h" // IWYU pragma: keep
+#include "../klog.h"	     // IWYU pragma: keep
+#include "linux/lsm_audit.h" // IWYU pragma: keep
 #include "selinux.h"
 #include "sepolicy.h"
 #include "ss/services.h"
-#include "linux/lsm_audit.h" // IWYU pragma: keep
 #include "xfrm.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
@@ -108,7 +108,7 @@ void apply_kernelsu_rules(void)
 
 #ifdef CONFIG_KSU_SUSFS
 	// Allow umount in zygote process without installing zygisk
-	//ksu_allow(db, "zygote", "labeledfs", "filesystem", "unmount");
+	// ksu_allow(db, "zygote", "labeledfs", "filesystem", "unmount");
 	susfs_set_priv_app_sid();
 	susfs_set_init_sid();
 	susfs_set_ksu_sid();
@@ -160,16 +160,17 @@ static int get_object(char *buf, char __user *user_object, size_t buf_sz,
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) ||                           \
-	!defined(KSU_COMPAT_USE_SELINUX_STATE)
+    !defined(KSU_COMPAT_USE_SELINUX_STATE)
 extern int avc_ss_reset(u32 seqno);
 #else
 extern int avc_ss_reset(struct selinux_avc *avc, u32 seqno);
 #endif
-// reset avc cache table, otherwise the new rules will not take effect if already denied
+// reset avc cache table, otherwise the new rules will not take effect if
+// already denied
 static void reset_avc_cache(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) ||                           \
-	!defined(KSU_COMPAT_USE_SELINUX_STATE)
+    !defined(KSU_COMPAT_USE_SELINUX_STATE)
 	avc_ss_reset(0);
 	selnl_notify_policyload(0);
 	selinux_status_update_policyload(0);
@@ -262,7 +263,7 @@ int handle_sepolicy(unsigned long arg3, void __user *arg4)
 		char cls_buf[MAX_SEPOL_LEN];
 
 		char __maybe_unused
-			operation[MAX_SEPOL_LEN]; // it is always ioctl now!
+		    operation[MAX_SEPOL_LEN]; // it is always ioctl now!
 		char perm_set[MAX_SEPOL_LEN];
 
 		char *s, *t, *c;
@@ -444,11 +445,11 @@ int handle_sepolicy(unsigned long arg3, void __user *arg4)
 		}
 		bool success = false;
 		if (subcmd == 1) {
-			success = ksu_type_change(db, src, tgt, cls,
-						  default_type);
+			success =
+			    ksu_type_change(db, src, tgt, cls, default_type);
 		} else if (subcmd == 2) {
-			success = ksu_type_member(db, src, tgt, cls,
-						  default_type);
+			success =
+			    ksu_type_member(db, src, tgt, cls, default_type);
 		} else {
 			pr_err("sepol: unknown subcmd: %d\n", subcmd);
 		}
@@ -492,8 +493,8 @@ int handle_sepolicy(unsigned long arg3, void __user *arg4)
 exit:
 	mutex_unlock(&ksu_rules);
 
-	// only allow and xallow needs to reset avc cache, but we cannot do that because
-	// we are in atomic context. so we just reset it every time.
+	// only allow and xallow needs to reset avc cache, but we cannot do that
+	// because we are in atomic context. so we just reset it every time.
 	reset_avc_cache();
 
 	return ret;

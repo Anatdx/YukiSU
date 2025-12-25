@@ -1,9 +1,9 @@
 #ifndef __KSU_H_KSU_MANAGER
 #define __KSU_H_KSU_MANAGER
 
+#include "allowlist.h"
 #include <linux/cred.h>
 #include <linux/types.h>
-#include "allowlist.h"
 
 #define KSU_INVALID_APPID -1
 
@@ -16,7 +16,8 @@ static inline bool ksu_is_manager_appid_valid()
 
 static inline bool is_manager()
 {
-    return unlikely(ksu_manager_appid == current_uid().val % PER_USER_RANGE);
+	return unlikely(ksu_manager_appid ==
+			current_uid().val % PER_USER_RANGE);
 }
 
 static inline uid_t ksu_get_manager_appid()

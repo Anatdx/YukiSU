@@ -1,10 +1,10 @@
+#include "../klog.h" // IWYU pragma: keep
+#include "../ksu.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
 #include "linux/security.h"
 #include "linux/version.h"
 #include "selinux_defs.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "../ksu.h"
 
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
@@ -45,7 +45,7 @@ is_ksu_transition(const struct task_security_struct *old_tsec,
 
 	if (!ksu_sid) {
 		err = security_secctx_to_secid(
-			KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT), &ksu_sid);
+		    KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT), &ksu_sid);
 		pr_err("failed to get ksu_sid: %d\n", err);
 	}
 
@@ -90,7 +90,7 @@ bool getenforce(void)
 bool is_context(const struct cred *cred, const char *context)
 {
 	const taskcred_sec_t *sec;
-	struct lsm_context ctx = { 0 };
+	struct lsm_context ctx = {0};
 	bool result = false;
 	int err;
 
@@ -140,7 +140,7 @@ u32 ksu_get_ksu_file_sid(void)
 {
 	u32 ksu_file_sid = 0;
 	int err = security_secctx_to_secid(
-		KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT), &ksu_file_sid);
+	    KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT), &ksu_file_sid);
 
 	if (err) {
 		pr_info("get ksufile sid err %d\n", err);
@@ -168,8 +168,8 @@ static inline void susfs_set_sid(const char *secctx_name, u32 *out_sid)
 		return;
 	}
 
-	err = security_secctx_to_secid(secctx_name, strlen(secctx_name),
-				       out_sid);
+	err =
+	    security_secctx_to_secid(secctx_name, strlen(secctx_name), out_sid);
 	if (err) {
 		pr_err("failed setting sid for '%s', err: %d\n", secctx_name,
 		       err);

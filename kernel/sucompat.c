@@ -1,10 +1,10 @@
-#include <linux/uaccess.h>
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/fs.h>
-#include <linux/types.h>
-#include <linux/version.h>
 #include <linux/ptrace.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler.h>
 #endif
@@ -16,19 +16,19 @@
 #include <asm/current.h>
 
 #ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs_def.h>
-#include <linux/namei.h>
-#include "selinux/selinux.h"
 #include "objsec.h"
+#include "selinux/selinux.h"
+#include <linux/namei.h>
+#include <linux/susfs_def.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 #include "allowlist.h"
+#include "app_profile.h"
 #include "feature.h"
+#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
-#include "kernel_compat.h"
 #include "sucompat.h"
-#include "app_profile.h"
 #ifdef CONFIG_KSU_SYSCALL_HOOK
 #include "kp_util.h"
 #endif
@@ -60,16 +60,16 @@ static int su_compat_feature_set(u64 value)
 }
 
 static const struct ksu_feature_handler su_compat_handler = {
-	.feature_id = KSU_FEATURE_SU_COMPAT,
-	.name = "su_compat",
-	.get_handler = su_compat_feature_get,
-	.set_handler = su_compat_feature_set,
+    .feature_id = KSU_FEATURE_SU_COMPAT,
+    .name = "su_compat",
+    .get_handler = su_compat_feature_get,
+    .set_handler = su_compat_feature_set,
 };
 
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
-	// To avoid having to mmap a page in userspace, just write below the stack
-	// pointer.
+	// To avoid having to mmap a page in userspace, just write below the
+	// stack pointer.
 	char __user *p = (void __user *)current_user_stack_pointer() - len;
 
 	return copy_to_user(p, d, len) ? NULL : p;
@@ -113,13 +113,14 @@ static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
 
 	if (current->pid != 1 && is_init(get_current_cred())) {
 		if (unlikely(strcmp(filename->name, KSUD_PATH) == 0)) {
-			pr_info("hook_manager: escape to root for init executing ksud: %d\n",
+			pr_info("hook_manager: escape to root for init "
+				"executing ksud: %d\n",
 				current->pid);
 			escape_to_root_for_init();
 		}
 #ifdef CONFIG_KSU_SUSFS
 		else if (likely(strstr(filename->name, "/app_process") ==
-					NULL &&
+				    NULL &&
 				strstr(filename->name, "/adbd") == NULL)) {
 			pr_info("hook_manager: unmark %d exec %s\n",
 				current->pid, filename->name);
@@ -259,7 +260,9 @@ int __maybe_unused ksu_handle_devpts(struct inode *inode)
 	return 0;
 }
 #else
-// the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
+// the call from execve_handler_pre won't provided correct value for
+// __never_use_argument, use them after fix execve_handler_pre, keeping them for
+// consistence for manually patched code
 int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 void *__never_use_argv, void *__never_use_envp,
 				 int *__never_use_flags)
@@ -307,7 +310,7 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 			 int *__unused_flags)
 {
-	char path[sizeof(su_path) + 1] = { 0 };
+	char path[sizeof(su_path) + 1] = {0};
 
 	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
 
@@ -345,8 +348,8 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 #else
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
-	char path[sizeof(su_path) + 1] = { 0 };
-	
+	char path[sizeof(su_path) + 1] = {0};
+
 	if (unlikely(!filename_user)) {
 		return 0;
 	}
@@ -383,11 +386,11 @@ int ksu_handle_devpts(struct inode *inode)
 
 	if (ksu_file_sid) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) ||                           \
-	defined(KSU_OPTIONAL_SELINUX_INODE)
+    defined(KSU_OPTIONAL_SELINUX_INODE)
 		struct inode_security_struct *sec = selinux_inode(inode);
 #else
 		struct inode_security_struct *sec =
-			(struct inode_security_struct *)inode->i_security;
+		    (struct inode_security_struct *)inode->i_security;
 #endif
 		if (sec) {
 			sec->sid = ksu_file_sid;

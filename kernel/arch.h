@@ -26,16 +26,17 @@ extern long __arm64_sys_setns(const struct pt_regs *regs);
 
 #elif defined(__arm__)
 
-// Oversimplified version of https://github.com/backslashxx/KernelSU/blob/master/kernel/arch.h#L29
+// Oversimplified version of
+// https://github.com/backslashxx/KernelSU/blob/master/kernel/arch.h#L29
 #define __PT_PARM1_REG uregs[0]
 #define __PT_PARM2_REG uregs[1]
 #define __PT_PARM3_REG uregs[2]
-#define __PT_SYSCALL_PARM4_REG uregs[3] 
+#define __PT_SYSCALL_PARM4_REG uregs[3]
 #define __PT_CCALL_PARM4_REG uregs[3]
 #define __PT_PARM5_REG uregs[4]
 #define __PT_PARM6_REG uregs[5]
 #define __PT_RET_REG uregs[14]
-#define __PT_FP_REG uregs[11]	/* Works only with CONFIG_FRAME_POINTER */
+#define __PT_FP_REG uregs[11] /* Works only with CONFIG_FRAME_POINTER */
 #define __PT_RC_REG uregs[0]
 #define __PT_SP_REG uregs[13]
 #define __PT_IP_REG uregs[12]

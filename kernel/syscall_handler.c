@@ -1,12 +1,12 @@
+#include <asm/syscall.h>
 #include <linux/compiler.h>
 #include <linux/cred.h>
-#include <linux/printk.h>
-#include <linux/spinlock.h>
 #include <linux/kprobes.h>
-#include <linux/tracepoint.h>
+#include <linux/printk.h>
 #include <linux/ptrace.h>
 #include <linux/slab.h>
-#include <asm/syscall.h>
+#include <linux/spinlock.h>
+#include <linux/tracepoint.h>
 
 #include <trace/events/syscalls.h>
 // Tracepoint registration count management
@@ -30,7 +30,8 @@ static void handle_process_mark(bool mark)
 {
 	struct task_struct *p, *t;
 	read_lock(&tasklist_lock);
-	for_each_process_thread (p, t) {
+	for_each_process_thread(p, t)
+	{
 		if (mark)
 			ksu_set_task_tracepoint_flag(t);
 		else
@@ -55,7 +56,8 @@ static void ksu_mark_running_process_locked(void)
 {
 	struct task_struct *p, *t;
 	read_lock(&tasklist_lock);
-	for_each_process_thread (p, t) {
+	for_each_process_thread(p, t)
+	{
 		if (!t->mm) { // only user processes
 			continue;
 		}
@@ -69,11 +71,13 @@ static void ksu_mark_running_process_locked(void)
 		if (ksu_root_process || is_zygote_process || is_shell ||
 		    is_init || ksu_is_allow_uid(uid)) {
 			ksu_set_task_tracepoint_flag(t);
-			pr_info("hook_manager: mark process: pid:%d, uid: %d, comm:%s\n",
+			pr_info("hook_manager: mark process: pid:%d, uid: %d, "
+				"comm:%s\n",
 				t->pid, uid, t->comm);
 		} else {
 			ksu_clear_task_tracepoint_flag(t);
-			pr_info("hook_manager: unmark process: pid:%d, uid: %d, comm:%s\n",
+			pr_info("hook_manager: unmark process: pid:%d, uid: "
+				"%d, comm:%s\n",
 				t->pid, uid, t->comm);
 		}
 		put_cred(cred);
@@ -88,7 +92,8 @@ void ksu_mark_running_process(void)
 	if (tracepoint_reg_count <= 1) {
 		ksu_mark_running_process_locked();
 	} else {
-		pr_info("hook_manager: not mark running process since syscall tracepoint is in use\n");
+		pr_info("hook_manager: not mark running process since syscall "
+			"tracepoint is in use\n");
 	}
 	spin_unlock_irqrestore(&tracepoint_reg_lock, flags);
 }
@@ -106,12 +111,11 @@ int ksu_get_task_mark(pid_t pid)
 		get_task_struct(task);
 		rcu_read_unlock();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-		marked = test_task_syscall_work(task, SYSCALL_TRACEPOINT) ? 1 :
-									    0;
+		marked =
+		    test_task_syscall_work(task, SYSCALL_TRACEPOINT) ? 1 : 0;
 #else
-		marked = test_tsk_thread_flag(task, TIF_SYSCALL_TRACEPOINT) ?
-				 1 :
-				 0;
+		marked =
+		    test_tsk_thread_flag(task, TIF_SYSCALL_TRACEPOINT) ? 1 : 0;
 #endif
 		put_task_struct(task);
 	} else {
@@ -248,7 +252,8 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
 		return 0;
 
 	if (unlikely(strcmp(path, KSUD_PATH) == 0)) {
-		pr_info("hook_manager: escape to root for init executing ksud: %d\n",
+		pr_info("hook_manager: escape to root for init executing ksud: "
+			"%d\n",
 			current->pid);
 		escape_to_root_for_init();
 	} else if (likely(strstr(path, "/app_process") == NULL &&
@@ -276,10 +281,9 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 			if (id == __NR_newfstatat) {
 				int *dfd = (int *)&PT_REGS_PARM1(regs);
 				const char __user **filename_user =
-					(const char __user **)&PT_REGS_PARM2(
-						regs);
+				    (const char __user **)&PT_REGS_PARM2(regs);
 				int *flags =
-					(int *)&PT_REGS_SYSCALL_PARM4(regs);
+				    (int *)&PT_REGS_SYSCALL_PARM4(regs);
 				ksu_handle_stat(dfd, filename_user, flags);
 				return;
 			}
@@ -288,8 +292,7 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 			if (id == __NR_faccessat) {
 				int *dfd = (int *)&PT_REGS_PARM1(regs);
 				const char __user **filename_user =
-					(const char __user **)&PT_REGS_PARM2(
-						regs);
+				    (const char __user **)&PT_REGS_PARM2(regs);
 				int *mode = (int *)&PT_REGS_PARM3(regs);
 				ksu_handle_faccessat(dfd, filename_user, mode,
 						     NULL);
@@ -299,16 +302,15 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 			// Handle execve
 			if (id == __NR_execve) {
 				const char __user **filename_user =
-					(const char __user **)&PT_REGS_PARM1(
-						regs);
+				    (const char __user **)&PT_REGS_PARM1(regs);
 				if (current->pid != 1 &&
 				    is_init(get_current_cred())) {
 					ksu_handle_init_mark_tracker(
-						filename_user);
+					    filename_user);
 				} else {
 					ksu_handle_execve_sucompat(
-						NULL, filename_user, NULL, NULL,
-						NULL);
+					    NULL, filename_user, NULL, NULL,
+					    NULL);
 				}
 				return;
 			}
@@ -334,10 +336,10 @@ void ksu_syscall_hook_manager_init(void)
 #ifdef CONFIG_KRETPROBES
 	// Register kretprobe for syscall_regfunc
 	syscall_regfunc_rp =
-		init_kretprobe("syscall_regfunc", syscall_regfunc_handler);
+	    init_kretprobe("syscall_regfunc", syscall_regfunc_handler);
 	// Register kretprobe for syscall_unregfunc
 	syscall_unregfunc_rp =
-		init_kretprobe("syscall_unregfunc", syscall_unregfunc_handler);
+	    init_kretprobe("syscall_unregfunc", syscall_unregfunc_handler);
 #endif
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
@@ -346,7 +348,8 @@ void ksu_syscall_hook_manager_init(void)
 	ksu_mark_running_process_locked();
 #endif
 	if (ret) {
-		pr_err("hook_manager: failed to register sys_enter tracepoint: %d\n",
+		pr_err("hook_manager: failed to register sys_enter tracepoint: "
+		       "%d\n",
 		       ret);
 	} else {
 		pr_info("hook_manager: sys_enter tracepoint registered\n");

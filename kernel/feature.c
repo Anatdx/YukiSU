@@ -28,8 +28,9 @@ int ksu_register_feature_handler(const struct ksu_feature_handler *handler)
 	mutex_lock(&feature_mutex);
 
 	if (feature_handlers[handler->feature_id]) {
-		pr_warn("feature: handler for %u already registered, overwriting\n",
-			handler->feature_id);
+		pr_warn(
+		    "feature: handler for %u already registered, overwriting\n",
+		    handler->feature_id);
 	}
 
 	feature_handlers[handler->feature_id] = handler;

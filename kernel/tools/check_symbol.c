@@ -1,11 +1,11 @@
+#include <elf.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <elf.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 typedef struct {
 	void *data;
@@ -56,7 +56,7 @@ int open_elf(const char *path, ElfFile *elf)
 	elf->shdr = (Elf64_Shdr *)((char *)elf->data + elf->ehdr->e_shoff);
 
 	elf->shstrtab =
-		(char *)elf->data + elf->shdr[elf->ehdr->e_shstrndx].sh_offset;
+	    (char *)elf->data + elf->shdr[elf->ehdr->e_shstrndx].sh_offset;
 
 	return 0;
 }
@@ -132,12 +132,12 @@ int main(int argc, char *argv[])
 	}
 
 	char *ko_strtab =
-		(char *)ko_elf.data + ko_elf.shdr[ko_symtab->sh_link].sh_offset;
+	    (char *)ko_elf.data + ko_elf.shdr[ko_symtab->sh_link].sh_offset;
 	char *vmlinux_strtab = (char *)vmlinux.data +
 			       vmlinux.shdr[vmlinux_symtab->sh_link].sh_offset;
 
 	Elf64_Sym *ko_syms =
-		(Elf64_Sym *)((char *)ko_elf.data + ko_symtab->sh_offset);
+	    (Elf64_Sym *)((char *)ko_elf.data + ko_symtab->sh_offset);
 	int ko_sym_count = ko_symtab->sh_size / sizeof(Elf64_Sym);
 
 	int has_error = 0;
@@ -147,23 +147,25 @@ int main(int argc, char *argv[])
 		    ko_syms[i].st_name != 0) {
 			const char *sym_name = ko_strtab + ko_syms[i].st_name;
 
-			Elf64_Sym *vmlinux_sym =
-				find_symbol(&vmlinux, sym_name, vmlinux_symtab,
-					    vmlinux_strtab);
+			Elf64_Sym *vmlinux_sym = find_symbol(
+			    &vmlinux, sym_name, vmlinux_symtab, vmlinux_strtab);
 
 			if (!vmlinux_sym ||
 			    vmlinux_sym->st_shndx == SHN_UNDEF) {
 				fprintf(stderr,
-					"Error: Symbol '%s' not found or undefined in %s\n",
+					"Error: Symbol '%s' not found or "
+					"undefined in %s\n",
 					sym_name, vmlinux_path);
 				has_error = 1;
 			} else {
 				int binding =
-					ELF64_ST_BIND(vmlinux_sym->st_info);
+				    ELF64_ST_BIND(vmlinux_sym->st_info);
 				if (binding != STB_GLOBAL &&
 				    binding != STB_WEAK) {
 					fprintf(stderr,
-						"Warning: Symbol '%s' is defined in %s but not global (binding=%d)\n",
+						"Warning: Symbol '%s' is "
+						"defined in %s but not global "
+						"(binding=%d)\n",
 						sym_name, vmlinux_path,
 						binding);
 				}

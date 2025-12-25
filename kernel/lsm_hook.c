@@ -1,13 +1,12 @@
-#include <linux/lsm_hooks.h>
-#include <linux/uidgid.h>
-#include <linux/version.h>
 #include <linux/dcache.h>
 #include <linux/err.h>
-#include <linux/uidgid.h>
+#include <linux/lsm_hooks.h>
 #include <linux/string.h>
+#include <linux/uidgid.h>
+#include <linux/version.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) &&                           \
-	defined(CONFIG_KSU_MANUAL_SU)
+    defined(CONFIG_KSU_MANUAL_SU)
 #include "manual_su.h"
 
 static int ksu_task_alloc(struct task_struct *task, unsigned long clone_flags)
@@ -18,7 +17,7 @@ static int ksu_task_alloc(struct task_struct *task, unsigned long clone_flags)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
-	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
 			      unsigned perm)
 {
@@ -36,7 +35,7 @@ static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
 #endif
 
 #if defined(CONFIG_KSU_MANUAL_HOOK) && !defined(CONFIG_KSU_SUSFS)
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0) &&                          \
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0) &&                           \
      defined(CONFIG_KSU_MANUAL_HOOK))
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
@@ -106,26 +105,26 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 
 static struct security_hook_list ksu_hooks[] = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
-	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-	LSM_HOOK_INIT(key_permission, ksu_key_permission),
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+    LSM_HOOK_INIT(key_permission, ksu_key_permission),
 #endif
 #if defined(CONFIG_KSU_MANUAL_HOOK) && !defined(CONFIG_KSU_SUSFS)
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0) &&                          \
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0) &&                           \
      defined(CONFIG_KSU_MANUAL_HOOK))
-	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
-	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
+    LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+    LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 #endif
 #endif
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0) &&                           \
-	defined(CONFIG_KSU_MANUAL_SU)
-	LSM_HOOK_INIT(task_alloc, ksu_task_alloc),
+    defined(CONFIG_KSU_MANUAL_SU)
+    LSM_HOOK_INIT(task_alloc, ksu_task_alloc),
 #endif
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 static const struct lsm_id ksu_lsmid = {
-	.name = "ksu",
-	.id = 912,
+    .name = "ksu",
+    .id = 912,
 };
 #endif
 

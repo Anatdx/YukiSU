@@ -1,6 +1,3 @@
-#include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/task_work.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
@@ -8,19 +5,22 @@
 #include <linux/nsproxy.h>
 #include <linux/path.h>
 #include <linux/printk.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/task_work.h>
 #include <linux/types.h>
 #ifndef KSU_HAS_PATH_UMOUNT
 #include <linux/syscalls.h>
 #endif
 
+#include "allowlist.h"
+#include "feature.h"
+#include "kernel_compat.h"
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
-#include "allowlist.h"
-#include "kernel_compat.h"
-#include "selinux/selinux.h"
-#include "feature.h"
-#include "ksud.h"
 #include "ksu.h"
+#include "ksud.h"
+#include "selinux/selinux.h"
 
 #include "sulog.h"
 
@@ -41,14 +41,14 @@ static int kernel_umount_feature_set(u64 value)
 }
 
 static const struct ksu_feature_handler kernel_umount_handler = {
-	.feature_id = KSU_FEATURE_KERNEL_UMOUNT,
-	.name = "kernel_umount",
-	.get_handler = kernel_umount_feature_get,
-	.set_handler = kernel_umount_feature_set,
+    .feature_id = KSU_FEATURE_KERNEL_UMOUNT,
+    .name = "kernel_umount",
+    .get_handler = kernel_umount_feature_get,
+    .set_handler = kernel_umount_feature_set,
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) ||                           \
-	defined(KSU_HAS_PATH_UMOUNT)
+    defined(KSU_HAS_PATH_UMOUNT)
 extern int path_umount(struct path *path, int flags);
 static int ksu_umount_mnt(const char *__never_use_mnt, struct path *path,
 			  int flags)
@@ -112,7 +112,8 @@ static void umount_tw_func(struct callback_head *cb)
 
 	down_read(&mount_list_lock);
 	struct mount_entry *entry;
-	list_for_each_entry (entry, &mount_list, list) {
+	list_for_each_entry(entry, &mount_list, list)
+	{
 		pr_info("%s: unmounting: %s flags 0x%x\n", __func__,
 			entry->umountable, entry->flags);
 		try_umount(entry->umountable, entry->flags);
@@ -143,8 +144,10 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 	// 1. Normal app: zygote -> appuid
 	// 2. Isolated process forked from zygote: zygote -> isolated_process
 	// 3. App zygote forked from zygote: zygote -> appuid
-	// 4. Isolated process froked from app zygote: appuid -> isolated_process (already handled by 3)
-	// 5. Isolated process froked from webview zygote (no need to handle, app cannot run custom code)
+	// 4. Isolated process froked from app zygote: appuid ->
+	// isolated_process (already handled by 3)
+	// 5. Isolated process froked from webview zygote (no need to handle,
+	// app cannot run custom code)
 	if (!is_appuid(new_uid) && !is_isolated_process(new_uid)) {
 		return 0;
 	}
@@ -154,9 +157,9 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 	}
 
 	// check old process's selinux context, if it is not zygote, ignore it!
-	// because some su apps may setuid to untrusted_app but they are in global mount namespace
-	// when we umount for such process, that is a disaster!
-	// also handle case 4 and 5
+	// because some su apps may setuid to untrusted_app but they are in
+	// global mount namespace when we umount for such process, that is a
+	// disaster! also handle case 4 and 5
 	bool is_zygote_child = is_zygote(get_current_cred());
 	if (!is_zygote_child) {
 		pr_info("handle umount ignore non zygote child: %d\n",

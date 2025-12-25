@@ -1,8 +1,8 @@
 #ifndef __SUKISU_KPM_H
 #define __SUKISU_KPM_H
 
-#include <linux/types.h>
 #include <linux/ioctl.h>
+#include <linux/types.h>
 
 struct ksu_kpm_cmd {
 	__aligned_u64 __user control_code;

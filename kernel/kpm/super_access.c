@@ -1,39 +1,33 @@
-#include <linux/export.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/fs.h>
-#include <linux/kernfs.h>
-#include <linux/file.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/uaccess.h>
-#include <linux/elf.h>
-#include <linux/kallsyms.h>
-#include <linux/version.h>
-#include <linux/list.h>
-#include <linux/spinlock.h>
-#include <linux/rcupdate.h>
-#include <asm/elf.h>
-#include <linux/vmalloc.h>
-#include <linux/mm.h>
-#include <linux/string.h>
-#include <asm/cacheflush.h>
-#include <linux/module.h>
-#include <linux/vmalloc.h>
-#include <linux/set_memory.h>
-#include <linux/version.h>
-#include <linux/export.h>
-#include <linux/slab.h>
-#include <linux/types.h>
-#include <linux/stddef.h>
-#include <linux/mount.h>
-#include <linux/kprobes.h>
-#include <linux/mm_types.h>
-#include <linux/netlink.h>
-#include <linux/sched.h>
-#include <../fs/mount.h>
-#include "kpm.h"
 #include "compact.h"
+#include "kpm.h"
+#include <../fs/mount.h>
+#include <asm/cacheflush.h>
+#include <asm/elf.h>
+#include <linux/elf.h>
+#include <linux/export.h>
+#include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/kallsyms.h>
+#include <linux/kernel.h>
+#include <linux/kernfs.h>
+#include <linux/kprobes.h>
+#include <linux/list.h>
+#include <linux/mm.h>
+#include <linux/mm_types.h>
+#include <linux/module.h>
+#include <linux/mount.h>
+#include <linux/netlink.h>
+#include <linux/rcupdate.h>
+#include <linux/sched.h>
+#include <linux/set_memory.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/stddef.h>
+#include <linux/string.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
+#include <linux/vmalloc.h>
 
 struct DynamicStructMember {
 	const char *name;
@@ -51,20 +45,19 @@ struct DynamicStructInfo {
 #define DYNAMIC_STRUCT_BEGIN(struct_name)                                      \
 	static struct DynamicStructMember struct_name##_members[] = {
 #define DEFINE_MEMBER(struct_name, member)                                     \
-	{ .name = #member,                                                     \
-	  .size = sizeof(((struct struct_name *)0)->member),                   \
-	  .offset = offsetof(struct struct_name, member) },
+	{.name = #member,                                                      \
+	 .size = sizeof(((struct struct_name *)0)->member),                    \
+	 .offset = offsetof(struct struct_name, member)},
 
 #define DYNAMIC_STRUCT_END(struct_name)                                        \
 	}                                                                      \
 	;                                                                      \
 	static struct DynamicStructInfo struct_name##_info = {                 \
-		.name = #struct_name,                                          \
-		.count = sizeof(struct_name##_members) /                       \
-			 sizeof(struct DynamicStructMember),                   \
-		.total_size = sizeof(struct struct_name),                      \
-		.members = struct_name##_members                               \
-	};
+	    .name = #struct_name,                                              \
+	    .count = sizeof(struct_name##_members) /                           \
+		     sizeof(struct DynamicStructMember),                       \
+	    .total_size = sizeof(struct struct_name),                          \
+	    .members = struct_name##_members};
 
 DYNAMIC_STRUCT_BEGIN(mount)
 DEFINE_MEMBER(mount, mnt_parent)
@@ -175,17 +168,16 @@ DYNAMIC_STRUCT_END(task_struct)
 #define STRUCT_INFO(name) &(name##_info)
 
 static struct DynamicStructInfo *dynamic_struct_infos[] = {
-	STRUCT_INFO(mount),
-	STRUCT_INFO(vfsmount),
-	STRUCT_INFO(mnt_namespace),
+    STRUCT_INFO(mount),
+    STRUCT_INFO(vfsmount),
+    STRUCT_INFO(mnt_namespace),
 #ifdef CONFIG_KPROBES
-	STRUCT_INFO(kprobe),
+    STRUCT_INFO(kprobe),
 #endif
-	STRUCT_INFO(vm_area_struct),
-	STRUCT_INFO(vm_operations_struct),
-	STRUCT_INFO(netlink_kernel_cfg),
-	STRUCT_INFO(task_struct)
-};
+    STRUCT_INFO(vm_area_struct),
+    STRUCT_INFO(vm_operations_struct),
+    STRUCT_INFO(netlink_kernel_cfg),
+    STRUCT_INFO(task_struct)};
 
 /*
  * return 0 if successful
@@ -234,11 +226,11 @@ int sukisu_super_access(const char *struct_name, const char *member_name,
 					   member_name) == 0) {
 					if (out_offset)
 						*out_offset =
-							info->members[i].offset;
+						    info->members[i].offset;
 
 					if (out_size)
 						*out_size =
-							info->members[i].size;
+						    info->members[i].size;
 
 					return 0;
 				}
@@ -254,9 +246,9 @@ EXPORT_SYMBOL(sukisu_super_access);
 
 #define DYNAMIC_CONTAINER_OF(offset, member_ptr)                               \
 	({                                                                     \
-		(offset != (size_t)-1) ?                                       \
-			(void *)((char *)(member_ptr)-offset) :                \
-			NULL;                                                  \
+		(offset != (size_t) - 1)                                       \
+		    ? (void *)((char *)(member_ptr) - offset)                  \
+		    : NULL;                                                    \
 	})
 
 /*
@@ -281,7 +273,7 @@ int sukisu_super_container_of(const char *struct_name, const char *member_name,
 				if (strcmp(info->members[i1].name,
 					   member_name) == 0) {
 					*out_ptr = (void *)DYNAMIC_CONTAINER_OF(
-						info->members[i1].offset, ptr);
+					    info->members[i1].offset, ptr);
 
 					return 0;
 				}

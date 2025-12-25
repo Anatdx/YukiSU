@@ -1,9 +1,9 @@
 #ifndef __KSU_H_KSU
 #define __KSU_H_KSU
 
+#include <linux/cred.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
-#include <linux/cred.h>
 
 #define KERNEL_SU_VERSION KSU_VERSION
 

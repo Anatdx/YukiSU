@@ -1,10 +1,10 @@
+#include <generated/compile.h>
+#include <generated/utsrelease.h>
 #include <linux/export.h>
 #include <linux/fs.h>
-#include <linux/printk.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
-#include <generated/utsrelease.h>
-#include <generated/compile.h>
+#include <linux/printk.h>
 #include <linux/version.h> /* LINUX_VERSION_CODE, KERNEL_VERSION macros */
 
 #ifdef CONFIG_KSU_SUSFS
@@ -24,10 +24,10 @@
 #include "setuid_hook.h"
 #include "sucompat.h"
 #endif // #ifndef CONFIG_KSU_SUSFS
+#include "file_wrapper.h"
+#include "ksu.h"
 #include "ksud.h"
 #include "supercalls.h"
-#include "ksu.h"
-#include "file_wrapper.h"
 #include "superkey.h"
 
 struct cred *ksu_cred;
@@ -58,19 +58,19 @@ int __init kernelsu_init(void)
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert(
-		"*************************************************************");
+	    "*************************************************************");
 	pr_alert(
-		"**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
+	    "**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
+	pr_alert("**							"
+		 "							 **");
 	pr_alert(
-		"**														 **");
+	    "**		 You are running KernelSU in DEBUG mode		  **");
+	pr_alert("**							"
+		 "							 **");
 	pr_alert(
-		"**		 You are running KernelSU in DEBUG mode		  **");
+	    "**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
 	pr_alert(
-		"**														 **");
-	pr_alert(
-		"**	 NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE	**");
-	pr_alert(
-		"*************************************************************");
+	    "*************************************************************");
 #endif
 
 	ksu_cred = prepare_creds();
@@ -117,9 +117,9 @@ int __init kernelsu_init(void)
 	return 0;
 }
 
-#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||          \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                      \
-	 defined(CONFIG_KSU_MANUAL_HOOK))
+#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||           \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                          \
+     defined(CONFIG_KSU_MANUAL_HOOK))
 extern void ksu_observer_exit(void);
 #endif
 
@@ -129,9 +129,9 @@ void kernelsu_exit(void)
 
 	ksu_throne_tracker_exit();
 
-#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||          \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                      \
-	 defined(CONFIG_KSU_MANUAL_HOOK))
+#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||           \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                          \
+     defined(CONFIG_KSU_MANUAL_HOOK))
 	ksu_observer_exit();
 #endif
 #ifndef CONFIG_KSU_SUSFS

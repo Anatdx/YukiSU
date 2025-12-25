@@ -1,8 +1,8 @@
 #ifndef __KSU_H_SELINUX_DEFS
 #define __KSU_H_SELINUX_DEFS
 
-#include "selinux.h"
 #include "objsec.h"
+#include "selinux.h"
 #ifdef SAMSUNG_SELINUX_PORTING
 #include "security.h" // Samsung SELinux Porting
 #endif
@@ -83,7 +83,7 @@ static inline void __security_release_secctx(struct lsm_context *cp)
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \
-	!defined(KSU_COMPAT_HAS_CURRENT_SID)
+    !defined(KSU_COMPAT_HAS_CURRENT_SID)
 /*
  * get the subjective security ID of the current task
  */

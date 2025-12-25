@@ -7,9 +7,9 @@
 #include <linux/version.h>
 
 #include "allowlist.h"
+#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager.h"
-#include "kernel_compat.h"
 #include "throne_tracker.h"
 
 uid_t ksu_manager_appid = KSU_INVALID_APPID;
@@ -78,15 +78,17 @@ static void crown_manager(const char *apk, struct list_head *uid_data)
 #ifdef KSU_MANAGER_PACKAGE
 	// pkg is `/<real package>`
 	if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {
-		pr_info("manager package is inconsistent with kernel build: %s\n",
-			KSU_MANAGER_PACKAGE);
+		pr_info(
+		    "manager package is inconsistent with kernel build: %s\n",
+		    KSU_MANAGER_PACKAGE);
 		return;
 	}
 #endif
 	struct list_head *list = (struct list_head *)uid_data;
 	struct uid_data *np;
 
-	list_for_each_entry (np, list, list) {
+	list_for_each_entry(np, list, list)
+	{
 		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
 			pr_info("Crowning manager: %s(uid=%d)\n", pkg, np->uid);
 			ksu_set_manager_appid(np->uid);
@@ -121,8 +123,11 @@ struct my_dir_context {
 };
 // https://docs.kernel.org/filesystems/porting.html
 // filldir_t (readdir callbacks) calling conventions have changed.
-// Instead of returning 0 or -E... it returns bool now. false means "no more" (as -E... used to) and true - "keep going" (as 0 in old calling conventions).
-// Rationale: callers never looked at specific -E... values anyway. -> iterate_shared() instances require no changes at all, all filldir_t ones in the tree converted.
+// Instead of returning 0 or -E... it returns bool now. false means "no more"
+// (as -E... used to) and true - "keep going" (as 0 in old calling conventions).
+// Rationale: callers never looked at specific -E... values anyway. ->
+// iterate_shared() instances require no changes at all, all filldir_t ones in
+// the tree converted.
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 #define FILLDIR_RETURN_TYPE bool
 #define FILLDIR_ACTOR_CONTINUE true
@@ -150,7 +155,7 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 			     unsigned int d_type)
 {
 	struct my_dir_context *my_ctx =
-		container_of(ctx, struct my_dir_context, ctx);
+	    container_of(ctx, struct my_dir_context, ctx);
 	char dirpath[DATA_PATH_LEN];
 
 	if (!my_ctx) {
@@ -181,7 +186,7 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 	if (d_type == DT_DIR && my_ctx->depth > 0 &&
 	    (my_ctx->stop && !*my_ctx->stop)) {
 		struct data_path *data =
-			kzalloc(sizeof(struct data_path), GFP_ATOMIC);
+		    kzalloc(sizeof(struct data_path), GFP_ATOMIC);
 
 		if (!data) {
 			pr_err("Failed to allocate memory for %s\n", dirpath);
@@ -197,12 +202,13 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 			struct apk_path_hash *pos;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 8, 0)
 			unsigned int hash =
-				full_name_hash(dirpath, strlen(dirpath));
+			    full_name_hash(dirpath, strlen(dirpath));
 #else
 			unsigned int hash =
-				full_name_hash(NULL, dirpath, strlen(dirpath));
+			    full_name_hash(NULL, dirpath, strlen(dirpath));
 #endif
-			list_for_each_entry (pos, &apk_path_hash_list, list) {
+			list_for_each_entry(pos, &apk_path_hash_list, list)
+			{
 				if (hash == pos->hash) {
 					pos->exists = true;
 					return FILLDIR_ACTOR_CONTINUE;
@@ -232,7 +238,8 @@ static void search_manager(const char *path, int depth,
 
 	// Initialize APK cache list
 	struct apk_path_hash *pos, *n;
-	list_for_each_entry (pos, &apk_path_hash_list, list) {
+	list_for_each_entry(pos, &apk_path_hash_list, list)
+	{
 		pos->exists = false;
 	}
 
@@ -245,33 +252,36 @@ static void search_manager(const char *path, int depth,
 	for (i = depth; i >= 0; i--) {
 		struct data_path *pos, *n;
 
-		list_for_each_entry_safe (pos, n, &data_path_list, list) {
-			struct my_dir_context ctx = { .ctx.actor = my_actor,
-						      .data_path_list =
-							      &data_path_list,
-						      .parent_dir =
-							      pos->dirpath,
-						      .private_data = uid_data,
-						      .depth = pos->depth,
-						      .stop = &stop };
+		list_for_each_entry_safe(pos, n, &data_path_list, list)
+		{
+			struct my_dir_context ctx = {.ctx.actor = my_actor,
+						     .data_path_list =
+							 &data_path_list,
+						     .parent_dir = pos->dirpath,
+						     .private_data = uid_data,
+						     .depth = pos->depth,
+						     .stop = &stop};
 			struct file *file;
 
 			if (!stop) {
 				file = ksu_filp_open_compat(
-					pos->dirpath, O_RDONLY | O_NOFOLLOW, 0);
+				    pos->dirpath, O_RDONLY | O_NOFOLLOW, 0);
 				if (IS_ERR(file)) {
-					pr_err("Failed to open directory: %s, err: %ld\n",
+					pr_err("Failed to open directory: %s, "
+					       "err: %ld\n",
 					       pos->dirpath, PTR_ERR(file));
 					goto skip_iterate;
 				}
 
-				// grab magic on first folder, which is /data/app
+				// grab magic on first folder, which is
+				// /data/app
 				if (!data_app_magic) {
 					if (file->f_inode->i_sb->s_magic) {
 						data_app_magic =
-							file->f_inode->i_sb
-								->s_magic;
-						pr_info("%s: dir: %s got magic! 0x%lx\n",
+						    file->f_inode->i_sb
+							->s_magic;
+						pr_info("%s: dir: %s got "
+							"magic! 0x%lx\n",
 							__func__, pos->dirpath,
 							data_app_magic);
 					} else {
@@ -282,7 +292,8 @@ static void search_manager(const char *path, int depth,
 
 				if (file->f_inode->i_sb->s_magic !=
 				    data_app_magic) {
-					pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n",
+					pr_info("%s: skip: %s magic: 0x%lx "
+						"expected: 0x%lx\n",
 						__func__, pos->dirpath,
 						file->f_inode->i_sb->s_magic,
 						data_app_magic);
@@ -302,7 +313,8 @@ static void search_manager(const char *path, int depth,
 
 	// clear apk_path_hash_list unconditionally
 	pr_info("Search manager: cleanup!\n");
-	list_for_each_entry_safe (pos, n, &apk_path_hash_list, list) {
+	list_for_each_entry_safe(pos, n, &apk_path_hash_list, list)
+	{
 		list_del(&pos->list);
 		kfree(pos);
 	}
@@ -314,7 +326,8 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 	struct uid_data *np;
 
 	bool exist = false;
-	list_for_each_entry (np, list, list) {
+	list_for_each_entry(np, list, list)
+	{
 		if (np->uid == uid % PER_USER_RANGE &&
 		    strncmp(np->package, package, KSU_MAX_PACKAGE_NAME) == 0) {
 			exist = true;
@@ -327,7 +340,7 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 void track_throne(bool prune_only)
 {
 	struct file *fp =
-		ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+	    ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
 		       __func__, PTR_ERR(fp));
@@ -343,17 +356,17 @@ void track_throne(bool prune_only)
 	char buf[KSU_MAX_PACKAGE_NAME];
 	for (;;) {
 		ssize_t count =
-			ksu_kernel_read_compat(fp, &chr, sizeof(chr), &pos);
+		    ksu_kernel_read_compat(fp, &chr, sizeof(chr), &pos);
 		if (count != sizeof(chr))
 			break;
 		if (chr != '\n')
 			continue;
 
-		count = ksu_kernel_read_compat(fp, buf, sizeof(buf),
-					       &line_start);
+		count =
+		    ksu_kernel_read_compat(fp, buf, sizeof(buf), &line_start);
 
 		struct uid_data *data =
-			kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
+		    kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
 		if (!data) {
 			filp_close(fp, 0);
 			goto out;
@@ -391,7 +404,8 @@ void track_throne(bool prune_only)
 
 	// first, check if manager_uid exist!
 	bool manager_exist = false;
-	list_for_each_entry (np, &uid_list, list) {
+	list_for_each_entry(np, &uid_list, list)
+	{
 		if (np->uid == ksu_get_manager_appid()) {
 			manager_exist = true;
 			break;
@@ -414,7 +428,8 @@ prune:
 	ksu_prune_allowlist(is_uid_exist, &uid_list);
 out:
 	// free uid_list
-	list_for_each_entry_safe (np, n, &uid_list, list) {
+	list_for_each_entry_safe(np, n, &uid_list, list)
+	{
 		list_del(&np->list);
 		kfree(np);
 	}

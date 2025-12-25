@@ -6,8 +6,8 @@
 #include <linux/fs_struct.h>
 #include <linux/limits.h>
 #include <linux/namei.h>
-#include <linux/proc_ns.h>
 #include <linux/pid.h>
+#include <linux/proc_ns.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
@@ -23,9 +23,9 @@
 #include <uapi/linux/fs.h>
 #endif
 
+#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
-#include "kernel_compat.h"
 #include "su_mount_ns.h"
 
 extern int path_mount(const char *dev_name, struct path *path,
@@ -81,13 +81,13 @@ int ksys_unshare(unsigned long unshare_flags)
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-	typedef long  ns_ret_t;
-	#define NS_RET_OK(r)   ((r) == 0)
-	#define NS_RET_ERR(r)  (r)
+typedef long ns_ret_t;
+#define NS_RET_OK(r) ((r) == 0)
+#define NS_RET_ERR(r) (r)
 #else
-	typedef void *ns_ret_t;
-	#define NS_RET_OK(r)   (!IS_ERR(r))
-	#define NS_RET_ERR(r)  PTR_ERR(r)
+typedef void *ns_ret_t;
+#define NS_RET_OK(r) (!IS_ERR(r))
+#define NS_RET_ERR(r) PTR_ERR(r)
 #endif
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
@@ -108,7 +108,8 @@ static void ksu_mnt_ns_global(void)
 
 	if (IS_ERR(pwd_path)) {
 		if (PTR_ERR(pwd_path) == -ENAMETOOLONG) {
-			pr_warn("absolute pwd longer than: %d, skip restore pwd!!\n",
+			pr_warn("absolute pwd longer than: %d, skip restore "
+				"pwd!!\n",
 				PATH_MAX);
 		} else {
 			pr_warn("get absolute pwd failed: %ld\n",
@@ -120,8 +121,8 @@ static void ksu_mnt_ns_global(void)
 try_setns:
 
 	rcu_read_lock();
-	// &init_task is not init, but swapper/idle, which forks the init process
-	// so we need find init process
+	// &init_task is not init, but swapper/idle, which forks the init
+	// process so we need find init process
 	struct pid *pid_struct = find_pid_ns(1, &init_pid_ns);
 	if (unlikely(!pid_struct)) {
 		rcu_read_unlock();
@@ -139,7 +140,8 @@ try_setns:
 	ns_ret_t path_ret = ns_get_path(&ns_path, pid1_task, &mntns_operations);
 	put_task_struct(pid1_task);
 	if (!NS_RET_OK(path_ret)) {
-		pr_warn("failed get path for init mount namespace: %ld\n", NS_RET_ERR(path_ret));
+		pr_warn("failed get path for init mount namespace: %ld\n",
+			NS_RET_ERR(path_ret));
 		goto out;
 	}
 	struct file *ns_file = dentry_open(&ns_path, O_RDONLY, ksu_cred);
@@ -196,7 +198,7 @@ static void ksu_mnt_ns_individual(void)
 	struct path root_path;
 	get_fs_root(current->fs, &root_path);
 	int pm_ret =
-		path_mount(NULL, &root_path, NULL, MS_PRIVATE | MS_REC, NULL);
+	    path_mount(NULL, &root_path, NULL, MS_PRIVATE | MS_REC, NULL);
 	path_put(&root_path);
 
 	if (pm_ret < 0) {

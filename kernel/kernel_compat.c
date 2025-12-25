@@ -1,10 +1,10 @@
-#include <linux/version.h>
-#include <linux/fs.h>
 #include <linux/dcache.h>
-#include <linux/uaccess.h>
 #include <linux/fdtable.h>
-#include <linux/string.h>
+#include <linux/fs.h>
 #include <linux/security.h>
+#include <linux/string.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 #include <linux/sched/task.h>
 #else
@@ -14,14 +14,14 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
-#include "klog.h" // IWYU pragma: keep
 #include "kernel_compat.h"
+#include "klog.h" // IWYU pragma: keep
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
-	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-#include <linux/key.h>
-#include <linux/errno.h>
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 #include <linux/cred.h>
+#include <linux/errno.h>
+#include <linux/key.h>
 
 extern int install_session_keyring_to_cred(struct cred *, struct key *);
 struct key *init_session_keyring = NULL;
@@ -48,7 +48,7 @@ static int install_session_keyring(struct key *keyring)
 struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
-	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	if (init_session_keyring != NULL && !current_cred()->session_keyring &&
 	    (current->flags & PF_WQ_WORKER)) {
 		pr_info("installing init session keyring for older kernel\n");
@@ -62,7 +62,7 @@ ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 			       loff_t *pos)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) ||                          \
-	defined(KSU_OPTIONAL_KERNEL_READ)
+    defined(KSU_OPTIONAL_KERNEL_READ)
 	return kernel_read(p, buf, count, pos);
 #else
 	loff_t offset = pos ? *pos : 0;
@@ -78,7 +78,7 @@ ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
 				loff_t *pos)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) ||                          \
-	defined(KSU_OPTIONAL_KERNEL_WRITE)
+    defined(KSU_OPTIONAL_KERNEL_WRITE)
 	return kernel_write(p, buf, count, pos);
 #else
 	loff_t offset = pos ? *pos : 0;
@@ -94,7 +94,7 @@ static inline long
 do_strncpy_user_nofault(char *dst, const void __user *unsafe_addr, long count)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) ||                           \
-	defined(KSU_OPTIONAL_STRNCPY)
+    defined(KSU_OPTIONAL_STRNCPY)
 	return strncpy_from_user_nofault(dst, unsafe_addr, count);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
 	return strncpy_from_unsafe_user(dst, unsafe_addr, count);
@@ -156,7 +156,7 @@ int path_mount(const char *dev_name, struct path *path, const char *type_page,
 	       unsigned long flags, void *data_page)
 {
 	// 384 is enough
-	char buf[384] = { 0 };
+	char buf[384] = {0};
 	mm_segment_t old_fs;
 	long ret;
 
@@ -187,7 +187,7 @@ int do_close_fd(unsigned int fd)
 static void *__kvmalloc(size_t size, gfp_t flags)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
-// https://elixir.bootlin.com/linux/v4.4.302/source/security/apparmor/lib.c#L79
+	// https://elixir.bootlin.com/linux/v4.4.302/source/security/apparmor/lib.c#L79
 	void *buffer = NULL;
 
 	if (size == 0)

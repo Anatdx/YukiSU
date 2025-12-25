@@ -1,27 +1,27 @@
-#include <linux/kprobes.h>
 #include <linux/compat.h>
+#include <linux/kprobes.h>
 #include <linux/workqueue.h>
 
 #define DECL_KP(name, sym, pre)                                                \
 	struct kprobe name = {                                                 \
-		.symbol_name = sym,                                            \
-		.pre_handler = pre,                                            \
+	    .symbol_name = sym,                                                \
+	    .pre_handler = pre,                                                \
 	}
 
 // ksud.c
 
 static struct work_struct stop_vfs_read_work, stop_execve_hook_work,
-	stop_input_hook_work;
+    stop_input_hook_work;
 
 #ifndef CONFIG_KSU_SUSFS
 static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
 	const char __user **filename_user =
-		(const char **)&PT_REGS_PARM1(real_regs);
+	    (const char **)&PT_REGS_PARM1(real_regs);
 	const char __user *const __user *__argv =
-		(const char __user *const __user *)PT_REGS_PARM2(real_regs);
-	struct user_arg_ptr argv = { .ptr.native = __argv };
+	    (const char __user *const __user *)PT_REGS_PARM2(real_regs);
+	struct user_arg_ptr argv = {.ptr.native = __argv};
 	struct filename filename_in, *filename_p;
 	char path[32];
 

@@ -1,9 +1,9 @@
 #ifndef __KSU_H_ALLOWLIST
 #define __KSU_H_ALLOWLIST
 
+#include "app_profile.h"
 #include <linux/types.h>
 #include <linux/uidgid.h>
-#include "app_profile.h"
 
 #define PER_USER_RANGE 100000
 #define FIRST_APPLICATION_UID 10000

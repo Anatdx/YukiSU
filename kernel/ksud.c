@@ -1,6 +1,3 @@
-#include <linux/rcupdate.h>
-#include <linux/slab.h>
-#include <linux/task_work.h>
 #include <asm/current.h>
 #include <linux/compat.h>
 #include <linux/cred.h>
@@ -8,6 +5,9 @@
 #include <linux/err.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/rcupdate.h>
+#include <linux/slab.h>
+#include <linux/task_work.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
@@ -17,22 +17,22 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 #include <linux/aio.h>
 #endif
+#include <linux/namei.h>
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/namei.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
 #else
 #include <linux/sched.h>
 #endif
 
-#include "manager.h"
 #include "allowlist.h"
 #include "arch.h"
 #include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
+#include "manager.h"
 #ifdef CONFIG_KSU_SYSCALL_HOOK
 #include "kp_hook.h"
 #endif
@@ -42,9 +42,9 @@
 #include "sucompat.h"
 #endif
 
-#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||                \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                      \
-	 defined(CONFIG_KSU_MANUAL_HOOK))
+#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||           \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                          \
+     defined(CONFIG_KSU_MANUAL_HOOK))
 extern int ksu_observer_init(void);
 #endif
 
@@ -52,31 +52,27 @@ bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
 
 static const char KERNEL_SU_RC[] =
-	"\n"
+    "\n"
 
-	"on post-fs-data\n"
-	"	start logd\n"
-	// We should wait for the post-fs-data finish
-	"	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH
-	" post-fs-data\n"
-	"\n"
+    "on post-fs-data\n"
+    "	start logd\n"
+    // We should wait for the post-fs-data finish
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " post-fs-data\n"
+    "\n"
 
-	"on nonencrypted\n"
-	"	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH
-	" services\n"
-	"\n"
+    "on nonencrypted\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
+    "\n"
 
-	"on property:vold.decrypt=trigger_restart_framework\n"
-	"	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH
-	" services\n"
-	"\n"
+    "on property:vold.decrypt=trigger_restart_framework\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
+    "\n"
 
-	"on property:sys.boot_completed=1\n"
-	"	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH
-	" boot-completed\n"
-	"\n"
+    "on property:sys.boot_completed=1\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " boot-completed\n"
+    "\n"
 
-	"\n";
+    "\n";
 
 static void stop_vfs_read_hook(void);
 static void stop_execve_hook(void);
@@ -103,9 +99,9 @@ void on_post_fs_data(void)
 	already_post_fs_data = true;
 	pr_info("on_post_fs_data!\n");
 	ksu_load_allow_list();
-#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||          \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                      \
-	 defined(CONFIG_KSU_MANUAL_HOOK))
+#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||           \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                          \
+     defined(CONFIG_KSU_MANUAL_HOOK))
 	ksu_observer_init();
 #endif
 	stop_input_hook();
@@ -126,7 +122,7 @@ int nuke_ext4_sysfs(const char *mnt)
 	struct super_block *sb = NULL;
 	const char *name = NULL;
 	int err;
-	
+
 	err = kern_path(mnt, 0, &path);
 	if (err) {
 		pr_err("nuke path err: %d\n", err);
@@ -156,9 +152,9 @@ void on_boot_completed(void)
 {
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
-#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||          \
-	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                      \
-	 defined(CONFIG_KSU_MANUAL_HOOK))
+#if defined(CONFIG_KSU_SYSCALL_HOOK) || defined(CONFIG_KSU_SUSFS) ||           \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) &&                          \
+     defined(CONFIG_KSU_MANUAL_HOOK))
 	track_throne(true);
 #endif
 }
@@ -228,9 +224,8 @@ static void on_post_fs_data_cbfun(struct callback_head *cb)
 	on_post_fs_data();
 }
 
-static struct callback_head on_post_fs_data_cb = {
-	.func = on_post_fs_data_cbfun
-};
+static struct callback_head on_post_fs_data_cb = {.func =
+						      on_post_fs_data_cbfun};
 
 static inline void handle_second_stage(void)
 {
@@ -238,7 +233,8 @@ static inline void handle_second_stage(void)
 	setup_ksu_cred();
 }
 
-// IMPORTANT NOTE: the call from execve_handler_pre WON'T provided correct value for envp and flags in GKI version
+// IMPORTANT NOTE: the call from execve_handler_pre WON'T provided correct value
+// for envp and flags in GKI version
 int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			     struct user_arg_ptr *argv,
 			     struct user_arg_ptr *envp, int *flags)
@@ -278,11 +274,12 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			if (p && !IS_ERR(p)) {
 				char first_arg[16];
 				ksu_strncpy_from_user_nofault(
-					first_arg, p, sizeof(first_arg));
+				    first_arg, p, sizeof(first_arg));
 				pr_info("/system/bin/init first arg: %s\n",
 					first_arg);
 				if (!strcmp(first_arg, "second_stage")) {
-					pr_info("/system/bin/init second_stage executed\n");
+					pr_info("/system/bin/init second_stage "
+						"executed\n");
 					handle_second_stage();
 					init_second_stage_executed = true;
 				}
@@ -302,10 +299,11 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			if (p && !IS_ERR(p)) {
 				char first_arg[16];
 				ksu_strncpy_from_user_nofault(
-					first_arg, p, sizeof(first_arg));
+				    first_arg, p, sizeof(first_arg));
 				pr_info("/init first arg: %s\n", first_arg);
 				if (!strcmp(first_arg, "--second-stage")) {
-					pr_info("/init second_stage executed\n");
+					pr_info(
+					    "/init second_stage executed\n");
 					handle_second_stage();
 					init_second_stage_executed = true;
 				}
@@ -319,32 +317,37 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 				int n;
 				for (n = 1; n <= envc; n++) {
 					const char __user *p =
-						get_user_arg_ptr(*envp, n);
+					    get_user_arg_ptr(*envp, n);
 					if (!p || IS_ERR(p)) {
 						continue;
 					}
 					char env[256];
-					// Reading environment variable strings from user space
+					// Reading environment variable strings
+					// from user space
 					if (ksu_strncpy_from_user_nofault(
-						    env, p, sizeof(env)) < 0)
+						env, p, sizeof(env)) < 0)
 						continue;
-					// Parsing environment variable names and values
+					// Parsing environment variable names
+					// and values
 					char *env_name = env;
 					char *env_value = strchr(env, '=');
 					if (env_value == NULL)
 						continue;
-					// Replace equal sign with string terminator
+					// Replace equal sign with string
+					// terminator
 					*env_value = '\0';
 					env_value++;
-					// Check if the environment variable name and value are matching
+					// Check if the environment variable
+					// name and value are matching
 					if (!strcmp(env_name,
 						    "INIT_SECOND_STAGE") &&
 					    (!strcmp(env_value, "1") ||
 					     !strcmp(env_value, "true"))) {
-						pr_info("/init second_stage executed\n");
+						pr_info("/init second_stage "
+							"executed\n");
 						handle_second_stage();
 						init_second_stage_executed =
-							true;
+						    true;
 					}
 				}
 			}
@@ -472,9 +475,10 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 		return 0;
 	}
 
-	// we've succeed to insert ksud.rc, now we need to proxy the read and modify the result!
-	// But, we can not modify the file_operations directly, because it's in read-only memory.
-	// We just replace the whole file_operations with a proxy one.
+	// we've succeed to insert ksud.rc, now we need to proxy the read and
+	// modify the result! But, we can not modify the file_operations
+	// directly, because it's in read-only memory. We just replace the whole
+	// file_operations with a proxy one.
 	memcpy(&fops_proxy, file->f_op, sizeof(struct file_operations));
 	orig_read = file->f_op->read;
 	if (orig_read) {
@@ -533,7 +537,8 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 		pr_info("input_handle_event: vol_down pressed count: %u\n",
 			volumedown_pressed_count);
 		if (is_volumedown_enough(volumedown_pressed_count)) {
-			pr_info("input_handle_event: vol_down pressed MAX! safe mode is active!\n");
+			pr_info("input_handle_event: vol_down pressed MAX! "
+				"safe mode is active!\n");
 			stop_input_hook();
 		}
 	}

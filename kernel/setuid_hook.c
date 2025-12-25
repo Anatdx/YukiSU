@@ -1,37 +1,37 @@
 #include <linux/compiler.h>
-#include <linux/version.h>
+#include <linux/printk.h>
+#include <linux/sched.h>
+#include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
 #include <linux/thread_info.h>
-#include <linux/seccomp.h>
-#include <linux/printk.h>
-#include <linux/sched.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 #include <linux/sched/signal.h>
 #endif
+#include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/uidgid.h>
-#include <linux/stat.h>
 
 #ifdef CONFIG_KSU_SUSFS
 #include <linux/susfs.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 #include "allowlist.h"
-#include "setuid_hook.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager.h"
-#include "selinux/selinux.h"
 #include "seccomp_cache.h"
+#include "selinux/selinux.h"
+#include "setuid_hook.h"
 #include "supercalls.h"
 #ifdef CONFIG_KSU_SYSCALL_HOOK
 #include "syscall_handler.h"
 #endif
-#include "kernel_umount.h"
 #include "kernel_compat.h"
+#include "kernel_umount.h"
 
 #include "sulog.h"
 
@@ -74,10 +74,10 @@ static int enhanced_security_feature_set(u64 value)
 }
 
 static const struct ksu_feature_handler enhanced_security_handler = {
-	.feature_id = KSU_FEATURE_ENHANCED_SECURITY,
-	.name = "enhanced_security",
-	.get_handler = enhanced_security_feature_get,
-	.set_handler = enhanced_security_feature_set,
+    .feature_id = KSU_FEATURE_ENHANCED_SECURITY,
+    .name = "enhanced_security",
+    .get_handler = enhanced_security_feature_get,
+    .set_handler = enhanced_security_feature_set,
 };
 
 static void ksu_install_manager_fd_tw_func(struct callback_head *cb)
@@ -125,7 +125,8 @@ int ksu_handle_setuid_common(uid_t new_uid, uid_t old_uid, uid_t new_euid)
 			send_sigkill();
 			return 0;
 		}
-		// disallow appuid decrease to any other uid if it is not allowed to su
+		// disallow appuid decrease to any other uid if it is not
+		// allowed to su
 		if (is_appuid(old_uid) && new_euid < current_euid().val &&
 		    !ksu_is_allow_uid_for_current(old_uid)) {
 			pr_warn("find suspicious EoP: %d %s, from %d to %d\n",
@@ -167,7 +168,8 @@ int ksu_handle_setuid_common(uid_t new_uid, uid_t old_uid, uid_t new_euid)
 #else
 int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-	// we rely on the fact that zygote always call setresuid(3) with same uids
+	// we rely on the fact that zygote always call setresuid(3) with same
+	// uids
 	uid_t new_uid = ruid;
 	uid_t old_uid = current_uid().val;
 
@@ -177,18 +179,21 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		// euid is what we care about here as it controls permission
 		if (unlikely(euid == 0)) {
 			if (!is_ksu_domain()) {
-				pr_warn("find suspicious EoP: %d %s, from %d to %d\n",
+				pr_warn("find suspicious EoP: %d %s, from %d "
+					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
 				send_sigkill();
 				return 0;
 			}
 		}
-		// disallow appuid decrease to any other uid if it is not allowed to su
+		// disallow appuid decrease to any other uid if it is not
+		// allowed to su
 		if (is_appuid(old_uid)) {
 			if (euid < current_euid().val &&
 			    !ksu_is_allow_uid_for_current(old_uid)) {
-				pr_warn("find suspicious EoP: %d %s, from %d to %d\n",
+				pr_warn("find suspicious EoP: %d %s, from %d "
+					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
 				send_sigkill();
@@ -204,15 +209,17 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	}
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	// Check if spawned process is isolated service first, and force to do umount if so
+	// Check if spawned process is isolated service first, and force to do
+	// umount if so
 	if (is_zygote_isolated_service_uid(new_uid)) {
 		goto do_umount;
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
-	// - Since ksu maanger app uid is excluded in allow_list_arr, so ksu_uid_should_umount(manager_uid)
-	//   will always return true, that's why we need to explicitly check if new_uid belongs to
-	//   ksu manager
+	// - Since ksu maanger app uid is excluded in allow_list_arr, so
+	// ksu_uid_should_umount(manager_uid)
+	//   will always return true, that's why we need to explicitly check if
+	//   new_uid belongs to ksu manager
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 	if (ksu_get_manager_appid() == new_uid % PER_USER_RANGE) {
 		spin_lock_irq(&current->sighand->siglock);
@@ -294,7 +301,8 @@ void ksu_setuid_hook_init(void)
 {
 	ksu_kernel_umount_init();
 	if (ksu_register_feature_handler(&enhanced_security_handler)) {
-		pr_err("Failed to register enhanced security feature handler\n");
+		pr_err(
+		    "Failed to register enhanced security feature handler\n");
 	}
 }
 

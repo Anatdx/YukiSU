@@ -1,7 +1,7 @@
 #include <linux/mm.h>
 #include <linux/pgtable.h>
-#include <linux/printk.h>
 #include <linux/preempt.h>
+#include <linux/printk.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task.h>
@@ -120,12 +120,14 @@ bool ksu_retry_filename_access(const char __user **char_usr_ptr, char *dest,
 
 	/*
 	 * This is crazy, but we know what we are doing:
-		 * Temporarily exit atomic context to handle page faults, then restore it.
-		 */
+	 * Temporarily exit atomic context to handle page faults, then restore
+	 * it.
+	 */
 	if (exit_atomic_ctx) {
 		if (ret < 0 && preempt_count()) {
 #ifdef CONFIG_KSU_DEBUG
-			pr_info("access to pointer failed, attempting to rescue..\n");
+			pr_info("access to pointer failed, attempting to "
+				"rescue..\n");
 #endif
 			preempt_enable_no_resched_notrace();
 			ret = strncpy_from_user(dest, fn, dest_len);

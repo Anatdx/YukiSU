@@ -15,8 +15,8 @@
 #endif
 
 #include "apk_sign.h"
-#include "klog.h" // IWYU pragma: keep
 #include "kernel_compat.h"
+#include "klog.h" // IWYU pragma: keep
 #include "manager_sign.h"
 
 struct sdesc {
@@ -25,10 +25,10 @@ struct sdesc {
 };
 
 static apk_sign_key_t apk_sign_keys[] = {
-    { EXPECTED_SIZE_FIRST, EXPECTED_HASH_FIRST }, // First Manager
-    { EXPECTED_SIZE_SECOND, EXPECTED_HASH_SECOND }, // Second Manager
+    {EXPECTED_SIZE_FIRST, EXPECTED_HASH_FIRST},	  // First Manager
+    {EXPECTED_SIZE_SECOND, EXPECTED_HASH_SECOND}, // Second Manager
 #ifdef EXPECTED_SIZE
-	{ EXPECTED_SIZE, EXPECTED_HASH }, // Custom
+    {EXPECTED_SIZE, EXPECTED_HASH}, // Custom
 #endif
 };
 
@@ -187,7 +187,7 @@ static bool has_v1_signature_file(struct file *fp)
 
 static __always_inline bool check_v2_signature(char *path)
 {
-	unsigned char buffer[0x11] = { 0 };
+	unsigned char buffer[0x11] = {0};
 	u32 size4;
 	u64 size8, size_of_block;
 
@@ -257,7 +257,7 @@ static __always_inline bool check_v2_signature(char *path)
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
 			v2_signing_valid =
-				check_block(fp, &size4, &pos, &offset);
+			    check_block(fp, &size4, &pos, &offset);
 		} else if (id == 0xf05368c0u) {
 			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
 			v3_signing_exist = true;
@@ -316,8 +316,8 @@ static int set_expected_size(const char *val, const struct kernel_param *kp)
 }
 
 static struct kernel_param_ops expected_size_ops = {
-	.set = set_expected_size,
-	.get = param_get_uint,
+    .set = set_expected_size,
+    .get = param_get_uint,
 };
 
 module_param_cb(ksu_debug_manager_appid, &expected_size_ops,

@@ -1,43 +1,43 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* 
+/*
  * Copyright (C) 2025 Liankong (xhsw.new@outlook.com). All Rights Reserved.
  * 本代码由GPL-2授权
- * 
+ *
  * 适配KernelSU的KPM 内核模块加载器兼容实现
- * 
+ *
  * 集成了 ELF 解析、内存布局、符号处理、重定位（支持 ARM64 重定位类型）
  * 并参照KernelPatch的标准KPM格式实现加载和控制
  */
 
-#include <linux/kernel.h>
-#include <linux/fs.h>
-#include <linux/kernfs.h>
-#include <linux/file.h>
-#include <linux/vmalloc.h>
-#include <linux/uaccess.h>
-#include <linux/elf.h>
-#include <linux/kallsyms.h>
-#include <linux/version.h>
-#include <linux/list.h>
-#include <linux/spinlock.h>
-#include <linux/rcupdate.h>
-#include <asm/elf.h>
-#include <linux/mm.h>
-#include <linux/string.h>
 #include <asm/cacheflush.h>
-#include <linux/module.h>
-#include <linux/set_memory.h>
-#include <linux/export.h>
-#include <linux/slab.h>
+#include <asm/elf.h>
 #include <asm/insn.h>
+#include <linux/elf.h>
+#include <linux/export.h>
+#include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/kallsyms.h>
+#include <linux/kernel.h>
+#include <linux/kernfs.h>
 #include <linux/kprobes.h>
+#include <linux/list.h>
+#include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/rcupdate.h>
+#include <linux/set_memory.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/stacktrace.h>
+#include <linux/string.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
+#include <linux/vmalloc.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0) && defined(CONFIG_MODULES)
 #include <linux/moduleloader.h>
 #endif
-#include "kpm.h"
-#include "compact.h"
 #include "../kernel_compat.h"
+#include "compact.h"
+#include "kpm.h"
 
 #define KPM_NAME_LEN 32
 #define KPM_ARGS_LEN 1024
@@ -127,8 +127,8 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 {
 	int res = -1;
 	if (control_code == SUKISU_KPM_LOAD) {
-		char kernel_load_path[256] = { 0 };
-		char kernel_args_buffer[256] = { 0 };
+		char kernel_load_path[256] = {0};
+		char kernel_args_buffer[256] = {0};
 
 		if (arg1 == 0) {
 			res = -EINVAL;
@@ -156,7 +156,7 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 					    (const char *)&kernel_args_buffer,
 					    NULL, &res);
 	} else if (control_code == SUKISU_KPM_UNLOAD) {
-		char kernel_name_buffer[256] = { 0 };
+		char kernel_name_buffer[256] = {0};
 
 		if (arg1 == 0) {
 			res = -EINVAL;
@@ -176,8 +176,8 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 	} else if (control_code == SUKISU_KPM_NUM) {
 		sukisu_kpm_num(&res);
 	} else if (control_code == SUKISU_KPM_INFO) {
-		char kernel_name_buffer[256] = { 0 };
-		char buf[256] = { 0 };
+		char kernel_name_buffer[256] = {0};
+		char buf[256] = {0};
 		int size;
 
 		if (arg1 == 0 || arg2 == 0) {
@@ -203,7 +203,7 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 		res = copy_to_user(arg2, &buf, size);
 
 	} else if (control_code == SUKISU_KPM_LIST) {
-		char buf[1024] = { 0 };
+		char buf[1024] = {0};
 		int len = (int)arg2;
 
 		if (len <= 0) {
@@ -226,8 +226,8 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 			pr_info("kpm: Copy to user failed.");
 
 	} else if (control_code == SUKISU_KPM_CONTROL) {
-		char kpm_name[KPM_NAME_LEN] = { 0 };
-		char kpm_args[KPM_ARGS_LEN] = { 0 };
+		char kpm_name[KPM_NAME_LEN] = {0};
+		char kpm_args[KPM_ARGS_LEN] = {0};
 
 		if (!ksu_access_ok(arg1, sizeof(kpm_name))) {
 			goto invalid_arg;
@@ -253,7 +253,7 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
 				   (const char *)&kpm_args, arg_len, &res);
 
 	} else if (control_code == SUKISU_KPM_VERSION) {
-		char buffer[256] = { 0 };
+		char buffer[256] = {0};
 
 		sukisu_kpm_version((char *)&buffer, sizeof(buffer));
 
@@ -281,9 +281,9 @@ EXPORT_SYMBOL(sukisu_handle_kpm);
 int sukisu_is_kpm_control_code(unsigned long control_code)
 {
 	return (control_code >= CMD_KPM_CONTROL &&
-		control_code <= CMD_KPM_CONTROL_MAX) ?
-		       1 :
-		       0;
+		control_code <= CMD_KPM_CONTROL_MAX)
+		   ? 1
+		   : 0;
 }
 
 int do_kpm(void __user *arg)
