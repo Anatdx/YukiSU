@@ -47,15 +47,26 @@ object KsuCli {
      * the app had root permission.
      */
     fun refreshShells() {
+        Log.d(TAG, "refreshShells: starting, old SHELL.isRoot=${SHELL.isRoot}")
         try {
             SHELL.close()
         } catch (_: Exception) {}
         try {
             GLOBAL_MNT_SHELL.close()
         } catch (_: Exception) {}
+        
+        // Check if we're now a manager before creating shells
+        val isManagerNow = try {
+            Natives.isManager
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshShells: failed to check isManager", e)
+            false
+        }
+        Log.d(TAG, "refreshShells: Natives.isManager=$isManagerNow")
+        
         SHELL = createRootShell()
         GLOBAL_MNT_SHELL = createRootShell(true)
-        Log.d(TAG, "Shells refreshed, isRoot=${SHELL.isRoot}")
+        Log.d(TAG, "Shells refreshed, SHELL.isRoot=${SHELL.isRoot}, GLOBAL_MNT_SHELL.isRoot=${GLOBAL_MNT_SHELL.isRoot}")
     }
 }
 
@@ -88,22 +99,28 @@ fun createRootShell(globalMnt: Boolean = false): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create()
     return try {
-        if (globalMnt) {
+        val shell = if (globalMnt) {
             builder.build(getKsuDaemonPath(), "debug", "su", "-g")
         } else {
             builder.build(getKsuDaemonPath(), "debug", "su")
         }
+        Log.d(TAG, "ksud shell created, isRoot=${shell.isRoot}, globalMnt=$globalMnt")
+        shell
     } catch (e: Throwable) {
-        Log.w(TAG, "ksu failed: ", e)
+        Log.w(TAG, "ksu failed (globalMnt=$globalMnt): ", e)
         try {
-            if (globalMnt) {
+            val shell = if (globalMnt) {
                 builder.build("su", "-mm")
             } else {
                 builder.build("su")
             }
+            Log.d(TAG, "su shell created, isRoot=${shell.isRoot}, globalMnt=$globalMnt")
+            shell
         } catch (e: Throwable) {
-            Log.e(TAG, "su failed: ", e)
-            builder.build("sh")
+            Log.e(TAG, "su failed (globalMnt=$globalMnt): ", e)
+            val shell = builder.build("sh")
+            Log.w(TAG, "fallback to sh, isRoot=${shell.isRoot}")
+            shell
         }
     }
 }
