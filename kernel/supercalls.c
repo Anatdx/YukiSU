@@ -1042,7 +1042,6 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 	kfree(tw);
 }
 
-#ifdef CONFIG_KSU_SUPERKEY
 // Task work for prctl-based SuperKey authentication
 struct ksu_superkey_prctl_tw {
 	struct callback_head cb;
