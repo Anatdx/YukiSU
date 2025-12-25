@@ -3,60 +3,58 @@
 
 #include <linux/cred.h>
 #include <linux/types.h>
-#include "allowlist.h"
 
-#define KSU_INVALID_APPID -1
+#define KSU_INVALID_UID -1
 
-extern uid_t ksu_manager_appid; // DO NOT DIRECT USE
+extern uid_t ksu_manager_uid; // DO NOT DIRECT USE
 
-// SuperKey 支持
-#ifdef CONFIG_KSU_SUPERKEY
-#include "superkey.h"
-#endif
+extern bool ksu_is_any_manager(uid_t uid);
+extern void ksu_add_manager(uid_t uid, int signature_index);
+extern void ksu_remove_manager(uid_t uid);
+extern int ksu_get_manager_signature_index(uid_t uid);
 
-static inline bool ksu_is_manager_appid_valid()
+static inline bool ksu_is_manager_uid_valid(void)
 {
-#ifdef CONFIG_KSU_SUPERKEY
-    // 超级密码模式：检查是否有已认证的管理器
-    return superkey_get_manager_uid() != (uid_t)-1 ||
-           ksu_manager_appid != KSU_INVALID_APPID;
-#else
-    return ksu_manager_appid != KSU_INVALID_APPID;
-#endif
+	return ksu_manager_uid != KSU_INVALID_UID;
 }
 
+#ifndef CONFIG_KSU_SUSFS
+static inline bool is_manager(void)
+{
+	return unlikely(ksu_is_any_manager(current_uid().val) || 
+			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val));
+}
+#else
 static inline bool is_manager()
 {
-#ifdef CONFIG_KSU_SUPERKEY
-    // 超级密码模式优先
-    if (superkey_is_manager())
-        return true;
+	return unlikely((ksu_manager_uid == current_uid().val % 100000) || 
+			(ksu_manager_uid != KSU_INVALID_UID && ksu_manager_uid == current_uid().val % 100000));
+}
 #endif
-    return unlikely(ksu_manager_appid == current_uid().val % PER_USER_RANGE);
+
+static inline uid_t ksu_get_manager_uid(void)
+{
+	return ksu_manager_uid;
 }
 
-static inline uid_t ksu_get_manager_appid()
+#ifndef CONFIG_KSU_SUSFS
+static inline void ksu_set_manager_uid(uid_t uid)
 {
-#ifdef CONFIG_KSU_SUPERKEY
-    uid_t superkey_uid = superkey_get_manager_uid();
-    if (superkey_uid != (uid_t)-1)
-        return superkey_uid;
-#endif
-    return ksu_manager_appid;
+	ksu_manager_uid = uid;
 }
-
-static inline void ksu_set_manager_appid(uid_t appid)
+#else
+static inline void ksu_set_manager_uid(uid_t uid)
 {
-    ksu_manager_appid = appid;
+	ksu_manager_uid = uid % 100000;
 }
-
-static inline void ksu_invalidate_manager_uid()
-{
-    ksu_manager_appid = KSU_INVALID_APPID;
-#ifdef CONFIG_KSU_SUPERKEY
-    superkey_invalidate();
 #endif
+
+static inline void ksu_invalidate_manager_uid(void)
+{
+	ksu_manager_uid = KSU_INVALID_UID;
 }
 
 int ksu_observer_init(void);
+void ksu_observer_exit(void);
+
 #endif
