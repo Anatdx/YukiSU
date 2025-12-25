@@ -38,7 +38,6 @@
 
 #define CMD_ENABLE_KPM 100
 #define CMD_HOOK_TYPE 101
-#define CMD_DYNAMIC_MANAGER 103
 #define CMD_GET_MANAGERS 104
 
 static bool ksuctl(int cmd, void *arg1, void *arg2) {
