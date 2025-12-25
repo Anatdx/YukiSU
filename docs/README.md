@@ -1,5 +1,6 @@
 # YukiSU
-<img align='right' src='YukiSU-mini.svg' width='220px' alt="sukisu logo">
+
+<img align='right' src='YukiSU-mini.svg' width='220px' alt="yukisu logo">
 
 
 **English** | [简体中文](./zh/README.md) | [日本語](./ja/README.md) | [Türkçe](./tr/README.md) | [Русский](./ru/README.md)
