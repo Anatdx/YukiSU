@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * SukiSU SuperKey Authentication
+ * YukiSU SuperKey Authentication
  * 
  * APatch 风格的超级密码鉴权系统
  * 修补 boot 时设置密码，运行时比对
@@ -27,10 +27,10 @@ static inline u64 hash_superkey(const char *key)
 {
     u64 hash = 1000000007ULL;
     int i;
-    
+
     if (!key)
         return 0;
-        
+
     for (i = 0; key[i]; i++) {
         hash = hash * 31ULL + (u64)key[i];
     }
@@ -47,11 +47,11 @@ static inline bool verify_superkey(const char *key)
 {
     if (!key || !key[0])
         return false;
-    
+
     // 如果 hash 为 0，说明没有设置超级密码
     if (ksu_superkey_hash == 0)
         return false;
-    
+
     return hash_superkey(key) == ksu_superkey_hash;
 }
 
@@ -63,9 +63,21 @@ static inline bool superkey_is_set(void)
     return ksu_superkey_hash != 0;
 }
 
+// 是否禁用签名校验 (SuperKey Only 模式)
+extern bool ksu_signature_bypass;
+
+/**
+ * superkey_is_signature_bypassed - 检查是否禁用了签名校验
+ */
+static inline bool superkey_is_signature_bypassed(void)
+{
+    return ksu_signature_bypass;
+}
+
 // Function declarations
 void superkey_init(void);
 int superkey_authenticate(const char __user *user_key);
+void superkey_set_manager_appid(uid_t appid);
 bool superkey_is_manager(void);
 void superkey_invalidate(void);
 uid_t superkey_get_manager_uid(void);
