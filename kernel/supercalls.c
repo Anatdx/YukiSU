@@ -1041,6 +1041,114 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 
 	kfree(tw);
 }
+
+// Task work for prctl-based SuperKey authentication
+struct ksu_superkey_prctl_tw {
+	struct callback_head cb;
+	struct ksu_superkey_prctl_cmd __user *cmd_user;
+};
+
+static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
+{
+	struct ksu_superkey_prctl_tw *tw =
+		container_of(cb, struct ksu_superkey_prctl_tw, cb);
+	struct ksu_superkey_prctl_cmd cmd;
+	int fd = -1;
+	int result = -EACCES;
+
+	// Copy command from userspace
+	if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
+		pr_err("superkey prctl auth: copy_from_user failed\n");
+		kfree(tw);
+		return;
+	}
+
+	// Ensure null termination
+	cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
+
+	// Authenticate with SuperKey using verify_superkey
+	if (verify_superkey(cmd.superkey)) {
+		// Authentication successful, set manager appid and install fd
+		uid_t uid = current_uid().val;
+		uid_t appid = uid % 100000; // Per-user range
+		pr_info("SuperKey prctl auth success for uid %d (appid %d), pid %d\n",
+				uid, appid, current->pid);
+
+		// Set manager appid for both traditional and SuperKey systems
+		ksu_set_manager_uid(appid);
+		superkey_set_manager_appid(appid);
+
+		// Install fd
+		fd = ksu_install_fd();
+		if (fd >= 0) {
+			result = 0;
+			pr_info("SuperKey prctl auth: fd %d installed for uid %d\n", fd,
+					uid);
+		} else {
+			result = fd; // fd contains error code
+			pr_err("SuperKey prctl auth: failed to install fd: %d\n", fd);
+		}
+	} else {
+		pr_warn("SuperKey prctl auth failed from uid %d, pid %d\n",
+				current_uid().val, current->pid);
+		result = -EACCES;
+	}
+
+	// Write result back to userspace
+	cmd.result = result;
+	cmd.fd = fd;
+	if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd))) {
+		pr_err("superkey prctl auth: copy_to_user failed\n");
+		if (fd >= 0) {
+			do_close_fd(fd);
+		}
+	}
+
+	kfree(tw);
+}
+
+// prctl hook handler for SuperKey authentication
+// prctl(option, arg2, arg3, arg4, arg5)
+// We use: prctl(KSU_PRCTL_SUPERKEY_AUTH, &cmd_struct, 0, 0, 0)
+static int ksu_handle_prctl_superkey(int option, unsigned long arg2)
+{
+	struct ksu_superkey_prctl_tw *tw;
+
+	if (option != KSU_PRCTL_SUPERKEY_AUTH)
+		return 0;
+
+	pr_info("prctl superkey auth request from uid %d, pid %d\n",
+			current_uid().val, current->pid);
+
+	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+	if (!tw)
+		return 0;
+
+	tw->cmd_user = (struct ksu_superkey_prctl_cmd __user *)arg2;
+	tw->cb.func = ksu_superkey_prctl_tw_func;
+
+	if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		pr_warn("superkey prctl auth add task_work failed\n");
+	}
+
+	return 0;
+}
+
+// prctl kprobe pre-handler
+static int prctl_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *real_regs = PT_REAL_REGS(regs);
+	int option = (int)PT_REGS_PARM1(real_regs);
+	unsigned long arg2 = PT_REGS_PARM2(real_regs);
+
+	return ksu_handle_prctl_superkey(option, arg2);
+}
+
+static struct kprobe prctl_kp = {
+	.symbol_name = SYS_PRCTL_SYMBOL,
+	.pre_handler = prctl_handler_pre,
+};
 #endif // CONFIG_KSU_SUPERKEY
 
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
@@ -1241,6 +1349,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 void ksu_supercalls_init(void)
 {
 	int i;
+	int rc;
 
 	pr_info("KernelSU IOCTL Commands:\n");
 	for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
@@ -1248,13 +1357,22 @@ void ksu_supercalls_init(void)
 	}
 #ifndef CONFIG_KSU_SUSFS
 #ifdef KSU_KPROBES_HOOK
-	int rc = register_kprobe(&reboot_kp);
+	rc = register_kprobe(&reboot_kp);
 	if (rc) {
 		pr_err("reboot kprobe failed: %d\n", rc);
 	} else {
 		pr_info("reboot kprobe registered successfully\n");
 	}
 #endif
+#endif
+
+#ifdef CONFIG_KSU_SUPERKEY
+	rc = register_kprobe(&prctl_kp);
+	if (rc) {
+		pr_err("prctl kprobe failed: %d\n", rc);
+	} else {
+		pr_info("prctl kprobe registered for SuperKey auth\n");
+	}
 #endif
 }
 
@@ -1266,6 +1384,10 @@ void ksu_supercalls_exit(void)
 #endif
 #else
 	pr_info("susfs: do nothing\n");
+#endif
+
+#ifdef CONFIG_KSU_SUPERKEY
+	unregister_kprobe(&prctl_kp);
 #endif
 }
 

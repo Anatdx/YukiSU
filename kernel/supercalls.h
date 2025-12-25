@@ -27,6 +27,7 @@
 struct ksu_superkey_prctl_cmd {
     char superkey[65]; // Input: SuperKey string (null-terminated)
     int result; // Output: 0 = success, negative = error
+    int fd; // Output: fd on success
 };
 
 // SuperKey auth structure for reboot hook
