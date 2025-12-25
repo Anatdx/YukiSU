@@ -2,16 +2,12 @@ package com.anatdx.yukisu.ui.component
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.*
@@ -55,17 +51,11 @@ private fun AboutCardContent() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Row {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                color = colorResource(id = R.color.ic_launcher_background),
-                shape = CircleShape
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_monochrome),
-                    contentDescription = "icon",
-                    modifier = Modifier.scale(1.4f)
-                )
-            }
+            Image(
+                painter = painterResource(id = R.drawable.ic_about_yukisu),
+                contentDescription = "icon",
+                modifier = Modifier.size(40.dp)
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
