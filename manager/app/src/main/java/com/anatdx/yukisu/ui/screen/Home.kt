@@ -59,6 +59,7 @@ import com.anatdx.yukisu.ui.viewmodel.HomeViewModel
 import com.anatdx.yukisu.ui.component.SuperKeyDialog
 import com.anatdx.yukisu.ui.component.rememberSuperKeyDialog
 import com.anatdx.yukisu.ui.component.SuperKeyAuthResult
+import com.anatdx.yukisu.ui.util.KsuCli
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -173,10 +174,14 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         when (result) {
                             is SuperKeyAuthResult.Success -> {
                                 superKeyAuthSuccess = true
-                                // 强制刷新状态 - 需要延迟等待内核 task_work 完成
+                                // 强制刷新状态 - 认证成功后需要重新创建 Shell
                                 coroutineScope.launch {
                                     // 等待内核状态更新
-                                    delay(200)
+                                    delay(100)
+                                    // 重新创建 Shell（之前的 Shell 没有 root 权限）
+                                    withContext(Dispatchers.IO) {
+                                        KsuCli.refreshShells()
+                                    }
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
                                 }
@@ -197,14 +202,18 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         val savedKey = superKeyPrefs.getString("saved_superkey", null)
                         if (!savedKey.isNullOrBlank()) {
                             try {
-                                // 在 IO 线程执行 Native 调用
-                                val success = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    Natives.authenticateSuperKey(savedKey)
+                                // 在 IO 线程执行 Native 调用和 Shell 刷新
+                                val success = withContext(Dispatchers.IO) {
+                                    val authSuccess = Natives.authenticateSuperKey(savedKey)
+                                    if (authSuccess) {
+                                        // 重新创建 Shell（之前的 Shell 没有 root 权限）
+                                        KsuCli.refreshShells()
+                                    }
+                                    authSuccess
                                 }
                                 if (success) {
                                     superKeyAuthSuccess = true
-                                    // 等待内核状态完全更新，然后强制刷新
-                                    kotlinx.coroutines.delay(100)
+                                    // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
                                 }
                             } catch (e: Exception) {

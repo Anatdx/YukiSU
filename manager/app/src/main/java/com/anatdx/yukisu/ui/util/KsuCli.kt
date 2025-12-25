@@ -37,7 +37,26 @@ private fun getKsuDaemonPath(): String {
 
 object KsuCli {
     var SHELL: Shell = createRootShell()
-    val GLOBAL_MNT_SHELL: Shell = createRootShell(true)
+        private set
+    var GLOBAL_MNT_SHELL: Shell = createRootShell(true)
+        private set
+    
+    /**
+     * Recreate shell instances after SuperKey authentication.
+     * This is necessary because the initial shells were created before
+     * the app had root permission.
+     */
+    fun refreshShells() {
+        try {
+            SHELL.close()
+        } catch (_: Exception) {}
+        try {
+            GLOBAL_MNT_SHELL.close()
+        } catch (_: Exception) {}
+        SHELL = createRootShell()
+        GLOBAL_MNT_SHELL = createRootShell(true)
+        Log.d(TAG, "Shells refreshed, isRoot=${SHELL.isRoot}")
+    }
 }
 
 fun getRootShell(globalMnt: Boolean = false): Shell {
