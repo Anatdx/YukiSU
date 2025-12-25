@@ -52,7 +52,7 @@ private fun AboutCardContent() {
     ) {
         Row {
             Image(
-                painter = painterResource(id = R.mipmap.ic_launcher),
+                painter = painterResource(id = R.drawable.ic_about_yukisu),
                 contentDescription = "icon",
                 modifier = Modifier.size(40.dp)
             )
