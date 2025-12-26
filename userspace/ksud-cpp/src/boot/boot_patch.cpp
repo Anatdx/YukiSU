@@ -1042,9 +1042,34 @@ std::string choose_boot_partition(const std::string& kmi, bool ota, const std::s
     return "/dev/block/by-name/boot" + slot;
 }
 
+// Return partition name only (without path and slot suffix)
+// Used by boot-info default-partition command for manager
+std::string get_default_partition_name(const std::string& kmi, bool is_replace_kernel) {
+    std::string slot = get_slot_suffix(false);
+    
+    // Android 12 GKI doesn't have init_boot
+    bool skip_init_boot = kmi.find("android12-") == 0;
+    
+    // Check if init_boot exists
+    std::string init_boot = "/dev/block/by-name/init_boot" + slot;
+    struct stat st;
+    bool init_boot_exist = (stat(init_boot.c_str(), &st) == 0);
+    
+    // Use init_boot if:
+    // - Not replacing kernel (LKM mode)
+    // - init_boot partition exists
+    // - Not android12 (which doesn't have init_boot)
+    if (!is_replace_kernel && init_boot_exist && !skip_init_boot) {
+        return "init_boot";
+    }
+
+    return "boot";
+}
+
 int boot_info_default_partition() {
     std::string kmi = get_current_kmi();
-    std::string partition = choose_boot_partition(kmi, false, nullptr, false);
+    // Return partition name only, not full path (matching Rust behavior)
+    std::string partition = get_default_partition_name(kmi, false);
     printf("%s\n", partition.c_str());
     return 0;
 }
