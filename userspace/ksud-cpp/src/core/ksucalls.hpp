@@ -8,12 +8,13 @@
 namespace ksud {
 
 // ioctl macros - cast to unsigned to avoid overflow warnings
+// Note: size field is 0 to match kernel _IOC(..., 0) definitions
 #define _IOC(dir, type, nr, size) \
     (static_cast<uint32_t>(((dir) << 30) | ((type) << 8) | (nr) | ((size) << 16)))
 #define _IO(type, nr)       _IOC(0, type, nr, 0)
-#define _IOR(type, nr, sz)  _IOC(2, type, nr, sizeof(sz))
-#define _IOW(type, nr, sz)  _IOC(1, type, nr, sizeof(sz))
-#define _IOWR(type, nr, sz) _IOC(3, type, nr, sizeof(sz))
+#define _IOR(type, nr, sz)  _IOC(2, type, nr, 0)
+#define _IOW(type, nr, sz)  _IOC(1, type, nr, 0)
+#define _IOWR(type, nr, sz) _IOC(3, type, nr, 0)
 
 constexpr uint32_t K = 'K';
 
