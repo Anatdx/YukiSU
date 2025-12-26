@@ -29,6 +29,10 @@ struct cred *ksu_cred;
 bool ksu_is_active = true;
 EXPORT_SYMBOL(ksu_is_active);
 
+// Track if GKI has fully initialized
+bool ksu_initialized = false;
+EXPORT_SYMBOL(ksu_initialized);
+
 #include "setuid_hook.h"
 #include "sucompat.h"
 #include "sulog.h"
@@ -106,6 +110,10 @@ int __init kernelsu_init(void)
 	kobject_del(&THIS_MODULE->mkobj.kobj);
 #endif
 #endif
+
+	// Mark as fully initialized
+	ksu_initialized = true;
+	pr_info("KernelSU GKI fully initialized\n");
 	return 0;
 }
 
@@ -125,6 +133,13 @@ int ksu_yield(void)
 	if (!ksu_is_active) {
 		pr_info("KernelSU GKI already yielded\n");
 		return 0;
+	}
+
+	if (!ksu_initialized) {
+		pr_warn("KernelSU GKI not fully initialized, cannot yield yet\n");
+		// Just mark as inactive, don't cleanup subsystems that haven't started
+		ksu_is_active = false;
+		return -EAGAIN;
 	}
 
 	pr_info("KernelSU GKI yielding to LKM...\n");
