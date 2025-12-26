@@ -27,6 +27,14 @@ int root_shell() {
     setenv("LOGNAME", "root", 1);
     setenv("ASH_STANDALONE", "1", 1);
 
+    // Prepend /data/adb/ksu/bin to PATH so ksud can be found
+    const char* old_path = getenv("PATH");
+    std::string new_path = "/data/adb/ksu/bin";
+    if (old_path && old_path[0] != '\0') {
+        new_path = new_path + ":" + old_path;
+    }
+    setenv("PATH", new_path.c_str(), 1);
+
     // Use busybox sh as the shell to avoid recursion
     // (since /system/bin/sh might be a hardlink to ksud itself)
     const char* shell = "/data/adb/ksu/bin/busybox";
@@ -68,6 +76,14 @@ int grant_root_shell(bool global_mnt) {
 
     // Set environment
     setenv("ASH_STANDALONE", "1", 1);
+
+    // Prepend /data/adb/ksu/bin to PATH so ksud can be found
+    const char* old_path = getenv("PATH");
+    std::string new_path = "/data/adb/ksu/bin";
+    if (old_path && old_path[0] != '\0') {
+        new_path = new_path + ":" + old_path;
+    }
+    setenv("PATH", new_path.c_str(), 1);
 
     // Use busybox sh as the shell to avoid recursion
     const char* shell = "/data/adb/ksu/bin/busybox";
