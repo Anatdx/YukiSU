@@ -105,11 +105,13 @@ object AppData {
         private val _superuserCount = MutableStateFlow(0)
         private val _moduleCount = MutableStateFlow(0)
         private val _kpmModuleCount = MutableStateFlow(0)
+        private val _isFullFeatured = MutableStateFlow(false)
 
         // 公开的只读状态流
         val superuserCount: StateFlow<Int> = _superuserCount.asStateFlow()
         val moduleCount: StateFlow<Int> = _moduleCount.asStateFlow()
         val kpmModuleCount: StateFlow<Int> = _kpmModuleCount.asStateFlow()
+        val isFullFeatured: StateFlow<Boolean> = _isFullFeatured.asStateFlow()
 
         /**
          * 刷新所有数据计数
@@ -118,6 +120,7 @@ object AppData {
             _superuserCount.value = getSuperuserCountUse()
             _moduleCount.value = getModuleCountUse()
             _kpmModuleCount.value = getKpmModuleCountUse()
+            _isFullFeatured.value = isFullFeatured()
         }
     }
 

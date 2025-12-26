@@ -28,7 +28,7 @@ import com.anatdx.yukisu.ui.util.*
 @Composable
 fun BottomBar(navController: NavHostController) {
     val navigator = navController.rememberDestinationsNavigator()
-    val isFullFeatured = AppData.isFullFeatured()
+    val isFullFeatured by AppData.DataRefreshManager.isFullFeatured.collectAsState()
     val kpmVersion = getKpmVersionUse()
     val cardColor = MaterialTheme.colorScheme.surfaceContainer
     val activity = LocalContext.current as MainActivity

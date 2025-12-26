@@ -60,6 +60,7 @@ import com.anatdx.yukisu.ui.component.SuperKeyDialog
 import com.anatdx.yukisu.ui.component.rememberSuperKeyDialog
 import com.anatdx.yukisu.ui.component.SuperKeyAuthResult
 import com.anatdx.yukisu.ui.util.KsuCli
+import com.anatdx.yukisu.ui.activity.util.AppData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -180,6 +181,10 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     }
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
+                                    // 刷新底栏状态
+                                    withContext(Dispatchers.IO) {
+                                        AppData.DataRefreshManager.refreshData()
+                                    }
                                 }
                             }
                             is SuperKeyAuthResult.Error -> {
@@ -211,6 +216,10 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     superKeyAuthSuccess = true
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
+                                    // 刷新底栏状态
+                                    withContext(Dispatchers.IO) {
+                                        AppData.DataRefreshManager.refreshData()
+                                    }
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("SuperKey", "Auto-auth error", e)
