@@ -52,11 +52,12 @@ constexpr const char* KSU_BACKUP_FILE_PREFIX = "ksu_backup_";
 constexpr const char* BACKUP_FILENAME = "stock_image.sha1";
 constexpr const char* UMOUNT_CONFIG_PATH = "/data/adb/ksu/.umount";
 
-// Feature IDs
+// Feature IDs - must match kernel definitions
 enum class FeatureId : uint32_t {
-    SU_COMPAT = 1,
-    KERNEL_UMOUNT = 2,
-    LKM_PRIORITY = 3,
+    SuCompat = 0,
+    KernelUmount = 1,
+    EnhancedSecurity = 2,
+    SuLog = 100,
 };
 
 // ioctl constants

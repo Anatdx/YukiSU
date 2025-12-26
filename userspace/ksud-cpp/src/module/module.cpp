@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <vector>
 
 namespace ksud {
 
@@ -23,7 +24,36 @@ struct ModuleInfo {
     bool enabled;
     bool update;
     bool remove;
+    bool web;
+    bool action;
+    bool mount;
 };
+
+// Escape special characters for JSON string
+static std::string escape_json(const std::string& s) {
+    std::string result;
+    result.reserve(s.size());
+    for (char c : s) {
+        switch (c) {
+            case '"': result += "\\\""; break;
+            case '\\': result += "\\\\"; break;
+            case '\b': result += "\\b"; break;
+            case '\f': result += "\\f"; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                    result += buf;
+                } else {
+                    result += c;
+                }
+        }
+    }
+    return result;
+}
 
 static std::map<std::string, std::string> parse_module_prop(const std::string& path) {
     std::map<std::string, std::string> props;
@@ -164,12 +194,13 @@ int module_run_action(const std::string& id) {
 int module_list() {
     DIR* dir = opendir(MODULE_DIR);
     if (!dir) {
-        printf("No modules installed\n");
+        // Empty JSON array
+        printf("[]\n");
         return 0;
     }
 
     struct dirent* entry;
-    bool found = false;
+    std::vector<ModuleInfo> modules;
 
     while ((entry = readdir(dir)) != nullptr) {
         if (entry->d_name[0] == '.') continue;
@@ -183,31 +214,45 @@ int module_list() {
         auto props = parse_module_prop(prop_path);
 
         ModuleInfo info;
-        info.id = props["id"];
+        info.id = props.count("id") ? props["id"] : std::string(entry->d_name);
         info.name = props.count("name") ? props["name"] : info.id;
-        info.version = props["version"];
-        info.version_code = props["versionCode"];
-        info.author = props["author"];
-        info.description = props["description"];
+        info.version = props.count("version") ? props["version"] : "";
+        info.version_code = props.count("versionCode") ? props["versionCode"] : "";
+        info.author = props.count("author") ? props["author"] : "";
+        info.description = props.count("description") ? props["description"] : "";
         info.enabled = !file_exists(module_path + "/" + DISABLE_FILE_NAME);
         info.update = file_exists(module_path + "/" + UPDATE_FILE_NAME);
         info.remove = file_exists(module_path + "/" + REMOVE_FILE_NAME);
+        info.web = file_exists(module_path + "/" + MODULE_WEB_DIR);
+        info.action = file_exists(module_path + "/" + MODULE_ACTION_SH);
+        // Check if module needs mounting (has system folder and no skip_mount)
+        info.mount = file_exists(module_path + "/system") && !file_exists(module_path + "/skip_mount");
 
-        printf("[%s] %s %s\n", info.enabled ? "+" : "-", info.id.c_str(), info.version.c_str());
-        printf("  Name: %s\n", info.name.c_str());
-        printf("  Author: %s\n", info.author.c_str());
-        if (info.update) printf("  Status: Will be updated on reboot\n");
-        if (info.remove) printf("  Status: Will be removed on reboot\n");
-        printf("\n");
-
-        found = true;
+        modules.push_back(info);
     }
 
     closedir(dir);
 
-    if (!found) {
-        printf("No modules installed\n");
+    // Output JSON array
+    printf("[\n");
+    for (size_t i = 0; i < modules.size(); i++) {
+        const auto& m = modules[i];
+        printf("  {\n");
+        printf("    \"id\": \"%s\",\n", escape_json(m.id).c_str());
+        printf("    \"name\": \"%s\",\n", escape_json(m.name).c_str());
+        printf("    \"version\": \"%s\",\n", escape_json(m.version).c_str());
+        printf("    \"versionCode\": \"%s\",\n", escape_json(m.version_code).c_str());
+        printf("    \"author\": \"%s\",\n", escape_json(m.author).c_str());
+        printf("    \"description\": \"%s\",\n", escape_json(m.description).c_str());
+        printf("    \"enabled\": \"%s\",\n", m.enabled ? "true" : "false");
+        printf("    \"update\": \"%s\",\n", m.update ? "true" : "false");
+        printf("    \"remove\": \"%s\",\n", m.remove ? "true" : "false");
+        printf("    \"web\": \"%s\",\n", m.web ? "true" : "false");
+        printf("    \"action\": \"%s\",\n", m.action ? "true" : "false");
+        printf("    \"mount\": \"%s\"\n", m.mount ? "true" : "false");
+        printf("  }%s\n", i < modules.size() - 1 ? "," : "");
     }
+    printf("]\n");
 
     return 0;
 }
