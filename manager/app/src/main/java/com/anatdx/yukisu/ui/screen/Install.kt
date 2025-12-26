@@ -148,6 +148,8 @@ fun InstallScreen(
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
+    // GKI priority - when enabled, GKI takes priority over LKM (LKM will not trigger yield)
+    var gkiPriority by remember { mutableStateOf(false) }
 
     val onInstall = {
         installMethod?.let { method ->
@@ -173,7 +175,8 @@ fun InstallScreen(
                         ota = isOta,
                         partition = partitionSelection,
                         superKey = superKey.ifBlank { null },
-                        signatureBypass = signatureBypass
+                        signatureBypass = signatureBypass,
+                        gkiPriority = gkiPriority
                     )
                     navigator.navigate(FlashScreenDestination(flashIt))
                 }
@@ -520,6 +523,49 @@ fun InstallScreen(
                                     enabled = superKey.isNotBlank()
                                 )
                             }
+                        }
+                    }
+                }
+
+                // GKI priority switch card (独立显示，适用于所有 LKM 安装模式)
+                AnimatedVisibility(
+                    visible = installMethod is InstallMethod.DirectInstall || 
+                              installMethod is InstallMethod.DirectInstallToInactiveSlot ||
+                              installMethod is InstallMethod.SelectFile,
+                    enter = fadeIn() + expandVertically(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    ElevatedCard(
+                        colors = getCardColors(MaterialTheme.colorScheme.secondaryContainer),
+                        elevation = getCardElevation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(id = R.string.gki_priority_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = stringResource(id = R.string.gki_priority_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                            Switch(
+                                checked = gkiPriority,
+                                onCheckedChange = { gkiPriority = it }
+                            )
                         }
                     }
                 }

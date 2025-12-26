@@ -544,8 +544,19 @@
     <string name="selected_apps_count">%1$d apps selected</string>
     <string name="already_added_apps_count">%1$d apps already added</string>
     <string name="all_apps_already_added">All apps have been added</string>
+    <string name="dynamic_manager_title">Dynamic Manager Configuration</string>
+    <string name="dynamic_manager_enabled_summary">Enabled (Size: %s)</string>
+    <string name="dynamic_manager_disabled">Disabled</string>
+    <string name="enable_dynamic_manager">Enable Dynamic Manager</string>
+    <string name="signature_size">Dynamic Manager Signature Size</string>
+    <string name="signature_hash">Dynamic Manager Signature Hash</string>
     <string name="hash_must_be_64_chars">Hash must be 64 hexadecimal characters</string>
+    <string name="dynamic_manager_set_success">Dynamic Manager configuration set successfully</string>
+    <string name="dynamic_manager_set_failed">Failed to set dynamic Manager configuration</string>
     <string name="invalid_sign_config">Invalid Manager configuration</string>
+    <string name="dynamic_manager_disabled_success">Dynamic Manager disabled</string>
+    <string name="dynamic_manager_clear_failed">Failed to clear dynamic Manager</string>
+    <string name="dynamic_managerature">Dynamic</string>
     <string name="signature_index">Signature %1$d</string>
     <string name="unknown_signature">Unknown</string>
     <string name="multi_manager_list">Active Manager</string>
@@ -727,5 +738,7 @@ Important Note:\n
     <string name="settings_clear_super_key_dialog">Do you really want to clear the stored SuperKey?</string>
     <string name="signature_bypass_title">SuperKey Only Mode</string>
     <string name="signature_bypass_desc">Disable APK signature verification. Manager will only be recognized through SuperKey authentication.</string>
+    <string name="gki_priority_title">GKI Priority Mode</string>
+    <string name="gki_priority_desc">When enabled, GKI takes priority over LKM. The LKM will not trigger GKI yield and both will run independently.</string>
 </resources>
 

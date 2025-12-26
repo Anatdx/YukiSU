@@ -312,6 +312,7 @@ fun installBoot(
     partition: String?,
     superKey: String? = null,
     signatureBypass: Boolean = false,
+    gkiPriority: Boolean = false,
     onFinish: (Boolean, Int) -> Unit,
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit,
@@ -350,6 +351,11 @@ fun installBoot(
         if (signatureBypass) {
             cmd += " --signature-bypass"
         }
+    }
+
+    // Add GKI priority flag if enabled (disables LKM priority)
+    if (gkiPriority) {
+        cmd += " --lkm-priority=false"
     }
 
     var lkmFile: File? = null

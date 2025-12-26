@@ -833,7 +833,8 @@ sealed class FlashIt : Parcelable {
         val ota: Boolean, 
         val partition: String? = null,
         val superKey: String? = null,
-        val signatureBypass: Boolean = false
+        val signatureBypass: Boolean = false,
+        val gkiPriority: Boolean = false
     ) : FlashIt()
     data class FlashModule(val uri: Uri) : FlashIt()
     data class FlashModules(val uris: List<Uri>, val currentIndex: Int = 0) : FlashIt()
@@ -866,6 +867,7 @@ fun flashIt(
             flashIt.partition,
             flashIt.superKey,
             flashIt.signatureBypass,
+            flashIt.gkiPriority,
             onFinish,
             onStdout,
             onStderr
