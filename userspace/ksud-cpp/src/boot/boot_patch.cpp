@@ -954,27 +954,18 @@ int boot_info_default_partition() {
 }
 
 int boot_info_available_partitions() {
-    const char* dir_path = "/dev/block/by-name";
-    DIR* dir = opendir(dir_path);
-    if (!dir) {
-        LOGE("Failed to open %s", dir_path);
-        return 1;
-    }
-
-    struct dirent* entry;
-    std::vector<std::string> boot_partitions;
-
-    while ((entry = readdir(dir)) != nullptr) {
-        std::string name = entry->d_name;
-        if (starts_with(name, "boot") || starts_with(name, "init_boot")) {
-            boot_partitions.push_back(name);
+    // Return base partition names (without slot suffix) like Rust version
+    // Manager will add slot suffix based on user's choice
+    std::string slot = get_slot_suffix(false);
+    
+    const char* candidates[] = {"boot", "init_boot", "vendor_boot"};
+    
+    for (const char* name : candidates) {
+        std::string full_path = std::string("/dev/block/by-name/") + name + slot;
+        struct stat st;
+        if (stat(full_path.c_str(), &st) == 0) {
+            printf("%s\n", name);
         }
-    }
-
-    closedir(dir);
-
-    for (const auto& p : boot_partitions) {
-        printf("%s\n", p.c_str());
     }
 
     return 0;
