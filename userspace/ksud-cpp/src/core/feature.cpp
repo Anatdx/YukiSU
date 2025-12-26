@@ -5,8 +5,10 @@
 #include "../utils.hpp"
 
 #include <cstdio>
+#include <cinttypes>
 #include <map>
 #include <fstream>
+#include <sstream>
 
 namespace ksud {
 
@@ -50,7 +52,7 @@ int feature_get(const std::string& id) {
 
     auto [value, supported] = get_feature(feature_id);
     printf("Feature: %s (id=%u)\n", feature_id_to_name(feature_id), feature_id);
-    printf("Value: %lu\n", value);
+    printf("Value: %" PRIu64 "\n", value);
     printf("Supported: %s\n", supported ? "yes" : "no");
 
     return 0;
@@ -65,11 +67,11 @@ int feature_set(const std::string& id, uint64_t value) {
 
     int ret = set_feature(feature_id, value);
     if (ret < 0) {
-        LOGE("Failed to set feature %s to %lu", id.c_str(), value);
+        LOGE("Failed to set feature %s to %" PRIu64, id.c_str(), value);
         return 1;
     }
 
-    LOGI("Set feature %s to %lu", id.c_str(), value);
+    LOGI("Set feature %s to %" PRIu64, id.c_str(), value);
     return 0;
 }
 
@@ -77,7 +79,7 @@ void feature_list() {
     printf("Available features:\n");
     for (const auto& [name, id] : FEATURE_MAP) {
         auto [value, supported] = get_feature(id);
-        printf("  %s (id=%u): value=%lu, supported=%s\n",
+        printf("  %s (id=%u): value=%" PRIu64 ", supported=%s\n",
                name.c_str(), id, value, supported ? "yes" : "no");
     }
 }
@@ -91,7 +93,7 @@ int feature_check(const std::string& id) {
 
     auto [value, supported] = get_feature(feature_id);
     if (supported) {
-        printf("supported (value=%lu)\n", value);
+        printf("supported (value=%" PRIu64 ")\n", value);
         return 0;
     } else {
         printf("unsupported\n");
@@ -125,7 +127,7 @@ int feature_load_config() {
             try {
                 uint64_t value = std::stoull(val);
                 set_feature(feature_id, value);
-                LOGI("Loaded feature %s = %lu", key.c_str(), value);
+                LOGI("Loaded feature %s = %" PRIu64, key.c_str(), value);
             } catch (...) {
                 LOGW("Invalid value for feature %s: %s", key.c_str(), val.c_str());
             }
