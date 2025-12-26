@@ -46,6 +46,10 @@ jobs:
         llvm-strip -d "/github/workspace/out/$OUTPUT_NAME"
         echo "Size after stripping: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
         
+    - name: Install GPG
+      run: |
+        apt-get update && apt-get install -y gnupg
+
     - name: Import GPG key
       uses: crazy-max/ghaction-import-gpg@v6
       with:
