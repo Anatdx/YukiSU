@@ -9,6 +9,10 @@
 
 extern bool ksu_uid_scanner_enabled;
 
+// GKI yield support: when LKM takes over, GKI should yield
+extern bool ksu_is_active;
+int ksu_yield(void);  // Called by LKM to make GKI yield
+
 #define EVENT_POST_FS_DATA 1
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3

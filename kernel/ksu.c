@@ -25,6 +25,10 @@
 
 struct cred *ksu_cred;
 
+// GKI yield support
+bool ksu_is_active = true;
+EXPORT_SYMBOL(ksu_is_active);
+
 #include "setuid_hook.h"
 #include "sucompat.h"
 #include "sulog.h"
@@ -106,6 +110,49 @@ int __init kernelsu_init(void)
 }
 
 extern void ksu_observer_exit(void);
+extern void ksu_supercalls_exit(void);
+
+/**
+ * ksu_yield - Make GKI KernelSU yield to LKM
+ * 
+ * Called by LKM when it wants to take over from GKI.
+ * This function will unhook everything and mark GKI as inactive.
+ * 
+ * Returns 0 on success, negative error code on failure.
+ */
+int ksu_yield(void)
+{
+	if (!ksu_is_active) {
+		pr_info("KernelSU GKI already yielded\n");
+		return 0;
+	}
+
+	pr_info("KernelSU GKI yielding to LKM...\n");
+
+	// Mark as inactive first to stop processing new requests
+	ksu_is_active = false;
+
+	// Clean up in reverse order of init
+	ksu_allowlist_exit();
+	ksu_observer_exit();
+	ksu_throne_tracker_exit();
+
+#if !defined(CONFIG_KSU_SUSFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+	ksu_ksud_exit();
+	ksu_syscall_hook_manager_exit();
+#endif
+
+	ksu_sucompat_exit();
+	ksu_setuid_hook_exit();
+	sukisu_custom_config_exit();
+	ksu_supercalls_exit();
+	ksu_feature_exit();
+
+	pr_info("KernelSU GKI yielded successfully, LKM can take over now\n");
+	return 0;
+}
+EXPORT_SYMBOL(ksu_yield);
+
 void kernelsu_exit(void)
 {
 	ksu_allowlist_exit();
