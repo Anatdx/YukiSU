@@ -517,7 +517,7 @@ int cli_run(int argc, char* argv[]) {
     std::string basename = (last_slash != std::string::npos) ? arg0.substr(last_slash + 1) : arg0;
     
     if (basename == "su") {
-        return root_shell();
+        return su_main(argc, argv);
     }
     
     // If invoked as "sh", forward to busybox sh with all arguments
