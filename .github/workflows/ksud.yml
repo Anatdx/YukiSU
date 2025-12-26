@@ -63,8 +63,35 @@ jobs:
     - name: Build ksud
       run: CROSS_NO_WARNINGS=0 cross build --target ${{ inputs.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
 
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign ksud with GPG
+      run: |
+        KSUD_FILE=$(find userspace/ksud/target -type f -name "ksud" -path "*/release/*" | head -n 1)
+        if [ -f "$KSUD_FILE" ]; then
+          echo "Signing $KSUD_FILE..."
+          gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+            --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+            --output "${KSUD_FILE}.sig" "$KSUD_FILE"
+          if [ -f "${KSUD_FILE}.sig" ]; then
+            echo "Signature created successfully"
+            ls -lh "${KSUD_FILE}.sig"
+          else
+            echo "Error: Signature file not created!"
+            exit 1
+          fi
+        fi
+
     - name: Upload ksud artifact
       uses: actions/upload-artifact@v4
       with:
         name: ksud-${{ inputs.target }}
-        path: userspace/ksud/target/**/release/ksud*
+        path: |
+          userspace/ksud/target/**/release/ksud
+          userspace/ksud/target/**/release/ksud.sig

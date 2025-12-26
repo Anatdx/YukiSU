@@ -127,8 +127,33 @@ jobs:
         ls -lh ksud
         file ksud
 
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign ksud with GPG
+      run: |
+        cd userspace/ksud-cpp/build
+        echo "Signing ksud..."
+        gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+          --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+          --output "ksud.sig" "ksud"
+        if [ -f "ksud.sig" ]; then
+          echo "Signature created successfully"
+          ls -lh ksud.sig
+        else
+          echo "Error: Signature file not created!"
+          exit 1
+        fi
+
     - name: Upload ksud artifact
       uses: actions/upload-artifact@v5
       with:
         name: ksud-${{ inputs.target }}
-        path: userspace/ksud-cpp/build/ksud
+        path: |
+          userspace/ksud-cpp/build/ksud
+          userspace/ksud-cpp/build/ksud.sig

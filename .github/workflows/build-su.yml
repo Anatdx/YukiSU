@@ -29,6 +29,29 @@ jobs:
     - name: Build su
       working-directory: ./userspace/su
       run: $ANDROID_NDK/ndk-build
+
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign su binaries with GPG
+      run: |
+        cd userspace/su/libs
+        for arch_dir in */; do
+          if [ -f "${arch_dir}su" ]; then
+            echo "Signing ${arch_dir}su..."
+            gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+              --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+              --output "${arch_dir}su.sig" "${arch_dir}su"
+          fi
+        done
+        echo "Signatures created:"
+        find . -name "*.sig" -ls
+
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
       with:

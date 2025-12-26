@@ -48,8 +48,33 @@ jobs:
         ls -lh ksuinit
         file ksuinit
 
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign ksuinit with GPG
+      run: |
+        cd userspace/ksuinit-cpp/build
+        echo "Signing ksuinit..."
+        gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+          --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+          --output "ksuinit.sig" "ksuinit"
+        if [ -f "ksuinit.sig" ]; then
+          echo "Signature created successfully"
+          ls -lh ksuinit.sig
+        else
+          echo "Error: Signature file not created!"
+          exit 1
+        fi
+
     - name: Upload ksuinit artifact
       uses: actions/upload-artifact@v5
       with:
         name: ksuinit
-        path: userspace/ksuinit-cpp/build/ksuinit
+        path: |
+          userspace/ksuinit-cpp/build/ksuinit
+          userspace/ksuinit-cpp/build/ksuinit.sig
