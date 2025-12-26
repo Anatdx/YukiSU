@@ -364,12 +364,11 @@ int boot_patch(const std::vector<std::string>& args) {
     auto parsed = parse_boot_patch_args(args);
     
     printf("\n");
-    printf(" __     __    _    _ _____ _____ _    _ \n");
-    printf(" \\ \\   / /   | |  | |_   _|  ___| |  | |\n");
-    printf("  \\ \\_/ /   | |  | | | | | |__ | |  | |\n");
-    printf("   \\   /    | |  | | | | |  __|| |  | |\n");
-    printf("    | |     | |__| |_| |_| |___| |__| |\n");
-    printf("    |_|      \\____/|_____|_____|______|\n");
+    printf("__   __ _   _  _  __ ___  ____   _   _ \n");
+    printf("\\ \\ / /| | | || |/ /|_ _|/ ___| | | | |\n");
+    printf(" \\ V / | | | || ' /  | | \\___ \\ | | | |\n");
+    printf("  | |  | |_| || . \\  | |  ___) || |_| |\n");
+    printf("  |_|   \\___/ |_|\\_\\|___||____/  \\___/ \n");
     printf("\n");
     
     // Create temp working directory

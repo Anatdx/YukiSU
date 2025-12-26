@@ -159,12 +159,11 @@ static bool exec_install_script(const std::string& module_dir, const std::string
 
 int module_install(const std::string& zip_path) {
     printf("\n");
-    printf(" __     __    _    _ _____ _____ _    _ \n");
-    printf(" \\ \\   / /   | |  | |_   _|  ___| |  | |\n");
-    printf("  \\ \\_/ /   | |  | | | | | |__ | |  | |\n");
-    printf("   \\   /    | |  | | | | |  __|| |  | |\n");
-    printf("    | |     | |__| |_| |_| |___| |__| |\n");
-    printf("    |_|      \\____/|_____|_____|______|\n");
+    printf("__   __ _   _  _  __ ___  ____   _   _ \n");
+    printf("\\ \\ / /| | | || |/ /|_ _|/ ___| | | | |\n");
+    printf(" \\ V / | | | || ' /  | | \\___ \\ | | | |\n");
+    printf("  | |  | |_| || . \\  | |  ___) || |_| |\n");
+    printf("  |_|   \\___/ |_|\\_\\|___||____/  \\___/ \n");
     printf("\n");
     
     LOGI("Installing module from %s", zip_path.c_str());
