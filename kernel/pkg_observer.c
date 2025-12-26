@@ -149,7 +149,12 @@ int ksu_observer_init(void)
 
 void ksu_observer_exit(void)
 {
+	if (!g) {
+		pr_info("%s: not initialized, skipping\n", __func__);
+		return;
+	}
 	unwatch_one_dir(&g_watch);
 	fsnotify_put_group(g);
+	g = NULL;
 	pr_info("%s: done.\n", __func__);
 }
