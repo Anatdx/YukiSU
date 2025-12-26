@@ -138,9 +138,12 @@ int feature_check(const std::string& id) {
         return 1;
     }
 
+    // TODO: Check if this feature is managed by any module
+    // For now, just check kernel support
+    
     auto [value, supported] = get_feature(feature_id);
     if (supported) {
-        printf("supported (value=%" PRIu64 ")\n", value);
+        printf("supported\n");
         return 0;
     } else {
         printf("unsupported\n");

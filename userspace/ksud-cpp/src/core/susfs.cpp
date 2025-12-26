@@ -47,10 +47,11 @@ std::string susfs_get_version() {
 
 std::string susfs_get_status() {
     std::string version = susfs_get_version();
+    // Manager App expects "true" or "false" string
     if (version == "unsupport") {
-        return "Not available";
+        return "false";
     }
-    return "Enabled (v" + version + ")";
+    return "true";
 }
 
 std::string susfs_get_features() {
