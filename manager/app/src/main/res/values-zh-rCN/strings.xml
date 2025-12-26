@@ -545,8 +545,19 @@
     <string name="selected_apps_count">%1$d 个已选应用</string>
     <string name="already_added_apps_count">%1$d 个已添加应用</string>
     <string name="all_apps_already_added">所有应用均已添加</string>
+    <string name="dynamic_manager_title">动态管理器配置</string>
+    <string name="dynamic_manager_enabled_summary">已启用（大小: %s）</string>
+    <string name="dynamic_manager_disabled">未启用</string>
+    <string name="enable_dynamic_manager">启用动态管理器</string>
+    <string name="signature_size">动态管理器签名大小</string>
+    <string name="signature_hash">动态管理器签名哈希值</string>
     <string name="hash_must_be_64_chars">哈希值必须是 64 位十六进制字符</string>
+    <string name="dynamic_manager_set_success">动态管理器配置设置成功</string>
+    <string name="dynamic_manager_set_failed">动态管理器配置设置失败</string>
     <string name="invalid_sign_config">无效的签名配置</string>
+    <string name="dynamic_manager_disabled_success">动态管理器已禁用</string>
+    <string name="dynamic_manager_clear_failed">清除动态管理器错误</string>
+    <string name="dynamic_managerature">动态</string>
     <string name="signature_index">签名 %1$d</string>
     <string name="unknown_signature">未知</string>
     <string name="multi_manager_list">活跃管理器</string>
@@ -722,4 +733,6 @@
     <string name="settings_clear_super_key_dialog">确定要清除已存储的超级密钥吗？</string>
     <string name="signature_bypass_title">仅超级密钥模式</string>
     <string name="signature_bypass_desc">禁用 APK 签名验证。管理器将仅通过超级密钥认证来识别。</string>
+    <string name="gki_priority_title">GKI 优先模式</string>
+    <string name="gki_priority_desc">启用后，GKI 优先于 LKM。LKM 将不会触发 GKI 让位，两者独立运行。</string>
 </resources>

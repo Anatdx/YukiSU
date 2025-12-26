@@ -22,6 +22,10 @@ const SUPERKEY_MAGIC: u64 = 0x5355504552; // "SUPER" in hex
 // SuperKey flags bit definitions
 const SUPERKEY_FLAG_SIGNATURE_BYPASS: u64 = 1; // bit 0: disable signature verification
 
+// LKM Priority magic marker (must match kernel's LKM_PRIORITY_MAGIC)
+// "LKMPRIO" in hex (little-endian)
+const LKM_PRIORITY_MAGIC: u64 = 0x4F4952504D4B4C;
+
 /// Calculate superkey hash using the same algorithm as kernel
 fn hash_superkey(key: &str) -> u64 {
     let mut hash: u64 = 1000000007;
@@ -71,6 +75,54 @@ fn inject_superkey_to_lkm(lkm_path: &Path, superkey: &str, signature_bypass: boo
     if !found {
         println!("- Warning: SUPERKEY_MAGIC not found in LKM, SuperKey may not work");
         println!("- Make sure the kernel module is compiled with SuperKey support");
+    } else {
+        // Write back the patched content
+        file.seek(SeekFrom::Start(0))?;
+        file.write_all(&content)?;
+        file.sync_all()?;
+    }
+    
+    Ok(())
+}
+
+/// Inject LKM priority setting into the kernel module
+/// When enabled is true, LKM will have priority over GKI (will trigger GKI yield)
+/// When enabled is false, LKM will not trigger GKI yield, both will run independently
+fn inject_lkm_priority_to_lkm(lkm_path: &Path, enabled: bool) -> Result<()> {
+    let enabled_value: u32 = if enabled { 1 } else { 0 };
+    println!("- LKM priority over GKI: {}", enabled);
+    
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(lkm_path)
+        .context("Failed to open LKM file for priority patching")?;
+    
+    let mut content = Vec::new();
+    file.read_to_end(&mut content)?;
+    
+    // Search for LKM_PRIORITY_MAGIC in the binary
+    let magic_bytes = LKM_PRIORITY_MAGIC.to_le_bytes();
+    let mut found = false;
+    
+    // Structure in kernel:
+    // offset 0: magic (u64)
+    // offset 8: enabled (u32)
+    // offset 12: reserved (u32)
+    for i in 0..content.len().saturating_sub(16) {
+        if content[i..i+8] == magic_bytes {
+            // Found magic, patch the enabled field at offset +8
+            let enabled_bytes = enabled_value.to_le_bytes();
+            content[i+8..i+12].copy_from_slice(&enabled_bytes);
+            found = true;
+            println!("- Injected LKM priority config at offset 0x{:x}", i);
+            break;
+        }
+    }
+    
+    if !found {
+        println!("- Warning: LKM_PRIORITY_MAGIC not found in LKM");
+        println!("- This LKM may not support GKI yield mechanism");
     } else {
         // Write back the patched content
         file.seek(SeekFrom::Start(0))?;
@@ -533,6 +585,12 @@ pub struct BootPatchArgs {
     #[arg(long, default_value = "false")]
     pub signature_bypass: bool,
 
+    /// LKM priority over GKI (default: true)
+    /// When enabled, LKM will trigger GKI yield and take over
+    /// When disabled, both GKI and LKM will run independently
+    #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true", action = clap::ArgAction::Set)]
+    pub lkm_priority: bool,
+
     /// will use another slot when boot image is not specified
     #[cfg(target_os = "android")]
     #[arg(short = 'u', long, default_value = "false")]
@@ -578,6 +636,7 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
             out_name,
             superkey,
             signature_bypass,
+            lkm_priority,
             ..
         } = args;
         #[cfg(target_os = "android")]
@@ -683,6 +742,10 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
         } else if signature_bypass {
             println!("- Warning: signature_bypass requires superkey to be set, ignoring");
         }
+
+        // Inject LKM priority setting into LKM
+        println!("- Configuring LKM priority");
+        inject_lkm_priority_to_lkm(&kmod_file, lkm_priority)?;
 
         let init_file = workdir.join("init");
         if let Some(init) = init {
