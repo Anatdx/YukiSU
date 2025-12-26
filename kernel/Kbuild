@@ -35,10 +35,10 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 obj-$(CONFIG_KPM) += kpm/
 
-REPO_OWNER := SukiSU-Ultra
-REPO_NAME := SukiSU-Ultra
+REPO_OWNER := Anatdx
+REPO_NAME := YukiSU
 REPO_BRANCH := main
-KSU_VERSION_API := 4.1.0
+KSU_VERSION_API := 1.0.0
 
 GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
@@ -68,15 +68,24 @@ endef
 ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
   ifeq ($(LOCAL_GIT_EXISTS),1)
     $(shell cd $(KSU_SRC); [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow)
-    KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC); $(GIT_BIN) rev-list --count $(REPO_BRANCH))
-    KSU_VERSION := $(shell expr 40000 + $(KSU_LOCAL_VERSION) - 2815)
+    KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC); $(GIT_BIN) rev-list --count HEAD 2>/dev/null || echo 0)
+    ifeq ($(KSU_LOCAL_VERSION),)
+      KSU_LOCAL_VERSION := 0
+    endif
+    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) 2>/dev/null || echo 10000)
+    ifeq ($(KSU_VERSION),)
+      KSU_VERSION := 10000
+    endif
     $(info -- $(REPO_NAME) version (local .git): $(KSU_VERSION))
   else
-    KSU_VERSION := 13000
+    KSU_VERSION := 10000
     $(warning -- Could not fetch version online or via local .git! Using fallback version: $(KSU_VERSION))
   endif
 else
-  KSU_VERSION := $(shell expr 40000 + $(KSU_GITHUB_VERSION_COMMIT) - 2815)
+  KSU_VERSION := $(shell expr 10000 + $(KSU_GITHUB_VERSION_COMMIT) 2>/dev/null || echo 10000)
+  ifeq ($(KSU_VERSION),)
+    KSU_VERSION := 10000
+  endif
   $(info -- $(REPO_NAME) version (GitHub): $(KSU_VERSION))
 endif
 
@@ -112,7 +121,7 @@ endif
 
 ifdef KSU_MANAGER_PACKAGE
 ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
-$(info -- SukiSU Manager package name: $(KSU_MANAGER_PACKAGE))
+$(info -- YukiSU Manager package name: $(KSU_MANAGER_PACKAGE))
 endif
 
 KERNEL_VERSION := $(VERSION).$(PATCHLEVEL)
