@@ -442,12 +442,15 @@ int boot_patch(const std::vector<std::string>& args) {
         std::string slot = get_slot_suffix(parsed.ota);
         std::string partition_name;
         
+        // Determine if we're in replace kernel mode (when --kernel is specified)
+        bool is_replace_kernel = !parsed.kernel.empty();
+        
         if (!parsed.partition.empty()) {
             // User specified partition name (e.g., "init_boot" or "boot")
-            partition_name = "/dev/block/by-name/" + parsed.partition + slot;
+            partition_name = choose_boot_partition(kmi, parsed.ota, &parsed.partition, is_replace_kernel);
         } else {
             // Auto-detect: choose_boot_partition returns full path with slot
-            partition_name = choose_boot_partition(kmi, parsed.ota, nullptr);
+            partition_name = choose_boot_partition(kmi, parsed.ota, nullptr, is_replace_kernel);
         }
         
         printf("- Bootdevice: %s\n", partition_name.c_str());
@@ -768,8 +771,8 @@ int boot_restore(const std::vector<std::string>& args) {
             return 1;
         }
     } else {
-        // Auto-detect boot partition
-        std::string partition_name = choose_boot_partition(kmi, false, nullptr);
+        // Auto-detect boot partition (restore doesn't replace kernel)
+        std::string partition_name = choose_boot_partition(kmi, false, nullptr, false);
         printf("- Bootdevice: %s\n", partition_name.c_str());
         
         bootimage = workdir + "/boot.img";
@@ -1006,17 +1009,32 @@ int boot_info_slot_suffix(bool ota) {
     return 0;
 }
 
-std::string choose_boot_partition(const std::string& kmi, bool ota, const std::string* override_partition) {
+std::string choose_boot_partition(const std::string& kmi, bool ota, const std::string* override_partition, bool is_replace_kernel) {
+    // If specific partition is specified, use it
     if (override_partition && !override_partition->empty()) {
-        return *override_partition;
+        // Validate partition name
+        if (*override_partition == "boot" || *override_partition == "init_boot" || *override_partition == "vendor_boot") {
+            std::string slot = get_slot_suffix(ota);
+            return "/dev/block/by-name/" + *override_partition + slot;
+        }
+        // Invalid partition name, fallback to auto-detect
     }
 
     std::string slot = get_slot_suffix(ota);
-
-    // Try init_boot first (GKI 2.0)
+    
+    // Android 12 GKI doesn't have init_boot
+    bool skip_init_boot = kmi.find("android12-") == 0;
+    
+    // Check if init_boot exists
     std::string init_boot = "/dev/block/by-name/init_boot" + slot;
     struct stat st;
-    if (stat(init_boot.c_str(), &st) == 0) {
+    bool init_boot_exist = (stat(init_boot.c_str(), &st) == 0);
+    
+    // Use init_boot if:
+    // - Not replacing kernel (LKM mode)
+    // - init_boot partition exists
+    // - Not android12 (which doesn't have init_boot)
+    if (!is_replace_kernel && init_boot_exist && !skip_init_boot) {
         return init_boot;
     }
 
@@ -1026,7 +1044,7 @@ std::string choose_boot_partition(const std::string& kmi, bool ota, const std::s
 
 int boot_info_default_partition() {
     std::string kmi = get_current_kmi();
-    std::string partition = choose_boot_partition(kmi, false, nullptr);
+    std::string partition = choose_boot_partition(kmi, false, nullptr, false);
     printf("%s\n", partition.c_str());
     return 0;
 }
