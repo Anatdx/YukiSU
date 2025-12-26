@@ -21,6 +21,41 @@ struct cred *ksu_cred;
 
 #include "sulog.h"
 
+/*
+ * LKM Priority Configuration
+ * 
+ * This controls whether LKM should take over from GKI when both are present.
+ * The value can be patched by ksud when flashing the LKM.
+ *
+ * Magic: "LKMPRIO" = 0x4F4952504D4B4C (little-endian)
+ */
+#define LKM_PRIORITY_MAGIC 0x4F4952504D4B4CULL
+
+struct lkm_priority_config {
+	volatile u64 magic;    // LKM_PRIORITY_MAGIC
+	volatile u32 enabled;  // 1 = LKM takes priority over GKI, 0 = disabled
+	volatile u32 reserved; // Reserved for future use
+} __attribute__((packed, aligned(8)));
+
+// ksud will search for LKM_PRIORITY_MAGIC and modify the enabled field
+static volatile struct lkm_priority_config
+    __attribute__((used, section(".data"))) lkm_priority_config = {
+	.magic = LKM_PRIORITY_MAGIC,
+	.enabled = 1,  // Default: LKM takes priority (can be changed by ksud patch)
+	.reserved = 0,
+};
+
+/**
+ * ksu_lkm_priority_enabled - Check if LKM priority is enabled
+ *
+ * Returns true if LKM should take over from GKI when both are present.
+ */
+static inline bool ksu_lkm_priority_enabled(void)
+{
+	return lkm_priority_config.magic == LKM_PRIORITY_MAGIC &&
+	       lkm_priority_config.enabled != 0;
+}
+
 /**
  * GKI yield work - deferred execution to avoid issues during module_init
  */
@@ -73,7 +108,15 @@ static void gki_yield_work_func(struct work_struct *work)
  */
 static void try_yield_gki(void)
 {
-	bool *gki_is_active = (bool *)kallsyms_lookup_name("ksu_is_active");
+	bool *gki_is_active;
+
+	// Check if LKM priority is enabled
+	if (!ksu_lkm_priority_enabled()) {
+		pr_info("KernelSU LKM priority disabled, coexisting with GKI\n");
+		return;
+	}
+
+	gki_is_active = (bool *)kallsyms_lookup_name("ksu_is_active");
 	if (!gki_is_active) {
 		pr_info("KernelSU GKI not detected, LKM running standalone\n");
 		return;
@@ -85,7 +128,7 @@ static void try_yield_gki(void)
 	}
 
 	// Schedule yield work to run after module_init completes
-	pr_info("KernelSU GKI detected, scheduling yield...\n");
+	pr_info("KernelSU GKI detected, LKM priority enabled, scheduling yield...\n");
 	schedule_delayed_work(&gki_yield_work, msecs_to_jiffies(500));
 }
 
