@@ -143,6 +143,8 @@ fun InstallScreen(
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
+    // GKI priority - when enabled, GKI takes priority over LKM (LKM will not trigger yield)
+    var gkiPriority by remember { mutableStateOf(false) }
 
     val onInstall = {
         installMethod?.let { method ->
@@ -168,7 +170,8 @@ fun InstallScreen(
                         ota = isOta,
                         partition = partitionSelection,
                         superKey = superKey.ifBlank { null },
-                        signatureBypass = signatureBypass
+                        signatureBypass = signatureBypass,
+                        gkiPriority = gkiPriority
                     )
                     navigator.navigate(FlashScreenDestination(flashIt))
                 }
@@ -513,6 +516,32 @@ fun InstallScreen(
                                     checked = signatureBypass,
                                     onCheckedChange = { signatureBypass = it },
                                     enabled = superKey.isNotBlank()
+                                )
+                            }
+                            
+                            // GKI priority switch
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(id = R.string.gki_priority_title),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    Text(
+                                        text = stringResource(id = R.string.gki_priority_desc),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Switch(
+                                    checked = gkiPriority,
+                                    onCheckedChange = { gkiPriority = it }
                                 )
                             }
                         }
