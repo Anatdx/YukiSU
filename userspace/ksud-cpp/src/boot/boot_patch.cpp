@@ -424,13 +424,14 @@ int boot_patch(const std::vector<std::string>& args) {
     } else {
         // Auto-detect boot partition
         std::string slot = get_slot_suffix(parsed.ota);
-        std::string partition_name = parsed.partition.empty() ? 
-            choose_boot_partition(kmi, parsed.ota, nullptr) : 
-            "/dev/block/by-name/" + parsed.partition + slot;
+        std::string partition_name;
         
-        // If partition is just a name, construct full path
-        if (!starts_with(partition_name, "/")) {
-            partition_name = "/dev/block/by-name/" + partition_name + slot;
+        if (!parsed.partition.empty()) {
+            // User specified partition name (e.g., "init_boot" or "boot")
+            partition_name = "/dev/block/by-name/" + parsed.partition + slot;
+        } else {
+            // Auto-detect: choose_boot_partition returns full path with slot
+            partition_name = choose_boot_partition(kmi, parsed.ota, nullptr);
         }
         
         printf("- Bootdevice: %s\n", partition_name.c_str());
