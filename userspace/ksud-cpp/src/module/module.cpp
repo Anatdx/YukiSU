@@ -203,6 +203,13 @@ int module_install(const std::string& zip_path) {
     printf("\n");
     fflush(stdout);  // Ensure banner is output before script execution
     
+    // Ensure binary assets (busybox, etc.) are extracted before running install script
+    // This prevents delay when script tries to use busybox
+    if (ensure_binaries(false) != 0) {
+        printf("! Failed to extract binary assets\n");
+        return 1;
+    }
+    
     LOGI("Installing module from %s", zip_path.c_str());
     
     // Check if zip file exists
