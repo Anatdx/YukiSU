@@ -13,7 +13,7 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 >
 > The classic Rust version is preserved in the [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) branch.
 
-[![Latest release](https://img.shields.io/github/v/release/YukiSU/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
@@ -72,7 +72,7 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 
 ## Sponsor
 
-- [ShirkNeko](https://afdian.com/a/shirkneko) (maintainer of YukiSU)
+- [ShirkNeko](https://afdian.com/a/shirkneko) (maintainer of SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (author of KernelSU)
 
 ## ShirkNeko's sponsorship list

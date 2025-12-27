@@ -7,7 +7,7 @@
 
 Решение для получения root доступа на основе ядра для устройств Android, форкнутый от [`SukiSU-Ultra`](https://github.com/ShirkNeko/SukiSU-Ultra), убрано лишнее и добавлены интересные изменения.
 
-[![Latest release](https://img.shields.io/github/v/release/YukiSU/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
@@ -66,7 +66,7 @@
 
 ## Спонсоры
 
-- [ShirkNeko](https://afdian.com/a/shirkneko) (мейнтейнер YukiSU)
+- [ShirkNeko](https://afdian.com/a/shirkneko) (мейнтейнер SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (автор KernelSU)
 
 ## Список спонсоров ShirkNeko
