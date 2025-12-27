@@ -527,12 +527,6 @@
 - 核心入面嘅預設設定係 \'0\'。\n
 - 啟用呢個功能有時會令到開發人員喺除錯權限或者 SELinux 問題嗰陣難以搵出原因，所以建議用戶喺除錯時禁用呢個功能。</string>
     <!-- 模块签名功能描述 -->
-    <string name="module_verified">已驗證</string>
-    <string name="module_signature_verified">模組簽名已驗證</string>
-    <string name="module_signature_verification">驗證簽名</string>
-    <string name="module_signature_invalid">未知發布者</string>
-    <string name="module_signature_invalid_message">未經簽名嘅模組可能唔完整。為咗保護裝置，已經阻止安裝呢個模組。</string>
-    <string name="module_signature_verification_failed">未經簽名嘅模組可能唔完整。你想唔想安裝嚟自未知發布者嘅模組？</string>
     <!-- KPM patching related strings -->
     <!-- KPM workflow related -->
     <!-- KPM error messages -->

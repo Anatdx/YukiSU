@@ -271,13 +271,6 @@ void get_hook_type(char *buff) {
   }
 }
 
-bool verify_module_signature(const char *input) {
-  // Module signature verification disabled (zakosign removed)
-  LogDebug("verify_module_signature: path=%s, verification skipped",
-           input ? input : "null");
-  return true;
-}
-
 // SuperKey authentication using prctl syscall (SECCOMP-safe)
 // prctl is not blocked by Android's SECCOMP policy, unlike reboot syscall
 bool authenticate_superkey(const char *superkey) {

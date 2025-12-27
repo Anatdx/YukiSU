@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 import com.anatdx.yukisu.ui.util.HanziToPinyin
 import com.anatdx.yukisu.ui.util.listModules
 import com.anatdx.yukisu.ui.util.getRootShell
-import com.anatdx.yukisu.ui.util.module.ModuleVerificationManager
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -84,8 +83,7 @@ class ModuleViewModel : ViewModel() {
         val metamodule: Boolean,
         val dirId: String, // real module id (dir name)
         var config: ModuleConfig? = null,
-        var isVerified: Boolean = false, // 添加验证状态字段
-        var verificationTimestamp: Long = 0L, // 添加验证时间戳
+
     )
 
     var isRefreshing by mutableStateOf(false)
@@ -168,24 +166,7 @@ class ModuleViewModel : ViewModel() {
                         )
                     }.toList()
 
-                // 批量检查所有模块的验证状态
-                val moduleIds = moduleInfos.map { it.dirId }
-                val verificationStatus = ModuleVerificationManager.batchCheckVerificationStatus(moduleIds)
-
-                // 更新模块验证状态
-                modules = moduleInfos.map { moduleInfo ->
-                    val isVerified = verificationStatus[moduleInfo.dirId] ?: false
-                    val verificationTimestamp = if (isVerified) {
-                        ModuleVerificationManager.getVerificationTimestamp(moduleInfo.dirId)
-                    } else {
-                        0L
-                    }
-
-                    moduleInfo.copy(
-                        isVerified = isVerified,
-                        verificationTimestamp = verificationTimestamp
-                    )
-                }
+                modules = moduleInfos
 
                 launch {
                     modules.forEach { module ->
@@ -321,13 +302,11 @@ fun ModuleViewModel.ModuleInfo.copy(
     metamodule: Boolean = this.metamodule,
     dirId: String = this.dirId,
     config: ModuleConfig? = this.config,
-    isVerified: Boolean = this.isVerified,
-    verificationTimestamp: Long = this.verificationTimestamp
 ): ModuleViewModel.ModuleInfo {
     return ModuleViewModel.ModuleInfo(
         id, name, author, version, versionCode, description,
         enabled, update, remove, updateJson, hasWebUi, hasActionScript, metamodule,
-        dirId, config, isVerified, verificationTimestamp
+        dirId, config
     )
 }
 

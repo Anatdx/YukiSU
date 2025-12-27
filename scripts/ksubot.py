@@ -93,7 +93,9 @@ async def main():
         print("[-] No files to upload")
         exit(1)
     print("[+] Logging in Telegram with bot")
-    async with await TelegramClient(StringSession(), API_ID, API_HASH).start(bot_token=BOT_TOKEN) as bot:
+    session_str = os.environ.get("SESSION_STRING")
+    async with await TelegramClient(StringSession(session_str), API_ID, API_HASH).start(bot_token=BOT_TOKEN) as bot:
+        print(f"[+] Session String (Please add this to your secrets as SESSION_STRING): {bot.session.save()}")
         caption = [""] * len(files)
         caption[-1] = get_caption()
         print("[+] Caption: ")

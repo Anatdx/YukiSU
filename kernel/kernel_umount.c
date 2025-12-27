@@ -138,7 +138,11 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 		return 0;
 	}
 #if __SULOG_GATE
-	ksu_sulog_report_syscall(new_uid, NULL, "setuid", NULL);
+	{
+		char uid_str[16];
+		snprintf(uid_str, sizeof(uid_str), "%d", new_uid);
+		ksu_sulog_report_syscall(new_uid, NULL, "setuid", uid_str);
+	}
 #endif
 	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);

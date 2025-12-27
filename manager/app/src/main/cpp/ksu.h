@@ -90,8 +90,6 @@ bool is_KPM_enable();
 
 void get_hook_type(char *hook_type);
 
-bool verify_module_signature(const char *input);
-
 // Feature IDs
 enum ksu_feature_id {
   KSU_FEATURE_SU_COMPAT = 0,

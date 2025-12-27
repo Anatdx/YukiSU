@@ -6,6 +6,12 @@
 
 一个 Android 上基于内核的 root 方案，由 [`/SukiSU-Ultra`](https://github.com/ShirkNeko/SukiSU-Ultra) 分叉而来，去掉了一些没用的东西，增加了一些有趣的变更。
 
+> **⚠️ 重要提示**
+>
+> YukiSU 的用户空间程序已**完全用 C++ 重写**（原先基于 Rust）。这意味着 YukiSU 的行为可能与其他 KernelSU 分支有所不同。如果您遇到任何问题，请向我们反馈，而不是向上游项目反馈。
+>
+> 经典的 Rust 版本保留在 [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) 分支中。
+
 [![最新发行](https://img.shields.io/github/v/release/YukiSU/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![频道](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
 [![协议: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)

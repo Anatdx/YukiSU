@@ -1,10 +1,11 @@
-name: Build ksud
+name: Build ksud (C++)
 on:
   workflow_call:
     inputs:
       target:
         required: true
         type: string
+        description: "Target architecture: aarch64, x86_64, armv7"
       os:
         required: false
         type: string
@@ -17,54 +18,142 @@ on:
         required: false
         type: boolean
         default: true
-      use_cache:
-        required: false
-        type: boolean
-        default: true
-env:
-  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     runs-on: ${{ inputs.os }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
 
     - name: Download artifacts
       uses: actions/download-artifact@v4
     
-    - name: Prepare LKM fies
+    - name: Prepare LKM files
       if: ${{ inputs.pack_lkm }}
       run: |
-        cp android*-lkm/*_kernelsu.ko ./userspace/ksud/bin/aarch64/
+        mkdir -p ./userspace/ksud/assets
+        cp android*-lkm/*_kernelsu.ko ./userspace/ksud/assets/
     
     - name: Prepare ksuinit
       if: ${{ inputs.pack_ksuinit }}
       run: |
+        mkdir -p ./userspace/ksud/assets
         # C++ 版本: ksuinit 直接在 artifact 根目录
-        # Rust 版本: ksuinit/*/release/ksuinit
         if [ -f ksuinit/ksuinit ]; then
-          mv ksuinit/ksuinit ./userspace/ksud/bin/aarch64/
-        else
-          mv ksuinit/*/release/ksuinit ./userspace/ksud/bin/aarch64/
+          cp ksuinit/ksuinit ./userspace/ksud/assets/
         fi
-        
-    - name: Setup rustup
-      run: |
-        rustup update stable
-        rustup target add x86_64-apple-darwin
-        rustup target add aarch64-apple-darwin
 
-    - name: Install cross
+    - name: Prepare binary tools (busybox, resetprop, bootctl)
       run: |
-        RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross --rev 66845c1
+        mkdir -p ./userspace/ksud/assets
+        # Copy binary tools from Rust ksud bin directory (same arch)
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64)
+            BIN_DIR=./userspace/ksud/bin/aarch64
+            ;;
+          x86_64-linux-android|x86_64)
+            BIN_DIR=./userspace/ksud/bin/x86_64
+            ;;
+          armv7-linux-androideabi|armv7)
+            BIN_DIR=./userspace/ksud/bin/arm
+            ;;
+        esac
+        
+        if [ -d "$BIN_DIR" ]; then
+          cp "$BIN_DIR/busybox" ./userspace/ksud/assets/ || true
+          cp "$BIN_DIR/resetprop" ./userspace/ksud/assets/ || true
+          cp "$BIN_DIR/bootctl" ./userspace/ksud/assets/ || true
+          ls -la ./userspace/ksud/assets/
+        fi
+
+    - name: Setup NDK
+      run: |
+        echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
+
+    - name: Determine target settings
+      id: target
+      run: |
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64)
+            echo "arch=aarch64" >> $GITHUB_OUTPUT
+            echo "abi=arm64-v8a" >> $GITHUB_OUTPUT
+            echo "android_target=aarch64-linux-android26" >> $GITHUB_OUTPUT
+            ;;
+          x86_64-linux-android|x86_64)
+            echo "arch=x86_64" >> $GITHUB_OUTPUT
+            echo "abi=x86_64" >> $GITHUB_OUTPUT
+            echo "android_target=x86_64-linux-android26" >> $GITHUB_OUTPUT
+            ;;
+          armv7-linux-androideabi|armv7)
+            echo "arch=armv7" >> $GITHUB_OUTPUT
+            echo "abi=armeabi-v7a" >> $GITHUB_OUTPUT
+            echo "android_target=armv7a-linux-androideabi26" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "Unknown target: ${{ inputs.target }}"
+            exit 1
+            ;;
+        esac
 
     - name: Build ksud
-      run: CROSS_NO_WARNINGS=0 cross build --target ${{ inputs.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
+      run: |
+        cd userspace/ksud
+        mkdir -p build && cd build
+        
+        # 使用 Android NDK 工具链进行交叉编译
+        TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+        export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
+        export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
+        export AR=$TOOLCHAIN/bin/llvm-ar
+        export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+        export STRIP=$TOOLCHAIN/bin/llvm-strip
+        
+        cmake .. \
+          -DCMAKE_SYSTEM_NAME=Android \
+          -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
+          -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
+          -DCMAKE_C_COMPILER=$CC \
+          -DCMAKE_CXX_COMPILER=$CXX \
+          -DCMAKE_BUILD_TYPE=Release
+        
+        make -j$(nproc)
+        
+        # Strip the binary
+        $STRIP ksud
+        
+        # Show binary info
+        ls -lh ksud
+        file ksud
+
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign ksud with GPG
+      run: |
+        cd userspace/ksud/build
+        echo "Signing ksud..."
+        gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+          --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+          --output "ksud.sig" "ksud"
+        if [ -f "ksud.sig" ]; then
+          echo "Signature created successfully"
+          ls -lh ksud.sig
+        else
+          echo "Error: Signature file not created!"
+          exit 1
+        fi
 
     - name: Upload ksud artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ksud-${{ inputs.target }}
-        path: userspace/ksud/target/**/release/ksud*
+        path: |
+          userspace/ksud/build/ksud
+          userspace/ksud/build/ksud.sig

@@ -596,13 +596,6 @@ Important Note:\n
 - Enabling this will sometimes make developers hard to identify the cause when they are debugging with some permission or SELinux issue, so users are advised to disable this when doing
 </string>
     <!-- 模块签名功能描述 -->
-    <string name="module_verified">Validated</string>
-    <string name="module_signature_verified">Module signature verified</string>
-    <string name="module_signature_verification">Signature Verification</string>
-    <string name="module_signature_verification_summary">Force signature verification when installing modules (only available for ARM architecture)</string>
-    <string name="module_signature_invalid">Unknown publisher</string>
-    <string name="module_signature_invalid_message">Unsigned modules may be incomplete. To protect your device, installation of this module has been blocked</string>
-    <string name="module_signature_verification_failed">Unsigned modules may be incomplete. Do you want to allow the following module from an unknown publisher to install in this device?</string>
     <string name="home_hook_type">Hook type</string>
     <!-- KPM patching related strings -->
     <string name="kpm_patch_options">KPM Patch</string>

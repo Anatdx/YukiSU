@@ -1,4 +1,4 @@
-name: Build ksuinit
+name: Build ksuinit (C++)
 on:
   workflow_call:
     inputs:
@@ -13,27 +13,68 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        
-    - name: Setup rustup
-      run: |
-        rustup update stable
-        rustup target add aarch64-unknown-linux-musl
 
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: userspace/ksuinit
-        cache-targets: false
+    - name: Setup NDK
+      run: |
+        echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
 
     - name: Build ksuinit
       run: |
-        LLVM_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-        export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$LLVM_BIN/aarch64-linux-android26-clang"
-        export RUSTFLAGS="-C link-arg=-no-pie"
         cd userspace/ksuinit
-        cargo build --target=aarch64-unknown-linux-musl --release
+        mkdir -p build && cd build
+        
+        # 使用 Android NDK 工具链进行交叉编译
+        TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+        export CC=$TOOLCHAIN/bin/aarch64-linux-android26-clang
+        export CXX=$TOOLCHAIN/bin/aarch64-linux-android26-clang++
+        export AR=$TOOLCHAIN/bin/llvm-ar
+        export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+        export STRIP=$TOOLCHAIN/bin/llvm-strip
+        
+        cmake .. \
+          -DCMAKE_SYSTEM_NAME=Android \
+          -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+          -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
+          -DCMAKE_C_COMPILER=$CC \
+          -DCMAKE_CXX_COMPILER=$CXX \
+          -DCMAKE_BUILD_TYPE=Release
+        
+        make -j$(nproc)
+        
+        # Strip the binary
+        $STRIP ksuinit
+        
+        # Show binary info
+        ls -lh ksuinit
+        file ksuinit
+
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign ksuinit with GPG
+      run: |
+        cd userspace/ksuinit/build
+        echo "Signing ksuinit..."
+        gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+          --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+          --output "ksuinit.sig" "ksuinit"
+        if [ -f "ksuinit.sig" ]; then
+          echo "Signature created successfully"
+          ls -lh ksuinit.sig
+        else
+          echo "Error: Signature file not created!"
+          exit 1
+        fi
 
     - name: Upload ksuinit artifact
       uses: actions/upload-artifact@v5
       with:
         name: ksuinit
-        path: userspace/ksuinit/target/**/release/ksuinit*
+        path: |
+          userspace/ksuinit/build/ksuinit
+          userspace/ksuinit/build/ksuinit.sig

@@ -362,22 +362,6 @@ private fun AdvancedSettings(
             checked = state.selinuxEnabled,
             onChange = handlers::handleSelinuxChange
         )
-
-        var forceSignatureVerification by rememberSaveable {
-            mutableStateOf(prefs.getBoolean("force_signature_verification", false))
-        }
-
-        // 强制签名验证开关
-        SwitchItem(
-            icon = Icons.Filled.Security,
-            title = stringResource(R.string.module_signature_verification),
-            summary = stringResource(R.string.module_signature_verification_summary),
-            checked = forceSignatureVerification,
-            onCheckedChange = { enabled ->
-                prefs.edit { putBoolean("force_signature_verification", enabled) }
-                forceSignatureVerification = enabled
-            }
-        )
     }
 }
 

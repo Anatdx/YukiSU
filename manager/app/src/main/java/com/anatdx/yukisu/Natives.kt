@@ -125,9 +125,6 @@ object Natives {
     external fun isKPMEnabled(): Boolean
     external fun getHookType(): String
 
-    // 模块签名验证
-    external fun verifyModuleSignature(modulePath: String): Boolean
-
     external fun getUserName(uid: Int): String?
 
     /**

@@ -138,19 +138,10 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 	if (unlikely(!filename_user))
 		return 0;
 
-#if __SULOG_GATE
-	bool is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
-	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path);
-
-	if (!is_allowed)
-		return 0;
-
-	ksu_sulog_report_su_attempt(current_uid().val, NULL, path, is_allowed);
-#else
+	// First check if allowed, exit early if not
 	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
 		return 0;
 	}
-#endif
 
 	addr = untagged_addr((unsigned long)*filename_user);
 	fn = (const char __user *)addr;
@@ -176,8 +167,14 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 		return 0;
 	}
 
+	// Only log and process if this is actually an su execution
 	if (likely(memcmp(path, su, sizeof(su))))
 		return 0;
+
+#if __SULOG_GATE
+	// Log the su execution attempt AFTER we know path and it's actually su
+	ksu_sulog_report_su_attempt(current_uid().val, NULL, path, true);
+#endif
 
 	pr_info("sys_execve su found\n");
 	*filename_user = ksud_user_path();

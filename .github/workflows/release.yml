@@ -57,6 +57,27 @@ jobs:
             fi
           done
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+          trust_level: 5
+
+      - name: Sign APKs with GPG
+        run: |
+          for apk in Manager/*.apk Spoofed-Manager/*.apk; do
+            if [ -f "$apk" ]; then
+              echo "Signing $apk..."
+              gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+                --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+                --output "${apk}.asc" "$apk"
+            fi
+          done
+          echo "Signatures created:"
+          find . -name "*.asc" -ls
+
       - name: Display structure of downloaded files
         run: ls -R
 
@@ -65,10 +86,14 @@ jobs:
         with:
           files: |
             Manager/*.apk
+            Manager/*.apk.asc
             Spoofed-Manager/*.apk
+            Spoofed-Manager/*.apk.asc
             android*-lkm/*_kernelsu.ko
+            android*-lkm/*_kernelsu.ko.sig
             AnyKernel3-*.zip
             boot-images-*/Image-*/*.img.gz
             kernel-WSA*.zip
             kernel-ARCVM*.zip
             ksud/ksud-*
+            ksud/*.sig
