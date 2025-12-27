@@ -145,9 +145,13 @@ static bool exec_install_script(const std::string& zip_path) {
     // Prepare all environment variable values BEFORE fork
     std::string ver_code_str = std::to_string(get_version());
     const char* old_path = getenv("PATH");
-    std::string new_path = std::string(BINARY_DIR);
+    std::string binary_dir = std::string(BINARY_DIR);
+    if (!binary_dir.empty() && binary_dir.back() == '/') binary_dir.pop_back();
+    std::string new_path;
     if (old_path && old_path[0] != '\0') {
-        new_path = new_path + ":" + old_path;
+        new_path = std::string(old_path) + ":" + binary_dir;  // Original PATH first (like Rust)
+    } else {
+        new_path = binary_dir;
     }
     
     // Make copies of string data that child process will use
@@ -499,10 +503,13 @@ static int run_script(const std::string& script, bool block, const std::string& 
     // to avoid calling C++ library functions in child process
     std::string ver_code_str = std::to_string(get_version());
     const char* old_path = getenv("PATH");
-    std::string new_path = std::string(BINARY_DIR);
-    if (!new_path.empty() && new_path.back() == '/') new_path.pop_back();
+    std::string binary_dir = std::string(BINARY_DIR);
+    if (!binary_dir.empty() && binary_dir.back() == '/') binary_dir.pop_back();
+    std::string new_path;
     if (old_path && old_path[0] != '\0') {
-        new_path = new_path + ":" + std::string(old_path);  // BINARY_DIR first!
+        new_path = std::string(old_path) + ":" + binary_dir;  // Original PATH first (like Rust)
+    } else {
+        new_path = binary_dir;
     }
     
     // Make copies of string data that child process will use
@@ -518,6 +525,9 @@ static int run_script(const std::string& script, bool block, const std::string& 
         // Child process
         setsid();
         
+        // Switch cgroups to escape from parent cgroup (like Rust version)
+        switch_cgroups();
+        
         // Change to script directory (like Rust version)
         chdir(script_dir_path);
 
@@ -528,6 +538,10 @@ static int run_script(const std::string& script, bool block, const std::string& 
         setenv("KSU_KERNEL_VER_CODE", ver_code, 1);
         setenv("KSU_VER_CODE", VERSION_CODE, 1);
         setenv("KSU_VER", VERSION_NAME, 1);
+        
+        // Magisk compatibility environment variables (some modules depend on this)
+        setenv("MAGISK_VER", "25.2", 1);
+        setenv("MAGISK_VER_CODE", "25200", 1);
         
         // Set KSU_MODULE if module_id provided
         if (module_id_cstr[0] != '\0') {
