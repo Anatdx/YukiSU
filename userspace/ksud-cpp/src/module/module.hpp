@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 namespace ksud {
 
@@ -25,5 +26,10 @@ int exec_stage_script(const std::string& stage, bool block);
 int exec_common_scripts(const std::string& stage_dir, bool block);
 int load_sepolicy_rule();
 int load_system_prop();
+
+// Get all managed features from active modules
+// Modules declare managed features via config system (manage.<feature>=true)
+// Returns: map<ModuleId, vector<ManagedFeature>>
+std::map<std::string, std::vector<std::string>> get_managed_features();
 
 } // namespace ksud

@@ -8,14 +8,72 @@
 #include "restorecon.hpp"
 #include "assets.hpp"
 #include "profile/profile.hpp"
+#include "kpm.hpp"
 #include "defs.hpp"
 #include "log.hpp"
 #include "utils.hpp"
 
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <cstring>
 
 namespace ksud {
+
+// Catch boot logs (logcat/dmesg) to file
+static void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
+    ensure_dir_exists(LOG_DIR);
+
+    std::string bootlog = std::string(LOG_DIR) + "/" + logname + ".log";
+    std::string oldbootlog = std::string(LOG_DIR) + "/" + logname + ".old.log";
+
+    // Rotate old log
+    if (access(bootlog.c_str(), F_OK) == 0) {
+        rename(bootlog.c_str(), oldbootlog.c_str());
+    }
+
+    // Fork and exec timeout command
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOGW("Failed to fork for %s: %s", logname, strerror(errno));
+        return;
+    }
+
+    if (pid == 0) {
+        // Child process
+        // Create new process group
+        setpgid(0, 0);
+
+        // Switch cgroups
+        switch_cgroups();
+
+        // Open log file for stdout
+        int fd = open(bootlog.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) {
+            _exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+
+        // Build argv: timeout -s 9 30s <command...>
+        std::vector<const char*> argv;
+        argv.push_back("timeout");
+        argv.push_back("-s");
+        argv.push_back("9");
+        argv.push_back("30s");
+        for (const char* arg : command) {
+            argv.push_back(arg);
+        }
+        argv.push_back(nullptr);
+
+        execvp("timeout", const_cast<char* const*>(argv.data()));
+        _exit(127);
+    }
+
+    // Parent: don't wait, let it run in background
+    LOGI("Started %s capture (pid %d)", logname, pid);
+}
 
 static void run_stage(const std::string& stage, bool block) {
     umask(0);
@@ -52,7 +110,9 @@ int on_post_data_fs() {
     // Clear all temporary module configs early (like Rust version)
     clear_all_temp_configs();
 
-    // TODO: catch_bootlog for logcat and dmesg
+    // Catch boot logs
+    catch_bootlog("logcat", {"logcat", "-b", "all"});
+    catch_bootlog("dmesg", {"dmesg", "-w"});
 
     // Check for Magisk (like Rust version)
     if (has_magisk()) {
@@ -103,8 +163,15 @@ int on_post_data_fs() {
     // Apply profile sepolicies
     apply_profile_sepolies();
 
-    // Load feature config
-    feature_load_config();
+    // Load feature config (with init_features handling managed features)
+    init_features();
+
+#ifdef __aarch64__
+    // Load KPM modules at boot
+    if (kpm_booted_load() != 0) {
+        LOGW("KPM: Failed to load modules at boot");
+    }
+#endif
 
     // Execute metamodule post-fs-data script first (priority)
     metamodule_exec_stage_script("post-fs-data", true);

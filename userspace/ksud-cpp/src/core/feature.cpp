@@ -1,5 +1,6 @@
 #include "feature.hpp"
 #include "ksucalls.hpp"
+#include "../module/module.hpp"
 #include "../log.hpp"
 #include "../defs.hpp"
 #include "../utils.hpp"
@@ -9,8 +10,16 @@
 #include <map>
 #include <fstream>
 #include <sstream>
+#include <cstring>
+#include <vector>
+#include <set>
 
 namespace ksud {
+
+// Binary config constants
+static const std::string FEATURE_CONFIG_PATH = std::string(WORKING_DIR) + ".feature_config";
+static constexpr uint32_t FEATURE_MAGIC = 0x7f4b5355;
+static constexpr uint32_t FEATURE_VERSION = 1;
 
 // Feature name to ID mapping
 static const std::map<std::string, uint32_t> FEATURE_MAP = {
@@ -204,6 +213,147 @@ int feature_save_config() {
     }
 
     LOGI("Saved feature config to %s", config_path.c_str());
+    return 0;
+}
+
+std::map<uint32_t, uint64_t> load_binary_config() {
+    std::map<uint32_t, uint64_t> features;
+
+    std::ifstream ifs(FEATURE_CONFIG_PATH, std::ios::binary);
+    if (!ifs) {
+        LOGI("Feature binary config not found, using defaults");
+        return features;
+    }
+
+    // Read magic
+    uint32_t magic = 0;
+    ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    if (magic != FEATURE_MAGIC) {
+        LOGW("Invalid feature config magic: expected 0x%08x, got 0x%08x", FEATURE_MAGIC, magic);
+        return features;
+    }
+
+    // Read version
+    uint32_t version = 0;
+    ifs.read(reinterpret_cast<char*>(&version), sizeof(version));
+    if (version != FEATURE_VERSION) {
+        LOGW("Feature config version mismatch: expected %u, got %u", FEATURE_VERSION, version);
+    }
+
+    // Read count
+    uint32_t count = 0;
+    ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
+
+    // Read features
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t id = 0;
+        uint64_t value = 0;
+        ifs.read(reinterpret_cast<char*>(&id), sizeof(id));
+        ifs.read(reinterpret_cast<char*>(&value), sizeof(value));
+
+        if (ifs.good()) {
+            features[id] = value;
+        }
+    }
+
+    LOGI("Loaded %zu features from binary config", features.size());
+    return features;
+}
+
+int save_binary_config(const std::map<uint32_t, uint64_t>& features) {
+    ensure_dir_exists(WORKING_DIR);
+
+    std::ofstream ofs(FEATURE_CONFIG_PATH, std::ios::binary | std::ios::trunc);
+    if (!ofs) {
+        LOGE("Failed to create feature binary config file");
+        return -1;
+    }
+
+    // Write magic
+    uint32_t magic = FEATURE_MAGIC;
+    ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+
+    // Write version
+    uint32_t version = FEATURE_VERSION;
+    ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+
+    // Write count
+    uint32_t count = static_cast<uint32_t>(features.size());
+    ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+    // Write features
+    for (const auto& [id, value] : features) {
+        ofs.write(reinterpret_cast<const char*>(&id), sizeof(id));
+        ofs.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    }
+
+    ofs.flush();
+    LOGI("Saved %zu features to binary config", features.size());
+    return 0;
+}
+
+void apply_config(const std::map<uint32_t, uint64_t>& features) {
+    LOGI("Applying feature configuration to kernel...");
+
+    int applied = 0;
+    for (const auto& [id, value] : features) {
+        int ret = set_feature(id, value);
+        if (ret >= 0) {
+            LOGI("Set feature %s to %" PRIu64, feature_id_to_name(id), value);
+            applied++;
+        } else {
+            LOGW("Failed to set feature %u: %d", id, ret);
+        }
+    }
+
+    LOGI("Applied %d features successfully", applied);
+}
+
+int init_features() {
+    LOGI("Initializing features from config...");
+
+    auto features = load_binary_config();
+
+    // Get managed features from active modules and skip them during init
+    auto managed_features_map = get_managed_features();
+    if (!managed_features_map.empty()) {
+        LOGI("Found %zu modules managing features", managed_features_map.size());
+
+        // Build a set of all managed feature IDs to skip
+        for (const auto& [module_id, feature_list] : managed_features_map) {
+            LOGI("Module '%s' manages %zu feature(s)", module_id.c_str(), feature_list.size());
+            for (const auto& feature_name : feature_list) {
+                auto [feature_id, valid] = parse_feature_id(feature_name);
+                if (valid) {
+                    // Remove managed features from config, let modules control them
+                    auto it = features.find(feature_id);
+                    if (it != features.end()) {
+                        features.erase(it);
+                        LOGI("  - Skipping managed feature '%s' (controlled by module: %s)",
+                             feature_name.c_str(), module_id.c_str());
+                    } else {
+                        LOGI("  - Feature '%s' is managed by module '%s', skipping",
+                             feature_name.c_str(), module_id.c_str());
+                    }
+                } else {
+                    LOGW("  - Unknown managed feature '%s' from module '%s', ignoring",
+                         feature_name.c_str(), module_id.c_str());
+                }
+            }
+        }
+    }
+
+    if (features.empty()) {
+        LOGI("No features to apply, skipping initialization");
+        return 0;
+    }
+
+    apply_config(features);
+
+    // Save the configuration (excluding managed features)
+    save_binary_config(features);
+    LOGI("Saved feature configuration to file");
+
     return 0;
 }
 

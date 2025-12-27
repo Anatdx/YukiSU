@@ -1,11 +1,16 @@
 #include "kpm.hpp"
 #include "log.hpp"
+#include "utils.hpp"
 #include "core/ksucalls.hpp"
 
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
+#include <sys/stat.h>
 
 namespace ksud {
+
+constexpr const char* KPM_DIR = "/data/adb/kpm";
 
 // KPM control codes
 constexpr uint64_t KPM_LOAD = 1;
@@ -190,6 +195,84 @@ int kpm_version() {
     }
     printf("%s", buf);
     return 0;
+}
+
+// Check KPM version to ensure it's supported
+static std::string kpm_check_version() {
+    char buf[64] = {0};
+    int32_t ret = -1;
+    
+    KsuKpmCmd cmd = {
+        KPM_VERSION,
+        reinterpret_cast<uint64_t>(buf),
+        sizeof(buf),
+        reinterpret_cast<uint64_t>(&ret)
+    };
+    
+    int ioctl_ret = ksuctl(KSU_IOCTL_KPM, &cmd);
+    if (ioctl_ret < 0 || ret < 0) {
+        return "";
+    }
+    
+    // Trim
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r' || buf[len-1] == ' ')) {
+        buf[--len] = '\0';
+    }
+    
+    return std::string(buf);
+}
+
+// Ensure KPM directory exists with correct permissions
+static void kpm_ensure_dir() {
+    ensure_dir_exists(KPM_DIR);
+    chmod(KPM_DIR, 0777);
+}
+
+// Load all .kpm modules from KPM_DIR
+static int kpm_load_all_modules() {
+    DIR* dir = opendir(KPM_DIR);
+    if (!dir) {
+        return 0; // Directory doesn't exist, nothing to load
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+
+        std::string name = entry->d_name;
+        // Check if it's a .kpm file
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".kpm") {
+            std::string path = std::string(KPM_DIR) + "/" + name;
+            LOGI("KPM: Loading module %s", path.c_str());
+            kpm_load_module(path, std::nullopt);
+        }
+    }
+
+    closedir(dir);
+    return 0;
+}
+
+int kpm_booted_load() {
+    // Check KPM version first
+    std::string version = kpm_check_version();
+    if (version.empty()) {
+        LOGW("KPM: Not supported or version check failed");
+        return -1;
+    }
+    LOGI("KPM: Version check ok: %s", version.c_str());
+
+    // Ensure KPM directory exists
+    kpm_ensure_dir();
+
+    // Check safe mode
+    if (is_safe_mode()) {
+        LOGW("KPM: Safe mode - all modules won't load");
+        return 0;
+    }
+
+    // Load all modules
+    return kpm_load_all_modules();
 }
 
 } // namespace ksud

@@ -707,4 +707,96 @@ int load_system_prop() {
     return 0;
 }
 
+// Parse bool config value (true, yes, 1, on -> true)
+static bool parse_bool_config(const std::string& value) {
+    std::string lower = value;
+    for (char& c : lower) c = tolower(c);
+    return lower == "true" || lower == "yes" || lower == "1" || lower == "on";
+}
+
+// Merge module configs (persist + temp, temp takes priority)
+static std::map<std::string, std::string> merge_module_configs(const std::string& module_id) {
+    std::map<std::string, std::string> config;
+    
+    std::string config_dir = std::string(MODULE_CONFIG_DIR) + module_id + "/";
+    std::string persist_path = config_dir + PERSIST_CONFIG_NAME;
+    std::string temp_path = config_dir + TEMP_CONFIG_NAME;
+    
+    // Load persist config first
+    auto persist_content = read_file(persist_path);
+    if (persist_content) {
+        std::istringstream iss(*persist_content);
+        std::string line;
+        while (std::getline(iss, line)) {
+            size_t eq = line.find('=');
+            if (eq != std::string::npos) {
+                std::string key = line.substr(0, eq);
+                std::string value = line.substr(eq + 1);
+                config[key] = value;
+            }
+        }
+    }
+    
+    // Load temp config (overrides persist)
+    auto temp_content = read_file(temp_path);
+    if (temp_content) {
+        std::istringstream iss(*temp_content);
+        std::string line;
+        while (std::getline(iss, line)) {
+            size_t eq = line.find('=');
+            if (eq != std::string::npos) {
+                std::string key = line.substr(0, eq);
+                std::string value = line.substr(eq + 1);
+                config[key] = value;
+            }
+        }
+    }
+    
+    return config;
+}
+
+std::map<std::string, std::vector<std::string>> get_managed_features() {
+    std::map<std::string, std::vector<std::string>> managed_features_map;
+    
+    DIR* dir = opendir(MODULE_DIR);
+    if (!dir) {
+        return managed_features_map;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+        if (entry->d_type != DT_DIR) continue;
+
+        std::string module_id = entry->d_name;
+        std::string module_path = std::string(MODULE_DIR) + module_id;
+
+        // Check if module is active (not disabled/removed)
+        if (file_exists(module_path + "/disable")) continue;
+        if (file_exists(module_path + "/remove")) continue;
+
+        // Read module config
+        auto config = merge_module_configs(module_id);
+        
+        // Extract manage.* config entries
+        std::vector<std::string> feature_list;
+        for (const auto& [key, value] : config) {
+            // Check if key starts with "manage."
+            if (key.size() > 7 && key.substr(0, 7) == "manage.") {
+                std::string feature_name = key.substr(7);
+                if (parse_bool_config(value)) {
+                    feature_list.push_back(feature_name);
+                }
+            }
+        }
+
+        if (!feature_list.empty()) {
+            managed_features_map[module_id] = feature_list;
+        }
+    }
+
+    closedir(dir);
+    return managed_features_map;
+}
+
 } // namespace ksud
