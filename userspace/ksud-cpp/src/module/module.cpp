@@ -219,9 +219,9 @@ int module_install(const std::string& zip_path) {
     printf("\n");
     fflush(stdout);  // Ensure banner is output before script execution
     
-    // Ensure binary assets (busybox, etc.) are extracted before running install script
-    // This prevents delay when script tries to use busybox
-    if (ensure_binaries(false) != 0) {
+    // Ensure binary assets (busybox, etc.) exist - use ignore_if_exist=true since 
+    // binaries should already be extracted during post-fs-data boot stage
+    if (ensure_binaries(true) != 0) {
         printf("! Failed to extract binary assets\n");
         return 1;
     }
