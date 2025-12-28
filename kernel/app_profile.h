@@ -5,6 +5,7 @@
 
 // Forward declarations
 struct cred;
+struct task_struct;
 
 #define KSU_APP_PROFILE_VER 2
 #define KSU_MAX_PACKAGE_NAME 256
