@@ -148,7 +148,7 @@ jobs:
 
       - name: Build with Gradle
         if: ${{ steps.determine.outputs.SKIP != 'true' }}
-        run: ./gradlew clean assembleRelease
+        run: ./gradlew assembleRelease --build-cache --no-daemon
 
       - name: Import GPG key
         if: ${{ github.event_name != 'pull_request' }}
