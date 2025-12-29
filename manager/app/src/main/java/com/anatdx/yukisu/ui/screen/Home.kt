@@ -924,25 +924,23 @@ private fun InfoCard(
             }
 
             if (!isSimpleMode) {
-                if (lkmMode != true && !showKpmInfo) {
-                    val displayVersion =
-                        if (systemInfo.kpmVersion.isEmpty() || systemInfo.kpmVersion.startsWith("Error")) {
-                            val statusText = if (Natives.isKPMEnabled()) {
-                                stringResource(R.string.kernel_patched)
-                            } else {
-                                stringResource(R.string.kernel_not_enabled)
-                            }
-                            "${stringResource(R.string.not_supported)} ($statusText)"
+                val displayVersion =
+                    if (systemInfo.kpmVersion.isEmpty() || systemInfo.kpmVersion.startsWith("Error")) {
+                        val statusText = if (Natives.isKPMEnabled()) {
+                            stringResource(R.string.kernel_patched)
                         } else {
-                            "${stringResource(R.string.supported)} (${systemInfo.kpmVersion})"
+                            stringResource(R.string.kernel_not_enabled)
                         }
+                        "${stringResource(R.string.not_supported)} ($statusText)"
+                    } else {
+                        "${stringResource(R.string.supported)} (${systemInfo.kpmVersion})"
+                    }
 
-                    InfoCardItem(
-                        stringResource(R.string.home_kpm_version),
-                        displayVersion,
-                        icon = Icons.Default.Archive
-                    )
-                }
+                InfoCardItem(
+                    stringResource(R.string.home_kpm_version),
+                    displayVersion,
+                    icon = Icons.Default.Archive
+                )
             }
 
             if (!isSimpleMode && !isHideSusfsStatus &&
