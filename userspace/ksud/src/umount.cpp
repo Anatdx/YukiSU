@@ -4,6 +4,7 @@
 #include "log.hpp"
 #include "utils.hpp"
 
+#include <algorithm>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
