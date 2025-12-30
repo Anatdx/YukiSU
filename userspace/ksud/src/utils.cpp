@@ -1,6 +1,7 @@
 #include "utils.hpp"
 #include "defs.hpp"
 #include "log.hpp"
+#include "core/ksucalls.hpp"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -140,10 +141,12 @@ bool is_safe_mode() {
         return true;
     }
 
-    // TODO: Check kernel safemode via ksucalls
-    // bool kernel_safemode = ksucalls::check_kernel_safemode();
-    // LOGI("kernel_safemode: %d", kernel_safemode);
-    // return kernel_safemode;
+    // Check kernel safemode via ksucalls (volume down key detection)
+    bool kernel_safemode = check_kernel_safemode();
+    if (kernel_safemode) {
+        LOGI("safemode: true (kernel volume down)");
+        return true;
+    }
 
     return false;
 }
