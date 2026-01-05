@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home">Головна</string>
+    <string name="learn_more">Learn more</string>
     <string name="home_not_installed">Не встановлено</string>
     <string name="home_click_to_install">Натисніть, щоб встановити</string>
     <string name="home_working">Працює</string>
@@ -34,6 +35,7 @@
     <string name="reboot_edl">Перезавантажити в режим EDL</string>
     <string name="about">Про додаток</string>
     <string name="module_uninstall_confirm">Ви впевнені, що хочете видалити модуль %s?</string>
+    <string name="metamodule_uninstall_confirm">Are you sure you want to uninstall module %s? This action will affect all modules, and certain features provided by the metamodule (such as mounting) will no longer work</string>
     <string name="module_uninstall_success">%s видалено</string>
     <string name="module_uninstall_failed">Не вдалося видалити: %s</string>
     <string name="module_version">Версія</string>
@@ -51,7 +53,6 @@
     <string name="home_support_title">Підтримати нас</string>
     <string name="home_support_content">KernelSU є, і завжди буде, безкоштовним та з відкритим вихідним кодом. Однак ви можете показати нам свою підтримку, зробивши пожертву.</string>
     <string name="about_source_code"><![CDATA[Переглянути вихідний код на %1$s<br/>Приєднуйтесь до нашого каналу %2$s]]></string>
-    <string name="profile">Профіль додатку</string>
     <string name="profile_default">За замовчуванням</string>
     <string name="profile_template">Шаблон</string>
     <string name="profile_custom">Власний</string>
@@ -63,7 +64,7 @@
     <string name="failed_to_update_app_profile">Не вдалося оновити профіль додатку для %s</string>
     <string name="require_kernel_version" formatted="false">Поточна версія KernelSU %s занадто низька для коректної роботи менеджера. Будь ласка, оновіться до версії %s або вище!</string>
     <string name="settings_umount_modules_default">Відмонтовувати модулі за замовчуванням</string>
-    <string name="settings_umount_modules_default_summary">Глобальне значення за замовчуванням для "Відмонтувати модулі" у профілі додатку. Якщо ввімкнено, це видалить усі зміни системи, зроблені модулями, для додатків без встановленого профілю.</string>
+    <string name="settings_umount_modules_default_summary">Глобальне значення за замовчуванням для \"Відмонтувати модулі\" у профілі додатку. Якщо ввімкнено, це видалить усі зміни системи, зроблені модулями, для додатків без встановленого профілю.</string>
     <string name="profile_umount_modules_summary">Увімкнення цієї опції дозволить KernelSU відновити будь-які змінені модулями файли для цього додатку.</string>
     <string name="profile_selinux_domain">Домен</string>
     <string name="profile_selinux_rules">Правила</string>
@@ -110,6 +111,9 @@
     <string name="install_inactive_slot">Встановити в неактивний слот (після OTA)</string>
     <string name="install_inactive_slot_warning">Ваш пристрій буде **ПРИМУСОВО** завантажено в поточний неактивний слот після перезавантаження!\nВикористовуйте цю опцію лише після завершення OTA.\nПродовжити?</string>
     <string name="install_next">Далі</string>
+    <string name="install_select_partition">Select partition</string>
+    <string name="install_upload_lkm_file">Use local LKM file</string>
+    <string name="install_only_support_ko_file">Only .ko files are supported</string>
     <string name="select_file_tip">Рекомендується образ розділу %1$s</string>
     <string name="select_kmi">Вибрати KMI</string>
     <string name="settings_uninstall">Видалити</string>
@@ -118,7 +122,7 @@
     <string name="settings_restore_stock_image">Відновити стоковий образ</string>
     <string name="settings_uninstall_temporary_message">Тимчасово видалити KernelSU, відновлення до початкового стану після наступного перезавантаження.</string>
     <string name="settings_uninstall_permanent_message">Повне та остаточне видалення KernelSU (Root та всі модулі).</string>
-    <string name="settings_restore_stock_image_message">Відновити стоковий заводський образ (якщо існує резервна копія), зазвичай використовується перед OTA; якщо потрібно видалити KernelSU, використовуйте "Видалити назавжди".</string>
+    <string name="settings_restore_stock_image_message">Відновити стоковий заводський образ (якщо існує резервна копія), зазвичай використовується перед OTA; якщо потрібно видалити KernelSU, використовуйте \"Видалити назавжди\".</string>
     <string name="flashing">Прошивка</string>
     <string name="flash_success">Прошивка успішна</string>
     <string name="flash_failed">Прошивка не вдалася</string>
@@ -162,6 +166,15 @@
     <string name="su_not_allowed">Надання прав суперкористувача для %s заборонено</string>
     <string name="settings_disable_su">Вимкнути сумісність з su</string>
     <string name="settings_disable_su_summary">Тимчасово заборонити будь-яким додаткам отримувати root-права через команду su (існуючі root-процеси не будуть зачеплені).</string>
+    <string name="settings_disable_kernel_umount">Disable kernel umount</string>
+    <string name="settings_disable_kernel_umount_summary">Disable kernel-level umount behavior controlled by KernelSU</string>
+    <string name="settings_enable_enhanced_security">Enable enhanced security</string>
+    <string name="settings_enable_enhanced_security_summary">Enable stricter security policies</string>
+    <string name="feature_status_unsupported_summary">Kernel does not support this feature</string>
+    <string name="feature_status_managed_summary">This feature is managed by a module</string>
+    <string name="settings_mode_default">Default</string>
+    <string name="settings_mode_temp_enable">Temporarily enable</string>
+    <string name="settings_mode_always_enable">Permanently enable</string>
     <string name="module_install_multiple_confirm_with_names">Ви впевнені, що хочете встановити наступні %1$d модулі? \n\n%2$s</string>
     <string name="more_settings">Більше налаштувань</string>
     <string name="selinux">SELinux</string>
@@ -175,6 +188,10 @@
     <string name="hide_other_info_summary">Приховує червону крапку про кількість суперкористувачів, модулів та KPM-модулів на сторінці навігаційної панелі</string>
     <string name="hide_susfs_status">Приховати статус SuSFS</string>
     <string name="hide_susfs_status_summary">Приховує інформацію про статус SuSFS на головній сторінці</string>
+    <string name="hide_zygisk_implement">Hide Zygisk status</string>
+    <string name="hide_zygisk_implement_summary">Hide Zygisk implementation information on the home page</string>
+    <string name="hide_meta_module_implement">Hide Meta Module status</string>
+    <string name="hide_meta_module_implement_summary">Hide Meta Module implementation information on the home page</string>
     <string name="hide_link_card">Приховати картку посилань</string>
     <string name="hide_link_card_summary">Приховує інформацію на картці посилань на головній сторінці</string>
     <string name="hide_tag_card">Приховати рядки тегів модуля</string>
@@ -184,6 +201,7 @@
     <string name="theme_light">Світла</string>
     <string name="theme_dark">Темна</string>
     <string name="manual_hook">Ручний хук</string>
+    <string name="inline_hook">Inline Hook</string>
     <string name="dynamic_color_title">Динамічні кольори</string>
     <string name="dynamic_color_summary">Динамічні кольори з використанням системних тем</string>
     <string name="choose_theme_color">Вибрати колір теми</string>
@@ -315,6 +333,8 @@
     <string name="module_failed_count">Не вдалося встановити %d новий модуль</string>
     <string name="module_download_error">Не вдалося завантажити модуль</string>
     <string name="kernel_flashing">Прошивка ядра</string>
+    <string name="warning_of_meta_module_title">Require Meta module</string>
+    <string name="warning_of_meta_module_summary">This module want to mount /system, meta module will handle that. Otherwise, it might not work</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">Всі</string>
     <string name="category_root_apps">Root</string>
@@ -348,7 +368,7 @@
     <!-- SuSFS Configuration -->
     <string name="susfs_config_title">Налаштування SuSFS</string>
     <string name="susfs_config_description">Опис налаштувань</string>
-    <string name="susfs_config_description_text">Ця функція дозволяє налаштовувати підміну значення uname та часу збірки SuSFS. Введіть потрібні значення та натисніть "Застосувати", щоб вони набули чинності.</string>
+    <string name="susfs_config_description_text">Ця функція дозволяє налаштовувати підміну значення uname та часу збірки SuSFS. Введіть потрібні значення та натисніть \"Застосувати\", щоб вони набули чинності.</string>
     <string name="susfs_uname_label">Значення Uname</string>
     <string name="susfs_uname_placeholder">Будь ласка, введіть власне значення uname</string>
     <string name="susfs_build_time_label">Підміна часу збірки</string>
@@ -386,8 +406,6 @@
     <string name="susfs_path_label">Шлях</string>
     <string name="susfs_path_placeholder">напр.: /system/addon.d</string>
     <string name="susfs_no_paths_configured">Немає налаштованих шляхів SUS</string>
-    <!-- SuSFS Umount Mode -->
-    <!-- SuSFS Run Umount -->
     <!-- SuSFS Reset Categories -->
     <string name="susfs_reset_paths_title">Скинути шляхи SUS</string>
     <string name="susfs_reset_paths_message">Це видалить усі конфігурації шляхів SUS. Ви впевнені, що хочете продовжити?</string>
@@ -410,6 +428,7 @@
     <string name="enable_log_feature_label">Підтримка логування</string>
     <string name="hide_symbols_feature_label">Приховати символи KSU SUSFS</string>
     <string name="sus_kstat_feature_label">Підтримка SUS Kstat</string>
+    <string name="sus_map_feature_label">SUS Map Support</string>
     <!-- 可切换状态 -->
     <string name="susfs_feature_configurable">Настроювані функції SuSFS</string>
     <string name="susfs_enable_log_label">Увімкнути лог SuSFS</string>
@@ -450,7 +469,7 @@
     <string name="kstat_full_clone_updated">Повне клонування Kstat оновлено: %1$s</string>
     <string name="add_kstat_statically_title">Додати статичну конфігурацію Kstat</string>
     <string name="file_or_directory_path_label">Шлях до файлу/каталогу</string>
-    <string name="hint_use_default_value">Підказка: Ви можете використовувати "default" для використання оригінального значення</string>
+    <string name="hint_use_default_value">Підказка: Ви можете використовувати \"default\" для використання оригінального значення</string>
     <string name="add_kstat_path_title">Додати шлях Kstat</string>
     <string name="add">Додати</string>
     <string name="reset_kstat_config_title">Скинути конфігурацію Kstat</string>
@@ -504,4 +523,191 @@
     <string name="hide_bl_script_description">Переопределить свойство состояния блокировки загрузчика в режиме службы late_start</string>
     <string name="cleanup_residue">Очистити залишки</string>
     <string name="cleanup_residue_description">Очищення залишкових файлів та каталогів різних модулів та інструментів (може призвести до випадкового видалення, втрати даних та неможливості завантаження, використовуйте з обережністю)</string>
+    <string name="susfs_edit_sus_path">Edit SUS Path</string>
+    <string name="edit_kstat_statically_title">Edit Kstat Static Configuration</string>
+    <string name="edit_kstat_path_title">Edit Kstat Path</string>
+    <string name="susfs_save">Save</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="update">Update</string>
+    <string name="kstat_config_updated">Kstat config update</string>
+    <string name="kstat_path_updated">Kstat path update</string>
+    <string name="susfs_update_full_clone">Susfs update full clone</string>
+    <string name="app_paths_section">Application Path</string>
+    <string name="other_paths_section">Other paths</string>
+    <string name="add_custom_path">Other</string>
+    <string name="add_app_path">App</string>
+    <string name="susfs_add_app_path">Add App Path</string>
+    <string name="susfs_version_mismatch">SuSFS library version mismatch, kernel: %1$s vs manager: %2$s, It is recommended to update the kernel or manager</string>
+    <string name="warning">Warning</string>
+    <string name="search_apps">Search Apps</string>
+    <string name="selected_apps_count">%1$d apps selected</string>
+    <string name="already_added_apps_count">%1$d apps already added</string>
+    <string name="all_apps_already_added">All apps have been added</string>
+    <string name="dynamic_manager_title">Dynamic Manager Configuration</string>
+    <string name="dynamic_manager_enabled_summary">Enabled (Size: %s)</string>
+    <string name="dynamic_manager_disabled">Disabled</string>
+    <string name="enable_dynamic_manager">Enable Dynamic Manager</string>
+    <string name="signature_size">Dynamic Manager Signature Size</string>
+    <string name="signature_hash">Dynamic Manager Signature Hash</string>
+    <string name="hash_must_be_64_chars">Hash must be 64 hexadecimal characters</string>
+    <string name="dynamic_manager_set_success">Dynamic Manager configuration set successfully</string>
+    <string name="dynamic_manager_set_failed">Failed to set dynamic Manager configuration</string>
+    <string name="invalid_sign_config">Invalid Manager configuration</string>
+    <string name="dynamic_manager_disabled_success">Dynamic Manager disabled</string>
+    <string name="dynamic_manager_clear_failed">Failed to clear dynamic Manager</string>
+    <string name="dynamic_managerature">Dynamic</string>
+    <string name="signature_index">Signature %1$d</string>
+    <string name="unknown_signature">Unknown</string>
+    <string name="multi_manager_list">Active Manager</string>
+    <string name="no_active_manager">No active manager</string>
+    <string name="default_signature">SukiSU</string>
+    <string name="home_zygisk_implement">Zygisk implement</string>
+    <string name="home_meta_module_implement">Meta Module implement</string>
+    <!-- 循环路径相关 -->
+    <string name="susfs_tab_sus_loop_paths">SUS Loop Paths</string>
+    <string name="susfs_add_sus_loop_path">Add SUS Loop Path</string>
+    <string name="susfs_edit_sus_loop_path">Edit SUS Loop Path</string>
+    <string name="susfs_loop_path_added_success">SUS loop path added successfully: %1$s</string>
+    <string name="susfs_loop_path_removed">SUS loop path removed: %1$s</string>
+    <string name="susfs_loop_path_updated">SUS loop path updated: %1$s -&gt; %2$s</string>
+    <string name="susfs_no_loop_paths_configured">No SUS loop paths configured</string>
+    <string name="susfs_reset_loop_paths_title">Reset Loop Paths</string>
+    <string name="susfs_reset_loop_paths_message">Are you sure you want to clear all SUS loop paths? This action cannot be undone</string>
+    <string name="susfs_loop_path_label">Loop Path</string>
+    <string name="susfs_loop_path_placeholder">/data/example/path</string>
+    <string name="susfs_loop_path_restriction_warning">Note: Only paths NOT inside /storage/ and /sdcard/ can be added via loop paths</string>
+    <string name="susfs_loop_path_invalid_location">Error: Loop paths cannot be inside /storage/ or /sdcard/ directories</string>
+    <string name="loop_paths_section">Loop Paths</string>
+    <string name="add_loop_path">Add Loop Path</string>
+    <!-- 循环路径功能描述 -->
+    <string name="sus_loop_paths_description_title">Loop Path Configuration</string>
+    <string name="sus_loop_paths_description_text">Loop paths are re-flagged as SUS_PATH on each non-root user app or isolated service startup. This helps address issues where added paths may have their inode status reset or inode re-created in the kernel</string>
+    <string name="avc_log_spoofing">AVC Log Spoofing</string>
+    <string name="avc_log_spoofing_enabled">AVC log spoofing has been enabled</string>
+    <string name="avc_log_spoofing_disabled">AVC log spoofing has been disabled</string>
+    <string name="avc_log_spoofing_description">Disabled: Disable spoofing the sus tcontext of \'su\' shown in avc log in kernel\n
+Enabled: Enable spoofing the sus tcontext of \'su\' with \'u:r:priv_app:s0:c512,c768\' shown in avc log in kernel</string>
+    <string name="avc_log_spoofing_warning">Important Note:\n
+- It is set to \'0\' by default in kernel\n
+- Enabling this will sometimes make developers hard to identify the cause when they are debugging with some permission or SELinux issue, so users are advised to disable this when doing</string>
+    <!-- 模块签名功能描述 -->
+    <string name="module_verified">Validated</string>
+    <string name="module_signature_verified">Module signature verified</string>
+    <string name="module_signature_verification">Signature Verification</string>
+    <string name="module_signature_verification_summary">Force signature verification when installing modules (only available for ARM architecture)</string>
+    <string name="module_signature_invalid">Unknown publisher</string>
+    <string name="module_signature_invalid_message">Unsigned modules may be incomplete. To protect your device, installation of this module has been blocked</string>
+    <string name="module_signature_verification_failed">Unsigned modules may be incomplete. Do you want to allow the following module from an unknown publisher to install in this device?</string>
+    <string name="home_hook_type">Hook type</string>
+    <!-- KPM patching related strings -->
+    <string name="kpm_patch_options">KPM Patch</string>
+    <string name="kpm_patch_description">For adding additional KPM features</string>
+    <string name="enable_kpm_patch">KPM Patch</string>
+    <string name="kpm_patch_switch_description">Apply KPM patch to kernel image before flashing</string>
+    <string name="enable_kpm_undo_patch">KPM Undo Patch</string>
+    <string name="kpm_undo_patch_switch_description">Undo previously applied KPM patch</string>
+    <string name="kpm_patch_enabled">KPM patch enabled</string>
+    <string name="kpm_undo_patch_enabled">KPM undo patch enabled</string>
+    <string name="kpm_patch_mode">KPM Patch Mode</string>
+    <string name="kpm_undo_patch_mode">KPM Undo Patch Mode</string>
+    <!-- KPM workflow related -->
+    <string name="kpm_preparing_tools">Preparing KPM tools</string>
+    <string name="kpm_applying_patch">Applying KPM patch</string>
+    <string name="kpm_undoing_patch">Undoing KPM patch</string>
+    <string name="kpm_found_image_file">Found Image file: %s</string>
+    <string name="kpm_patch_success">KPM patch applied successfully</string>
+    <string name="kpm_undo_patch_success">KPM patch undone successfully</string>
+    <string name="kpm_file_repacked">File repacked successfully</string>
+    <!-- KPM error messages -->
+    <string name="kpm_extract_zip_failed">Failed to extract zip file</string>
+    <string name="kpm_image_file_not_found">Image file not found</string>
+    <string name="kpm_patch_failed">KPM patch failed</string>
+    <string name="kpm_undo_patch_failed">KPM undo patch failed</string>
+    <string name="kpm_patch_operation_failed">KPM patch operation failed: %s</string>
+    <!-- KPM option radio group strings -->
+    <string name="kpm_follow_kernel_file">Follow Kernel</string>
+    <string name="kpm_follow_kernel_description">Use kernel as-is without any KPM modifications</string>
+    <!-- 确认安装相关字符串 -->
+    <string name="confirm_installation">Confirm Installation</string>
+    <string name="confirm_multiple_installation">Confirm Installation (%d files)</string>
+    <string name="install_confirm">Install</string>
+    <string name="module_package">Module</string>
+    <string name="kernel_package">Kernel</string>
+    <string name="unknown_package">Unknown</string>
+    <string name="unknown_kernel">Unknown Kernel</string>
+    <string name="unknown_file">Unknown File</string>
+    <string name="version">Version</string>
+    <string name="author">Author</string>
+    <string name="description">Description</string>
+    <string name="supported_devices">Supported Devices</string>
+    <!-- SUS Map related strings -->
+    <string name="susfs_tab_sus_maps">SUS Maps</string>
+    <string name="susfs_sus_map_label">Library Path</string>
+    <string name="susfs_sus_map_placeholder">/data/adb/modules/my_module/zygisk/arm64-v8a.so</string>
+    <string name="susfs_add_sus_map">Add SUS Map</string>
+    <string name="susfs_edit_sus_map">Edit SUS Map</string>
+    <string name="susfs_sus_map_added_success">SUS map added successfully: %1$s</string>
+    <string name="susfs_sus_map_removed">SUS map removed: %1$s</string>
+    <string name="susfs_sus_map_updated">SUS map updated: %1$s -&gt; %2$s</string>
+    <string name="susfs_no_sus_maps_configured">No SUS maps configured</string>
+    <string name="susfs_reset_sus_maps_title">Reset SUS Maps</string>
+    <string name="susfs_reset_sus_maps_message">This will remove all configured SUS maps. This action cannot be undone</string>
+    <string name="sus_maps_section">Memory Map Hiding</string>
+    <string name="sus_maps_description_title">Hide the mmapped real file from various maps in /proc/self/</string>
+    <string name="sus_maps_description_text">Hide the real file paths of memory mappings from /proc/self/[maps|smaps|smaps_rollup|map_files|mem|pagemap]. Please note: This feature does not support hiding anonymous memory mappings, nor can it hide inline hooks or PLT hooks caused by the injected library itself</string>
+    <string name="sus_maps_warning">Important Notice: For applications with well-implemented injection detection mechanisms, this feature may not effectively bypass detection</string>
+    <string name="sus_maps_debug_info">First, find the target application\'s PID and UID using ps -enf, then check the relevant paths in /proc/&lt;pid&gt;/maps and compare the device numbers with those in /proc/1/mountinfo to ensure consistency. Only when the device numbers match can the map hiding function work properly</string>
+    <!-- Log Viewer -->
+    <string name="log_viewer_title">Log Viewer</string>
+    <string name="log_viewer_back">Back</string>
+    <string name="log_viewer_search">Search</string>
+    <string name="log_viewer_clear_logs">Clear Logs</string>
+    <string name="log_viewer_clear_logs_confirm">Are you sure you want to clear the selected log file? This action cannot be undone</string>
+    <string name="log_viewer_logs_cleared">Logs cleared successfully</string>
+    <string name="log_viewer_filter_type">Filter by Type</string>
+    <string name="log_viewer_all_types">All Types</string>
+    <string name="log_viewer_showing_entries">Showing %1$d of %2$d entries</string>
+    <string name="log_viewer_no_logs">No logs found</string>
+    <string name="log_viewer_no_matching_logs">No matching logs found</string>
+    <string name="log_viewer_refresh">Refresh</string>
+    <string name="log_viewer_raw_log">Raw Log</string>
+    <string name="log_viewer_search_placeholder">Search by UID, command, or details…</string>
+    <string name="log_viewer_clear_search">Clear search</string>
+    <string name="log_viewer_view_logs">View Usage Logs</string>
+    <string name="log_viewer_view_logs_summary">View KernelSU superuser access logs</string>
+    <string name="log_viewer_exclude_subtypes">Exclude sub-types</string>
+    <string name="log_viewer_exclude_current_app">Current App</string>
+    <string name="log_viewer_page_info">Page: %1$d/%2$d | Total logs: %3$d</string>
+    <string name="log_viewer_too_many_logs">Too many logs, showing only the latest %1$d entries</string>
+    <string name="log_viewer_load_more">Load More Logs</string>
+    <string name="log_viewer_all_logs_loaded">All logs displayed</string>
+    <!-- MiUI Uninstall Desc -->
+    <string name="miui_uninstall_title">Confirm Uninstallation SukiSU Manager?</string>
+    <string name="miui_uninstall_content">Proceeding with the uninstallation will not affect the core functionality of your root access. The root is designed to operate independently of this manager.</string>
+    <string name="incompatible_kernel_msg">    The current manager is incompatible with this kernel! Please upgrade the kernel to version %2$d or higher (currently %1$d)
+    </string>
+    <string name="umount_path_manager">Umount Path Management</string>
+    <string name="umount_path_manager_summary">Manage kernel unmount paths</string>
+    <string name="umount_path_restart_notice">A reboot is required for changes to take effect. The system will apply the new configuration on the next boot</string>
+    <string name="add_umount_path">Add Umount Path</string>
+    <string name="mount_path">Mount Path</string>
+    <string name="umount_flags">Unmount Flags</string>
+    <string name="umount_flags_hint">0=Normal unmount, 2=MNT_DETACH</string>
+    <string name="flags">Flags</string>
+    <string name="confirm_delete">Confirm Delete</string>
+    <string name="confirm_delete_umount_path">Are you sure you want to delete the path %s?</string>
+    <string name="umount_path_added">Path added, will take effect after reboot</string>
+    <string name="umount_path_removed">Path removed, will take effect after reboot</string>
+    <string name="operation_failed">Operation failed</string>
+    <string name="confirm_action">Confirm Action</string>
+    <string name="confirm_clear_custom_paths">Are you sure you want to clear all custom paths? (default paths will be preserved)</string>
+    <string name="custom_paths_cleared">Custom paths cleared</string>
+    <string name="clear_custom_paths">Clear Custom Paths</string>
+    <string name="apply_config">Apply Configuration</string>
+    <string name="config_applied">Configuration applied to kernel</string>
+    <string name="mnt_detach">MNT_DETACH</string>
+    <string name="group_contains_apps">Contains %d apps</string>
+    <string name="settings_disable_sulog">Disable superuser logging</string>
+    <string name="settings_disable_sulog_summary">Disable KernelSU superuser access logging</string>
 </resources>
