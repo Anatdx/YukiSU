@@ -1,14 +1,17 @@
-#ifndef __KSU_H_KSU_CORE
-#define __KSU_H_KSU_CORE
+#ifndef __KSU_H_KSU_SETUID_HOOK
+#define __KSU_H_KSU_SETUID_HOOK
 
-#include "apk_sign.h"
 #include <linux/init.h>
-#include <linux/thread_info.h>
 #include <linux/types.h>
+
+#ifdef CONFIG_KSU_LKM
+#include "apk_sign.h"
+#include <linux/thread_info.h>
+#endif // CONFIG_KSU_LKM
 
 void ksu_setuid_hook_init(void);
 void ksu_setuid_hook_exit(void);
 
 int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
 
-#endif
+#endif //__KSU_H_KSU_SETUID_HOOK

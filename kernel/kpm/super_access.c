@@ -44,6 +44,7 @@ struct DynamicStructInfo {
 
 #define DYNAMIC_STRUCT_BEGIN(struct_name)                                      \
 	static struct DynamicStructMember struct_name##_members[] = {
+
 #define DEFINE_MEMBER(struct_name, member)                                     \
 	{.name = #member,                                                      \
 	 .size = sizeof(((struct struct_name *)0)->member),                    \
@@ -124,7 +125,9 @@ DYNAMIC_STRUCT_BEGIN(netlink_kernel_cfg)
 DEFINE_MEMBER(netlink_kernel_cfg, groups)
 DEFINE_MEMBER(netlink_kernel_cfg, flags)
 DEFINE_MEMBER(netlink_kernel_cfg, input)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 DEFINE_MEMBER(netlink_kernel_cfg, cb_mutex)
+#endif
 DEFINE_MEMBER(netlink_kernel_cfg, bind)
 DEFINE_MEMBER(netlink_kernel_cfg, unbind)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
@@ -155,8 +158,10 @@ DEFINE_MEMBER(task_struct, thread_info)
 #ifdef CONFIG_CGROUPS
 DEFINE_MEMBER(task_struct, cgroups)
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
 #ifdef CONFIG_SECURITY
 DEFINE_MEMBER(task_struct, security)
+#endif
 #endif
 DEFINE_MEMBER(task_struct, thread)
 DYNAMIC_STRUCT_END(task_struct)
@@ -242,7 +247,7 @@ EXPORT_SYMBOL(yukisu_super_access);
 
 #define DYNAMIC_CONTAINER_OF(offset, member_ptr)                               \
 	({                                                                     \
-		(offset != (size_t) - 1)                                       \
+		(offset != (size_t)-1)                                         \
 		    ? (void *)((char *)(member_ptr) - offset)                  \
 		    : NULL;                                                    \
 	})

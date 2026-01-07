@@ -1,25 +1,41 @@
-#include "objsec.h"
 #include <linux/capability.h>
 #include <linux/cred.h>
-#include <linux/sched.h>
-#include <linux/sched/signal.h>
-#include <linux/seccomp.h>
-#include <linux/slab.h>
-#include <linux/thread_info.h>
-#include <linux/uidgid.h>
+#include <linux/err.h>
+#include <linux/fdtable.h>
+#include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/pid.h>
+#include <linux/proc_ns.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h> // signal_struct
+#include <linux/sched/task.h>
+#endif
+#include "objsec.h"
+#include <linux/sched.h>
+#include <linux/seccomp.h>
+#include <linux/security.h>
+#include <linux/spinlock.h>
+#include <linux/syscalls.h>
+#include <linux/thread_info.h>
+#include <linux/tty.h>
+#include <linux/uidgid.h>
 
 #include "allowlist.h"
 #include "app_profile.h"
+#include "arch.h"
+#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "selinux/selinux.h"
-#include "sucompat.h"
+#ifndef CONFIG_KSU_HYMOFS
 #include "syscall_hook_manager.h"
-
+#endif
 #include "sulog.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
-static struct group_info root_groups = {.usage = REFCOUNT_INIT(2)};
+static struct group_info root_groups = {
+    .usage = REFCOUNT_INIT(2),
+};
 #else
 static struct group_info root_groups = {.usage = ATOMIC_INIT(2)};
 #endif
@@ -56,7 +72,11 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 			put_group_info(group_info);
 			return;
 		}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 		group_info->gid[i] = kgid;
+#else
+		GROUP_AT(group_info, i) = kgid;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 	}
 
 	groups_sort(group_info);
@@ -64,68 +84,71 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-void seccomp_filter_release(struct task_struct *tsk);
-
-static void disable_seccomp(void)
+void disable_seccomp(struct task_struct *tsk)
 {
-	struct task_struct *fake;
-
-	fake = kmalloc(sizeof(*fake), GFP_ATOMIC);
-	if (!fake) {
-		pr_warn("failed to alloc fake task_struct\n");
+	if (unlikely(!tsk))
 		return;
-	}
 
-	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that current->sighand->siglock is held
-	// during the operation.
-	spin_lock_irq(&current->sighand->siglock);
+	assert_spin_locked(&tsk->sighand->siglock);
+
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) &&                                           \
     LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 	clear_syscall_work(SECCOMP);
 #else
 	clear_thread_flag(TIF_SECCOMP);
-#endif
+#endif // #if defined(CONFIG_GENERIC_ENTRY) &&
+       // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 
-	memcpy(fake, current, sizeof(*fake));
+#ifdef CONFIG_SECCOMP
+	tsk->seccomp.mode = 0;
+	if (tsk->seccomp.filter) {
+		// 5.9+ have filter_count, but optional.
+#ifdef KSU_OPTIONAL_SECCOMP_FILTER_CNT
+		atomic_set(&tsk->seccomp.filter_count, 0);
+#endif // #ifdef KSU_OPTIONAL_SECCOMP_FILTER_CNT
 
-	current->seccomp.mode = 0;
-	current->seccomp.filter = NULL;
-	atomic_set(&current->seccomp.filter_count, 0);
-	spin_unlock_irq(&current->sighand->siglock);
+		// some old kernel backport seccomp_filter_release..
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) &&                            \
+    defined(KSU_OPTIONAL_SECCOMP_FILTER_RELEASE)
+		seccomp_filter_release(tsk);
+#else
+		// never, ever call seccomp_filter_release on 6.10+ (no effect)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) &&                          \
+     LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
+		seccomp_filter_release(tsk);
+#else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+		put_seccomp_filter(tsk);
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+		tsk->seccomp.filter = NULL;
+#endif // #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) &&
+       // LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
-	// https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
-	fake->flags |= PF_EXITING;
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-	// https://github.com/torvalds/linux/commit/0d8315dddd2899f519fe1ca3d4d5cdaf44ea421e#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R556-R558
-	fake->sighand = NULL;
-#endif
-
-	seccomp_filter_release(fake);
-	kfree(fake);
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) &&
+       // defined(KSU_OPTIONAL_SECCOMP_FILTER_RELEASE)
+	}
+#endif // #ifdef CONFIG_SECCOMP
 }
 
 void escape_with_root_profile(void)
 {
 	struct cred *cred;
+	// a bit useless, but we just want less ifdefs
 	struct task_struct *p = current;
-	struct task_struct *t;
 
-	cred = prepare_creds();
-	if (!cred) {
-		pr_warn("prepare_creds failed!\n");
-		return;
-	}
-
-	if (cred->euid.val == 0) {
+	if (current_euid().val == 0) {
 		pr_warn("Already root, don't escape!\n");
 #if __SULOG_GATE
 		ksu_sulog_report_su_grant(current_euid().val, NULL,
 					  "escape_to_root_failed");
-#endif
-		abort_creds(cred);
+#endif // #if __SULOG_GATE
+		return;
+	}
+
+	cred = prepare_creds();
+	if (!cred) {
+		pr_warn("prepare_creds failed!\n");
 		return;
 	}
 
@@ -162,17 +185,25 @@ void escape_with_root_profile(void)
 
 	commit_creds(cred);
 
-	disable_seccomp();
+	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
+	// When disabling Seccomp, ensure that current->sighand->siglock is held
+	// during the operation.
+	spin_lock_irq(&p->sighand->siglock);
+	disable_seccomp(p);
+	spin_unlock_irq(&p->sighand->siglock);
 
 	setup_selinux(profile->selinux_domain);
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(current_euid().val, NULL, "escape_to_root");
 #endif
 
+#ifndef CONFIG_KSU_HYMOFS
+	struct task_struct *t;
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);
 	}
+#endif
 }
 
 void escape_to_root_for_init(void)
@@ -216,54 +247,11 @@ static int __manual_su_handle_devpts(struct inode *inode)
 	return 0;
 }
 
-static void disable_seccomp_for_task(struct task_struct *tsk)
-{
-	struct task_struct *fake;
-
-	fake = kmalloc(sizeof(*fake), GFP_ATOMIC);
-	if (!fake) {
-		pr_warn("failed to alloc fake task_struct\n");
-		return;
-	}
-
-	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that tsk->sighand->siglock is held
-	// during the operation.
-	spin_lock_irq(&tsk->sighand->siglock);
-	// disable seccomp
-#if defined(CONFIG_GENERIC_ENTRY) &&                                           \
-    LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-	// clear_syscall_work is only for tsk, use clear_tsk_thread_flag for
-	// other tasks
-	clear_tsk_thread_flag(tsk, TIF_SECCOMP);
-#else
-	clear_tsk_thread_flag(tsk, TIF_SECCOMP);
-#endif
-
-	memcpy(fake, tsk, sizeof(*fake));
-	tsk->seccomp.mode = SECCOMP_MODE_DISABLED;
-	tsk->seccomp.filter = NULL;
-	atomic_set(&tsk->seccomp.filter_count, 0);
-	spin_unlock_irq(&tsk->sighand->siglock);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
-	// https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
-	fake->flags |= PF_EXITING;
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-	// https://github.com/torvalds/linux/commit/0d8315dddd2899f519fe1ca3d4d5cdaf44ea421e#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R556-R558
-	fake->sighand = NULL;
-#endif
-
-	seccomp_filter_release(fake);
-	kfree(fake);
-}
-
 void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 {
 	struct cred *newcreds;
 	struct task_struct *target_task;
-	struct task_struct *p = current;
-	struct task_struct *t;
+	unsigned long flags;
 
 	pr_info(
 	    "cmd_su: escape_to_root_for_cmd_su called for UID: %d, PID: %d\n",
@@ -336,7 +324,9 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	task_unlock(target_task);
 
 	if (target_task->sighand) {
-		disable_seccomp_for_task(target_task);
+		spin_lock_irqsave(&target_task->sighand->siglock, flags);
+		disable_seccomp(target_task);
+		spin_unlock_irqrestore(&target_task->sighand->siglock, flags);
 	}
 
 	setup_selinux(profile->selinux_domain);
@@ -354,10 +344,14 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(target_uid, "cmd_su", "manual_escalation");
 #endif
+#ifndef CONFIG_KSU_HYMOFS
+	struct task_struct *p = current;
+	struct task_struct *t;
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);
 	}
+#endif
 	pr_info("cmd_su: privilege escalation completed for UID: %d, PID: %d\n",
 		target_uid, target_pid);
 }

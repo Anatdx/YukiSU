@@ -1,5 +1,5 @@
-#ifndef __SUKISU_SUPER_ACCESS_H
-#define __SUKISU_SUPER_ACCESS_H
+#ifndef __YUKISU_SUPER_ACCESS_H
+#define __YUKISU_SUPER_ACCESS_H
 
 #include "compact.h"
 #include "kpm.h"

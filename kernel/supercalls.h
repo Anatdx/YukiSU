@@ -8,120 +8,107 @@
 
 #ifdef CONFIG_KPM
 #include "kpm/kpm.h"
-#endif
+#endif // #ifdef CONFIG_KPM
 
-// Magic numbers for reboot hook to install fd
+// Magic numbers for reboot hook
 #define KSU_INSTALL_MAGIC1 0xDEADBEEF
 #define KSU_INSTALL_MAGIC2 0xCAFEBABE
-
-// Magic for SuperKey authentication via reboot syscall
-// Usage: reboot(KSU_INSTALL_MAGIC1, KSU_SUPERKEY_MAGIC2, 0, &superkey_struct)
 #define KSU_SUPERKEY_MAGIC2 0xCAFE5555
 
-// Magic for SuperKey authentication via prctl syscall (SECCOMP-safe)
-// Usage: prctl(KSU_PRCTL_SUPERKEY_AUTH, &superkey_struct, 0, 0, 0)
-// prctl is not blocked by Android's SECCOMP policy, unlike reboot
-// NOTE: Avoid 0xDEAD/0xBEEF patterns - easily detected by root checkers
-#define KSU_PRCTL_SUPERKEY_AUTH 0x59554B49  // "YUKI" in hex
+// Magic numbers for prctl hook (SECCOMP-safe)
+#define KSU_PRCTL_SUPERKEY_AUTH 0x59554B49 // "YUKI"
+#define KSU_PRCTL_GET_FD 0x59554B4A // "YUKJ"
 
-// Magic for getting driver fd for already authenticated manager (SECCOMP-safe)
-// Usage: prctl(KSU_PRCTL_GET_FD, &fd_output, 0, 0, 0)
-// This allows ksud to get driver fd when launched from manager app
-#define KSU_PRCTL_GET_FD 0x59554B4A  // "YUKJ" in hex
-
-// Output structure for KSU_PRCTL_GET_FD
+// prctl command structures
 struct ksu_prctl_get_fd_cmd {
-	int result; // Output: 0 = success, negative = error
-	int fd;	    // Output: fd on success, -1 on failure
+	int result;
+	int fd;
 };
 
-// SuperKey auth structure for prctl hook
 struct ksu_superkey_prctl_cmd {
-	char superkey[65]; // Input: SuperKey string (null-terminated)
-	int result;	   // Output: 0 = success, negative = error
-	int fd;		   // Output: fd on success
+	char superkey[65];
+	int result;
+	int fd;
 };
 
-// SuperKey auth structure for reboot hook
 struct ksu_superkey_reboot_cmd {
-	char superkey[65]; // Input: SuperKey string (null-terminated)
-	int result;	   // Output: 0 = success, negative = error
-	int fd;		   // Output: fd on success
+	char superkey[65];
+	int result;
+	int fd;
 };
 
-// Command structures for ioctl
-
+// IOCTL command structures
 struct ksu_become_daemon_cmd {
-	__u8 token[65]; // Input: daemon token (null-terminated)
+	__u8 token[65];
 };
 
 struct ksu_get_info_cmd {
-	__u32 version;	// Output: KERNEL_SU_VERSION
-	__u32 flags;	// Output: flags (bit 0: MODULE mode)
-	__u32 features; // Output: max feature ID supported
+	__u32 version;
+	__u32 flags;
+	__u32 features;
 };
 
 struct ksu_report_event_cmd {
-	__u32 event; // Input: EVENT_POST_FS_DATA, EVENT_BOOT_COMPLETED, etc.
+	__u32 event;
 };
 
 struct ksu_set_sepolicy_cmd {
-	__u64 cmd;	   // Input: sepolicy command
-	__aligned_u64 arg; // Input: sepolicy argument pointer
+	__u64 cmd;
+	__aligned_u64 arg;
 };
 
 struct ksu_check_safemode_cmd {
-	__u8 in_safe_mode; // Output: true if in safe mode, false otherwise
+	__u8 in_safe_mode;
 };
 
 struct ksu_get_allow_list_cmd {
-	__u32 uids[128]; // Output: array of allowed/denied UIDs
-	__u32 count;	 // Output: number of UIDs in array
-	__u8 allow;	 // Input: true for allow list, false for deny list
+	__u32 uids[128];
+	__u32 count;
+	__u8 allow;
 };
 
 struct ksu_uid_granted_root_cmd {
-	__u32 uid;    // Input: target UID to check
-	__u8 granted; // Output: true if granted, false otherwise
+	__u32 uid;
+	__u8 granted;
 };
 
 struct ksu_uid_should_umount_cmd {
-	__u32 uid;	    // Input: target UID to check
-	__u8 should_umount; // Output: true if should umount, false otherwise
+	__u32 uid;
+	__u8 should_umount;
 };
 
-struct ksu_get_manager_appid_cmd {
-	__u32 appid; // Output: manager app id
+struct ksu_get_manager_uid_cmd {
+	__u32 uid;
 };
 
 struct ksu_get_app_profile_cmd {
-	struct app_profile profile; // Input/Output: app profile structure
+	struct app_profile profile;
 };
 
 struct ksu_set_app_profile_cmd {
-	struct app_profile profile; // Input: app profile structure
+	struct app_profile profile;
 };
 
 struct ksu_get_feature_cmd {
-	__u32 feature_id; // Input: feature ID (enum ksu_feature_id)
-	__u64 value;	  // Output: feature value/state
-	__u8 supported; // Output: true if feature is supported, false otherwise
+	__u32 feature_id;
+	__u64 value;
+	__u8 supported;
 };
 
 struct ksu_set_feature_cmd {
-	__u32 feature_id; // Input: feature ID (enum ksu_feature_id)
-	__u64 value;	  // Input: feature value/state to set
+	__u32 feature_id;
+	__u64 value;
 };
 
 struct ksu_get_wrapper_fd_cmd {
-	__u32 fd;    // Input: userspace fd
-	__u32 flags; // Input: flags of userspace fd
+	__u32 fd;
+	__u32 flags;
 };
 
 struct ksu_manage_mark_cmd {
-	__u32 operation; // Input: KSU_MARK_*
-	__s32 pid;	 // Input: target pid (0 for all processes)
-	__u32 result;	 // Output: for get operation - mark status or reg_count
+	__u32 operation;
+	__s32 pid;
+	__u32 result;
 };
 
 #define KSU_MARK_GET 1
@@ -130,67 +117,59 @@ struct ksu_manage_mark_cmd {
 #define KSU_MARK_REFRESH 4
 
 struct ksu_nuke_ext4_sysfs_cmd {
-	__aligned_u64 arg; // Input: mnt pointer
+	__aligned_u64 arg;
 };
 
 struct ksu_add_try_umount_cmd {
-	__aligned_u64 arg; // char ptr, this is the mountpoint
-	__u32 flags;	   // this is the flag we use for it
-	__u8 mode; // denotes what to do with it 0:wipe_list 1:add_to_list
-		   // 2:delete_entry
+	__aligned_u64 arg;
+	__u32 flags;
+	__u8 mode;
 };
 
-// List current umount entries
 struct ksu_list_try_umount_cmd {
-	__aligned_u64 arg; // User buffer
-	__u32 buf_size;	   // Buffer size provided by userspace
+	__aligned_u64 arg;
+	__u32 buf_size;
 };
 
-#define KSU_UMOUNT_WIPE 0 // ignore everything and wipe list
-#define KSU_UMOUNT_ADD 1  // add entry (path + flags)
-#define KSU_UMOUNT_DEL 2  // delete entry, strcmp
+#define KSU_UMOUNT_WIPE 0
+#define KSU_UMOUNT_ADD 1
+#define KSU_UMOUNT_DEL 2
 
-// Other command structures
 struct ksu_get_full_version_cmd {
-	char version_full[KSU_FULL_VERSION_STRING]; // Output: full version
-						    // string
+	char version_full[KSU_FULL_VERSION_STRING];
 };
 
 struct ksu_hook_type_cmd {
-	char hook_type[32]; // Output: hook type string
+	char hook_type[32];
 };
 
 struct ksu_enable_kpm_cmd {
-	__u8 enabled; // Output: true if KPM is enabled
+	__u8 enabled;
 };
 
 #ifdef CONFIG_KSU_MANUAL_SU
 struct ksu_manual_su_cmd {
-	__u32 option;	  // Input: operation type (MANUAL_SU_OP_GENERATE_TOKEN,
-			  // MANUAL_SU_OP_ESCALATE, MANUAL_SU_OP_ADD_PENDING)
-	__u32 target_uid; // Input: target UID
-	__u32 target_pid; // Input: target PID
-	char token_buffer[33]; // Input/Output: token buffer
+	__u32 option;
+	__u32 target_uid;
+	__u32 target_pid;
+	char token_buffer[33];
 };
-#endif
+#endif // #ifdef CONFIG_KSU_MANUAL_SU
 
-// SuperKey authentication command
+#ifdef CONFIG_KSU_SUPERKEY
 struct ksu_superkey_auth_cmd {
-	char superkey[65]; // Input: superkey string (null-terminated)
-	__u32 result;	   // Output: 0 = success, other = error
+	char superkey[65];
+	__s32 result;
 };
 
-// SuperKey status query command
 struct ksu_superkey_status_cmd {
-	__u8 is_configured; // Output: 1 if SuperKey is configured, 0 otherwise
-	__u8
-	    is_authenticated; // Output: 1 if already authenticated via SuperKey
-	__u8 signature_bypassed; // Output: 1 if signature verification is
-				 // bypassed (SuperKey only mode)
-	__u8 reserved;
+	__u8 enabled;
+	__u8 authenticated;
+	__u32 manager_uid;
 };
+#endif // CONFIG_KSU_SUPERKEY
 
-// IOCTL command definitions
+// IOCTL definitions
 #define KSU_IOCTL_GRANT_ROOT _IOC(_IOC_NONE, 'K', 1, 0)
 #define KSU_IOCTL_GET_INFO _IOC(_IOC_READ, 'K', 2, 0)
 #define KSU_IOCTL_REPORT_EVENT _IOC(_IOC_WRITE, 'K', 3, 0)
@@ -200,7 +179,7 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_GET_DENY_LIST _IOC(_IOC_READ | _IOC_WRITE, 'K', 7, 0)
 #define KSU_IOCTL_UID_GRANTED_ROOT _IOC(_IOC_READ | _IOC_WRITE, 'K', 8, 0)
 #define KSU_IOCTL_UID_SHOULD_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 9, 0)
-#define KSU_IOCTL_GET_MANAGER_APPID _IOC(_IOC_READ, 'K', 10, 0)
+#define KSU_IOCTL_GET_MANAGER_UID _IOC(_IOC_READ, 'K', 10, 0)
 #define KSU_IOCTL_GET_APP_PROFILE _IOC(_IOC_READ | _IOC_WRITE, 'K', 11, 0)
 #define KSU_IOCTL_SET_APP_PROFILE _IOC(_IOC_WRITE, 'K', 12, 0)
 #define KSU_IOCTL_GET_FEATURE _IOC(_IOC_READ | _IOC_WRITE, 'K', 13, 0)
@@ -209,34 +188,32 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_MANAGE_MARK _IOC(_IOC_READ | _IOC_WRITE, 'K', 16, 0)
 #define KSU_IOCTL_NUKE_EXT4_SYSFS _IOC(_IOC_WRITE, 'K', 17, 0)
 #define KSU_IOCTL_ADD_TRY_UMOUNT _IOC(_IOC_WRITE, 'K', 18, 0)
-// Other IOCTL command definitions
 #define KSU_IOCTL_GET_FULL_VERSION _IOC(_IOC_READ, 'K', 100, 0)
 #define KSU_IOCTL_HOOK_TYPE _IOC(_IOC_READ, 'K', 101, 0)
 #define KSU_IOCTL_ENABLE_KPM _IOC(_IOC_READ, 'K', 102, 0)
-#ifdef CONFIG_KSU_MANUAL_SU
-#define KSU_IOCTL_MANUAL_SU _IOC(_IOC_READ | _IOC_WRITE, 'K', 106, 0)
-#endif
-// SuperKey authentication IOCTL
-#define KSU_IOCTL_SUPERKEY_AUTH _IOC(_IOC_READ | _IOC_WRITE, 'K', 107, 0)
-// SuperKey status query IOCTL
-#define KSU_IOCTL_SUPERKEY_STATUS _IOC(_IOC_READ, 'K', 108, 0)
 #define KSU_IOCTL_LIST_TRY_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0)
 
-// IOCTL handler types
+#ifdef CONFIG_KSU_MANUAL_SU
+#define KSU_IOCTL_MANUAL_SU _IOC(_IOC_READ | _IOC_WRITE, 'K', 106, 0)
+#endif // #ifdef CONFIG_KSU_MANUAL_SU
+
+#ifdef CONFIG_KSU_SUPERKEY
+#define KSU_IOCTL_SUPERKEY_AUTH _IOC(_IOC_READ | _IOC_WRITE, 'K', 107, 0)
+#define KSU_IOCTL_SUPERKEY_STATUS _IOC(_IOC_READ, 'K', 108, 0)
+#endif // #ifdef CONFIG_KSU_SUPERKEY
+
+// Handler types
 typedef int (*ksu_ioctl_handler_t)(void __user *arg);
 typedef bool (*ksu_perm_check_t)(void);
 
-// IOCTL command mapping
 struct ksu_ioctl_cmd_map {
 	unsigned int cmd;
 	const char *name;
 	ksu_ioctl_handler_t handler;
-	ksu_perm_check_t perm_check; // Permission check function
+	ksu_perm_check_t perm_check;
 };
 
-// Install KSU fd to current process
 int ksu_install_fd(void);
-
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
 

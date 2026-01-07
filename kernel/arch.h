@@ -18,10 +18,19 @@
 #define __PT_SP_REG sp
 #define __PT_IP_REG pc
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 #define REBOOT_SYMBOL "__arm64_sys_reboot"
 #define SYS_READ_SYMBOL "__arm64_sys_read"
 #define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
 #define SYS_PRCTL_SYMBOL "__arm64_sys_prctl"
+#define SYS_SETNS_SYMBOL __arm64_sys_setns
+#else
+#define REBOOT_SYMBOL "sys_reboot"
+#define SYS_READ_SYMBOL "sys_read"
+#define SYS_EXECVE_SYMBOL "sys_execve"
+#define SYS_PRCTL_SYMBOL "sys_prctl"
+#define SYS_SETNS_SYMBOL sys_setns
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 
 #elif defined(__x86_64__)
 
@@ -38,14 +47,26 @@
 #define __PT_RC_REG ax
 #define __PT_SP_REG sp
 #define __PT_IP_REG ip
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 #define REBOOT_SYMBOL "__x64_sys_reboot"
 #define SYS_READ_SYMBOL "__x64_sys_read"
 #define SYS_EXECVE_SYMBOL "__x64_sys_execve"
 #define SYS_PRCTL_SYMBOL "__x64_sys_prctl"
+#define SYS_SETNS_SYMBOL __x64_sys_setns
+#else
+#define REBOOT_SYMBOL "sys_reboot"
+#define SYS_READ_SYMBOL "sys_read"
+#define SYS_EXECVE_SYMBOL "sys_execve"
+#define SYS_PRCTL_SYMBOL "sys_prctl"
+#define SYS_SETNS_SYMBOL sys_setns
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 
 #else
+#ifdef KSU_KPROBES_HOOK
 #error "Unsupported arch"
-#endif
+#endif // #ifdef KSU_KPROBES_HOOK
+#endif // #if defined(__aarch64__)
 
 /* allow some architecutres to override `struct pt_regs` */
 #ifndef __PT_REGS_CAST
@@ -65,6 +86,10 @@
 #define PT_REGS_SP(x) (__PT_REGS_CAST(x)->__PT_SP_REG)
 #define PT_REGS_IP(x) (__PT_REGS_CAST(x)->__PT_IP_REG)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 #define PT_REAL_REGS(regs) ((struct pt_regs *)PT_REGS_PARM1(regs))
+#else
+#define PT_REAL_REGS(regs) ((regs))
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 
-#endif
+#endif // __KSU_H_ARCH

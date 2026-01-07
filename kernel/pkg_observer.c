@@ -3,12 +3,18 @@
 #include "ksu.h"
 #include "throne_tracker.h"
 #include <linux/fs.h>
-#include <linux/fsnotify_backend.h>
 #include <linux/module.h>
 #include <linux/namei.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#ifdef CONFIG_KSU_LKM
+#include <linux/fsnotify_backend.h>
+#else
+#include <linux/fsnotify.h>
+#include <linux/string.h>
+#include "pkg_observer_defs.h" // KSU_DECL_FSNOTIFY_OPS
+#endif // #ifdef CONFIG_KSU_LKM
 
 #define MASK_SYSTEM (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
 
@@ -22,6 +28,7 @@ struct watch_dir {
 
 static struct fsnotify_group *g;
 
+#ifdef CONFIG_KSU_LKM
 static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
 				  struct inode *inode, struct inode *dir,
 				  const struct qstr *file_name, u32 cookie)
@@ -37,15 +44,47 @@ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
 	}
 	return 0;
 }
+#else
+static KSU_DECL_FSNOTIFY_OPS(ksu_handle_generic_event)
+{
+	if (!file_name || (mask & FS_ISDIR))
+		return 0;
+
+	if (ksu_fname_len(file_name) == 13 &&
+	    !memcmp(ksu_fname_arg(file_name), "packages.list", 13)) {
+		pr_info("packages.list detected: %d\n", mask);
+		track_throne(false);
+	}
+	return 0;
+}
+#endif // #ifdef CONFIG_KSU_LKM
 
 static const struct fsnotify_ops ksu_ops = {
+#ifdef CONFIG_KSU_LKM
     .handle_inode_event = ksu_handle_inode_event,
+#else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+    .handle_inode_event = ksu_handle_generic_event,
+#else
+    .handle_event = ksu_handle_generic_event,
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+#endif // #ifdef CONFIG_KSU_LKM
 };
+
+static void __maybe_unused m_free(struct fsnotify_mark *m)
+{
+	if (m) {
+		kfree(m);
+	}
+}
 
 static int add_mark_on_inode(struct inode *inode, u32 mask,
 			     struct fsnotify_mark **out)
 {
 	struct fsnotify_mark *m;
+#ifdef CONFIG_KSU_LKM
+	int ret;
+#endif // #ifdef CONFIG_KSU_LKM
 
 	m = kzalloc(sizeof(*m), GFP_KERNEL);
 	if (!m)
@@ -54,10 +93,30 @@ static int add_mark_on_inode(struct inode *inode, u32 mask,
 	fsnotify_init_mark(m, g);
 	m->mask = mask;
 
+#ifdef CONFIG_KSU_LKM
 	if (fsnotify_add_inode_mark(m, inode, 0)) {
 		fsnotify_put_mark(m);
 		return -EINVAL;
 	}
+#else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+	fsnotify_init_mark(m, g);
+	m->mask = mask;
+	ret = fsnotify_add_inode_mark(m, inode, 0);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+	ret = fsnotify_add_mark(m, inode, NULL, 0);
+#else
+	fsnotify_init_mark(m, m_free);
+	m->mask = mask;
+	ret = fsnotify_add_mark(m, g, inode, NULL, 0);
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+
+	if (ret < 0) {
+		fsnotify_put_mark(m);
+		return ret;
+	}
+
+#endif // #ifdef CONFIG_KSU_LKM
 	*out = m;
 	return 0;
 }
@@ -116,13 +175,28 @@ int ksu_observer_init(void)
 		return PTR_ERR(g);
 
 	ret = watch_one_dir(&g_watch);
-	pr_info("observer init done\n");
+	pr_info("%s done.\n", __func__);
+#ifndef CONFIG_KSU_LKM
+	// Do initial manager scan after observer is ready
+	// This is needed because packages.list already exists at boot
+	pr_info("Triggering initial manager scan...\n");
+	track_throne(false);
+#endif // #ifndef CONFIG_KSU_LKM
 	return 0;
 }
 
 void ksu_observer_exit(void)
 {
+#ifndef CONFIG_KSU_LKM
+	if (!g) {
+		pr_info("%s: not initialized, skipping\n", __func__);
+		return;
+	}
+#endif // #ifndef CONFIG_KSU_LKM
 	unwatch_one_dir(&g_watch);
 	fsnotify_put_group(g);
-	pr_info("observer exit done\n");
+#ifndef CONFIG_KSU_LKM
+	g = NULL;
+#endif // #ifndef CONFIG_KSU_LKM
+	pr_info("%s: done.\n", __func__);
 }

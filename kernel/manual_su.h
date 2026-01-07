@@ -7,7 +7,7 @@
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
 #define mmap_lock mmap_sem
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
 
 #define ksu_task_is_dead(t) ((t)->exit_state != 0)
 
@@ -46,4 +46,4 @@ int ksu_handle_manual_su_request(int option, struct manual_su_request *request);
 bool is_pending_root(uid_t uid);
 void remove_pending_root(uid_t uid);
 void ksu_try_escalate_for_uid(uid_t uid);
-#endif
+#endif // #ifndef __KSU_MANUAL_SU_H

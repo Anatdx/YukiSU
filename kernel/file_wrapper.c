@@ -1,26 +1,31 @@
+#include <linux/aio.h> // kernel 3.18
 #include <linux/anon_inodes.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/export.h>
-#include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+
+#ifdef CONFIG_KSU_LKM
+#include <linux/fdtable.h>
 #include <linux/gfp.h>
 #include <linux/mount.h>
+#include "objsec.h"
+#include "ksud.h"
+#endif // #ifdef CONFIG_KSU_LKM
+
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
-#include "objsec.h"
-
 #include "klog.h" // IWYU pragma: keep
-#include "ksud.h"
 #include "selinux/selinux.h"
 
 #include "file_wrapper.h"
 
+#ifdef CONFIG_KSU_LKM
 struct ksu_file_wrapper {
 	struct file *orig;
 	struct file_operations ops;
@@ -49,6 +54,7 @@ static int ksu_wrapper_open(struct inode *ino, struct file *fp)
 
 static const struct file_operations ksu_file_wrapper_inode_fops = {
     .owner = THIS_MODULE, .open = ksu_wrapper_open};
+#endif // #ifdef CONFIG_KSU_LKM
 
 static loff_t ksu_wrapper_llseek(struct file *fp, loff_t off, int flags)
 {
@@ -73,6 +79,7 @@ static ssize_t ksu_wrapper_write(struct file *fp, const char __user *ptr,
 	return orig->f_op->write(orig, ptr, sz, off);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 static ssize_t ksu_wrapper_read_iter(struct kiocb *iocb, struct iov_iter *iovi)
 {
 	struct ksu_file_wrapper *data = iocb->ki_filp->private_data;
@@ -88,6 +95,7 @@ static ssize_t ksu_wrapper_write_iter(struct kiocb *iocb, struct iov_iter *iovi)
 	iocb->ki_filp = orig;
 	return orig->f_op->write_iter(iocb, iovi);
 }
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 static int ksu_wrapper_iopoll(struct kiocb *kiocb, struct io_comp_batch *icb,
@@ -98,7 +106,7 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, struct io_comp_batch *icb,
 	kiocb->ki_filp = orig;
 	return orig->f_op->iopoll(kiocb, icb, v);
 }
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin)
 {
 	struct ksu_file_wrapper *data = kiocb->ki_filp->private_data;
@@ -106,25 +114,49 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin)
 	kiocb->ki_filp = orig;
 	return orig->f_op->iopoll(kiocb, spin);
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) &&                            \
+    (LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0) ||                          \
+     defined(KSU_HAS_ITERATE_DIR))
 static int ksu_wrapper_iterate(struct file *fp, struct dir_context *dc)
 {
 	struct ksu_file_wrapper *data = fp->private_data;
 	struct file *orig = data->orig;
 	return orig->f_op->iterate(orig, dc);
 }
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) &&
+       // (LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0) ||
+       // defined(KSU_HAS_ITERATE_DIR))
 
+// int (*readdir) (struct file *, void *, filldir_t);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) &&                           \
+    !defined(KSU_HAS_ITERATE_DIR)
+static int ksu_wrapper_readdir(struct file *fp, void *ptr, filldir_t filler)
+{
+	struct ksu_file_wrapper *data = fp->private_data;
+	struct file *orig = data->orig;
+	return orig->f_op->readdir(orig, ptr, filler);
+}
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) &&
+       // !defined(KSU_HAS_ITERATE_DIR)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 static int ksu_wrapper_iterate_shared(struct file *fp, struct dir_context *dc)
 {
 	struct ksu_file_wrapper *data = fp->private_data;
 	struct file *orig = data->orig;
 	return orig->f_op->iterate_shared(orig, dc);
 }
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 
+#ifdef CONFIG_KSU_LKM
 static __poll_t ksu_wrapper_poll(struct file *fp, struct poll_table_struct *pts)
+#else
+// typedef unsigned __bitwise __poll_t;
+static unsigned __bitwise ksu_wrapper_poll(struct file *fp,
+					   struct poll_table_struct *pts)
+#endif // #ifdef CONFIG_KSU_LKM
 {
 	struct ksu_file_wrapper *data = fp->private_data;
 	struct file *orig = data->orig;
@@ -152,6 +184,16 @@ static int ksu_wrapper_mmap(struct file *fp, struct vm_area_struct *vma)
 	struct ksu_file_wrapper *data = fp->private_data;
 	struct file *orig = data->orig;
 	return orig->f_op->mmap(orig, vma);
+}
+
+// static unsigned long mmap_supported_flags {}
+
+static int ksu_wrapper_open_proxy(struct inode *ino, struct file *fp)
+{
+	struct ksu_file_wrapper *data = fp->private_data;
+	struct file *orig = data->orig;
+	struct inode *orig_ino = file_inode(orig);
+	return orig->f_op->open(orig_ino, orig);
 }
 
 static int ksu_wrapper_flush(struct file *fp, fl_owner_t id)
@@ -194,7 +236,7 @@ static ssize_t ksu_wrapper_sendpage(struct file *fp, struct page *pg, int arg1,
 	}
 	return -EINVAL;
 }
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 
 static unsigned long ksu_wrapper_get_unmapped_area(struct file *fp,
 						   unsigned long arg1,
@@ -256,7 +298,7 @@ void ksu_wrapper_splice_eof(struct file *fp)
 		return orig->f_op->splice_eof(orig);
 	}
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 static int ksu_wrapper_setlease(struct file *fp, int arg1,
@@ -280,7 +322,9 @@ static int ksu_wrapper_setlease(struct file *fp, int arg1,
 	}
 	return -EINVAL;
 }
-#else
+#elif LINUX_VERSION_CODE >=                                                    \
+    KERNEL_VERSION(3, 18, 0) // int (*setlease)(struct file *, long, struct
+			     // file_lock **, void **);
 static int ksu_wrapper_setlease(struct file *fp, long arg1,
 				struct file_lock **fl, void **p)
 {
@@ -291,7 +335,18 @@ static int ksu_wrapper_setlease(struct file *fp, long arg1,
 	}
 	return -EINVAL;
 }
-#endif
+#else // int (*setlease)(struct file *, long, struct file_lock **);
+static int ksu_wrapper_setlease(struct file *fp, long arg1,
+				struct file_lock **fl)
+{
+	struct ksu_file_wrapper *data = fp->private_data;
+	struct file *orig = data->orig;
+	if (orig->f_op->setlease) {
+		return orig->f_op->setlease(orig, arg1, fl);
+	}
+	return -EINVAL;
+}
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 
 static long ksu_wrapper_fallocate(struct file *fp, int mode, loff_t offset,
 				  loff_t len)
@@ -304,6 +359,7 @@ static long ksu_wrapper_fallocate(struct file *fp, int mode, loff_t offset,
 	return -EINVAL;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 static void ksu_wrapper_show_fdinfo(struct seq_file *m, struct file *f)
 {
 	struct ksu_file_wrapper *data = f->private_data;
@@ -312,7 +368,19 @@ static void ksu_wrapper_show_fdinfo(struct seq_file *m, struct file *f)
 		orig->f_op->show_fdinfo(m, orig);
 	}
 }
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+static int ksu_wrapper_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct ksu_file_wrapper *data = f->private_data;
+	struct file *orig = data->orig;
+	if (orig->f_op->show_fdinfo) {
+		orig->f_op->show_fdinfo(m, orig);
+	}
+	return -EINVAL;
+}
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 // https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/read_write.c;l=1593-1606;drc=398da7defe218d3e51b0f3bdff75147e28125b60
 static ssize_t ksu_wrapper_copy_file_range(struct file *file_in, loff_t pos_in,
 					   struct file *file_out,
@@ -324,7 +392,14 @@ static ssize_t ksu_wrapper_copy_file_range(struct file *file_in, loff_t pos_in,
 	return orig->f_op->copy_file_range(file_in, pos_in, orig, pos_out, len,
 					   flags);
 }
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+// no REMAP_FILE_DEDUP: use file_in
+// https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/read_write.c;l=1598-1599;drc=398da7defe218d3e51b0f3bdff75147e28125b60
+// https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=403-404;drc=398da7defe218d3e51b0f3bdff75147e28125b60
+// REMAP_FILE_DEDUP: use file_out
+// https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=483-484;drc=398da7defe218d3e51b0f3bdff75147e28125b60
 static loff_t ksu_wrapper_remap_file_range(struct file *file_in, loff_t pos_in,
 					   struct file *file_out,
 					   loff_t pos_out, loff_t len,
@@ -342,7 +417,9 @@ static loff_t ksu_wrapper_remap_file_range(struct file *file_in, loff_t pos_in,
 						    pos_out, len, remap_flags);
 	}
 }
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2,
 			       int flags)
 {
@@ -353,26 +430,33 @@ static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2,
 	}
 	return -EINVAL;
 }
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 
+#ifdef CONFIG_KSU_LKM
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data);
+#endif // #ifdef CONFIG_KSU_LKM
 
 static int ksu_wrapper_release(struct inode *inode, struct file *filp)
 {
+#ifdef CONFIG_KSU_LKM
 	// https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/file_table.c;l=467-473;drc=3be0b283b562eabbc2b1f3bb534dc8903079bbaa
 	// f_op->release is called before fops_put(f_op), so we put it manually.
 	fops_put(filp->f_op);
 	// prevent it from being put again
 	filp->f_op = NULL;
 	ksu_release_file_wrapper(filp->private_data);
+#else
+	ksu_delete_file_wrapper(filp->private_data);
+#endif // #ifdef CONFIG_KSU_LKM
 	return 0;
 }
 
-static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
+struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 {
 	struct ksu_file_wrapper *p =
-	    kcalloc(1, sizeof(struct ksu_file_wrapper), GFP_KERNEL);
+	    kcalloc(sizeof(struct ksu_file_wrapper), 1, GFP_KERNEL);
 	if (!p) {
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 	}
 
 	get_file(fp);
@@ -382,15 +466,34 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	p->ops.llseek = fp->f_op->llseek ? ksu_wrapper_llseek : NULL;
 	p->ops.read = fp->f_op->read ? ksu_wrapper_read : NULL;
 	p->ops.write = fp->f_op->write ? ksu_wrapper_write : NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 	p->ops.read_iter = fp->f_op->read_iter ? ksu_wrapper_read_iter : NULL;
 	p->ops.write_iter =
 	    fp->f_op->write_iter ? ksu_wrapper_write_iter : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 	p->ops.iopoll = fp->f_op->iopoll ? ksu_wrapper_iopoll : NULL;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) &&                            \
+    (LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0) ||                          \
+     defined(KSU_HAS_ITERATE_DIR))
 	p->ops.iterate = fp->f_op->iterate ? ksu_wrapper_iterate : NULL;
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) &&
+       // (LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0) ||
+       // defined(KSU_HAS_ITERATE_DIR))
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) &&                           \
+    !defined(KSU_HAS_ITERATE_DIR)
+	p->ops.readdir = fp->f_op->readdir ? ksu_wrapper_readdir : NULL;
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) &&
+       // !defined(KSU_HAS_ITERATE_DIR)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	p->ops.iterate_shared =
 	    fp->f_op->iterate_shared ? ksu_wrapper_iterate_shared : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	p->ops.poll = fp->f_op->poll ? ksu_wrapper_poll : NULL;
 	p->ops.unlocked_ioctl =
 	    fp->f_op->unlocked_ioctl ? ksu_wrapper_unlocked_ioctl : NULL;
@@ -399,9 +502,10 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	p->ops.mmap = fp->f_op->mmap ? ksu_wrapper_mmap : NULL;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 	p->ops.fop_flags = fp->f_op->fop_flags;
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 	p->ops.mmap_supported_flags = fp->f_op->mmap_supported_flags;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+	p->ops.open = fp->f_op->open ? ksu_wrapper_open_proxy : NULL;
 	p->ops.flush = fp->f_op->flush ? ksu_wrapper_flush : NULL;
 	p->ops.release = ksu_wrapper_release;
 	p->ops.fsync = fp->f_op->fsync ? ksu_wrapper_fsync : NULL;
@@ -420,28 +524,48 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	    fp->f_op->splice_read ? ksu_wrapper_splice_read : NULL;
 	p->ops.setlease = fp->f_op->setlease ? ksu_wrapper_setlease : NULL;
 	p->ops.fallocate = fp->f_op->fallocate ? ksu_wrapper_fallocate : NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	p->ops.show_fdinfo =
 	    fp->f_op->show_fdinfo ? ksu_wrapper_show_fdinfo : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	p->ops.copy_file_range =
 	    fp->f_op->copy_file_range ? ksu_wrapper_copy_file_range : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
 	p->ops.remap_file_range =
 	    fp->f_op->remap_file_range ? ksu_wrapper_remap_file_range : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 	p->ops.fadvise = fp->f_op->fadvise ? ksu_wrapper_fadvise : NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	p->ops.splice_eof =
 	    fp->f_op->splice_eof ? ksu_wrapper_splice_eof : NULL;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 
 	return p;
 }
 
+#ifdef CONFIG_KSU_LKM
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data)
 {
 	fput((struct file *)data->orig);
 	kfree(data);
 }
+#else
+void ksu_delete_file_wrapper(struct ksu_file_wrapper *data)
+{
+	fput((struct file *)data->orig);
+	kfree(data);
+}
+#endif // #ifdef CONFIG_KSU_LKM
 
+#ifdef CONFIG_KSU_LKM
 static char *ksu_wrapper_d_dname(struct dentry *dentry, char *buffer,
 				 int buflen)
 {
@@ -529,7 +653,7 @@ err:
 	module_put(fops->owner);
 	return file;
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 
 int ksu_install_file_wrapper(int fd)
 {
@@ -628,5 +752,6 @@ void ksu_file_wrapper_init(void)
 		       "NULL\n");
 	}
 	fput(dummy);
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)
 }
+#endif // #ifdef CONFIG_KSU_LKM

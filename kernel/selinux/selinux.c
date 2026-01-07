@@ -1,10 +1,15 @@
-#include "selinux.h"
 #include "../klog.h" // IWYU pragma: keep
 #include "../ksu.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
 #include "linux/version.h"
+#ifdef CONFIG_KSU_LKM
+#include "selinux.h"
 #include "objsec.h"
+#else
+#include "linux/security.h"
+#include "selinux_defs.h"
+#endif // #ifdef CONFIG_KSU_LKM
 
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
@@ -34,6 +39,29 @@ static int transive_to_domain(const char *domain, struct cred *cred)
 	return error;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 19, 0)
+bool __maybe_unused
+is_ksu_transition(const struct task_security_struct *old_tsec,
+		  const struct task_security_struct *new_tsec)
+{
+	static u32 ksu_sid;
+	char *secdata;
+	u32 seclen;
+	bool allowed = false;
+
+	if (!ksu_sid)
+		security_secctx_to_secid(KERNEL_SU_DOMAIN,
+					 strlen(KERNEL_SU_DOMAIN), &ksu_sid);
+
+	if (security_secid_to_secctx(old_tsec->sid, &secdata, &seclen))
+		return false;
+
+	allowed = (!strcmp("u:r:init:s0", secdata) && new_tsec->sid == ksu_sid);
+	security_release_secctx(secdata, seclen);
+	return allowed;
+}
+#endif // #if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 19, 0)
+
 void setup_selinux(const char *domain)
 {
 	if (transive_to_domain(domain, (struct cred *)__task_cred(current))) {
@@ -42,7 +70,7 @@ void setup_selinux(const char *domain)
 	}
 }
 
-void setup_ksu_cred()
+void setup_ksu_cred(void)
 {
 	if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred)) {
 		pr_err("setup ksu cred failed.\n");
@@ -51,25 +79,51 @@ void setup_ksu_cred()
 
 void setenforce(bool enforce)
 {
+#ifdef CONFIG_KSU_LKM
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 	selinux_state.enforcing = enforce;
-#endif
+#endif // #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+#else
+	__setenforce(enforce);
+#endif // #ifdef CONFIG_KSU_LKM
 }
 
-bool getenforce()
+bool getenforce(void)
 {
+#ifdef CONFIG_KSU_LKM
 #ifdef CONFIG_SECURITY_SELINUX_DISABLE
 	if (selinux_state.disabled) {
 		return false;
 	}
-#endif
+#endif // #ifdef CONFIG_SECURITY_SELINUX_DISABLE
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 	return selinux_state.enforcing;
 #else
 	return true;
-#endif
+#endif // #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+#else
+	if (is_selinux_disabled()) {
+		return false;
+	}
+
+	return __is_selinux_enforcing();
+#endif // #ifdef CONFIG_KSU_LKM
 }
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \
+    !defined(KSU_COMPAT_HAS_CURRENT_SID)
+/*
+ * get the subjective security ID of the current task
+ */
+static inline u32 current_sid(void)
+{
+	const struct task_security_struct *tsec = current_security();
+
+	return tsec->sid;
+}
+#endif // #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&
+       // !defined(KSU_COMPAT_HAS_CURRENT_SID)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
 struct lsm_context {
@@ -88,7 +142,7 @@ static void __security_release_secctx(struct lsm_context *cp)
 #else
 #define __security_secid_to_secctx security_secid_to_secctx
 #define __security_release_secctx security_release_secctx
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
 
 bool is_task_ksu_domain(const struct cred *cred)
 {
@@ -98,10 +152,11 @@ bool is_task_ksu_domain(const struct cred *cred)
 		return false;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct *tsec = selinux_cred(cred);
+	const struct task_security_struct *tsec;
 #else
-	const struct cred_security_struct *tsec = selinux_cred(cred);
-#endif
+	const struct cred_security_struct *tsec;
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
+	tsec = cred->security;
 	if (!tsec) {
 		return false;
 	}
@@ -114,7 +169,7 @@ bool is_task_ksu_domain(const struct cred *cred)
 	return result;
 }
 
-bool is_ksu_domain()
+bool is_ksu_domain(void)
 {
 	current_sid();
 	return is_task_ksu_domain(current_cred());
@@ -128,10 +183,11 @@ bool is_context(const struct cred *cred, const char *context)
 		return false;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct *tsec = selinux_cred(cred);
+	const struct task_security_struct *tsec;
 #else
-	const struct cred_security_struct *tsec = selinux_cred(cred);
+	const struct cred_security_struct *tsec;
 #endif
+	tsec = cred->security;
 	if (!tsec) {
 		return false;
 	}

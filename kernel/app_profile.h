@@ -5,6 +5,7 @@
 
 // Forward declarations
 struct cred;
+struct task_struct;
 
 #define KSU_APP_PROFILE_VER 2
 #define KSU_MAX_PACKAGE_NAME 256
@@ -64,9 +65,9 @@ struct app_profile {
 
 // Escalate current process to root with the appropriate profile
 void escape_with_root_profile(void);
-
-void escape_to_root_for_init(void);
-
 void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid);
+
+void disable_seccomp(struct task_struct *tsk);
+void escape_to_root_for_init(void);
 
 #endif
