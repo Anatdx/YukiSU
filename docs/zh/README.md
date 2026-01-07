@@ -11,6 +11,8 @@
 > YukiSU 的用户空间程序已**完全用 C++ 重写**（原先基于 Rust）。这意味着 YukiSU 的行为可能与其他 KernelSU 分支有所不同。如果您遇到任何问题，请向我们反馈，而不是向上游项目反馈。
 >
 > 经典的 Rust 版本保留在 [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) 分支中。
+>
+> 从版本 **1.2.0** 开始，内核驱动程序使用 **统一代码库**，同时支持 LKM 和 GKI/non-GKI 构建。
 
 [![最新发行](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![频道](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
@@ -25,7 +27,10 @@
 3. [App Profile](https://kernelsu.org/zh_CN/guide/app-profile.html): 把 Root 权限关进笼子里。
 4. 支持 non-GKI 与 GKI 1.0。
 5. KPM 支持
-6. 可调整管理器外观，可自定义 susfs 配置。
+6. 内置 [HymoFS](https://github.com/backslashxx/HymoFS)，实现内核级文件系统隐藏（替代 susfs）
+7. 可调整管理器外观
+
+> **注意：** YukiSU 不再支持 susfs。HymoFS 是我们内置的文件系统隐藏解决方案。
 
 ## 兼容状态
 
@@ -83,7 +88,7 @@
 
 - [KernelSU](https://github.com/tiann/KernelSU): 上游
 - [RKSU](https://github.com/rsuntk/KernelsU): non-GKI 支持
-- [susfs](https://gitlab.com/simonpunk/susfs4ksu): 隐藏内核补丁以及用户空间模组的 KernelSU 附件
+- [HymoFS](https://github.com/backslashxx/HymoFS): 内核级文件系统隐藏
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch 是内核模块 APatch 实现的关键部分
 
 <details>

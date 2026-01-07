@@ -7,6 +7,14 @@
 
 Решение для получения root доступа на основе ядра для устройств Android, форкнутый от [`SukiSU-Ultra`](https://github.com/ShirkNeko/SukiSU-Ultra), убрано лишнее и добавлены интересные изменения.
 
+> **⚠️ Важное уведомление**
+>
+> YukiSU был **полностью переписан на C++** (ранее на основе Rust). Это означает, что YukiSU может вести себя иначе, чем другие форки KernelSU. Если у вас возникнут проблемы, сообщайте нам, а не вышестоящим проектам.
+>
+> Классическая версия на Rust сохранена в ветке [`classic`](https://github.com/Anatdx/YukiSU/tree/classic).
+>
+> Начиная с версии **1.2.0**, драйвер ядра использует **единую кодовую базу** для сборок LKM и GKI/не-GKI.
+
 [![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
@@ -20,7 +28,10 @@
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Запереть root-доступ в клетку
 4. Поддержка не-GKI и GKI 1.0
 5. Поддержка KPM
-6. Настройки темы менеджера и встроенного инструмента управления susfs.
+6. Встроенный [HymoFS](https://github.com/backslashxx/HymoFS) для скрытия файловой системы на уровне ядра (замена susfs)
+7. Настройки темы менеджера
+
+> **Примечание:** YukiSU больше не поддерживает susfs. HymoFS — наше встроенное решение для скрытия файловой системы.
 
 ## Статус совместимости
 
@@ -90,7 +101,7 @@
 - [KernelSU](https://github.com/tiann/KernelSU): Исходный
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): поддержка не-GKI
-- [susfs](https://gitlab.com/simonpunk/susfs4ksu): Дополнение патчей ядра и модуля пользовательского пространства для сокрытия root в KernelSU.
+- [HymoFS](https://github.com/backslashxx/HymoFS): скрытие файловой системы на уровне ядра
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch является ключевой частью реализации APatch в модуле ядра.
 
 <details>

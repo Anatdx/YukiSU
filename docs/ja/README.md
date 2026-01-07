@@ -5,150 +5,100 @@
 
 [English](../README.md) | [简体中文](../zh/README.md) | **日本語** | [Türkçe](../tr/README.md) | [Русский](../ru/README.md)
 
-[KernelSU](https://github.com/tiann/KernelSU) をベースとした Android デバイスの root ソリューション
+[`SukiSU-Ultra`](https://github.com/ShirkNeko/SukiSU-Ultra) をフォークした Android デバイスのカーネルベース root ソリューション。不要なものを削除し、興味深い変更を加えました。
 
-**試験中なビルドです！自己責任で使用してください！**<br>
-このソリューションは [KernelSU](https://github.com/tiann/KernelSU) に基づいていますが、試験中なビルドです。
-
-> これは非公式なフォークです。すべての権利は [@tiann](https://github.com/tiann) に帰属します。
+> **⚠️ 重要なお知らせ**
 >
-> ただし、将来的には KSU とは別に管理されるブランチとなる予定です。
+> YukiSU のユーザースペースプログラムは **C++ で完全に書き直されました**（以前は Rust ベース）。これにより、YukiSU の動作は他の KernelSU フォークと異なる場合があります。問題が発生した場合は、上流プロジェクトではなく、私たちに報告してください。
+>
+> クラシック Rust バージョンは [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) ブランチに保存されています。
+>
+> バージョン **1.2.0** 以降、カーネルドライバーは LKM と GKI/non-GKI ビルドの両方に対応した**統一コードベース**を使用しています。
 
-## 追加する方法
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
 
-メインブランチを使用 (非 GKI のデバイスのビルドは非対応) (susfs を手動で統合が必要)
+## 特徴
 
-```
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s main
-```
+1. カーネルベースの `su` と root アクセス管理
+2. [Magic Mount](https://github.com/5ec1cff/KernelSU) に基づくモジュールシステム
+   > **Note:** YukiSU はすべてのモジュールマウントをインストールされた *metamodule* に委任しています。コア自体はマウント操作を処理しなくなりました。
+3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html): root 権限をケージに閉じ込める
+4. non-GKI と GKI 1.0 をサポート
+5. KPM サポート
+6. [HymoFS](https://github.com/backslashxx/HymoFS) を内蔵し、カーネルレベルでのファイルシステム隠蔽を実現（susfs の代替）
+7. マネージャーテーマの調整
 
-非 GKI のデバイスに対応するブランチを使用 (susfs を手動で統合が必要)
+> **注意:** YukiSU は susfs をサポートしなくなりました。HymoFS がファイルシステム隠蔽のための内蔵ソリューションです。
 
-```
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s nongki
-```
+## 互換性状態
 
-## 統合された susfs の使い方
+- YukiSU は Android GKI 2.0 デバイス（カーネル 5.10+）を公式にサポートしています。
 
-1. susfs-main または他の susfs-\* ブランチを直接で使用、susfs の統合は不要 (非 GKI デバイスのビルドに対応)
+- 古いカーネル（4.4+）も互換性がありますが、カーネルを手動でビルドする必要があります。
 
-```
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s susfs-main
-```
+- 追加のバックポートにより、YukiSU は 3.x カーネル（3.4-3.18）をサポートできます。
 
-## フックの方式
+- 現在、`arm64-v8a`、`armeabi-v7a (bare)`、および `X86_64`（一部）のみサポートしています。
 
-- この方式は (https://github.com/rsuntk/KernelSU) のフック方式を参照してください。
+## インストール
 
-1. **KPROBES でフック:**
+[`guide/installation.md`](guide/installation.md) を参照してください
 
-   - 読み込み可能なカーネルモジュールの場合 (LKM)
-   - GKI カーネルのデフォルトとなるフック方式
-   - `CONFIG_KPROBES=y` が必要です
+## 統合
 
-2. **手動でフック:**
-   - 標準の KernelSU フック: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#manually-modify-the-kernel-source
-   - backslashxx syscall フック: https://github.com/backslashxx/KernelSU/issues/5
-   - 非 GKI カーネル用のデフォルトフック方式
-   - `CONFIG_KSU_MANUAL_HOOK=y` が必要です
+[`guide/how-to-integrate.md`](guide/how-to-integrate.md) を参照してください
 
-## KPM に対応
+## 翻訳
 
-- KernelPatch に基づいて重複した KSU の機能を削除、KPM の対応を維持させています。
-- KPM 機能の整合性を確保するために、APatch の互換機能を更に向上させる予定です。
+マネージャーの翻訳を提出する場合は、[Crowdin](https://crowdin.com/project/YukiSU) にアクセスしてください。
 
-オープンソースアドレス: https://github.com/ShirkNeko/YukiSU_KernelPatch_patch
+## KPM サポート
 
-KPM テンプレートのアドレス: https://github.com/udochina/KPM-Build-Anywhere
+- KernelPatch に基づいて、KSU と重複する機能を削除し、KPM サポートのみを保持しました。
+- 進行中: 異なる実装間での互換性を確保するために、追加機能を統合して APatch 互換性を拡張しています。
+
+**オープンソースリポジトリ**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
+
+**KPM テンプレート**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
 
 > [!Note]
 >
-> 1. `CONFIG_KPM=y` が必要です。
-> 2. 非 GKI デバイスには `CONFIG_KALLSYMS=y` と `CONFIG_KALLSYMS_ALL=y` も必要です。
-> 3. いくつかのカーネル `4.19` およびそれ以降のソースコードでは、 `4.19` からバックポートされた `set_memory.h` ヘッダーファイルも必要です。
-
-## ROOT を保持した状態でのシステムアップデートの方法
-
-- 始めに OTA 後すぐに再起動せずにマネージャーのカーネルのフラッシュ、パッチのインターフェースを開いて`GKI/非 GKI のインストール`を見つけます。フラッシュする AnyKernel3 の zip ファイルを選択し、フラッシュする実行中のスロットと逆のスロットを選択後に再起動をして GKI モードの更新が保持できます (この方法はすべての非 GKI のデバイスが対応している訳ではないので、自分でお試しください。これは非 GKI のデバイスで TWRP を使用する最も安全な方法です)。
-- または LKM モードを使用して未使用のスロットにインストールします (OTA 後)。
-
-## 互換性の状態
-
-- KernelSU (v1.0.0 より前) は Android GKI 2.0 のデバイス (カーネル 5.10 以降) を公式に対応しています。
-
-- 古いカーネル (4.4 以降) も互換性がありますが、カーネルを手動で再ビルドする必要があります。
-
-- KernelSU は追加のリバースポートを通じて 3.x カーネル (3.4-3.18) で対応可能です。
-
-- 現在 `arm64-v8a`, `armeabi-v7a (bare)` および一部の `X86_64` に対応しています。
-
-## その他のリンク
-
-**マネージャーの翻訳を行う場合** https://crowdin.com/project/YukiSU
-
-- [その他パッチ済み GKI](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) ZRAM パッチ、KPM、susfs が含まれています...
-- [パッチの少ない GKI](https://github.com/MiRinFork/GKI_YukiSU_SUSFS/releases) susfs のみ
-- [OnePlus](https://github.com/ShirkNeko/Action_OnePlus_MKSU_SUSFS)
-
-## 使い方
-
-### Universal GKI
-
-**すべて**参照してください https://kernelsu.org/ja_JP/guide/installation.html
-
-> [!Note]
->
-> 1. Xiaomi、Redmi、Samsung などの GKI 2.0 を搭載したデバイス向け (Meizu、OnePlus、Zenith、Oppo などカーネルが変更されているメーカーを除く)
-> 2. GKI のビルドは[その他のリンク](#その他のリンク)から入手できます。デバイスのカーネルバージョンを確認してください。ダウンロード後に TWRP またはカーネルフラッシュツールを使用して AnyKernel3 の接頭辞を持つ zip ファイルをフラッシュしてください。Pixel のユーザーは、パッチの少ない GKI を使用する必要があります。
-> 3. 接頭辞のない .zip アーカイブは圧縮されていません。.gz の接頭辞は Tenguet モデルで使用される圧縮になります。
-
-### OnePlus
-
-1. `その他のリンク`の項目に記載されているリンクを開き、デバイス情報を使用してカスタマイズされたカーネルをビルドし、AnyKernel3 の接頭辞を持つ .zip ファイルをフラッシュします。
-
-> [!Note]
->
-> - 5.10、5.15、6.1、6.6 などのカーネルバージョンの最初の 2 文字のみを入力する必要があります。
-> - SoC のコードネームは自分で検索してください。通常は、数字がなく英語表記のみです。
-> - ブランチと構成ファイルは、OnePlus オープンソースカーネルリポジトリから見つけることができます。
-
-## 機能
-
-1. カーネルベースな `su` および root アクセスの管理。
-2. [OverlayFS](https://en.wikipedia.org/wiki/OverlayFS) モジュールシステムではなく、 5ec1cff 氏の [Magic Mount](https://github.com/5ec1cff/KernelSU) に基づいています。
-3. [アプリプロファイル](https://kernelsu.org/guide/app-profile.html): root 権限をケージ内にロックします。
-4. 非 GKI / GKI 1.0 の対応を復活
-5. その他のカスタマイズ
-6. KPM カーネルモジュールに対応
+> 1. `CONFIG_KPM=y` が必要です
+> 2. non-GKI デバイスには `CONFIG_KALLSYMS=y` と `CONFIG_KALLSYMS_ALL=y` が必要です
+> 3. `4.19` 未満のカーネルでは、`4.19` から `set_memory.h` のバックポートが必要です
 
 ## トラブルシューティング
 
-1. KernelSU Manager のアンインストールが停止してしまう → com.sony.playmemories.mobile のアプリをアンインストールしてください。
+1. マネージャーアプリのアンインストール時にデバイスがフリーズする？
+   _com.sony.playmemories.mobile_ をアンインストールしてください
+
+## スポンサー
+
+- [ShirkNeko](https://afdian.com/a/shirkneko) (SukiSU メンテナー)
+- [weishu](https://github.com/sponsors/tiann) (KernelSU 作者)
 
 ## ライセンス
 
-- 「kernel」のディレクトリ内のファイルは [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) のライセンスに基づいています。
-- アニメキャラクター画像とスタンプを含むこれらのファイルの `ic_launcher(?!.*alt.*).*` は[怡子曰曰](https://space.bilibili.com/10545509)によって著作権保護されており、画像の Brand Intellectual Property は[明风 OuO](https://space.bilibili.com/274939213)によって所有され、ベクター化は @MiRinChan によって行われています。 これらのファイルを使用する前に、[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt)を遵守することに加えて、アートコンテンツを使用するために前の 2 人の作者から許可を得る必要があります。
-- 上記のファイルまたはディレクトリを除き、その他のすべての部分は[GPL-3.0 以降](https://www.gnu.org/licenses/gpl-3.0.html)です。
+- 「kernel」ディレクトリ内のファイルは [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) ライセンスです。
+- 上記以外のすべての部分は [GPL-3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) ライセンスです。
 
-## スポンサーシップの一覧
+## クレジット
 
-- [Ktouls](https://github.com/Ktouls) 応援してくれてありがとう
-- [zaoqi123](https://github.com/zaoqi123) ミルクティーを買ってあげるのも良い考えですね
-- [wswzgdg](https://github.com/wswzgdg) このプロジェクトにご支援いただき、ありがとうございます
-- [yspbwx2010](https://github.com/yspbwx2010) ありがとうございます
-- [DARKWWEE](https://github.com/DARKWWEE) ラオスから 100 USDT の支援に感謝します
-- [Saksham Singla](https://github.com/TypeFlu) ウェブサイトの提供とメンテナンス
-- [OukaroMF](https://github.com/OukaroMF) ウェブサイトのドメインと寄付
+- [KernelSU](https://github.com/tiann/KernelSU): 上流
+- [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
+- [RKSU](https://github.com/rsuntk/KernelsU): non-GKI サポート
+- [HymoFS](https://github.com/backslashxx/HymoFS): カーネルレベルファイルシステム隠蔽
+- [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch は APatch カーネルモジュール実装の重要な部分です
 
-## 貢献者
+<details>
+<summary>KernelSU のクレジット</summary>
 
-- [KernelSU](https://github.com/tiann/KernelSU): オリジナルのプロジェクト
-- [MKSU](https://github.com/5ec1cff/KernelSU): 使用しているプロジェクト
-- [RKSU](https://github.com/rsuntk/KernelsU): このプロジェクトのカーネルを使用した非 GKI デバイスのサポートの再導入
-- [susfs](https://gitlab.com/simonpunk/susfs4ksu): susfs ファイルシステムの使用
-- [KernelSU](https://git.zx2c4.com/kernel-assisted-superuser/about/): KernelSU の概念化
-- [Magisk](https://github.com/topjohnwu/Magisk): パワフルな root ユーティリティ
-- [genuine](https://github.com/brevent/genuine/): APK v2 署名認証
-- [Diamorphine](https://github.com/m0nad/Diamorphine): いくつかの root キットユーティリティ
+- [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/): KernelSU のアイデア
+- [Magisk](https://github.com/topjohnwu/Magisk): 強力な root ツール
+- [genuine](https://github.com/brevent/genuine/): APK v2 署名検証
+- [Diamorphine](https://github.com/m0nad/Diamorphine): rootkit スキル
+</details>
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch はカーネルモジュールの APatch 実装の重要な部分での活用

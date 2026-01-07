@@ -22,22 +22,64 @@ Prerequisite: An open-source, bootable kernel.
    - Refer to [`guide/how-to-integrate.md`](how-to-integrate.md)
    - Optional reference: [backslashxx hooks](https://github.com/backslashxx/KernelSU/issues/5)
 
+3. **Inline hook (HymoFS):**
+
+   - [HymoFS](https://github.com/backslashxx/HymoFS) is YukiSU's built-in kernel-level filesystem hiding or mounting solution
+   - Uses inline hooks to intercept VFS operations for hiding files/directories at kernel level.
+   - Requires `CONFIG_KSU_HYMOFS=y`
+   - Optional: `CONFIG_KSU_HYMOFS_LSMBPS=y` for LSM BPF support
+
+> **Note:** YukiSU no longer supports susfs. HymoFS is our built-in replacement.
+
 ### How to add the YukiSU kernel driver to the kernel source code
 
-- Main Branch (Typically used for standalone LKM builds)
+YukiSU now uses a **unified codebase** for both LKM and GKI/non-GKI builds. No separate branches are needed.
 
 ```sh
 curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s main
 ```
 
-- Built-in Branch (for GKI/non-GKI builds, optional susfs support)
+Or specify a tag/commit:
 
 ```sh
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s builtin
+curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s v1.2.0
 ```
 
-- Backup Branch (If builtin fails, try this first)
+To cleanup:
 
 ```sh
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s tmp-builtin
+curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s -- --cleanup
+```
+
+### Required Kernel Config Options
+
+#### For LKM (Loadable Kernel Module) mode:
+
+```
+CONFIG_KSU=m
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+```
+
+#### For GKI (built-in) mode:
+
+```
+CONFIG_KSU=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+```
+
+#### Optional features:
+
+```
+# Enable HymoFS (kernel-level filesystem hiding)
+CONFIG_KSU_HYMOFS=y
+
+# Enable HymoFS LSM BPF support (requires LSM BPF)
+CONFIG_KSU_HYMOFS_LSMBPS=y
+
+# Enable KPM (KernelPatch Module) support
+CONFIG_KPM=y
 ```

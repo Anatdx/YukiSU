@@ -12,6 +12,8 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 > YukiSU has been **completely rewritten in C++** (previously Rust-based). This rewrite means that YukiSU may behave differently from other KernelSU forks. If you encounter any issues, please report them to us rather than to upstream projects.
 >
 > The classic Rust version is preserved in the [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) branch.
+>
+> Since version **1.2.0**, the kernel driver uses a **unified codebase** for both LKM and GKI/non-GKI builds.
 
 [![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
@@ -26,7 +28,10 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
 4. Support non-GKI and GKI 1.0
 5. KPM Support
-6. Tweaks to the manager theme and the built-in susfs management tool.
+6. Built-in [HymoFS](https://github.com/backslashxx/HymoFS) for kernel-level filesystem hiding (replaces susfs)
+7. Tweaks to the manager theme
+
+> **Note:** YukiSU no longer supports susfs. HymoFS is our built-in solution for filesystem hiding.
 
 ## Compatibility Status
 
@@ -96,7 +101,7 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 - [KernelSU](https://github.com/tiann/KernelSU): upstream
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): support non-GKI
-- [susfs](https://gitlab.com/simonpunk/susfs4ksu): An addon root hiding kernel patches and userspace module for KernelSU.
+- [HymoFS](https://github.com/backslashxx/HymoFS): kernel-level filesystem hiding
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch is a key part of the APatch implementation of the kernel module
 
 <details>

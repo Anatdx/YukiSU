@@ -15,29 +15,71 @@ YukiSU может быть интегрирован как в ядра GKI, та
 
 2. **Ручной хук:**
 
-- [Дополнительные сведения см. в этом репозитории](https://github.com/rksuorg/kernel_patches)
-- Метод хука по умолчанию для ядер, отличных от GKI; `CONFIG_KPROBES` по умолчанию отключен.
+   - [Дополнительные сведения см. в этом репозитории](https://github.com/rksuorg/kernel_patches)
+   - Метод хука по умолчанию для ядер, отличных от GKI; `CONFIG_KPROBES` по умолчанию отключен.
    - Требуется `CONFIG_KSU_MANUAL_HOOK=y`
    - См. [руководство по kernelsu](https://github.com/tiann/KernelSU/blob/main/website/docs/guide/how-to-integrate-for-non-gki.md#manually-modify-the-kernel-source)
    - См. [`guide/how-to-integrate.md`](how-to-integrate.md)
    - Дополнительная ссылка: [backslashxx hooks](https://github.com/backslashxx/KernelSU/issues/5)
 
+3. **Inline hook (HymoFS):**
+
+   - [HymoFS](https://github.com/backslashxx/HymoFS) — встроенное решение YukiSU для скрытия файловой системы на уровне ядра
+   - Использует inline hooks для перехвата операций VFS для скрытия файлов/каталогов на уровне ядра.
+   - Требуется `CONFIG_KSU_HYMOFS=y`
+   - Опционально: `CONFIG_KSU_HYMOFS_LSMBPS=y` для поддержки LSM BPF
+
+> **Примечание:** YukiSU больше не поддерживает susfs. HymoFS — наша встроенная замена.
+
 ### Как добавить драйвер ядра YukiSU в исходный код ядра
 
-- Основная ветвь (обычно используется исключительно для сборок LKM)
+YukiSU теперь использует **единую кодовую базу** для сборок LKM и GKI/non-GKI. Отдельные ветки не нужны.
 
 ```sh
 curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s main
 ```
 
-- Встроенная ветвь (для сборок GKI/non-GKI, дополнительная поддержка susfs)
+Или укажите тег/коммит:
 
 ```sh
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s builtin
+curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s v1.2.0
 ```
 
-- Резервная ветвь (Если builtin не работает, попробуйте сначала эту)
+Очистка:
 
 ```sh
-curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s tmp-builtin
+curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s -- --cleanup
+```
+
+### Необходимые опции конфигурации ядра
+
+#### Для режима LKM (загружаемый модуль ядра):
+
+```
+CONFIG_KSU=m
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+```
+
+#### Для режима GKI (встроенный):
+
+```
+CONFIG_KSU=y
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+```
+
+#### Дополнительные возможности:
+
+```
+# Включить HymoFS (скрытие файловой системы на уровне ядра)
+CONFIG_KSU_HYMOFS=y
+
+# Включить поддержку HymoFS LSM BPF (требуется LSM BPF)
+CONFIG_KSU_HYMOFS_LSMBPS=y
+
+# Включить поддержку KPM (модуль KernelPatch)
+CONFIG_KPM=y
 ```

@@ -14,8 +14,9 @@
 
 Мы предоставляем заранее собранные ядра для использования:
 
-- [ShirkNeko flavor kernel](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) (добавлен патч алгоритма сжатия ZRAM, susfs, KPM. Работает на многих устройствах.)
-- [MiRinFork flavored kernel](https://github.com/MiRinFork/GKI_YukiSU_SUSFS) (добавлены susfs, KPM. Ближе всего к GKI, работает на большинстве устройств.)
+- [ShirkNeko flavor kernel](https://github.com/ShirkNeko/GKI_KernelSU_SUSFS) (добавлен патч алгоритма сжатия ZRAM, KPM. Работает на многих устройствах.)
+
+> **Примечание:** Эти внешние ядра могут всё еще включать susfs. Сам YukiSU больше не поддерживает susfs — вместо этого мы используем встроенный HymoFS.
 
 Хотя некоторые устройства можно установить в режиме LKM, их нельзя установить на устройство, используя GKI-ядро; поэтому ядро необходимо вручную модифицировать и скомпилировать. Например:
 
@@ -24,7 +25,9 @@
 
 Также мы предоставляем заранее собранные ядра специально для ваших OnePlus-устройств:
 
-- [ShirkNeko/Action_OnePlus_MKSU_SUSFS](https://github.com/ShirkNeko/Action_OnePlus_MKSU_SUSFS) (добавлен патч алгоритма сжатия ZRAM, susfs, KPM.)
+- [ShirkNeko/Action_OnePlus_MKSU_SUSFS](https://github.com/ShirkNeko/Action_OnePlus_MKSU_SUSFS) (добавлен патч алгоритма сжатия ZRAM, KPM.)
+
+> **Примечание:** Название репозитория всё еще содержит "SUSFS", но YukiSU использует HymoFS вместо этого.
 
 Используя ссылку выше - форкните репозиторий, настройте GitHub Actions (или используйте встроённый workflow), заполните параметры сборки, скомпилируйте и в конце поместите результат в zip с суффиксом AnyKernel3.
 
