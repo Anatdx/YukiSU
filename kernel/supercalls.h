@@ -167,7 +167,7 @@ struct ksu_superkey_status_cmd {
 	__u8 authenticated;
 	__u32 manager_uid;
 };
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 // IOCTL definitions
 #define KSU_IOCTL_GRANT_ROOT _IOC(_IOC_NONE, 'K', 1, 0)
@@ -217,4 +217,4 @@ int ksu_install_fd(void);
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
 
-#endif // __KSU_H_SUPERCALLS
+#endif // #ifndef __KSU_H_SUPERCALLS

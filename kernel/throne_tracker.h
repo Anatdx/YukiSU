@@ -7,4 +7,4 @@ void ksu_throne_tracker_exit(void);
 
 void track_throne(bool prune_only);
 
-#endif // __KSU_H_THRONE_TRACKER
+#endif // #ifndef __KSU_H_THRONE_TRACKER

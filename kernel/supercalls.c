@@ -58,11 +58,11 @@
 
 #ifdef CONFIG_KSU_MANUAL_SU
 #include "manual_su.h"
-#endif
+#endif // #ifdef CONFIG_KSU_MANUAL_SU
 
 #ifdef CONFIG_KSU_SUPERKEY
 #include "superkey.h"
-#endif
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 // Permission check functions
 bool only_manager(void)
@@ -92,7 +92,7 @@ bool allowed_for_su(void)
 #if __SULOG_GATE
 	ksu_sulog_report_permission_check(current_uid().val, current->comm,
 					  is_allowed);
-#endif
+#endif // #if __SULOG_GATE
 	return is_allowed;
 }
 
@@ -113,7 +113,7 @@ static int do_get_info(void __user *arg)
 
 #ifdef MODULE
 	cmd.flags |= 0x1;
-#endif
+#endif // #ifdef MODULE
 	if (is_manager()) {
 		cmd.flags |= 0x2;
 	}
@@ -144,7 +144,7 @@ static int do_report_event(void __user *arg)
 			on_post_fs_data();
 #if __SULOG_GATE
 			ksu_sulog_init();
-#endif
+#endif // #if __SULOG_GATE
 		}
 		break;
 	}
@@ -329,7 +329,7 @@ static int do_set_app_profile(void __user *arg)
 		ksu_sulog_report_manager_operation("SET_APP_PROFILE",
 						   current_uid().val,
 						   cmd.profile.current_uid);
-#endif
+#endif // #if __SULOG_GATE
 		return -EFAULT;
 	}
 
@@ -524,7 +524,7 @@ static int do_manage_mark(void __user *arg)
 		pr_info("manage_mark: refreshed running processes\n");
 #else
 		pr_info("manual_hook: cmd: KSU_MARK_REFRESH: do nothing\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) &&
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 		break;
 	}
 	default: {
@@ -766,8 +766,7 @@ static int list_try_umount(void __user *arg)
 			   "----------\t-----\n");
 
 	down_read(&mount_list_lock);
-	list_for_each_entry(entry, &mount_list, list)
-	{
+	list_for_each_entry (entry, &mount_list, list) {
 		int written =
 		    snprintf(output_buf + offset, output_size - offset,
 			     "%s\t%u\n", entry->umountable, entry->flags);
@@ -802,7 +801,7 @@ static int do_get_full_version(void __user *arg)
 	strscpy(cmd.version_full, KSU_VERSION_FULL, sizeof(cmd.version_full));
 #else
 	strlcpy(cmd.version_full, KSU_VERSION_FULL, sizeof(cmd.version_full));
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("get_full_version: copy_to_user failed\n");
@@ -1156,7 +1155,7 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 
 	kfree(tw);
 }
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 // downstream: make sure to pass arg as reference, this can allow us to extend
 // things.
@@ -1171,7 +1170,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 #ifdef CONFIG_KSU_DEBUG
 	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1,
 		magic2);
-#endif // CONFIG_KSU_DEBUG
+#endif // #ifdef CONFIG_KSU_DEBUG
 
 	// Check if this is a request to install KSU fd
 	if (magic2 == KSU_INSTALL_MAGIC2) {
@@ -1208,7 +1207,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 
 		return 0;
 	}
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 	// extensions
 
@@ -1232,7 +1231,7 @@ static struct kprobe reboot_kp = {
     .symbol_name = REBOOT_SYMBOL,
     .pre_handler = reboot_handler_pre,
 };
-#endif // KSU_KPROBES_HOOK
+#endif // #ifdef KSU_KPROBES_HOOK
 #else // #ifndef CONFIG_KSU_HYMOFS
 /* HymoFS inline hook version - direct synchronous fd installation */
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
@@ -1300,7 +1299,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		}
 		return 0;
 	}
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 	return -EINVAL;
 }
@@ -1374,7 +1373,7 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 #else
 			ksys_close(fd);
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-#else	
+#else
 			do_close_fd(fd);
 #endif // #ifdef CONFIG_KSU_LKM
 	}
@@ -1459,7 +1458,7 @@ static struct kprobe prctl_kp = {
     .symbol_name = SYS_PRCTL_SYMBOL,
     .pre_handler = prctl_handler_pre,
 };
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 void ksu_supercalls_init(void)
 {
@@ -1480,7 +1479,7 @@ void ksu_supercalls_init(void)
 	} else {
 		pr_info("reboot kprobe registered successfully\n");
 	}
-#endif // KSU_KPROBES_HOOK
+#endif // #ifdef KSU_KPROBES_HOOK
 #endif // #ifndef CONFIG_KSU_HYMOFS
 
 	// SuperKey prctl kprobe - always register regardless of HymoFS
@@ -1491,7 +1490,7 @@ void ksu_supercalls_init(void)
 	} else {
 		pr_info("prctl kprobe registered for SuperKey auth\n");
 	}
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 void ksu_supercalls_exit(void)
@@ -1499,13 +1498,13 @@ void ksu_supercalls_exit(void)
 #ifndef CONFIG_KSU_HYMOFS
 #ifdef KSU_KPROBES_HOOK
 	unregister_kprobe(&reboot_kp);
-#endif // KSU_KPROBES_HOOK
+#endif // #ifdef KSU_KPROBES_HOOK
 #endif // #ifndef CONFIG_KSU_HYMOFS
 
 	// SuperKey prctl kprobe - always unregister regardless of HymoFS
 #ifdef CONFIG_KSU_SUPERKEY
 	unregister_kprobe(&prctl_kp);
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 static inline void ksu_ioctl_audit(unsigned int cmd, const char *cmd_name,
@@ -1597,7 +1596,7 @@ int ksu_install_fd(void)
 #if __SULOG_GATE
 	ksu_sulog_report_permission_check(current_uid().val, current->comm,
 					  fd >= 0);
-#endif
+#endif // #if __SULOG_GATE
 
 	pr_info("ksu fd installed: %d for pid %d\n", fd, current->pid);
 

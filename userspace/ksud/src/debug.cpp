@@ -4,10 +4,10 @@
 #include "log.hpp"
 #include "utils.hpp"
 
-#include <cstdio>
-#include <fstream>
 #include <sys/stat.h>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
 
 namespace ksud {
 
@@ -48,37 +48,37 @@ int debug_set_manager(const std::string& pkg) {
         printf("CONFIG_KSU_DEBUG is not enabled in kernel\n");
         return 1;
     }
-    
+
     // Get package UID
     uint32_t uid;
     if (!get_pkg_uid(pkg, uid)) {
         printf("Failed to get UID for package: %s\n", pkg.c_str());
         return 1;
     }
-    
+
     printf("Package %s has UID: %u\n", pkg.c_str(), uid);
-    
+
     // Set manager UID via kernel parameter
     std::string param_path = std::string(KERNEL_PARAM_PATH) + "/ksu_debug_manager_uid";
-    
+
     uint32_t before_uid = 0;
     read_u32(param_path, before_uid);
-    
+
     if (!write_u32(param_path, uid)) {
         printf("Failed to write manager UID to kernel parameter\n");
         return 1;
     }
-    
+
     uint32_t after_uid = 0;
     read_u32(param_path, after_uid);
-    
+
     printf("Set manager UID: %u -> %u\n", before_uid, after_uid);
-    
+
     // Force-stop the package to apply changes
     printf("Force-stopping package...\n");
     std::string cmd = "am force-stop " + pkg;
     system(cmd.c_str());
-    
+
     printf("Manager set successfully!\n");
     return 0;
 }

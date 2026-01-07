@@ -1,10 +1,10 @@
 #include "restorecon.hpp"
-#include "../log.hpp"
-#include "../defs.hpp"
 #include <sys/xattr.h>
 #include <cstring>
 #include <filesystem>
 #include <vector>
+#include "../defs.hpp"
+#include "../log.hpp"
 
 namespace fs = std::filesystem;
 
@@ -76,19 +76,19 @@ bool restore_syscon_if_unlabeled(const fs::path& dir) {
 
 bool restorecon() {
     bool success = true;
-    
+
     // Set context for daemon
     if (!lsetfilecon(DAEMON_PATH, ADB_CON)) {
         LOGW("Failed to set context for daemon");
         success = false;
     }
-    
+
     // Restore module directory contexts
     if (!restore_syscon_if_unlabeled(MODULE_DIR)) {
         LOGW("Failed to restore contexts for module directory");
         success = false;
     }
-    
+
     return success;
 }
 

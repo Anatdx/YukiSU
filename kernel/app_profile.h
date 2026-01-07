@@ -70,4 +70,4 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid);
 void disable_seccomp(struct task_struct *tsk);
 void escape_to_root_for_init(void);
 
-#endif
+#endif // #ifndef __KSU_H_APP_PROFILE

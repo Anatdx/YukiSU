@@ -12,12 +12,12 @@
 #include "hymo_utils.hpp"
 #include "mount/hymofs.hpp"
 
+#include <sys/mount.h>
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <sys/mount.h>
 
 namespace fs = std::filesystem;
 
@@ -82,26 +82,26 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "status") {
         HymoFSStatus status = HymoFS::check_status();
         switch (status) {
-            case HymoFSStatus::Available:
-                printf("Available\n");
-                break;
-            case HymoFSStatus::NotPresent:
-                printf("NotPresent\n");
-                break;
-            case HymoFSStatus::KernelTooOld:
-                printf("KernelTooOld\n");
-                break;
-            case HymoFSStatus::ModuleTooOld:
-                printf("ModuleTooOld\n");
-                break;
+        case HymoFSStatus::Available:
+            printf("Available\n");
+            break;
+        case HymoFSStatus::NotPresent:
+            printf("NotPresent\n");
+            break;
+        case HymoFSStatus::KernelTooOld:
+            printf("KernelTooOld\n");
+            break;
+        case HymoFSStatus::ModuleTooOld:
+            printf("ModuleTooOld\n");
+            break;
         }
         return 0;
     }
-    
+
     if (subcmd == "list") {
         if (HymoFS::is_available()) {
             std::string rules = HymoFS::get_active_rules();
@@ -111,7 +111,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "clear") {
         if (HymoFS::is_available()) {
             if (HymoFS::clear_rules()) {
@@ -131,7 +131,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "debug") {
         if (subargs.empty()) {
             fprintf(stderr, "Usage: ksud hymo debug <on|off>\n");
@@ -153,7 +153,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "fix-mounts") {
         if (HymoFS::is_available()) {
             if (HymoFS::fix_mounts()) {
@@ -168,18 +168,18 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "storage") {
         print_storage_status();
         return 0;
     }
-    
+
     if (subcmd == "modules") {
         Config config = load_default_config();
         print_module_list(config);
         return 0;
     }
-    
+
     if (subcmd == "show-config") {
         Config config = load_default_config();
         printf("{\n");
@@ -191,7 +191,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
         printf("  \"prefer_erofs\": %s,\n", config.prefer_erofs ? "true" : "false");
         printf("  \"disable_umount\": %s,\n", config.disable_umount ? "true" : "false");
         printf("  \"enable_nuke\": %s,\n", config.enable_nuke ? "true" : "false");
-        printf("  \"ignore_protocol_mismatch\": %s,\n", config.ignore_protocol_mismatch ? "true" : "false");
+        printf("  \"ignore_protocol_mismatch\": %s,\n",
+               config.ignore_protocol_mismatch ? "true" : "false");
         printf("  \"enable_kernel_debug\": %s,\n", config.enable_kernel_debug ? "true" : "false");
         printf("  \"enable_stealth\": %s,\n", config.enable_stealth ? "true" : "false");
         printf("  \"avc_spoof\": %s,\n", config.avc_spoof ? "true" : "false");
@@ -200,20 +201,21 @@ int cmd_hymo(const std::vector<std::string>& args) {
         printf("  \"partitions\": [");
         for (size_t i = 0; i < config.partitions.size(); ++i) {
             printf("\"%s\"", config.partitions[i].c_str());
-            if (i < config.partitions.size() - 1) printf(", ");
+            if (i < config.partitions.size() - 1)
+                printf(", ");
         }
         printf("]\n");
         printf("}\n");
         return 0;
     }
-    
+
     if (subcmd == "gen-config") {
         std::string output = subargs.empty() ? "config.toml" : subargs[0];
         Config().save_to_file(output);
         printf("Generated config: %s\n", output.c_str());
         return 0;
     }
-    
+
     if (subcmd == "add") {
         if (subargs.empty()) {
             fprintf(stderr, "Error: Module ID required for add command\n");
@@ -233,9 +235,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
                               config.partitions.end());
 
         std::sort(all_partitions.begin(), all_partitions.end());
-        all_partitions.erase(
-            std::unique(all_partitions.begin(), all_partitions.end()),
-            all_partitions.end());
+        all_partitions.erase(std::unique(all_partitions.begin(), all_partitions.end()),
+                             all_partitions.end());
 
         int success_count = 0;
         for (const auto& part : all_partitions) {
@@ -267,7 +268,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "delete") {
         if (subargs.empty()) {
             fprintf(stderr, "Error: Module ID required for delete command\n");
@@ -282,9 +283,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
                               config.partitions.end());
 
         std::sort(all_partitions.begin(), all_partitions.end());
-        all_partitions.erase(
-            std::unique(all_partitions.begin(), all_partitions.end()),
-            all_partitions.end());
+        all_partitions.erase(std::unique(all_partitions.begin(), all_partitions.end()),
+                             all_partitions.end());
 
         int success_count = 0;
         for (const auto& part : all_partitions) {
@@ -298,10 +298,11 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
 
         if (success_count > 0) {
-            printf("Successfully removed %d rules for module %s\n", success_count, module_id.c_str());
+            printf("Successfully removed %d rules for module %s\n", success_count,
+                   module_id.c_str());
             RuntimeState state = load_runtime_state();
-            auto it = std::remove(state.hymofs_module_ids.begin(),
-                                  state.hymofs_module_ids.end(), module_id);
+            auto it = std::remove(state.hymofs_module_ids.begin(), state.hymofs_module_ids.end(),
+                                  module_id);
             if (it != state.hymofs_module_ids.end()) {
                 state.hymofs_module_ids.erase(it, state.hymofs_module_ids.end());
                 state.save();
@@ -311,7 +312,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "set-mode") {
         if (subargs.size() < 2) {
             fprintf(stderr, "Usage: ksud hymo set-mode <mod_id> <mode>\n");
@@ -331,7 +332,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "raw") {
         if (subargs.empty()) {
             fprintf(stderr, "Usage: ksud hymo raw <cmd> [args...]\n");
@@ -346,7 +347,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
                 return 1;
             }
             int type = 0;
-            if (subargs.size() >= 4) type = std::stoi(subargs[3]);
+            if (subargs.size() >= 4)
+                type = std::stoi(subargs[3]);
             success = HymoFS::add_rule(subargs[1], subargs[2], type);
         } else if (cmd == "hide") {
             if (subargs.size() < 2) {
@@ -381,7 +383,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
         return 0;
     }
-    
+
     if (subcmd == "reload") {
         Config config = load_default_config();
         Logger::getInstance().init(config.verbose, DAEMON_LOG_FILE);
@@ -390,7 +392,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
             fprintf(stderr, "HymoFS not available.\n");
             return 1;
         }
-        
+
         LOG_INFO("Reloading HymoFS mappings...");
 
         std::string effective_mirror_path = hymo::HYMO_MIRROR_DEV;
@@ -421,7 +423,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
                     break;
                 }
             }
-            if (has_content) active_modules.push_back(mod);
+            if (has_content)
+                active_modules.push_back(mod);
         }
         module_list = active_modules;
 
@@ -436,7 +439,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
         update_hymofs_mappings(config, module_list, MIRROR_DIR, plan);
 
         if (HymoFS::set_stealth(config.enable_stealth)) {
-            LOG_INFO("Stealth mode set to: " + std::string(config.enable_stealth ? "true" : "false"));
+            LOG_INFO("Stealth mode set to: " +
+                     std::string(config.enable_stealth ? "true" : "false"));
         }
 
         if (config.enable_stealth) {
@@ -446,7 +450,8 @@ int cmd_hymo(const std::vector<std::string>& args) {
         }
 
         RuntimeState state = load_runtime_state();
-        if (state.storage_mode.empty()) state.storage_mode = "hymofs";
+        if (state.storage_mode.empty())
+            state.storage_mode = "hymofs";
         state.mount_point = MIRROR_DIR.string();
         state.hymofs_module_ids = plan.hymofs_module_ids;
         state.save();
@@ -455,7 +460,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
         printf("Reload complete.\n");
         return 0;
     }
-    
+
     if (subcmd == "mount") {
         return cmd_mount();
     }
@@ -484,10 +489,12 @@ static void segregate_custom_rules(MountPlan& plan, const fs::path& mirror_dir) 
                         fs::create_directories(target.parent_path());
                         fs::rename(layer, target);
                         layer = target;
-                        LOG_DEBUG("Segregated custom rule source: " + layer_str + " -> " + target.string());
+                        LOG_DEBUG("Segregated custom rule source: " + layer_str + " -> " +
+                                  target.string());
                     }
                 } catch (const std::exception& e) {
-                    LOG_WARN("Failed to segregate custom rule source: " + layer_str + " - " + e.what());
+                    LOG_WARN("Failed to segregate custom rule source: " + layer_str + " - " +
+                             e.what());
                 }
             }
         }
@@ -507,7 +514,8 @@ static void segregate_custom_rules(MountPlan& plan, const fs::path& mirror_dir) 
                     fs::create_directories(target.parent_path());
                     fs::rename(path, target);
                     path = target;
-                    LOG_DEBUG("Segregated magic rule source: " + path_str + " -> " + target.string());
+                    LOG_DEBUG("Segregated magic rule source: " + path_str + " -> " +
+                              target.string());
                 }
             } catch (const std::exception& e) {
                 LOG_WARN("Failed to segregate magic rule source: " + path_str + " - " + e.what());
@@ -552,9 +560,11 @@ static int cmd_mount() {
             LOG_WARN("Forcing HymoFS despite protocol mismatch (ignore_protocol_mismatch=true)");
             can_use_hymofs = true;
             if (hymofs_status == HymoFSStatus::KernelTooOld) {
-                warning_msg = "⚠️Kernel version is lower than module version. Please update your kernel.";
+                warning_msg =
+                    "⚠️Kernel version is lower than module version. Please update your kernel.";
             } else {
-                warning_msg = "⚠️Module version is lower than kernel version. Please update your module.";
+                warning_msg =
+                    "⚠️Module version is lower than kernel version. Please update your module.";
             }
         } else {
             LOG_WARN("Cannot force HymoFS: Kernel module not present or error state (Status: " +
@@ -594,7 +604,8 @@ static int cmd_mount() {
 
         // Apply Stealth Mode
         if (HymoFS::set_stealth(config.enable_stealth)) {
-            LOG_INFO("Stealth mode set to: " + std::string(config.enable_stealth ? "true" : "false"));
+            LOG_INFO("Stealth mode set to: " +
+                     std::string(config.enable_stealth ? "true" : "false"));
         } else {
             LOG_WARN("Failed to set stealth mode.");
         }
@@ -607,10 +618,12 @@ static int cmd_mount() {
         try {
             // Setup storage with fallback
             try {
-                storage = setup_storage(MIRROR_DIR, img_path, config.force_ext4, config.prefer_erofs);
+                storage =
+                    setup_storage(MIRROR_DIR, img_path, config.force_ext4, config.prefer_erofs);
             } catch (const std::exception& e) {
                 if (config.force_ext4) {
-                    LOG_WARN("Force Ext4 failed: " + std::string(e.what()) + ". Falling back to auto.");
+                    LOG_WARN("Force Ext4 failed: " + std::string(e.what()) +
+                             ". Falling back to auto.");
                     storage = setup_storage(MIRROR_DIR, img_path, false, config.prefer_erofs);
                 } else {
                     throw;
@@ -643,7 +656,8 @@ static int cmd_mount() {
             }
 
             module_list = active_modules;
-            LOG_INFO("Syncing " + std::to_string(module_list.size()) + " active modules to mirror...");
+            LOG_INFO("Syncing " + std::to_string(module_list.size()) +
+                     " active modules to mirror...");
 
             bool sync_ok = true;
             for (const auto& mod : module_list) {
@@ -731,10 +745,12 @@ static int cmd_mount() {
         // **Legacy/Overlay Path**
         if (hymofs_status == HymoFSStatus::KernelTooOld) {
             LOG_WARN("HymoFS Protocol Mismatch! Kernel is too old.");
-            warning_msg = "⚠️Kernel version is lower than module version. Please update your kernel.";
+            warning_msg =
+                "⚠️Kernel version is lower than module version. Please update your kernel.";
         } else if (hymofs_status == HymoFSStatus::ModuleTooOld) {
             LOG_WARN("HymoFS Protocol Mismatch! Module is too old.");
-            warning_msg = "⚠️Module version is lower than kernel version. Please update your module.";
+            warning_msg =
+                "⚠️Module version is lower than kernel version. Please update your module.";
         }
 
         LOG_INFO("Mode: Standard Overlay/Magic (Copy)");
@@ -760,10 +776,9 @@ static int cmd_mount() {
     }
 
     LOG_INFO("Plan: " + std::to_string(exec_result.overlay_module_ids.size()) +
-             " OverlayFS modules, " +
-             std::to_string(exec_result.magic_module_ids.size()) +
-             " Magic modules, " +
-             std::to_string(plan.hymofs_module_ids.size()) + " HymoFS modules");
+             " OverlayFS modules, " + std::to_string(exec_result.magic_module_ids.size()) +
+             " Magic modules, " + std::to_string(plan.hymofs_module_ids.size()) +
+             " HymoFS modules");
 
     // KSU Nuke (Stealth)
     bool nuke_active = false;
@@ -803,7 +818,8 @@ static int cmd_mount() {
                         }
                     }
                 }
-                if (active) break;
+                if (active)
+                    break;
             }
             if (active)
                 state.active_mounts.push_back(part);
@@ -842,7 +858,8 @@ static int cmd_mount() {
                         }
                     }
                 }
-                if (active) break;
+                if (active)
+                    break;
             }
 
             bool exists = false;

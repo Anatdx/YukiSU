@@ -13,7 +13,7 @@ struct action_cache {
 	DECLARE_BITMAP(allow_native, SECCOMP_ARCH_NATIVE_NR);
 #ifdef SECCOMP_ARCH_COMPAT
 	DECLARE_BITMAP(allow_compat, SECCOMP_ARCH_COMPAT_NR);
-#endif
+#endif // #ifdef SECCOMP_ARCH_COMPAT
 };
 
 struct seccomp_filter {
@@ -22,7 +22,7 @@ struct seccomp_filter {
 	bool log;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 	bool wait_killable_recv;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 	struct action_cache cache;
 	struct seccomp_filter *prev;
 	struct bpf_prog *prog;
@@ -45,7 +45,7 @@ void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr)
 	if (nr >= 0 && nr < SECCOMP_ARCH_COMPAT_NR) {
 		clear_bit(nr, filter->cache.allow_compat);
 	}
-#endif
+#endif // #ifdef SECCOMP_ARCH_COMPAT
 }
 
 void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
@@ -62,6 +62,6 @@ void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
 	if (nr >= 0 && nr < SECCOMP_ARCH_COMPAT_NR) {
 		set_bit(nr, filter->cache.allow_compat);
 	}
-#endif
+#endif // #ifdef SECCOMP_ARCH_COMPAT
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "defs.hpp"
-#include "hymo_magic.h"
 #include <filesystem>
 #include <string>
 #include <vector>
+#include "defs.hpp"
+#include "hymo_magic.h"
 
 namespace fs = std::filesystem;
 
@@ -14,32 +14,30 @@ enum class HymoFSStatus { Available, NotPresent, KernelTooOld, ModuleTooOld };
 
 class HymoFS {
 public:
-  static constexpr int EXPECTED_PROTOCOL_VERSION = HYMO_PROTOCOL_VERSION;
+    static constexpr int EXPECTED_PROTOCOL_VERSION = HYMO_PROTOCOL_VERSION;
 
-  static HymoFSStatus check_status();
-  static bool is_available();
-  static int get_protocol_version();
-  static bool clear_rules();
-  static bool add_rule(const std::string &src, const std::string &target,
-                       int type = 0);
-  static bool delete_rule(const std::string &src);
-  static bool set_mirror_path(const std::string &path);
-  static bool set_avc_log_spoofing(bool enabled);
-  static bool hide_path(const std::string &path);
-  static bool add_merge_rule(const std::string &src, const std::string &target);
+    static HymoFSStatus check_status();
+    static bool is_available();
+    static int get_protocol_version();
+    static bool clear_rules();
+    static bool add_rule(const std::string& src, const std::string& target, int type = 0);
+    static bool delete_rule(const std::string& src);
+    static bool set_mirror_path(const std::string& path);
+    static bool set_avc_log_spoofing(bool enabled);
+    static bool hide_path(const std::string& path);
+    static bool add_merge_rule(const std::string& src, const std::string& target);
 
-  // Helper to recursively walk a directory and generate rules
-  static bool add_rules_from_directory(const fs::path &target_base,
-                                       const fs::path &module_dir);
-  static bool remove_rules_from_directory(const fs::path &target_base,
-                                          const fs::path &module_dir);
+    // Helper to recursively walk a directory and generate rules
+    static bool add_rules_from_directory(const fs::path& target_base, const fs::path& module_dir);
+    static bool remove_rules_from_directory(const fs::path& target_base,
+                                            const fs::path& module_dir);
 
-  // Inspection methods
-  static std::string get_active_rules();
-  static bool set_debug(bool enable);
-  static bool set_stealth(bool enable);
-  static bool fix_mounts();
-  static bool hide_overlay_xattrs(const std::string &path);
+    // Inspection methods
+    static std::string get_active_rules();
+    static bool set_debug(bool enable);
+    static bool set_stealth(bool enable);
+    static bool fix_mounts();
+    static bool hide_overlay_xattrs(const std::string& path);
 };
 
-} // namespace hymo
+}  // namespace hymo

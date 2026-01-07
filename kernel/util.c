@@ -4,7 +4,7 @@
 #include <linux/pgtable.h>
 #else
 #include <asm/pgtable.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 #include <asm/current.h>
 #include <linux/printk.h>
 
@@ -33,7 +33,7 @@ bool try_set_access_flag(unsigned long addr)
 	if (!mmap_read_trylock(mm))
 #else
 	if (!down_read_trylock(&mm->mmap_sem))
-#endif
+#endif // #if LINUX_VERSION_CODE >=
 		return false;
 
 	vma = find_vma(mm, addr);
@@ -84,9 +84,9 @@ out_unlock:
 	mmap_read_unlock(mm);
 #else
 	up_read(&mm->mmap_sem);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 208)
 	return ret;
 #else
 	return false;
-#endif
+#endif // #ifdef CONFIG_ARM64
 }

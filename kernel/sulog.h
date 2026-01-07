@@ -22,7 +22,7 @@ static inline size_t strlcpy(char *dest, const char *src, size_t size)
 {
 	return strscpy(dest, src, size);
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
 
 #define KSU_STRSCPY(dst, src, size)                                            \
 	do {                                                                   \
@@ -49,7 +49,7 @@ static inline void time64_to_tm(time64_t totalsecs, int offset,
 	result->tm_mon = rtc_tm.tm_mon;
 	result->tm_year = rtc_tm.tm_year;
 }
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 8, 0)
 
 struct dedup_key {
 	u32 crc;
@@ -93,6 +93,6 @@ void ksu_sulog_report_syscall(uid_t uid, const char *comm, const char *syscall,
 
 int ksu_sulog_init(void);
 void ksu_sulog_exit(void);
-#endif // __SULOG_GATE
+#endif // #if __SULOG_GATE
 
 #endif /* __KSU_SULOG_H */

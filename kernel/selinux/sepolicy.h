@@ -43,4 +43,4 @@ bool ksu_type_member(struct policydb *db, const char *src, const char *tgt,
 bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path,
 		  const char *ctx);
 
-#endif
+#endif // #ifndef __KSU_H_SEPOLICY

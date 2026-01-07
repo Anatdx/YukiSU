@@ -8,7 +8,7 @@
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) ||                        \
     defined(KSU_COMPAT_HAS_SELINUX_STATE)
 #define KSU_COMPAT_USE_SELINUX_STATE
-#endif
+#endif // #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) ||
 
 // TODO: rename to "ksu"
 #define KERNEL_SU_DOMAIN "su"
@@ -39,4 +39,4 @@ int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
 void setup_ksu_cred(void);
 
-#endif
+#endif // #ifndef __KSU_H_SELINUX

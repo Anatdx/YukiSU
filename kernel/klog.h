@@ -6,6 +6,6 @@
 #ifdef pr_fmt
 #undef pr_fmt
 #define pr_fmt(fmt) "KernelSU: " fmt
-#endif
+#endif // #ifdef pr_fmt
 
-#endif
+#endif // #ifndef __KSU_H_KLOG

@@ -1,8 +1,8 @@
 #include "metamodule.hpp"
 #include "../defs.hpp"
+#include "../hymo/hymo_cli.hpp"
 #include "../log.hpp"
 #include "../utils.hpp"
-#include "../hymo/hymo_cli.hpp"
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -86,7 +86,7 @@ static bool should_use_builtin_mount() {
 
 int metamodule_exec_mount_script() {
     std::string script = std::string(METAMODULE_DIR) + "metamount.sh";
-    
+
     // Check if external metamodule exists
     if (file_exists(script)) {
         LOGI("External metamodule found, executing metamount.sh: %s", script.c_str());
@@ -141,16 +141,16 @@ int metamodule_exec_mount_script() {
     }
 
     LOGI("No external metamodule found, using built-in hymo mount");
-    
+
     // Call built-in hymo mount
     int ret = hymo::cmd_hymo({"mount"});
-    
+
     if (ret == 0) {
         LOGI("Built-in hymo mount completed successfully");
     } else {
         LOGE("Built-in hymo mount failed with code: %d", ret);
     }
-    
+
     return ret;
 }
 

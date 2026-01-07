@@ -22,4 +22,4 @@ extern struct rw_semaphore mount_list_lock;
 
 void try_umount(const char *mnt, int flags);
 
-#endif
+#endif // #ifndef __KSU_H_KERNEL_UMOUNT

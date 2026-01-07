@@ -71,7 +71,7 @@
 /* allow some architecutres to override `struct pt_regs` */
 #ifndef __PT_REGS_CAST
 #define __PT_REGS_CAST(x) (x)
-#endif
+#endif // #ifndef __PT_REGS_CAST
 
 #define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PARM1_REG)
 #define PT_REGS_PARM2(x) (__PT_REGS_CAST(x)->__PT_PARM2_REG)
@@ -92,4 +92,4 @@
 #define PT_REAL_REGS(regs) ((regs))
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 
-#endif // __KSU_H_ARCH
+#endif // #ifndef __KSU_H_ARCH

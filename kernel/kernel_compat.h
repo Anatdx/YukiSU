@@ -17,7 +17,6 @@ extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 extern ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 				       size_t count, loff_t *pos);
 
-
 #ifndef CONFIG_KSU_LKM
 #include "linux/key.h"
 #include "ss/policydb.h"
@@ -43,8 +42,8 @@ extern ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #if defined(CONFIG_UH) || defined(CONFIG_KDP) || defined(CONFIG_RKP)
 #error                                                                         \
     "CONFIG_UH, CONFIG_KDP and CONFIG_RKP is enabled! Please disable or remove it before compile a kernel with KernelSU!"
+#endif // #if defined(CONFIG_UH) || defined(CONFIG_KDP) || defined(CONFIG_RKP)
 #endif // #ifdef SAMSUNG_UH_DRIVER_EXIST
-#endif // #if defined(CONFIG_UH) || defined(CONFIG_KDP) ||
        // defined(CONFIG_RKP)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
@@ -86,4 +85,4 @@ static inline int do_close_fd(unsigned int fd)
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 }
 
-#endif // __KSU_H_KERNEL_COMPAT
+#endif // #ifndef __KSU_H_KERNEL_COMPAT

@@ -6,13 +6,13 @@
 #include <linux/version.h>
 #ifdef CONFIG_KSU_DEBUG
 #include <linux/moduleparam.h>
-#endif
+#endif // #ifdef CONFIG_KSU_DEBUG
 #include <crypto/hash.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 #include <crypto/sha2.h>
 #else
 #include <crypto/sha.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 
 #include "apk_sign.h"
 #include "kernel_compat.h"
@@ -22,7 +22,7 @@
 #ifdef CONFIG_KSU_SUPERKEY
 #include "superkey.h"
 extern bool ksu_signature_bypass;
-#endif
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 struct sdesc {
 	struct shash_desc shash;
@@ -308,7 +308,7 @@ clean:
 	if (v3_signing_exist || v3_1_signing_exist) {
 #ifdef CONFIG_KSU_DEBUG
 		pr_err("Unexpected v3 signature scheme found!\n");
-#endif
+#endif // #ifdef CONFIG_KSU_DEBUG
 		return false;
 	}
 
@@ -353,6 +353,6 @@ bool is_manager_apk(char *path)
 	if (superkey_is_set() && superkey_is_signature_bypassed()) {
 		return false;
 	}
-#endif
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 	return check_v2_signature(path, NULL);
 }

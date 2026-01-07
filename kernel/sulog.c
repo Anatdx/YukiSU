@@ -417,4 +417,4 @@ void ksu_sulog_exit(void)
 	pr_info("sulog: cleaned up successfully\n");
 }
 
-#endif // __SULOG_GATE
+#endif // #if __SULOG_GATE

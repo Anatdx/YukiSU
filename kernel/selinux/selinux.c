@@ -19,7 +19,7 @@ static int transive_to_domain(const char *domain, struct cred *cred)
 	struct task_security_struct *tsec;
 #else
 	struct cred_security_struct *tsec;
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
 	tsec = cred->security;
 	if (!tsec) {
 		pr_err("tsec == NULL!\n");
@@ -186,7 +186,7 @@ bool is_context(const struct cred *cred, const char *context)
 	const struct task_security_struct *tsec;
 #else
 	const struct cred_security_struct *tsec;
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
 	tsec = cred->security;
 	if (!tsec) {
 		return false;

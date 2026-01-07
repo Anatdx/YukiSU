@@ -14,7 +14,7 @@
 
 #ifndef KSU_HAS_PATH_UMOUNT
 #include <linux/syscalls.h>
-#endif
+#endif // #ifndef KSU_HAS_PATH_UMOUNT
 
 #include "allowlist.h"
 #include "feature.h"
@@ -74,7 +74,7 @@ static void ksu_sys_umount(const char *mnt, int flags)
 	ksys_umount(usermnt, flags);
 #else
 	sys_umount(usermnt, flags); // cuz asmlinkage long sys##name
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 	set_fs(old_fs);
 }
 
@@ -84,7 +84,7 @@ static void ksu_sys_umount(const char *mnt, int flags)
 		ksu_sys_umount(mnt, flags);                                    \
 	})
 
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) ||
 
 void try_umount(const char *mnt, int flags)
 {
@@ -181,7 +181,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 		snprintf(uid_str, sizeof(uid_str), "%d", new_uid);
 		ksu_sulog_report_syscall(new_uid, NULL, "setuid", uid_str);
 	}
-#endif
+#endif // #if __SULOG_GATE
 
 	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
 	if (!tw)

@@ -223,7 +223,7 @@ void yukisu_custom_config_exit(void)
 {
 #if __SULOG_GATE
 	ksu_sulog_exit();
-#endif
+#endif // #if __SULOG_GATE
 }
 
 int __init kernelsu_init(void)

@@ -3,6 +3,7 @@
 #include "core/feature.hpp"
 #include "core/hide_bootloader.hpp"
 #include "core/ksucalls.hpp"
+#include "core/restorecon.hpp"
 #include "defs.hpp"
 #include "kpm.hpp"
 #include "log.hpp"
@@ -10,7 +11,6 @@
 #include "module/module.hpp"
 #include "module/module_config.hpp"
 #include "profile/profile.hpp"
-#include "core/restorecon.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
 
@@ -172,7 +172,7 @@ int on_post_data_fs() {
     if (kpm_booted_load() != 0) {
         LOGW("KPM: Failed to load modules at boot");
     }
-#endif
+#endif // #ifdef __aarch64__
 
     // Execute metamodule post-fs-data script first (priority)
     metamodule_exec_stage_script("post-fs-data", true);
@@ -200,11 +200,11 @@ int on_post_data_fs() {
 
 void on_services() {
     LOGI("services triggered");
-    
+
     // Hide bootloader unlock status (soft BL hiding)
     // Service stage is the correct timing - after boot_completed is set
     hide_bootloader_status();
-    
+
     run_stage("service", false);
     LOGI("services completed");
 }

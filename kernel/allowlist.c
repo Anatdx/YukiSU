@@ -14,10 +14,10 @@
 #include <linux/sched/task.h>
 #else
 #include <linux/sched.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler_types.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 
 #include "allowlist.h"
 #include "kernel_compat.h"

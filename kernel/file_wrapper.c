@@ -114,7 +114,7 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin)
 	kiocb->ki_filp = orig;
 	return orig->f_op->iopoll(kiocb, spin);
 }
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0) &&                            \
     (LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0) ||                          \
@@ -513,7 +513,7 @@ struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	p->ops.lock = fp->f_op->lock ? ksu_wrapper_lock : NULL;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	p->ops.sendpage = fp->f_op->sendpage ? ksu_wrapper_sendpage : NULL;
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	p->ops.get_unmapped_area =
 	    fp->f_op->get_unmapped_area ? ksu_wrapper_get_unmapped_area : NULL;
 	p->ops.check_flags = fp->f_op->check_flags;

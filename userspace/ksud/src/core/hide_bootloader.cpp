@@ -3,12 +3,12 @@
 #include "../log.hpp"
 #include "../utils.hpp"
 
+#include <sys/wait.h>
+#include <unistd.h>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
-#include <unistd.h>
-#include <sys/wait.h>
 
 namespace ksud {
 
@@ -38,18 +38,18 @@ static const struct {
     {"vendor.boot.vbmeta.device_state", "locked"},
     {"vendor.boot.verifiedbootstate", "green"},
     {"sys.oem_unlock_allowed", "0"},
-    
+
     // MIUI specific
     {"ro.secureboot.lockstate", "locked"},
-    
+
     // Realme specific
     {"ro.boot.realmebootstate", "green"},
     {"ro.boot.realme.lockstate", "1"},
-    
+
     // Samsung specific
     {"ro.boot.warranty_bit", "0"},
     {"ro.vendor.boot.warranty_bit", "0"},
-    
+
     // OnePlus specific
     {"ro.boot.oem_unlock_support", "0"},
 };
@@ -60,16 +60,17 @@ static const struct {
 static std::string get_prop(const char* name) {
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "getprop %s 2>/dev/null", name);
-    
+
     FILE* fp = popen(cmd, "r");
-    if (!fp) return "";
-    
+    if (!fp)
+        return "";
+
     char buf[256] = {0};
     if (fgets(buf, sizeof(buf), fp)) {
         // Remove trailing newline
         size_t len = strlen(buf);
-        if (len > 0 && buf[len-1] == '\n') {
-            buf[len-1] = '\0';
+        if (len > 0 && buf[len - 1] == '\n') {
+            buf[len - 1] = '\0';
         }
     }
     pclose(fp);
@@ -86,13 +87,13 @@ static bool reset_prop(const char* name, const char* value) {
         LOGW("hide_bl: fork failed: %s", strerror(errno));
         return false;
     }
-    
+
     if (pid == 0) {
         // Child process
         execl(RESETPROP_PATH, "resetprop", "-n", name, value, nullptr);
         _exit(127);
     }
-    
+
     // Parent: wait for child
     int status;
     waitpid(pid, &status, 0);
@@ -104,12 +105,12 @@ static bool reset_prop(const char* name, const char* value) {
  */
 static void check_reset_prop(const char* name, const char* expected) {
     std::string value = get_prop(name);
-    
+
     // Skip if empty (property doesn't exist) or already matches
     if (value.empty() || value == expected) {
         return;
     }
-    
+
     LOGI("hide_bl: resetting %s from '%s' to '%s'", name, value.c_str(), expected);
     reset_prop(name, expected);
 }
@@ -119,7 +120,7 @@ static void check_reset_prop(const char* name, const char* expected) {
  */
 static void contains_reset_prop(const char* name, const char* contains, const char* newval) {
     std::string value = get_prop(name);
-    
+
     if (value.find(contains) != std::string::npos) {
         LOGI("hide_bl: resetting %s (contains '%s') to '%s'", name, contains, newval);
         reset_prop(name, newval);
@@ -152,7 +153,7 @@ static void do_hide_bootloader() {
     // Wait for boot_completed like Shamiko does
     // resetprop -w blocks until property exists with given value
     LOGI("hide_bl: waiting for sys.boot_completed=0");
-    
+
     pid_t wait_pid = fork();
     if (wait_pid == 0) {
         execl(RESETPROP_PATH, "resetprop", "-w", "sys.boot_completed", "0", nullptr);
@@ -162,16 +163,16 @@ static void do_hide_bootloader() {
         int status;
         waitpid(wait_pid, &status, 0);
     }
-    
+
     LOGI("hide_bl: starting bootloader status hiding...");
-    
+
     // Reset standard properties
     for (const auto& prop : PROPS_TO_HIDE) {
         if (prop.expected != nullptr) {
             check_reset_prop(prop.name, prop.expected);
         }
     }
-    
+
     LOGI("hide_bl: bootloader status hiding completed");
 }
 
@@ -181,27 +182,27 @@ void hide_bootloader_status() {
         LOGI("hide_bl: disabled, skipping");
         return;
     }
-    
+
     // Check if resetprop exists
     if (access(RESETPROP_PATH, X_OK) != 0) {
         LOGW("hide_bl: resetprop not found at %s", RESETPROP_PATH);
         return;
     }
-    
+
     // Fork to background so we don't block boot
     pid_t pid = fork();
     if (pid < 0) {
         LOGW("hide_bl: fork failed: %s", strerror(errno));
         return;
     }
-    
+
     if (pid == 0) {
         // Child process - run in background
         setsid();  // Detach from parent
         do_hide_bootloader();
         _exit(0);
     }
-    
+
     // Parent returns immediately, doesn't block boot
     LOGI("hide_bl: started background process (pid %d)", pid);
 }

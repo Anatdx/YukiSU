@@ -34,4 +34,4 @@ void ksu_feature_init(void);
 
 void ksu_feature_exit(void);
 
-#endif // __KSU_H_FEATURE
+#endif // #ifndef __KSU_H_FEATURE

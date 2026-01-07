@@ -4,8 +4,8 @@
 #include "log.hpp"
 #include "utils.hpp"
 
-#include <algorithm>
 #include <unistd.h>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <vector>

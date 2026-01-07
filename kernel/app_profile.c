@@ -10,7 +10,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h> // signal_struct
 #include <linux/sched/task.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include "objsec.h"
 #include <linux/sched.h>
 #include <linux/seccomp.h>
@@ -29,7 +29,7 @@
 #include "selinux/selinux.h"
 #ifndef CONFIG_KSU_HYMOFS
 #include "syscall_hook_manager.h"
-#endif
+#endif // #ifndef CONFIG_KSU_HYMOFS
 #include "sulog.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
@@ -38,7 +38,7 @@ static struct group_info root_groups = {
 };
 #else
 static struct group_info root_groups = {.usage = ATOMIC_INIT(2)};
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 
 static void setup_groups(struct root_profile *profile, struct cred *cred)
 {
@@ -195,7 +195,7 @@ void escape_with_root_profile(void)
 	setup_selinux(profile->selinux_domain);
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(current_euid().val, NULL, "escape_to_root");
-#endif
+#endif // #if __SULOG_GATE
 
 #ifndef CONFIG_KSU_HYMOFS
 	struct task_struct *t;
@@ -203,7 +203,7 @@ void escape_with_root_profile(void)
 	{
 		ksu_set_task_tracepoint_flag(t);
 	}
-#endif
+#endif // #ifndef CONFIG_KSU_HYMOFS
 }
 
 void escape_to_root_for_init(void)
@@ -217,7 +217,7 @@ void escape_to_root_for_init(void)
 
 #ifndef DEVPTS_SUPER_MAGIC
 #define DEVPTS_SUPER_MAGIC 0x1cd1
-#endif
+#endif // #ifndef DEVPTS_SUPER_MAGIC
 
 static int __manual_su_handle_devpts(struct inode *inode)
 {
@@ -240,7 +240,7 @@ static int __manual_su_handle_devpts(struct inode *inode)
 #else
 	struct inode_security_struct *sec =
 	    (struct inode_security_struct *)inode->i_security;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) ||
 	if (ksu_file_sid && sec)
 		sec->sid = ksu_file_sid;
 
@@ -267,7 +267,7 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 #if __SULOG_GATE
 		ksu_sulog_report_su_grant(target_uid, "cmd_su",
 					  "target_not_found");
-#endif
+#endif // #if __SULOG_GATE
 		return;
 	}
 	get_task_struct(target_task);
@@ -287,7 +287,7 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 #if __SULOG_GATE
 		ksu_sulog_report_su_grant(target_uid, "cmd_su",
 					  "cred_alloc_failed");
-#endif
+#endif // #if __SULOG_GATE
 		put_task_struct(target_task);
 		return;
 	}
@@ -343,7 +343,7 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	put_task_struct(target_task);
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(target_uid, "cmd_su", "manual_escalation");
-#endif
+#endif // #if __SULOG_GATE
 #ifndef CONFIG_KSU_HYMOFS
 	struct task_struct *p = current;
 	struct task_struct *t;
@@ -351,8 +351,8 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	{
 		ksu_set_task_tracepoint_flag(t);
 	}
-#endif
+#endif // #ifndef CONFIG_KSU_HYMOFS
 	pr_info("cmd_su: privilege escalation completed for UID: %d, PID: %d\n",
 		target_uid, target_pid);
 }
-#endif
+#endif // #ifdef CONFIG_KSU_MANUAL_SU

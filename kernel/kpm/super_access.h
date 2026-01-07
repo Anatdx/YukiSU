@@ -14,4 +14,4 @@ extern int yukisu_super_container_of(const char *struct_name,
 				     const char *member_name, void *ptr,
 				     void **out_ptr);
 
-#endif
+#endif // #ifndef __YUKISU_SUPER_ACCESS_H

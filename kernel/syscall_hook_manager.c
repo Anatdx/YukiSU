@@ -245,7 +245,7 @@ static int syscall_unregfunc_handler(struct kretprobe_instance *ri,
 
 static struct kretprobe *syscall_regfunc_rp = NULL;
 static struct kretprobe *syscall_unregfunc_rp = NULL;
-#endif
+#endif // #ifdef CONFIG_KRETPROBES
 
 static inline bool check_syscall_fastpath(int nr)
 {
@@ -343,9 +343,10 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 			if (id == __NR_execve) {
 				const char __user **filename_user =
 				    (const char __user **)&PT_REGS_PARM1(regs);
-				// For LKM mode, use tracepoint hook to detect init events
-				// because kprobe hook cannot reliably read user addresses
-				// on kernels with MTE/PAC enabled
+				// For LKM mode, use tracepoint hook to detect
+				// init events because kprobe hook cannot
+				// reliably read user addresses on kernels with
+				// MTE/PAC enabled
 				if (current->pid != 1 &&
 				    is_init(get_current_cred())) {
 					ksu_handle_init_mark_tracker(
@@ -383,23 +384,22 @@ void ksu_syscall_hook_manager_init(void)
 
 #ifdef CONFIG_KRETPROBES
 	// Register kretprobe for syscall_regfunc
-	syscall_regfunc_rp = init_kretprobe(
-		"syscall_regfunc", syscall_regfunc_handler);
+	syscall_regfunc_rp =
+	    init_kretprobe("syscall_regfunc", syscall_regfunc_handler);
 	// Register kretprobe for syscall_unregfunc
-	syscall_unregfunc_rp = init_kretprobe(
-		"syscall_unregfunc", syscall_unregfunc_handler);
+	syscall_unregfunc_rp =
+	    init_kretprobe("syscall_unregfunc", syscall_unregfunc_handler);
 #endif // #ifdef CONFIG_KRETPROBES
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
-	ret = register_trace_sys_enter(ksu_sys_enter_handler,
-						NULL);
+	ret = register_trace_sys_enter(ksu_sys_enter_handler, NULL);
 #ifndef CONFIG_KRETPROBES
 	ksu_mark_running_process_locked();
 #endif // #ifndef CONFIG_KRETPROBES
 	if (ret) {
 		pr_err("hook_manager: failed to register sys_enter tracepoint: "
-				"%d\n",
-				ret);
+		       "%d\n",
+		       ret);
 	} else {
 		pr_info("hook_manager: sys_enter tracepoint registered\n");
 	}

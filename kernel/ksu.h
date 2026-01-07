@@ -8,7 +8,7 @@
 // Fallback KSU_VERSION if not defined by Kbuild (e.g. when building as LKM)
 #ifndef KSU_VERSION
 #define KSU_VERSION 12000
-#endif
+#endif // #ifndef KSU_VERSION
 
 #define KERNEL_SU_VERSION KSU_VERSION
 #define KERNEL_SU_OPTION 0xDEADBEEF

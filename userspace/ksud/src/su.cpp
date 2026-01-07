@@ -86,7 +86,7 @@ int su_main(int argc, char* argv[]) {
     // AND merge everything after -c into a single argument (matching Rust behavior)
     std::vector<std::string> args_vec;
     args_vec.push_back(argv[0]);
-    
+
     int c_index = -1;
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -298,11 +298,11 @@ int grant_root_shell(bool global_mnt) {
         LOGE("Failed to grant root");
         return 1;
     }
-    
+
     // Set UID/GID to 0
     setgid(0);
     setuid(0);
-    
+
     // Switch to global mount namespace if requested
     if (global_mnt) {
         int fd = open("/proc/1/ns/mnt", O_RDONLY);
@@ -311,7 +311,7 @@ int grant_root_shell(bool global_mnt) {
             close(fd);
         }
     }
-    
+
     // Add /data/adb/ksu/bin to PATH
     const char* old_path = getenv("PATH");
     std::string new_path = "/data/adb/ksu/bin";
@@ -320,12 +320,12 @@ int grant_root_shell(bool global_mnt) {
         new_path += old_path;
     }
     setenv("PATH", new_path.c_str(), 1);
-    
+
     // Exec to sh immediately (matching Rust behavior)
     // This avoids any complex operations that might trigger SECCOMP
     char* shell_argv[] = {const_cast<char*>("sh"), nullptr};
     execv("/system/bin/sh", shell_argv);
-    
+
     LOGE("Failed to exec shell: %s", strerror(errno));
     return 127;
 }

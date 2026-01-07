@@ -68,4 +68,4 @@ int do_kpm(void __user *arg);
  */
 #define YUKISU_KPM_VERSION 7
 
-#endif
+#endif // #ifndef __YUKISU_KPM_H

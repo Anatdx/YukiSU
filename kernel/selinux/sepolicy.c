@@ -77,14 +77,14 @@ static bool add_typeattribute(struct policydb *db, const char *type,
 #else
 #define ksu_hashtab_for_each(htab, cur)                                        \
 	ksu_hash_for_each(htab->htable, htab->size, cur)
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 
 // symtab_search is introduced on 5.9.0:
 // https://elixir.bootlin.com/linux/v5.9-rc1/source/security/selinux/ss/symtab.h
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 #define symtab_search(s, name) hashtab_search((s)->table, name)
 #define symtab_insert(s, name, datum) hashtab_insert((s)->table, name, datum)
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 
 #define avtab_for_each(avtab, cur)                                             \
 	ksu_hash_for_each(avtab.htable, avtab.nslot, cur);
@@ -498,7 +498,7 @@ static const struct hashtab_key_params filenametr_key_params = {
     .hash = filenametr_hash,
     .cmp = filenametr_cmp,
 };
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 
 static bool add_filename_trans(struct policydb *db, const char *s,
 			       const char *t, const char *c, const char *d,
@@ -603,7 +603,7 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 
 	return ebitmap_set_bit(&db->filename_trans_ttypes, src->value - 1, 1) ==
 	       0;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
 }
 
 static bool add_genfscon(struct policydb *db, const char *fs_name,
@@ -638,7 +638,7 @@ void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
 }
 #define ksu_kvrealloc(p, new_size, old_size)                                   \
 	ksu_kvrealloc_compat(p, old_size, new_size, GFP_ATOMIC)
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 
 static bool add_type(struct policydb *db, const char *type_name, bool attr)
 {
@@ -674,7 +674,7 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	struct ebitmap *new_type_attr_map_array = ksu_kvrealloc(
 	    db->type_attr_map_array, value * sizeof(struct ebitmap),
-			(value - 1) * sizeof(struct ebitmap));
+	    (value - 1) * sizeof(struct ebitmap));
 
 	if (!new_type_attr_map_array) {
 		pr_err("add_type: alloc type_attr_map_array failed\n");
@@ -873,11 +873,11 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 				1);
 	}
 	return true;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 
 #else
 	return false;
-#endif
+#endif // #ifdef KSU_SUPPORT_ADD_TYPE
 }
 
 static bool set_type_state(struct policydb *db, const char *type_name,
@@ -924,7 +924,7 @@ static void add_typeattribute_raw(struct policydb *db, struct type_datum *type,
 #else
 	struct ebitmap *sattr =
 	    flex_array_get(db->type_attr_map_array, type->value - 1);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	ebitmap_set_bit(sattr, attr->value - 1, 1);
 
 	struct hashtab_node *node;

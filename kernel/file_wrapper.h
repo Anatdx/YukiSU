@@ -16,4 +16,4 @@ struct ksu_file_wrapper {
 struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp);
 void ksu_delete_file_wrapper(struct ksu_file_wrapper *data);
 #endif // #ifdef CONFIG_KSU_LKM
-#endif // KSU_FILE_WRAPPER_H
+#endif // #ifndef KSU_FILE_WRAPPER_H

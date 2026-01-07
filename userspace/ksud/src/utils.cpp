@@ -1,10 +1,10 @@
 #include "utils.hpp"
-#include "defs.hpp"
-#include "log.hpp"
+#include "boot/boot_patch.hpp"
+#include "core/assets.hpp"
 #include "core/ksucalls.hpp"
 #include "core/restorecon.hpp"
-#include "core/assets.hpp"
-#include "boot/boot_patch.hpp"
+#include "defs.hpp"
+#include "log.hpp"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -13,16 +13,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <vector>
-#include <filesystem>
 #ifdef __ANDROID__
 #include <sys/system_properties.h>
-#endif
+#endif // #ifdef __ANDROID__
 #ifdef USE_LIBZIP
 #include <zip.h>
-#endif
+#endif // #ifdef USE_LIBZIP
 
 namespace ksud {
 
@@ -132,7 +132,7 @@ std::optional<std::string> getprop(const std::string& prop) {
     // This is a stub for testing purposes
     (void)prop;
     return std::nullopt;
-#endif
+#endif // #ifdef __ANDROID__
 }
 
 bool is_safe_mode() {
@@ -485,7 +485,7 @@ int install(const std::optional<std::string>& magiskboot_path) {
     if (!restorecon()) {
         LOGW("Failed to restore SELinux contexts");
     }
-    
+
     // Extract binary assets
     if (!ensure_binaries(false)) {
         LOGW("Failed to extract binary assets");
@@ -544,7 +544,7 @@ int uninstall(const std::optional<std::string>& magiskboot_path) {
         restore_args.push_back(*magiskboot_path);
     }
     restore_args.push_back("--flash");
-    
+
     int ret = boot_restore(restore_args);
     if (ret != 0) {
         LOGE("Boot image restoration failed");
@@ -568,17 +568,17 @@ uint64_t get_zip_uncompressed_size(const std::string& zip_path) {
         LOGE("Failed to open ZIP: %s", zip_path.c_str());
         return 0;
     }
-    
+
     uint64_t total = 0;
     zip_int64_t num_entries = zip_get_num_entries(za, 0);
-    
+
     for (zip_int64_t i = 0; i < num_entries; i++) {
         zip_stat_t stat;
         if (zip_stat_index(za, i, 0, &stat) == 0) {
             total += stat.size;
         }
     }
-    
+
     zip_close(za);
     return total;
 #else
@@ -588,7 +588,7 @@ uint64_t get_zip_uncompressed_size(const std::string& zip_path) {
         return 0;
     }
     return static_cast<uint64_t>(ifs.tellg()) * 2;
-#endif
+#endif // #ifdef USE_LIBZIP
 }
 
 }  // namespace ksud

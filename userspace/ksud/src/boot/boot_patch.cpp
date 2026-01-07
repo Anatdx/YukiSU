@@ -183,34 +183,35 @@ static std::string find_magiskboot(const std::string& specified_path, const std:
                     return resolved_path;
                 }
             }
-            
+
             // Fallback: try copying to workdir (might fail due to noexec)
             std::string local_copy = workdir + "/magiskboot";
             printf("- Trying to copy magiskboot to workdir...\n");
-            
+
             int src_fd = open(specified_path.c_str(), O_RDONLY);
             if (src_fd < 0) {
-                LOGE("Failed to open source magiskboot: %s (errno=%d)", specified_path.c_str(), errno);
+                LOGE("Failed to open source magiskboot: %s (errno=%d)", specified_path.c_str(),
+                     errno);
                 return "";
             }
-            
+
             int dst_fd = open(local_copy.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
             if (dst_fd < 0) {
                 LOGE("Failed to create dest magiskboot (errno=%d)", errno);
                 close(src_fd);
                 return "";
             }
-            
+
             char buf[8192];
             ssize_t bytes_read;
             while ((bytes_read = read(src_fd, buf, sizeof(buf))) > 0) {
                 write(dst_fd, buf, bytes_read);
             }
-            
+
             fsync(dst_fd);
             close(src_fd);
             close(dst_fd);
-            
+
             if (access(local_copy.c_str(), X_OK) == 0) {
                 return local_copy;
             }
@@ -439,7 +440,7 @@ int boot_patch(const std::vector<std::string>& args) {
     // 3. /data/local/tmp (fallback, requires shell access)
     std::string workdir;
     char* tmpdir = nullptr;
-    
+
     // Try TMPDIR env first (manager sets this to app cache dir)
     const char* env_tmpdir = getenv("TMPDIR");
     if (env_tmpdir && access(env_tmpdir, W_OK) == 0) {
@@ -452,7 +453,7 @@ int boot_patch(const std::vector<std::string>& args) {
             printf("- Using TMPDIR: %s\n", env_tmpdir);
         }
     }
-    
+
     // Try current directory
     if (workdir.empty()) {
         char cwd[PATH_MAX];
@@ -467,7 +468,7 @@ int boot_patch(const std::vector<std::string>& args) {
             }
         }
     }
-    
+
     // Fallback to /data/local/tmp
     if (workdir.empty()) {
         char tmpdir_template[] = "/data/local/tmp/KernelSU_XXXXXX";
@@ -476,7 +477,7 @@ int boot_patch(const std::vector<std::string>& args) {
             workdir = tmpdir;
         }
     }
-    
+
     if (workdir.empty()) {
         LOGE("Failed to create temp directory");
         LOGE("Try setting TMPDIR environment variable to a writable directory");
@@ -670,7 +671,7 @@ int boot_patch(const std::vector<std::string>& args) {
     printf("- magiskboot: %s\n", magiskboot.c_str());
     printf("- bootimage: %s\n", bootimage.c_str());
     printf("- workdir: %s\n", workdir.c_str());
-    
+
     // Verify boot image exists and is readable
     struct stat boot_stat;
     if (stat(bootimage.c_str(), &boot_stat) != 0) {
@@ -679,7 +680,7 @@ int boot_patch(const std::vector<std::string>& args) {
         return 1;
     }
     printf("- Boot image size: %ld bytes\n", (long)boot_stat.st_size);
-    
+
     auto unpack_result = exec_command({magiskboot, "unpack", bootimage}, workdir);
     printf("- unpack exit code: %d\n", unpack_result.exit_code);
     if (!unpack_result.stdout_str.empty()) {
@@ -688,7 +689,7 @@ int boot_patch(const std::vector<std::string>& args) {
     if (!unpack_result.stderr_str.empty()) {
         printf("- stderr: %s\n", unpack_result.stderr_str.c_str());
     }
-    
+
     if (unpack_result.exit_code != 0) {
         LOGE("magiskboot unpack failed with exit code %d", unpack_result.exit_code);
         cleanup();
@@ -923,13 +924,14 @@ int boot_restore(const std::vector<std::string>& args) {
     bool from_backup = false;
 
     // Try to find backup
-    auto backup_exists =
-        exec_command({magiskboot, "cpio", ramdisk, "exists " + std::string(BACKUP_FILENAME)}, workdir);
+    auto backup_exists = exec_command(
+        {magiskboot, "cpio", ramdisk, "exists " + std::string(BACKUP_FILENAME)}, workdir);
     if (backup_exists.exit_code == 0) {
         // Extract backup sha1
         std::string backup_file = workdir + "/" + BACKUP_FILENAME;
         exec_command({magiskboot, "cpio", ramdisk,
-                      "extract " + std::string(BACKUP_FILENAME) + " " + backup_file}, workdir);
+                      "extract " + std::string(BACKUP_FILENAME) + " " + backup_file},
+                     workdir);
 
         auto sha_content = read_file(backup_file);
         if (sha_content) {
@@ -954,7 +956,8 @@ int boot_restore(const std::vector<std::string>& args) {
         do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kernelsu.ko");
 
         // Restore init if init.real exists
-        auto init_real_exists = exec_command({magiskboot, "cpio", ramdisk, "exists init.real"}, workdir);
+        auto init_real_exists =
+            exec_command({magiskboot, "cpio", ramdisk, "exists init.real"}, workdir);
         if (init_real_exists.exit_code == 0) {
             do_cpio_cmd(magiskboot, workdir, ramdisk, "mv init.real init");
         }
@@ -1022,9 +1025,9 @@ std::string get_current_kmi() {
         LOGE("Failed to get uname");
         return "";
     }
-    
+
     std::string full_version = uts.release;  // e.g. "6.6.66-android15-8-g29d86c5fc9dd"
-    
+
     // Extract major.minor (e.g. "6.6")
     size_t dot1 = full_version.find('.');
     if (dot1 == std::string::npos)

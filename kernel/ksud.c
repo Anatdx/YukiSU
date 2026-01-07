@@ -13,7 +13,7 @@
     LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 #include <linux/sched/task.h>
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) &&
-	   // LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+       // LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
 #else
@@ -165,12 +165,12 @@ void on_boot_completed(void)
 struct user_arg_ptr {
 #ifdef CONFIG_COMPAT
 	bool is_compat;
-#endif
+#endif // #ifdef CONFIG_COMPAT
 	union {
 		const char __user *const __user *native;
 #ifdef CONFIG_COMPAT
 		const compat_uptr_t __user *compat;
-#endif
+#endif // #ifdef CONFIG_COMPAT
 	} ptr;
 };
 #endif // #ifndef CONFIG_KSU_HYMOFS
@@ -641,7 +641,8 @@ static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 		ret = strncpy_from_user_nofault(path, fn, 32);
 	}
 	if (ret < 0) {
-		// Debug: only log once per boot for /system/bin/init detection failure
+		// Debug: only log once per boot for /system/bin/init detection
+		// failure
 		static bool init_log_once = false;
 		if (!init_log_once && current->pid <= 10) {
 			pr_err("kprobe execve: pid=%d addr=%lx ret=%ld\n",
@@ -719,7 +720,7 @@ static void stop_vfs_read_hook(void)
 #else
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 }
 
 static void stop_execve_hook(void)
@@ -730,7 +731,7 @@ static void stop_execve_hook(void)
 #else
 	ksu_execveat_hook = false;
 	pr_info("stop execve_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 }
 
 static void stop_input_hook(void)
@@ -746,7 +747,7 @@ static void stop_input_hook(void)
 #else
 	ksu_input_hook = false;
 	pr_info("stop input_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 }
 
 // ksud: module support

@@ -129,7 +129,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
 	ksu_sulog_report_su_attempt(current_uid().val, NULL, su_path,
 				    is_allowed);
-#endif
+#endif // #if __SULOG_GATE
 
 	pr_info("do_execveat_common su found\n");
 	memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
@@ -184,7 +184,7 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
 	ksu_sulog_report_su_attempt(current_uid().val, NULL, su_path, true);
-#endif
+#endif // #if __SULOG_GATE
 
 	pr_info("sys_execve su found\n");
 	*filename_user = ksud_user_path();
@@ -193,7 +193,7 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 
 	return 0;
 }
-#endif // !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 
 #if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
 static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
@@ -219,7 +219,7 @@ static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
 				current->pid, filename->name);
 			// proc umount?unmark it?
 		}
-#endif // CONFIG_KSU_HYMOFS
+#endif // #ifdef CONFIG_KSU_HYMOFS
 	}
 }
 
@@ -263,7 +263,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 #if __SULOG_GATE
 		ksu_sulog_report_syscall(current_uid().val, NULL, "faccessat",
 					 path);
-#endif
+#endif // #if __SULOG_GATE
 		pr_info("faccessat su->sh!\n");
 		*filename_user = sh_user_path();
 	}
@@ -292,7 +292,7 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "newfstatat",
 				 (*filename)->name);
-#endif // __SULOG_GATE
+#endif // #if __SULOG_GATE
 	pr_info("ksu_handle_stat: su->sh!\n");
 	memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
 	return 0;
@@ -324,14 +324,14 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 #if __SULOG_GATE
 		ksu_sulog_report_syscall(current_uid().val, NULL, "newfstatat",
 					 path);
-#endif // __SULOG_GATE
+#endif // #if __SULOG_GATE
 		pr_info("ksu_handle_stat: su->sh!\n");
 		*filename_user = sh_user_path();
 	}
 
 	return 0;
 }
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_HYMOFS)
 
 #if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_HYMOFS)
 EXPORT_SYMBOL(ksu_handle_execveat);

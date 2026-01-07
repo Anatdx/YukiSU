@@ -54,7 +54,7 @@ void ksu_mark_running_process(void);
 int ksu_get_task_mark(pid_t pid);
 int ksu_set_task_mark(pid_t pid, bool mark);
 
-#endif // CONFIG_KSU_HYMOFS || KSU_MANUAL_HOOK
+#endif // #if defined(CONFIG_KSU_HYMOFS) || defined(KSU_MANUAL_HOOK)
 
 static inline void ksu_set_task_tracepoint_flag(struct task_struct *t)
 {
@@ -62,7 +62,7 @@ static inline void ksu_set_task_tracepoint_flag(struct task_struct *t)
 	set_task_syscall_work(t, SYSCALL_TRACEPOINT);
 #else
 	set_tsk_thread_flag(t, TIF_SYSCALL_TRACEPOINT);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 }
 
 static inline void ksu_clear_task_tracepoint_flag(struct task_struct *t)
@@ -71,7 +71,7 @@ static inline void ksu_clear_task_tracepoint_flag(struct task_struct *t)
 	clear_task_syscall_work(t, SYSCALL_TRACEPOINT);
 #else
 	clear_tsk_thread_flag(t, TIF_SYSCALL_TRACEPOINT);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 }
 
 #if defined(CONFIG_KSU_HYMOFS) || defined(KSU_MANUAL_HOOK)
@@ -81,6 +81,6 @@ ksu_clear_task_tracepoint_flag_if_needed(struct task_struct *t)
 }
 #else
 void ksu_clear_task_tracepoint_flag_if_needed(struct task_struct *t);
-#endif // defined(CONFIG_KSU_HYMOFS) || defined(KSU_MANUAL_HOOK)
+#endif // #if defined(CONFIG_KSU_HYMOFS) || defined(KSU_MANUAL_HOOK)
 
 #endif // #ifndef __KSU_H_HOOK_MANAGER

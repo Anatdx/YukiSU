@@ -6,4 +6,4 @@
 
 bool is_manager_apk(char *path);
 
-#endif
+#endif // #ifndef __KSU_H_APK_V2_SIGN

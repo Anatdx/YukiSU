@@ -180,7 +180,7 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 		    KSU_MANAGER_PACKAGE);
 		return;
 	}
-#endif // KSU_MANAGER_PACKAGE
+#endif // #ifdef KSU_MANAGER_PACKAGE
 
 	list_for_each_entry (np, uid_data, list) {
 		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {

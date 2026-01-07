@@ -1,9 +1,9 @@
 #include "assets.hpp"
+#include <filesystem>
+#include <string>
 #include "../defs.hpp"
 #include "../log.hpp"
 #include "../utils.hpp"
-#include <filesystem>
-#include <string>
 
 namespace fs = std::filesystem;
 

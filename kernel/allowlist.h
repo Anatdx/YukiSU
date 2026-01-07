@@ -54,6 +54,6 @@ static inline bool is_isolated_process(uid_t uid)
 #ifdef CONFIG_KSU_MANUAL_SU
 bool ksu_temp_grant_root_once(uid_t uid);
 void ksu_temp_revoke_root_once(uid_t uid);
-#endif
+#endif // #ifdef CONFIG_KSU_MANUAL_SU
 
-#endif
+#endif // #ifndef __KSU_H_ALLOWLIST

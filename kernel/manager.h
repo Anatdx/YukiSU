@@ -27,7 +27,7 @@ static inline bool ksu_is_manager_uid_valid(void)
 	       ksu_manager_uid != KSU_INVALID_UID;
 #else
 	return ksu_manager_uid != KSU_INVALID_UID;
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 /* Compatibility functions for appid-based checks */
@@ -38,7 +38,7 @@ static inline bool ksu_is_manager_appid_valid(void)
 	       ksu_manager_appid != KSU_INVALID_UID;
 #else
 	return ksu_manager_appid != KSU_INVALID_UID;
-#endif // CONFIG_KSU_SUPERKEY
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 static inline uid_t ksu_get_manager_appid(void)
@@ -90,7 +90,7 @@ static inline void ksu_invalidate_manager_uid(void)
 	ksu_manager_uid = KSU_INVALID_UID;
 #ifdef CONFIG_KSU_SUPERKEY
 	superkey_invalidate();
-#endif
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 static inline void ksu_invalidate_manager_appid(void)
@@ -106,4 +106,4 @@ int ksu_observer_init(void);
 #ifndef CONFIG_KSU_LKM
 void ksu_observer_exit(void);
 #endif // #ifndef CONFIG_KSU_LKM
-#endif // __KSU_H_KSU_MANAGER
+#endif // #ifndef __KSU_H_KSU_MANAGER

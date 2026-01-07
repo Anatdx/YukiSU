@@ -4,7 +4,7 @@
 #include <linux/sched/task.h>
 #else
 #include <linux/sched.h>
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include <linux/uaccess.h>
@@ -36,7 +36,7 @@ static int install_session_keyring(struct key *keyring)
 
 	return commit_creds(new);
 }
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||
 
 struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 {
@@ -47,7 +47,7 @@ struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 		pr_info("installing init session keyring for older kernel\n");
 		install_session_keyring(init_session_keyring);
 	}
-#endif
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||
 	return filp_open(filename, flags, mode);
 }
 
@@ -64,7 +64,7 @@ ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 		*pos = offset + result;
 	}
 	return result;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) ||
 }
 
 ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
@@ -80,7 +80,7 @@ ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
 		*pos = offset + result;
 	}
 	return result;
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) ||
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) ||                           \
@@ -123,4 +123,4 @@ long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 
 	return ret;
 }
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) ||

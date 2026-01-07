@@ -4,6 +4,7 @@
 #include "core/feature.hpp"
 #include "core/hide_bootloader.hpp"
 #include "core/ksucalls.hpp"
+#include "core/restorecon.hpp"
 #include "debug.hpp"
 #include "defs.hpp"
 #include "flash/flash_ak3.hpp"
@@ -14,7 +15,6 @@
 #include "module/module.hpp"
 #include "module/module_config.hpp"
 #include "profile/profile.hpp"
-#include "core/restorecon.hpp"
 #include "sepolicy/sepolicy.hpp"
 #include "su.hpp"
 #include "umount.hpp"
@@ -144,7 +144,7 @@ static void print_usage() {
     printf("  hymo           HymoFS module manager\n");
 #ifdef __aarch64__
     printf("  kpm            KPM module manager\n");
-#endif
+#endif // #ifdef __aarch64__
     printf("  help           Show this help\n");
     printf("  version        Show version\n");
 }
@@ -509,7 +509,7 @@ static int cmd_kpm(const std::vector<std::string>& args) {
     printf("Unknown kpm subcommand: %s\n", subcmd.c_str());
     return 1;
 }
-#endif
+#endif // #ifdef __aarch64__
 
 int cli_run(int argc, char* argv[]) {
     // Initialize logging
@@ -618,7 +618,7 @@ int cli_run(int argc, char* argv[]) {
 #ifdef __aarch64__
     } else if (cmd == "kpm") {
         return cmd_kpm(args);
-#endif
+#endif // #ifdef __aarch64__
     }
 
     printf("Unknown command: %s\n", cmd.c_str());
