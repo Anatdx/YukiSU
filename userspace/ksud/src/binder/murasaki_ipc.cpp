@@ -256,6 +256,9 @@ public:
     }
 };
 
+// MurasakiService 析构函数 - 需要在 Impl 定义之后
+MurasakiService::~MurasakiService() = default;
+
 // 更新 MurasakiService 的 run 方法以使用 Impl
 void MurasakiService::run() {
     if (!initialized_) {

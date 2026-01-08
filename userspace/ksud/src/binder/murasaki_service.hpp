@@ -81,12 +81,16 @@ public:
 
 private:
     MurasakiService() = default;
-    ~MurasakiService() = default;
+    ~MurasakiService();
     MurasakiService(const MurasakiService&) = delete;
     MurasakiService& operator=(const MurasakiService&) = delete;
 
     bool running_ = false;
     bool initialized_ = false;
+
+    // IPC 实现 (定义在 murasaki_ipc.cpp)
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 /**
