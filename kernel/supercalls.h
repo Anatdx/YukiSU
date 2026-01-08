@@ -202,6 +202,17 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_SUPERKEY_STATUS _IOC(_IOC_READ, 'K', 108, 0)
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
+// HymoFS ioctl commands (integrated into KSU fd)
+#ifdef CONFIG_KSU_HYMOFS
+#define KSU_IOCTL_HYMO_CMD _IOC(_IOC_READ | _IOC_WRITE, 'K', 150, 0)
+
+struct ksu_hymo_cmd {
+	__u32 cmd; // HYMO_CMD_* from hymo_magic.h
+	__aligned_u64 arg; // Pointer to command-specific argument
+	__s32 result; // Return value from hymo_dispatch_cmd
+};
+#endif // #ifdef CONFIG_KSU_HYMOFS
+
 // Handler types
 typedef int (*ksu_ioctl_handler_t)(void __user *arg);
 typedef bool (*ksu_perm_check_t)(void);

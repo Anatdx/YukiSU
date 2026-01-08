@@ -942,6 +942,31 @@ static int do_superkey_status(void __user *arg)
 }
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
+#ifdef CONFIG_KSU_HYMOFS
+// 150. HYMO_CMD - HymoFS command dispatch (integrated)
+static int do_hymo_cmd(void __user *arg)
+{
+	struct ksu_hymo_cmd cmd;
+	int ret;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+		pr_err("hymo_cmd: copy_from_user failed\n");
+		return -EFAULT;
+	}
+
+	// Dispatch to HymoFS
+	ret = hymo_dispatch_cmd(cmd.cmd, (void __user *)(unsigned long)cmd.arg);
+	cmd.result = ret;
+
+	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+		pr_err("hymo_cmd: copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return ret;
+}
+#endif // #ifdef CONFIG_KSU_HYMOFS
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1054,6 +1079,12 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "LIST_TRY_UMOUNT",
      .handler = list_try_umount,
      .perm_check = manager_or_root},
+#ifdef CONFIG_KSU_HYMOFS
+    {.cmd = KSU_IOCTL_HYMO_CMD,
+     .name = "HYMO_CMD",
+     .handler = do_hymo_cmd,
+     .perm_check = only_root},
+#endif // #ifdef CONFIG_KSU_HYMOFS
     {.cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL} // Sentinel
 };
 

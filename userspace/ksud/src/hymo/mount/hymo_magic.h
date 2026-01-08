@@ -2,13 +2,12 @@
 #define _LINUX_HYMO_MAGIC_H
 
 #include <stddef.h>
-#include <sys/ioctl.h>
 
 #define HYMO_MAGIC1 0x48594D4F  // "HYMO"
 #define HYMO_MAGIC2 0x524F4F54  // "ROOT"
-#define HYMO_PROTOCOL_VERSION 9
+#define HYMO_PROTOCOL_VERSION 10
 
-// Command definitions (for syscall mode - legacy)
+// HymoFS command codes (used via KSU ioctl)
 #define HYMO_CMD_ADD_RULE 0x48001
 #define HYMO_CMD_DEL_RULE 0x48002
 #define HYMO_CMD_HIDE_RULE 0x48003
@@ -24,10 +23,6 @@
 #define HYMO_CMD_SET_AVC_LOG_SPOOFING 0x48013
 #define HYMO_CMD_SET_MIRROR_PATH 0x48014
 
-// Device path
-#define HYMO_DEVICE_NAME "hymo"
-#define HYMO_DEVICE_PATH "/dev/hymo"
-
 struct hymo_syscall_arg {
     const char* src;
     const char* target;
@@ -38,21 +33,5 @@ struct hymo_syscall_list_arg {
     char* buf;
     size_t size;
 };
-
-// ioctl definitions (for fd-based mode)
-#define HYMO_IOC_MAGIC 'H'
-#define HYMO_IOC_ADD_RULE _IOW(HYMO_IOC_MAGIC, 1, struct hymo_syscall_arg)
-#define HYMO_IOC_DEL_RULE _IOW(HYMO_IOC_MAGIC, 2, struct hymo_syscall_arg)
-#define HYMO_IOC_HIDE_RULE _IOW(HYMO_IOC_MAGIC, 3, struct hymo_syscall_arg)
-#define HYMO_IOC_CLEAR_ALL _IO(HYMO_IOC_MAGIC, 5)
-#define HYMO_IOC_GET_VERSION _IOR(HYMO_IOC_MAGIC, 6, int)
-#define HYMO_IOC_LIST_RULES _IOWR(HYMO_IOC_MAGIC, 7, struct hymo_syscall_list_arg)
-#define HYMO_IOC_SET_DEBUG _IOW(HYMO_IOC_MAGIC, 8, int)
-#define HYMO_IOC_REORDER_MNT_ID _IO(HYMO_IOC_MAGIC, 9)
-#define HYMO_IOC_SET_STEALTH _IOW(HYMO_IOC_MAGIC, 10, int)
-#define HYMO_IOC_HIDE_OVERLAY_XATTRS _IOW(HYMO_IOC_MAGIC, 11, struct hymo_syscall_arg)
-#define HYMO_IOC_ADD_MERGE_RULE _IOW(HYMO_IOC_MAGIC, 12, struct hymo_syscall_arg)
-#define HYMO_IOC_SET_AVC_LOG_SPOOFING _IOW(HYMO_IOC_MAGIC, 13, int)
-#define HYMO_IOC_SET_MIRROR_PATH _IOW(HYMO_IOC_MAGIC, 14, struct hymo_syscall_arg)
 
 #endif // #ifndef _LINUX_HYMO_MAGIC_H
