@@ -19,3 +19,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "KernelSU"
 include(":app")
+
+// Murasaki API SDK
+include(":murasaki-api:api")
+include(":murasaki-api:aidl")
+include(":murasaki-api:provider")
+include(":murasaki-api:shared")

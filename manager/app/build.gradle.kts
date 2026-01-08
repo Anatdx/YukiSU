@@ -111,6 +111,10 @@ ksp {
 }
 
 dependencies {
+    // Murasaki API SDK
+    implementation(project(":murasaki-api:api"))
+    implementation(project(":murasaki-api:provider"))
+    
     implementation(libs.gson)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)

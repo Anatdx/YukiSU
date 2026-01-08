@@ -1,0 +1,3 @@
+[submodule "manager/murasaki-api"]
+	path = manager/murasaki-api
+	url = https://github.com/Anatdx/Murasaki.git
