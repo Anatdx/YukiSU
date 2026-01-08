@@ -50,6 +50,11 @@ object Natives {
 
     init {
         System.loadLibrary("kernelsu")
+        try {
+            System.loadLibrary("murasaki_binder")
+        } catch (e: UnsatisfiedLinkError) {
+            // Binder library may not be available
+        }
     }
 
     val version: Int
@@ -205,4 +210,101 @@ object Natives {
 
         constructor() : this("")
     }
+
+    // ==================== Murasaki Binder API ====================
+    
+    /**
+     * Check if connected to Murasaki Binder service
+     */
+    @JvmStatic
+    external fun murasakiBinderConnected(): Boolean
+    
+    /**
+     * Disconnect from Murasaki Binder service
+     */
+    @JvmStatic
+    external fun murasakiBinderDisconnect()
+    
+    /**
+     * Get Murasaki service version
+     */
+    @JvmStatic
+    external fun murasakiGetVersion(): Int
+    
+    /**
+     * Get KernelSU kernel version via Binder
+     */
+    @JvmStatic
+    external fun murasakiGetKsuVersion(): Int
+    
+    /**
+     * Get current privilege level
+     * 0=SHELL, 1=ROOT, 2=KERNEL
+     */
+    @JvmStatic
+    external fun murasakiGetPrivilegeLevel(): Int
+    
+    /**
+     * Check if kernel mode (HymoFS) is available
+     */
+    @JvmStatic
+    external fun murasakiIsKernelModeAvailable(): Boolean
+    
+    /**
+     * Get SELinux context for a process
+     */
+    @JvmStatic
+    external fun murasakiGetSelinuxContext(pid: Int): String
+    
+    // HymoFS operations
+    
+    /**
+     * Add a hide rule for a path
+     */
+    @JvmStatic
+    external fun murasakiHymoAddHideRule(path: String, targetUid: Int): Int
+    
+    /**
+     * Add a redirect rule
+     */
+    @JvmStatic
+    external fun murasakiHymoAddRedirectRule(src: String, target: String, targetUid: Int): Int
+    
+    /**
+     * Clear all HymoFS rules
+     */
+    @JvmStatic
+    external fun murasakiHymoClearRules(): Int
+    
+    /**
+     * Set stealth mode
+     */
+    @JvmStatic
+    external fun murasakiHymoSetStealthMode(enable: Boolean): Int
+    
+    /**
+     * Set debug mode
+     */
+    @JvmStatic
+    external fun murasakiHymoSetDebugMode(enable: Boolean): Int
+    
+    /**
+     * Get active HymoFS rules
+     */
+    @JvmStatic
+    external fun murasakiHymoGetActiveRules(): String
+    
+    // Kernel operations
+    
+    /**
+     * Check if UID is granted root
+     */
+    @JvmStatic
+    external fun murasakiIsUidGrantedRoot(uid: Int): Boolean
+    
+    /**
+     * Nuke ext4 sysfs entries
+     */
+    @JvmStatic
+    external fun murasakiNukeExt4Sysfs(): Int
 }

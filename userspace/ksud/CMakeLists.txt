@@ -108,6 +108,10 @@ set(SOURCES
     src/hymo/mount/hymofs.cpp
     src/hymo/mount/magic.cpp
     src/hymo/mount/overlay.cpp
+    # Murasaki Binder service
+    src/binder/murasaki_binder.cpp
+    src/binder/murasaki_service.cpp
+    src/binder/murasaki_ipc.cpp
     ${ASSETS_CPP}
 )
 
@@ -122,6 +126,11 @@ add_executable(ksud ${SOURCES})
 # 链接库 - Android bionic libc 已内置 pthread，不需要单独链接
 if(NOT ANDROID)
     target_link_libraries(ksud PRIVATE pthread)
+endif()
+
+# libbinder_ndk for Binder IPC (Android only)
+if(ANDROID)
+    target_link_libraries(ksud PRIVATE binder_ndk)
 endif()
 
 target_link_libraries(ksud PRIVATE z miniz)

@@ -1,6 +1,6 @@
 #include "init_event.hpp"
 #include "assets.hpp"
-#include "binder/murasaki_service.hpp"
+#include "binder/murasaki_binder.hpp"
 #include "core/feature.hpp"
 #include "core/hide_bootloader.hpp"
 #include "core/ksucalls.hpp"
@@ -12,6 +12,7 @@
 #include "module/module.hpp"
 #include "module/module_config.hpp"
 #include "profile/profile.hpp"
+#include "sepolicy/sepolicy.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
 
@@ -22,6 +23,27 @@
 #include <cstring>
 
 namespace ksud {
+
+// Load Murasaki Binder service SEPolicy rules
+static void load_murasaki_sepolicy() {
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+
+    if (!get_asset("murasaki_sepolicy.rule", data, size)) {
+        LOGW("Failed to get murasaki_sepolicy.rule asset");
+        return;
+    }
+
+    std::string rules(reinterpret_cast<const char*>(data), size);
+    LOGI("Loading Murasaki SEPolicy rules...");
+
+    int ret = sepolicy_live_patch(rules);
+    if (ret != 0) {
+        LOGW("Failed to apply Murasaki sepolicy rules: %d", ret);
+    } else {
+        LOGI("Murasaki SEPolicy rules applied successfully");
+    }
+}
 
 // Catch boot logs (logcat/dmesg) to file
 static void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
@@ -162,6 +184,9 @@ int on_post_data_fs() {
     // Load sepolicy rules from modules
     load_sepolicy_rule();
 
+    // Load Murasaki Binder service sepolicy rules
+    load_murasaki_sepolicy();
+
     // Apply profile sepolicies
     apply_profile_sepolies();
 
@@ -207,8 +232,9 @@ void on_services() {
     hide_bootloader_status();
 
     // Start Murasaki Binder service (in background)
-    LOGI("Starting Murasaki service...");
-    murasaki::start_murasaki_service_async();
+    // 使用真正的 Android Binder 向 ServiceManager 注册
+    LOGI("Starting Murasaki Binder service...");
+    murasaki::start_murasaki_binder_service_async();
 
     run_stage("service", false);
     LOGI("services completed");

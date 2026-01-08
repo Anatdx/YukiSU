@@ -1,0 +1,42 @@
+# Murasaki Binder Service SEPolicy Rules
+# 
+# 这些规则允许 ksud (su domain) 向 ServiceManager 注册 Binder 服务
+# 并允许 App 连接到该服务
+
+# 定义 Murasaki 服务类型
+type murasaki_service, service_manager_type
+
+# 允许 su domain 添加 murasaki_service
+allow su servicemanager:binder { call transfer }
+allow su murasaki_service:service_manager { add find }
+
+# 允许 su domain 创建和使用 binder
+allow su binder_device:chr_file { ioctl open read write }
+
+# 允许所有 untrusted_app 找到并使用 murasaki_service
+allow untrusted_app murasaki_service:service_manager find
+allow untrusted_app su:binder { call transfer }
+allow su untrusted_app:binder { call transfer }
+
+# 允许 platform_app 使用
+allow platform_app murasaki_service:service_manager find
+allow platform_app su:binder { call transfer }
+allow su platform_app:binder { call transfer }
+
+# 允许 system_app 使用
+allow system_app murasaki_service:service_manager find
+allow system_app su:binder { call transfer }
+allow su system_app:binder { call transfer }
+
+# 允许 shell 使用
+allow shell murasaki_service:service_manager find
+allow shell su:binder { call transfer }
+allow su shell:binder { call transfer }
+
+# 允许 priv_app 使用
+allow priv_app murasaki_service:service_manager find
+allow priv_app su:binder { call transfer }
+allow su priv_app:binder { call transfer }
+
+# 如果需要兼容 Shizuku，可以使用已有的服务名劫持方式
+# 这里我们选择注册独立服务名
