@@ -12,6 +12,8 @@
 #include "binder_wrapper.hpp"
 
 #include <android/binder_parcel.h>
+#include <fstream>
+
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
@@ -27,15 +29,89 @@ static constexpr int32_t MURASAKI_VERSION = 1;
 // Binder interface descriptor
 static constexpr const char* INTERFACE_DESCRIPTOR = "io.murasaki.IMurasakiService";
 
+namespace {
+
+// KernelSU allowlist binary format structures
+// Matches kernel/app_profile.h
+constexpr uint32_t KSU_ALLOWLIST_MAGIC = 0x7f4b5355;
+constexpr uint32_t KSU_MAX_PACKAGE_NAME = 256;
+constexpr int KSU_MAX_GROUPS = 32;
+constexpr int KSU_SELINUX_DOMAIN = 64;
+
+struct root_profile {
+    int32_t uid;
+    int32_t gid;
+    int32_t groups_count;
+    int32_t groups[KSU_MAX_GROUPS];
+    struct {
+        uint64_t effective;
+        uint64_t permitted;
+        uint64_t inheritable;
+    } capabilities;
+    char selinux_domain[KSU_SELINUX_DOMAIN];
+    int32_t namespaces;
+};
+
+struct non_root_profile {
+    uint8_t umount_modules;
+};
+
+struct app_profile {
+    uint32_t version;
+    char key[KSU_MAX_PACKAGE_NAME];
+    int32_t current_uid;
+    uint8_t allow_su;
+
+    // The kernel structure alignment will insert padding here
+    // to ensure the union (containing u64) is 8-byte aligned.
+    // We rely on the compiler to match kernel layout.
+
+    union {
+        root_profile root;
+        non_root_profile non_root;
+    };
+};
+
+}  // namespace
+
 // Helper: Check if uid is granted root via KernelSU
-// Uses mark system to check permissions
+// Parses /data/adb/ksu/.allowlist directly to reuse KernelSU's authentication state
 static bool is_uid_granted_root(uid_t uid) {
     if (uid == 0)
         return true;
 
-    // For now, we can't directly check uid->root mapping without pid
-    // The kernel manages uid allowlist internally
-    // TODO: Add proper uid checking via new ioctl if needed
+    // TODO: Define this path in a common header
+    const char* allowlist_path = "/data/adb/ksu/.allowlist";
+
+    std::ifstream ifs(allowlist_path, std::ios::binary);
+    if (!ifs) {
+        LOGD("Murasaki: Failed to open allowlist at %s", allowlist_path);
+        return false;
+    }
+
+    uint32_t magic;
+    uint32_t version;
+
+    if (!ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic)) ||
+        !ifs.read(reinterpret_cast<char*>(&version), sizeof(version))) {
+        return false;
+    }
+
+    if (magic != KSU_ALLOWLIST_MAGIC) {
+        LOGD("Murasaki: Invalid allowlist magic");
+        return false;
+    }
+
+    app_profile profile;
+    while (ifs.read(reinterpret_cast<char*>(&profile), sizeof(profile))) {
+        if (profile.current_uid == static_cast<int32_t>(uid)) {
+            if (profile.allow_su) {
+                return true;
+            }
+            return false;
+        }
+    }
+
     return false;
 }
 
