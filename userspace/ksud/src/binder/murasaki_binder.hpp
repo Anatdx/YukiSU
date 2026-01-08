@@ -10,20 +10,6 @@
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
 
-// NDK 29+ has these in public headers, but we need to declare for older NDK versions
-// that might be used for building. At runtime on Android 10+, these will be available.
-#if __ANDROID_API__ >= 29
-// binder_manager.h and binder_process.h are available in API 29+
-extern "C" {
-binder_status_t AServiceManager_addService(AIBinder* binder, const char* instance);
-AIBinder* AServiceManager_checkService(const char* instance);
-AIBinder* AServiceManager_getService(const char* instance);
-void ABinderProcess_startThreadPool(void);
-void ABinderProcess_joinThreadPool(void);
-bool ABinderProcess_setThreadPoolMaxThreadCount(uint32_t numThreads);
-}
-#endif // #if __ANDROID_API__ >= 29
-
 #endif // #ifdef __ANDROID__
 
 #include <atomic>

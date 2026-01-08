@@ -9,6 +9,7 @@
 #include "../defs.hpp"
 #include "../hymo/mount/hymofs.hpp"
 #include "../log.hpp"
+#include "binder_wrapper.hpp"
 
 #include <android/binder_parcel.h>
 #include <unistd.h>
@@ -63,6 +64,12 @@ int MurasakiBinderService::init() {
 
     LOGI("Initializing Murasaki Binder service...");
 
+    // Initialize wrapper
+    if (!BinderWrapper::instance().init()) {
+        LOGE("Failed to initialize Binder wrapper");
+        return -ENOSYS;
+    }
+
     // 创建 Binder class
     binderClass_ = AIBinder_Class_define(INTERFACE_DESCRIPTOR,
                                          nullptr,  // onCreate - we manage instance ourselves
@@ -82,7 +89,15 @@ int MurasakiBinderService::init() {
     }
 
     // 注册到 ServiceManager
-    binder_status_t status = AServiceManager_addService(binder_, MURASAKI_SERVICE_NAME);
+    auto addService = BinderWrapper::instance().AServiceManager_addService;
+    if (!addService) {
+        LOGE("AServiceManager_addService not available");
+        AIBinder_decStrong(binder_);
+        binder_ = nullptr;
+        return -ENOSYS;
+    }
+
+    binder_status_t status = addService(binder_, MURASAKI_SERVICE_NAME);
     if (status != STATUS_OK) {
         LOGE("Failed to register service: %d", status);
         AIBinder_decStrong(binder_);
@@ -97,7 +112,11 @@ int MurasakiBinderService::init() {
 void MurasakiBinderService::joinThreadPool() {
     running_ = true;
     LOGI("Joining Binder thread pool...");
-    ABinderProcess_joinThreadPool();
+    if (auto join = BinderWrapper::instance().ABinderProcess_joinThreadPool) {
+        join();
+    } else {
+        LOGE("ABinderProcess_joinThreadPool not available");
+    }
     running_ = false;
 }
 
@@ -109,12 +128,21 @@ void MurasakiBinderService::startThreadPool() {
     running_ = true;
 
     // 启动 Binder 线程
-    ABinderProcess_startThreadPool();
+    if (auto start = BinderWrapper::instance().ABinderProcess_startThreadPool) {
+        start();
+    } else {
+        LOGE("ABinderProcess_startThreadPool not available");
+        // Not fatal, but service might not work
+    }
 
     // 创建服务线程
     serviceThread_ = std::thread([this]() {
         LOGI("Murasaki service thread started");
-        ABinderProcess_joinThreadPool();
+        if (auto join = BinderWrapper::instance().ABinderProcess_joinThreadPool) {
+            join();
+        } else {
+            LOGE("ABinderProcess_joinThreadPool not available");
+        }
         LOGI("Murasaki service thread exited");
         running_ = false;
     });

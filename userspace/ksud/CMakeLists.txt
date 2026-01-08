@@ -124,13 +124,13 @@ include_directories(${GENERATED_DIR})
 add_executable(ksud ${SOURCES})
 
 # 链接库 - Android bionic libc 已内置 pthread，不需要单独链接
-if(NOT ANDROID)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     target_link_libraries(ksud PRIVATE pthread)
 endif()
 
 # libbinder_ndk for Binder IPC (Android only)
-if(ANDROID)
-    target_link_libraries(ksud PRIVATE binder_ndk)
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    target_link_libraries(ksud PRIVATE binder_ndk dl)
 endif()
 
 target_link_libraries(ksud PRIVATE z miniz)
