@@ -66,6 +66,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          submodules: recursive
 
       - name: Setup need_upload
         id: need_upload
