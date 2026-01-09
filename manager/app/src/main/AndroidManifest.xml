@@ -86,6 +86,12 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:noHistory="true" />
+
+        <provider
+            android:name=".ui.shizuku.ShizukuManagerProvider"
+            android:authorities="moe.shizuku.manager.provider"
+            android:exported="true"
+            android:multiprocess="false" />
     </application>
 
 </manifest>
