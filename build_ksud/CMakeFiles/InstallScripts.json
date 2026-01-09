@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/an/hymoworker/YukiSU/build_ksud/cmake_install.cmake",
+		"/home/an/hymoworker/YukiSU/build_ksud/_deps/picosha2-build/cmake_install.cmake",
+		"/home/an/hymoworker/YukiSU/build_ksud/_deps/miniz-build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -256,6 +256,26 @@ void on_boot_completed() {
     // Run boot-completed stage
     run_stage("boot-completed", false);
 
+    // KSU: 分发 Shizuku Binder
+    LOGI("Dispatching Shizuku Binder to apps...");
+    if (fork() == 0) {
+        // Child process
+        // Find manager APK path
+        // Default path, usually /data/app/com.anatdx.yukisu-..../base.apk
+        // Since we don't have a reliable way to find exact path in C++ without complex
+        // scanning/cmds We can use `pm path` via shell Or simpler: just exec our Java Dispatcher
+        // via a shell wrapper that resolves the path
+
+        const char* cmd = "full_path=$(pm path com.anatdx.yukisu | cut -d: -f2); "
+                          "if [ -f \"$full_path\" ]; then "
+                          "  CLASSPATH=$full_path app_process /system/bin "
+                          "com.anatdx.yukisu.ui.shizuku.BinderDispatcher; "
+                          "fi";
+
+        execlp("sh", "sh", "-c", cmd, nullptr);
+        _exit(0);
+    }
+
     LOGI("boot-completed completed");
 }
 

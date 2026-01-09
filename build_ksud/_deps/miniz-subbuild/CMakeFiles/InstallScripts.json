@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/an/hymoworker/YukiSU/build_ksud/_deps/miniz-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

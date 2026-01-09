@@ -1,0 +1,2 @@
+/home/an/Android/Sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar qc libminiz.a CMakeFiles/miniz.dir/miniz.c.o CMakeFiles/miniz.dir/miniz_zip.c.o CMakeFiles/miniz.dir/miniz_tinfl.c.o CMakeFiles/miniz.dir/miniz_tdef.c.o
+/home/an/Android/Sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib libminiz.a

@@ -1,0 +1,74 @@
+
+---
+events:
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineSystem.cmake:12 (find_program)"
+      - "CMakeLists.txt:16 (project)"
+    mode: "program"
+    variable: "CMAKE_UNAME"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "uname"
+    candidate_directories:
+      - "/home/an/Android/Sdk/cmdline-tools/latest/bin/"
+      - "/home/an/Android/Sdk/platform-tools/"
+      - "/home/an/.local/bin/"
+      - "/home/an/.nvm/versions/node/v20.19.1/bin/"
+      - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/debugCommand/"
+      - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/copilotCli/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/usr/lib/jvm/default/bin/"
+      - "/usr/bin/site_perl/"
+      - "/usr/bin/vendor_perl/"
+      - "/usr/bin/core_perl/"
+      - "/home/an/.vscode/extensions/vscjava.vscode-java-debug-0.58.5/bundled/scripts/noConfigScripts/"
+      - "/home/an/.vscode/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/scripts/noConfigScripts/"
+      - "/bin/"
+    searched_directories:
+      - "/home/an/Android/Sdk/cmdline-tools/latest/bin/uname"
+      - "/home/an/Android/Sdk/platform-tools/uname"
+      - "/home/an/.local/bin/uname"
+      - "/home/an/.nvm/versions/node/v20.19.1/bin/uname"
+      - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/debugCommand/uname"
+      - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/copilotCli/uname"
+      - "/usr/local/sbin/uname"
+      - "/usr/local/bin/uname"
+    found: "/usr/bin/uname"
+    search_context:
+      ENV{PATH}:
+        - "/home/an/Android/Sdk/cmdline-tools/latest/bin"
+        - "/home/an/Android/Sdk/platform-tools"
+        - "/home/an/.local/bin"
+        - "/home/an/.nvm/versions/node/v20.19.1/bin"
+        - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/debugCommand"
+        - "/home/an/.config/Code/User/globalStorage/github.copilot-chat/copilotCli"
+        - "/home/an/Android/Sdk/platform-tools"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/lib/jvm/default/bin"
+        - "/usr/bin/site_perl"
+        - "/usr/bin/vendor_perl"
+        - "/usr/bin/core_perl"
+        - "/home/an/.vscode/extensions/vscjava.vscode-java-debug-0.58.5/bundled/scripts/noConfigScripts"
+        - "/home/an/.vscode/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/scripts/noConfigScripts"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineSystem.cmake:212 (message)"
+      - "CMakeLists.txt:16 (project)"
+    message: |
+      The system is: Linux - 6.18.2-arch2-1 - x86_64
+...
