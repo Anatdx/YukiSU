@@ -27,9 +27,18 @@ using namespace hymo;
 static constexpr int32_t MURASAKI_VERSION = 1;
 
 // Binder interface descriptor
-static constexpr const char* INTERFACE_DESCRIPTOR = "io.murasaki.IMurasakiService";
+static constexpr const char* INTERFACE_DESCRIPTOR = "io.murasaki.server.IMurasakiService";
 
 namespace {
+
+// Binder callbacks
+static void* Binder_onCreate(void* args) {
+    return args;
+}
+
+static void Binder_onDestroy(void* userData) {
+    (void)userData;
+}
 
 // KernelSU allowlist binary format structures
 // Matches kernel/app_profile.h
@@ -123,7 +132,9 @@ MurasakiBinderService& MurasakiBinderService::getInstance() {
 MurasakiBinderService::~MurasakiBinderService() {
     stop();
     if (binder_) {
-        AIBinder_decStrong(binder_);
+        auto& bw = BinderWrapper::instance();
+        if (bw.AIBinder_decStrong)
+            bw.AIBinder_decStrong(binder_);
         binder_ = nullptr;
     }
     if (binderClass_) {
@@ -146,11 +157,20 @@ int MurasakiBinderService::init() {
         return -ENOSYS;
     }
 
+    auto& bw = BinderWrapper::instance();
+
+    // 检查必要的函数是否加载成功
+    if (!bw.AIBinder_Class_define || !bw.AIBinder_new) {
+        LOGE("Required binder functions not available");
+        return -ENOSYS;
+    }
+
     // 创建 Binder class
-    binderClass_ = AIBinder_Class_define(INTERFACE_DESCRIPTOR,
-                                         nullptr,  // onCreate - we manage instance ourselves
-                                         nullptr,  // onDestroy
-                                         onTransact);
+    binderClass_ =
+        bw.AIBinder_Class_define(INTERFACE_DESCRIPTOR,
+                                 Binder_onCreate,   // onCreate - NEW: required, pass-through args
+                                 Binder_onDestroy,  // onDestroy
+                                 onTransact);
 
     if (!binderClass_) {
         LOGE("Failed to define binder class");
@@ -158,25 +178,26 @@ int MurasakiBinderService::init() {
     }
 
     // 创建 Binder 对象，传入 this 作为 user data
-    binder_ = AIBinder_new(binderClass_, this);
+    binder_ = bw.AIBinder_new(binderClass_, this);
     if (!binder_) {
         LOGE("Failed to create binder");
         return -ENOMEM;
     }
 
     // 注册到 ServiceManager
-    auto addService = BinderWrapper::instance().AServiceManager_addService;
-    if (!addService) {
+    if (!bw.AServiceManager_addService) {
         LOGE("AServiceManager_addService not available");
-        AIBinder_decStrong(binder_);
+        if (bw.AIBinder_decStrong)
+            bw.AIBinder_decStrong(binder_);
         binder_ = nullptr;
         return -ENOSYS;
     }
 
-    binder_status_t status = addService(binder_, MURASAKI_SERVICE_NAME);
+    binder_status_t status = bw.AServiceManager_addService(binder_, MURASAKI_SERVICE_NAME);
     if (status != STATUS_OK) {
         LOGE("Failed to register service: %d", status);
-        AIBinder_decStrong(binder_);
+        if (bw.AIBinder_decStrong)
+            bw.AIBinder_decStrong(binder_);
         binder_ = nullptr;
         return -EPERM;
     }
@@ -232,7 +253,8 @@ void MurasakiBinderService::stop() {
 }
 
 uid_t MurasakiBinderService::getCallingUid() {
-    return AIBinder_getCallingUid();
+    auto& bw = BinderWrapper::instance();
+    return bw.AIBinder_getCallingUid ? bw.AIBinder_getCallingUid() : 0;
 }
 
 bool MurasakiBinderService::checkCallerPermission(uid_t uid, int requiredLevel) {
@@ -259,10 +281,26 @@ bool MurasakiBinderService::checkCallerPermission(uid_t uid, int requiredLevel) 
 
 binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_code_t code,
                                                   const AParcel* in, AParcel* out) {
-    auto* service = static_cast<MurasakiBinderService*>(AIBinder_getUserData(binder));
+    auto& bw = BinderWrapper::instance();
+    auto* service = static_cast<MurasakiBinderService*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
     if (!service) {
         return STATUS_UNEXPECTED_NULL;
     }
+
+    // Handle INTERFACE_TRANSACTION for Descriptor check
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, INTERFACE_DESCRIPTOR, -1);
+        return STATUS_OK;
+    }
+
+    // Skip Interface Token
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
 
     // IMurasakiService transactions
     switch (code) {
@@ -290,16 +328,25 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
 }
 // ==================== Handler Implementations ====================
 
+// Helper macro to simplify AParcel calls through wrapper
+#define BW BinderWrapper::instance()
+// AIDL protocol: write status code (0 = success) before return value
+#define WRITE_NO_EXCEPTION()   \
+    if (BW.AParcel_writeInt32) \
+    BW.AParcel_writeInt32(out, 0)
+
 binder_status_t MurasakiBinderService::handleGetVersion(const AParcel* in, AParcel* out) {
     (void)in;
-    AParcel_writeInt32(out, MURASAKI_VERSION);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, MURASAKI_VERSION);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleGetKsuVersion(const AParcel* in, AParcel* out) {
     (void)in;
     int32_t version = get_version();
-    AParcel_writeInt32(out, version);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, version);
     return STATUS_OK;
 }
 
@@ -314,7 +361,8 @@ binder_status_t MurasakiBinderService::handleGetPrivilegeLevel(const AParcel* in
         level = 1;  // ROOT
     }
 
-    AParcel_writeInt32(out, level);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, level);
     return STATUS_OK;
 }
 
@@ -322,13 +370,14 @@ binder_status_t MurasakiBinderService::handleIsKernelModeAvailable(const AParcel
                                                                    AParcel* out) {
     (void)in;
     bool available = get_version() > 0;
-    AParcel_writeBool(out, available);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeBool(out, available);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleGetSelinuxContext(const AParcel* in, AParcel* out) {
     int32_t pid;
-    AParcel_readInt32(in, &pid);
+    BW.AParcel_readInt32(in, &pid);
 
     // Read from /proc/[pid]/attr/current
     char path[64];
@@ -336,7 +385,8 @@ binder_status_t MurasakiBinderService::handleGetSelinuxContext(const AParcel* in
 
     FILE* f = fopen(path, "r");
     if (!f) {
-        AParcel_writeString(out, "", 0);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, "", 0);
         return STATUS_OK;
     }
 
@@ -351,7 +401,8 @@ binder_status_t MurasakiBinderService::handleGetSelinuxContext(const AParcel* in
         len--;
     }
 
-    AParcel_writeString(out, context, len);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeString(out, context, len);
     return STATUS_OK;
 }
 
@@ -360,25 +411,28 @@ binder_status_t MurasakiBinderService::handleGetSelinuxContext(const AParcel* in
 binder_status_t MurasakiBinderService::handleHymoAddHideRule(const AParcel* in, AParcel* out) {
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 1)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
     const char* path = nullptr;
-    AParcel_readString(in, &path, nullptr);
+    BW.AParcel_readString(in, &path, nullptr);
 
     int32_t targetUid;
-    AParcel_readInt32(in, &targetUid);
+    BW.AParcel_readInt32(in, &targetUid);
 
     bool result = HymoFS::hide_path(path ? path : "");
-    AParcel_writeInt32(out, result ? 0 : -1);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result ? 0 : -1);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleHymoAddRedirectRule(const AParcel* in, AParcel* out) {
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 1)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
@@ -386,13 +440,14 @@ binder_status_t MurasakiBinderService::handleHymoAddRedirectRule(const AParcel* 
     const char* target = nullptr;
     int32_t targetUid;
 
-    AParcel_readString(in, &src, nullptr);
-    AParcel_readString(in, &target, nullptr);
-    AParcel_readInt32(in, &targetUid);
+    BW.AParcel_readString(in, &src, nullptr);
+    BW.AParcel_readString(in, &target, nullptr);
+    BW.AParcel_readInt32(in, &targetUid);
 
     // type=0 is redirect rule
     bool result = HymoFS::add_rule(src ? src : "", target ? target : "", 0);
-    AParcel_writeInt32(out, result ? 0 : -1);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result ? 0 : -1);
     return STATUS_OK;
 }
 
@@ -400,49 +455,56 @@ binder_status_t MurasakiBinderService::handleHymoClearRules(const AParcel* in, A
     (void)in;
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 1)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
     bool result = HymoFS::clear_rules();
-    AParcel_writeInt32(out, result ? 0 : -1);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result ? 0 : -1);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleHymoSetStealthMode(const AParcel* in, AParcel* out) {
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 1)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
     bool enable;
-    AParcel_readBool(in, &enable);
+    BW.AParcel_readBool(in, &enable);
 
     bool result = HymoFS::set_stealth(enable);
-    AParcel_writeInt32(out, result ? 0 : -1);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result ? 0 : -1);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleHymoSetDebugMode(const AParcel* in, AParcel* out) {
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 1)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
     bool enable;
-    AParcel_readBool(in, &enable);
+    BW.AParcel_readBool(in, &enable);
 
     bool result = HymoFS::set_debug(enable);
-    AParcel_writeInt32(out, result ? 0 : -1);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result ? 0 : -1);
     return STATUS_OK;
 }
 
 binder_status_t MurasakiBinderService::handleHymoGetActiveRules(const AParcel* in, AParcel* out) {
     (void)in;
     std::string rules = HymoFS::get_active_rules();
-    AParcel_writeString(out, rules.c_str(), rules.size());
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeString(out, rules.c_str(), rules.size());
     return STATUS_OK;
 }
 
@@ -451,10 +513,11 @@ binder_status_t MurasakiBinderService::handleHymoGetActiveRules(const AParcel* i
 binder_status_t MurasakiBinderService::handleKernelIsUidGrantedRoot(const AParcel* in,
                                                                     AParcel* out) {
     int32_t uid;
-    AParcel_readInt32(in, &uid);
+    BW.AParcel_readInt32(in, &uid);
 
     bool granted = is_uid_granted_root(uid);
-    AParcel_writeBool(out, granted);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeBool(out, granted);
     return STATUS_OK;
 }
 
@@ -462,14 +525,19 @@ binder_status_t MurasakiBinderService::handleKernelNukeExt4Sysfs(const AParcel* 
     (void)in;
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid, 2)) {
-        AParcel_writeInt32(out, -EPERM);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -EPERM);
         return STATUS_OK;
     }
 
     int result = nuke_ext4_sysfs("");
-    AParcel_writeInt32(out, result);
+    WRITE_NO_EXCEPTION();
+    BW.AParcel_writeInt32(out, result);
     return STATUS_OK;
 }
+
+#undef WRITE_NO_EXCEPTION
+#undef BW
 
 void MurasakiBinderService::onBinderDied(void* cookie) {
     (void)cookie;

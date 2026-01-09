@@ -1,9 +1,7 @@
 #include "init_event.hpp"
 #include "assets.hpp"
-#ifdef __ANDROID__
 #include "binder/murasaki_binder.hpp"
 #include "binder/shizuku_service.hpp"
-#endif // #ifdef __ANDROID__
 #include "core/feature.hpp"
 #include "core/hide_bootloader.hpp"
 #include "core/ksucalls.hpp"
@@ -236,7 +234,7 @@ void on_services() {
 
     // Start Murasaki Binder service (in background)
     // 使用真正的 Android Binder 向 ServiceManager 注册
-#ifdef __ANDROID__
+
     LOGI("Starting Murasaki Binder service...");
     murasaki::start_murasaki_binder_service_async();
 
@@ -244,7 +242,6 @@ void on_services() {
     // 让现有 Shizuku/Sui 生态的 App 可以直接使用
     LOGI("Starting Shizuku compatible service...");
     shizuku::start_shizuku_service();
-#endif // #ifdef __ANDROID__
 
     run_stage("service", false);
     LOGI("services completed");
@@ -260,6 +257,57 @@ void on_boot_completed() {
     run_stage("boot-completed", false);
 
     LOGI("boot-completed completed");
+}
+
+int run_daemon() {
+    LOGI("Starting ksud daemon...");
+
+    // Switch to global mount namespace
+    // This is crucial for visibility across Apps
+    if (!switch_mnt_ns(1)) {
+        LOGE("Failed to switch to global mount namespace (PID 1)");
+    } else {
+        LOGI("Switched to global mount namespace");
+    }
+
+    // Patch SEPolicy to allow Binder communication
+    // Essential for App <-> ksud (su domain) communication
+    // And for allowing Apps to find the service (which defaults to default_android_service type)
+    LOGI("Patching SEPolicy for Binder service...");
+    const char* rules =
+        "allow appdomain su binder { call transfer };"
+        "allow shell su binder { call transfer };"
+        "allow su appdomain binder { call transfer };"
+        "allow su shell binder { call transfer };"
+        "allow appdomain default_android_service service_manager find;"
+        "allow shell default_android_service service_manager find;"
+        // Also allow untrusted_app explicitly just in case appdomain is not sufficient
+        "allow untrusted_app_all su binder { call transfer };"
+        "allow untrusted_app_all default_android_service service_manager find;";
+
+    int sepolicy_ret = sepolicy_live_patch(rules);
+    if (sepolicy_ret != 0) {
+        LOGE("Failed to patch SEPolicy: %d", sepolicy_ret);
+    } else {
+        LOGI("SEPolicy patched successfully");
+    }
+
+    // 启动 Murasaki Binder 服务
+    LOGI("Initializing Murasaki Binder service...");
+    int ret = murasaki::MurasakiBinderService::getInstance().init();
+    if (ret != 0) {
+        LOGE("Failed to init Murasaki service: %d", ret);
+    }
+
+    // 启动 Shizuku 兼容服务
+    LOGI("Initializing Shizuku compatible service...");
+    shizuku::start_shizuku_service();
+
+    // 加入 Binder 线程池（阻塞）
+    LOGI("Joining Binder thread pool...");
+    murasaki::MurasakiBinderService::getInstance().joinThreadPool();
+
+    return 0;
 }
 
 }  // namespace ksud

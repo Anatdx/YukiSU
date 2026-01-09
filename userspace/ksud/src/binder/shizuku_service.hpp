@@ -4,8 +4,6 @@
 
 #pragma once
 
-#ifdef __ANDROID__
-
 #include <android/binder_ibinder.h>
 #include <sys/types.h>
 #include <atomic>
@@ -184,5 +182,3 @@ void start_shizuku_service();
 
 }  // namespace shizuku
 }  // namespace ksud
-
-#endif // #ifdef __ANDROID__

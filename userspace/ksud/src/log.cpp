@@ -1,20 +1,32 @@
 #include "log.hpp"
+#include <dlfcn.h>
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #ifdef __ANDROID__
+#include <android/log.h>
 #include <sys/system_properties.h>
 #endif // #ifdef __ANDROID__
 
 namespace ksud {
 
-static LogLevel g_log_level = LogLevel::INFO;
-static char g_log_tag[32] = "KernelSU";
+static LogLevel g_log_level = LogLevel::VERBOSE;  // Default to VERBOSE for debugging
+static char g_log_tag[32] = "ksud";
+
+// Function pointer for __android_log_write
+using android_log_write_t = int (*)(int prio, const char* tag, const char* text);
+static android_log_write_t g_android_log_write = nullptr;
 
 void log_init(const char* tag) {
     strncpy(g_log_tag, tag, sizeof(g_log_tag) - 1);
     g_log_tag[sizeof(g_log_tag) - 1] = '\0';
+
+    // Dynamically load liblog.so
+    void* handle = dlopen("liblog.so", RTLD_LAZY);
+    if (handle) {
+        g_android_log_write = (android_log_write_t)dlsym(handle, "__android_log_write");
+    }
 }
 
 void log_set_level(LogLevel level) {
@@ -30,23 +42,23 @@ static void log_write(LogLevel level, const char* fmt, va_list args) {
     switch (level) {
     case LogLevel::VERBOSE:
         level_str = "V";
-        android_level = 2;
+        android_level = 2;  // ANDROID_LOG_VERBOSE
         break;
     case LogLevel::DEBUG:
         level_str = "D";
-        android_level = 3;
+        android_level = 3;  // ANDROID_LOG_DEBUG
         break;
     case LogLevel::INFO:
         level_str = "I";
-        android_level = 4;
+        android_level = 4;  // ANDROID_LOG_INFO
         break;
     case LogLevel::WARN:
         level_str = "W";
-        android_level = 5;
+        android_level = 5;  // ANDROID_LOG_WARN
         break;
     case LogLevel::ERROR:
         level_str = "E";
-        android_level = 6;
+        android_level = 6;  // ANDROID_LOG_ERROR
         break;
     default:
         level_str = "?";
@@ -54,24 +66,24 @@ static void log_write(LogLevel level, const char* fmt, va_list args) {
         break;
     }
 
-    char msg[1024];
+    char msg[4096];  // Increased buffer size
     vsnprintf(msg, sizeof(msg), fmt, args);
 
-    // Try Android log first
-    FILE* log_file = fopen("/dev/log/main", "w");
-    if (log_file) {
-        // Android log format: priority, tag, message
-        fprintf(log_file, "%c/%s: %s\n", level_str[0], g_log_tag, msg);
-        fclose(log_file);
+    // Try Android log via dlsym
+    if (g_android_log_write) {
+        g_android_log_write(android_level, g_log_tag, msg);
+    } else {
+        // Fallback: try writing to /dev/kmsg for kernel log if logcat fails
+        FILE* kmsg = fopen("/dev/kmsg", "w");
+        if (kmsg) {
+            fprintf(kmsg, "<%d>%s: %s\n", android_level, g_log_tag, msg);
+            fclose(kmsg);
+        }
     }
 
-    // Also write to stderr for debugging
-    time_t now = time(nullptr);
-    struct tm* tm_info = localtime(&now);
-    char time_buf[32];
-    strftime(time_buf, sizeof(time_buf), "%m-%d %H:%M:%S", tm_info);
-
-    fprintf(stderr, "%s %s/%s: %s\n", time_buf, level_str, g_log_tag, msg);
+    // Also write to stderr for debugging (only if process is interactive)
+    // Removed timestamp to keep it simple, logcat handles time
+    // fprintf(stderr, "%s/%s: %s\n", level_str, g_log_tag, msg);
 }
 
 void log_v(const char* fmt, ...) {

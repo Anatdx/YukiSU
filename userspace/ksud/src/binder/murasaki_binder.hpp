@@ -5,12 +5,9 @@
 
 #pragma once
 
-#ifdef __ANDROID__
 #include <android/binder_ibinder.h>
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
-
-#endif // #ifdef __ANDROID__
 
 #include <atomic>
 #include <memory>
@@ -22,8 +19,6 @@ namespace murasaki {
 
 // 服务名称 - 用于 ServiceManager 注册
 static constexpr const char* MURASAKI_SERVICE_NAME = "io.murasaki.IMurasakiService";
-
-#ifdef __ANDROID__
 
 // Transaction codes - MUST match AIDL definitions in Murasaki API
 // See: aidl/io/murasaki/server/IMurasakiService.aidl
@@ -155,8 +150,6 @@ private:
     std::atomic<bool> running_{false};
     std::thread serviceThread_;
 };
-
-#endif // #ifdef __ANDROID__
 
 /**
  * 启动 Murasaki Binder 服务 (异步)

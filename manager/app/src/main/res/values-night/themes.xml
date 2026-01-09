@@ -7,4 +7,6 @@
 
     <style name="Theme.KernelSU.WebUI" parent="Theme.KernelSU" />
 
+    <style name="Theme.YukiSU.Dialog" parent="android:Theme.Material.Dialog.Alert">
+    </style>
 </resources>

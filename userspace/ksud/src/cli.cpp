@@ -125,6 +125,7 @@ static void print_usage() {
     printf("YukiSU userspace daemon\n\n");
     printf("USAGE: ksud <COMMAND>\n\n");
     printf("COMMANDS:\n");
+    printf("  daemon         Run as daemon (Binder service)\n");
     printf("  module         Manage KernelSU modules\n");
     printf("  post-fs-data   Trigger post-fs-data event\n");
     printf("  services       Trigger service event\n");
@@ -567,6 +568,9 @@ int cli_run(int argc, char* argv[]) {
     } else if (cmd == "version" || cmd == "-v" || cmd == "--version") {
         print_version();
         return 0;
+    } else if (cmd == "daemon") {
+        // 运行为常驻 daemon，启动 Binder 服务
+        return run_daemon();
     } else if (cmd == "post-fs-data") {
         return on_post_data_fs();
     } else if (cmd == "services") {

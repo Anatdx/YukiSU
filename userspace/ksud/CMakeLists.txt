@@ -130,9 +130,10 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
     target_link_libraries(ksud PRIVATE pthread)
 endif()
 
-# libbinder_ndk for Binder IPC (Android only)
+# libbinder_ndk headers and dl library for dynamic loading (Android only)
+# We use dlopen() to load libbinder_ndk.so at runtime, so no direct linking needed
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-    target_link_libraries(ksud PRIVATE binder_ndk dl)
+    target_link_libraries(ksud PRIVATE dl)
 endif()
 
 target_link_libraries(ksud PRIVATE z miniz)

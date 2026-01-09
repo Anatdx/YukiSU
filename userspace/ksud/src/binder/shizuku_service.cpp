@@ -1,8 +1,6 @@
 // Shizuku 兼容服务 - C++ 原生实现
 // 直接用 libbinder_ndk 实现完整的 IShizukuService
 
-#ifdef __ANDROID__
-
 #include "shizuku_service.hpp"
 #include "../core/ksucalls.hpp"
 #include "../log.hpp"
@@ -31,6 +29,15 @@ namespace shizuku {
 // 使用 murasaki 命名空间的 BinderWrapper
 using murasaki::BinderWrapper;
 
+// Binder callbacks (shared)
+static void* Binder_onCreate(void* args) {
+    return args;
+}
+
+static void Binder_onDestroy(void* userData) {
+    (void)userData;
+}
+
 // ==================== RemoteProcessHolder ====================
 
 AIBinder_Class* RemoteProcessHolder::binderClass_ = nullptr;
@@ -42,14 +49,18 @@ RemoteProcessHolder::RemoteProcessHolder(pid_t pid, int stdin_fd, int stdout_fd,
       stderr_fd_(stderr_fd),
       exit_code_(-1),
       exited_(false) {
+    auto& bw = BinderWrapper::instance();
+
     // 创建 Binder class (只需一次)
-    if (!binderClass_) {
-        binderClass_ = AIBinder_Class_define(REMOTE_PROCESS_DESCRIPTOR, nullptr, nullptr,
-                                             RemoteProcessHolder::onTransact);
+    if (!binderClass_ && bw.AIBinder_Class_define) {
+        binderClass_ = bw.AIBinder_Class_define(REMOTE_PROCESS_DESCRIPTOR, Binder_onCreate,
+                                                Binder_onDestroy, RemoteProcessHolder::onTransact);
     }
 
     // 创建 Binder 对象
-    binder_ = AIBinder_new(binderClass_, this);
+    if (bw.AIBinder_new) {
+        binder_ = bw.AIBinder_new(binderClass_, this);
+    }
 }
 
 RemoteProcessHolder::~RemoteProcessHolder() {
@@ -61,7 +72,9 @@ RemoteProcessHolder::~RemoteProcessHolder() {
     if (stderr_fd_ >= 0)
         close(stderr_fd_);
     if (binder_) {
-        AIBinder_decStrong(binder_);
+        auto& bw = BinderWrapper::instance();
+        if (bw.AIBinder_decStrong)
+            bw.AIBinder_decStrong(binder_);
     }
 }
 
@@ -156,62 +169,102 @@ AIBinder* RemoteProcessHolder::getBinder() {
 
 binder_status_t RemoteProcessHolder::onTransact(AIBinder* binder, transaction_code_t code,
                                                 const AParcel* in, AParcel* out) {
-    auto* holder = static_cast<RemoteProcessHolder*>(AIBinder_getUserData(binder));
+    auto& bw = BinderWrapper::instance();
+    auto* holder = static_cast<RemoteProcessHolder*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
     if (!holder)
         return STATUS_UNEXPECTED_NULL;
+
+    // Handle INTERFACE_TRANSACTION for Descriptor check
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, REMOTE_PROCESS_DESCRIPTOR, -1);
+        return STATUS_OK;
+    }
+
+    // Skip Interface Token
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
+
+// AIDL protocol: write status code (0 = success) before return value
+#define WRITE_NO_EXCEPTION_RP() \
+    if (bw.AParcel_writeInt32)  \
+    bw.AParcel_writeInt32(out, 0)
 
     switch (code) {
     case TRANSACTION_getOutputStream: {
         int fd = holder->getOutputStream();
         // 返回 ParcelFileDescriptor - 需要 dup 一份
         int dupFd = dup(fd);
-        AParcel_writeParcelFileDescriptor(out, dupFd);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeParcelFileDescriptor)
+            bw.AParcel_writeParcelFileDescriptor(out, dupFd);
         return STATUS_OK;
     }
     case TRANSACTION_getInputStream: {
         int fd = holder->getInputStream();
         int dupFd = dup(fd);
-        AParcel_writeParcelFileDescriptor(out, dupFd);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeParcelFileDescriptor)
+            bw.AParcel_writeParcelFileDescriptor(out, dupFd);
         return STATUS_OK;
     }
     case TRANSACTION_getErrorStream: {
         int fd = holder->getErrorStream();
         int dupFd = dup(fd);
-        AParcel_writeParcelFileDescriptor(out, dupFd);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeParcelFileDescriptor)
+            bw.AParcel_writeParcelFileDescriptor(out, dupFd);
         return STATUS_OK;
     }
     case TRANSACTION_waitFor: {
         int result = holder->waitFor();
-        AParcel_writeInt32(out, result);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeInt32)
+            bw.AParcel_writeInt32(out, result);
         return STATUS_OK;
     }
     case TRANSACTION_exitValue: {
         int result = holder->exitValue();
-        AParcel_writeInt32(out, result);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeInt32)
+            bw.AParcel_writeInt32(out, result);
         return STATUS_OK;
     }
     case TRANSACTION_destroy: {
         holder->destroy();
+        WRITE_NO_EXCEPTION_RP();
         return STATUS_OK;
     }
     case TRANSACTION_alive: {
         bool result = holder->alive();
-        AParcel_writeBool(out, result);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeBool)
+            bw.AParcel_writeBool(out, result);
         return STATUS_OK;
     }
     case TRANSACTION_waitForTimeout: {
         int64_t timeout;
-        AParcel_readInt64(in, &timeout);
+        if (bw.AParcel_readInt64)
+            bw.AParcel_readInt64(in, &timeout);
         // 忽略 unit 参数，假设是毫秒
         const char* unit = nullptr;
-        AParcel_readString(in, &unit, nullptr);
+        if (bw.AParcel_readString)
+            bw.AParcel_readString(in, &unit, nullptr);
         bool result = holder->waitForTimeout(timeout);
-        AParcel_writeBool(out, result);
+        WRITE_NO_EXCEPTION_RP();
+        if (bw.AParcel_writeBool)
+            bw.AParcel_writeBool(out, result);
         return STATUS_OK;
     }
     default:
         return STATUS_UNKNOWN_TRANSACTION;
     }
+
+#undef WRITE_NO_EXCEPTION_RP
 }
 
 // ==================== ShizukuService ====================
@@ -224,7 +277,9 @@ ShizukuService& ShizukuService::getInstance() {
 ShizukuService::~ShizukuService() {
     stop();
     if (binder_) {
-        AIBinder_decStrong(binder_);
+        auto& bw = BinderWrapper::instance();
+        if (bw.AIBinder_decStrong)
+            bw.AIBinder_decStrong(binder_);
     }
 }
 
@@ -237,14 +292,20 @@ int ShizukuService::init() {
     LOGI("Initializing Shizuku compatible service...");
 
     // 初始化 Binder wrapper
-    if (!BinderWrapper::instance().init()) {
+    auto& bw = BinderWrapper::instance();
+    if (!bw.init()) {
         LOGE("Failed to init binder wrapper for Shizuku");
         return -1;
     }
 
+    if (!bw.AIBinder_Class_define || !bw.AIBinder_new) {
+        LOGE("Required binder functions not available for Shizuku");
+        return -1;
+    }
+
     // 创建 Binder class
-    binderClass_ =
-        AIBinder_Class_define(SHIZUKU_DESCRIPTOR, nullptr, nullptr, ShizukuService::onTransact);
+    binderClass_ = bw.AIBinder_Class_define(SHIZUKU_DESCRIPTOR, Binder_onCreate, Binder_onDestroy,
+                                            ShizukuService::onTransact);
 
     if (!binderClass_) {
         LOGE("Failed to define Shizuku binder class");
@@ -252,17 +313,14 @@ int ShizukuService::init() {
     }
 
     // 创建 Binder 对象
-    binder_ = AIBinder_new(binderClass_, this);
+    binder_ = bw.AIBinder_new(binderClass_, this);
     if (!binder_) {
         LOGE("Failed to create Shizuku binder");
         return -1;
     }
 
     // 注册到 ServiceManager
-    // Shizuku 使用 "user_service" 或直接注册为 "binder"
-    // 我们注册为 moe.shizuku.server.IShizukuService (与 Sui 一致)
-    auto addService = BinderWrapper::instance().AServiceManager_addService;
-    if (!addService) {
+    if (!bw.AServiceManager_addService) {
         LOGE("AServiceManager_addService not available");
         return -1;
     }
@@ -275,7 +333,7 @@ int ShizukuService::init() {
 
     bool registered = false;
     for (const char* name : serviceNames) {
-        binder_status_t status = addService(binder_, name);
+        binder_status_t status = bw.AServiceManager_addService(binder_, name);
         if (status == STATUS_OK) {
             LOGI("Shizuku service registered as '%s'", name);
             registered = true;
@@ -306,14 +364,26 @@ void ShizukuService::stop() {
 }
 
 uid_t ShizukuService::getCallingUid() {
-    return AIBinder_getCallingUid();
+    auto& bw = BinderWrapper::instance();
+    return bw.AIBinder_getCallingUid ? bw.AIBinder_getCallingUid() : 0;
 }
 
 bool ShizukuService::checkCallerPermission(uid_t uid) {
     if (uid == 0 || uid == 2000)
         return true;  // root 和 shell
 
-    // 检查 KSU allowlist
+    // 1. 检查内存缓存 (Runtime Allow)
+    // 必须先检查缓存，因为 handleRequestPermission 可能已经授权了
+    if (auto* client = findClient(uid, 0)) {  // PID 0 means ignore PID check if logical
+        // findClient 需要准确的 PID，但这里我们只有 UID
+        // 实际上 checkCallerPermission 通常在 IPC 上下文中调用，可以获取 PID
+        // 但目前设计 checkCallerPermission 只接受 UID
+        // 我们需要遍历 map 或者修改数据结构。
+        // 简单起见，这里暂时只依赖 KSU allowlist，
+        // 真正的缓存检查放在 handleCheckSelfPermission 中。
+    }
+
+    // 2. 检查 KSU allowlist (.allowlist 文件)
     // 复用 murasaki_binder.cpp 的逻辑
     const char* allowlist_path = "/data/adb/ksu/.allowlist";
     std::ifstream ifs(allowlist_path, std::ios::binary);
@@ -454,11 +524,28 @@ RemoteProcessHolder* ShizukuService::createProcess(const std::vector<std::string
 
 binder_status_t ShizukuService::onTransact(AIBinder* binder, transaction_code_t code,
                                            const AParcel* in, AParcel* out) {
-    auto* service = static_cast<ShizukuService*>(AIBinder_getUserData(binder));
+    auto& bw = BinderWrapper::instance();
+    auto* service = static_cast<ShizukuService*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
     if (!service)
         return STATUS_UNEXPECTED_NULL;
 
-    LOGD("Shizuku transaction: code=%d, uid=%d", code, AIBinder_getCallingUid());
+    uid_t callingUid = bw.AIBinder_getCallingUid ? bw.AIBinder_getCallingUid() : 0;
+    LOGD("Shizuku transaction: code=%d, uid=%d", code, callingUid);
+
+    // Handle INTERFACE_TRANSACTION
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, SHIZUKU_DESCRIPTOR, -1);
+        return STATUS_OK;
+    }
+
+    // Skip Interface Token
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
 
     switch (code) {
     case TRANSACTION_getVersion:
@@ -497,6 +584,14 @@ binder_status_t ShizukuService::onTransact(AIBinder* binder, transaction_code_t 
 
 // ==================== Handler Implementations ====================
 
+// Helper macro to simplify AParcel calls through wrapper
+#define BW BinderWrapper::instance()
+
+// AIDL protocol: write status code (0 = success) before return value
+#define WRITE_NO_EXCEPTION()   \
+    if (BW.AParcel_writeInt32) \
+    BW.AParcel_writeInt32(out, 0)
+
 binder_status_t ShizukuService::handleGetVersion(const AParcel* in, AParcel* out) {
     (void)in;
     uid_t uid = getCallingUid();
@@ -504,22 +599,28 @@ binder_status_t ShizukuService::handleGetVersion(const AParcel* in, AParcel* out
         LOGW("getVersion: permission denied for uid %d", uid);
         // 仍然返回版本，但记录警告
     }
-    AParcel_writeInt32(out, SHIZUKU_SERVER_VERSION);
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeInt32)
+        BW.AParcel_writeInt32(out, SHIZUKU_SERVER_VERSION);
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleGetUid(const AParcel* in, AParcel* out) {
     (void)in;
-    AParcel_writeInt32(out, getuid());
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeInt32)
+        BW.AParcel_writeInt32(out, getuid());
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleCheckPermission(const AParcel* in, AParcel* out) {
-    const char* permission = nullptr;
-    AParcel_readString(in, &permission, nullptr);
+    std::string permission;
+    BW.readString(in, permission);
 
     // 简化实现：返回 PERMISSION_GRANTED (0)
-    AParcel_writeInt32(out, 0);
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeInt32)
+        BW.AParcel_writeInt32(out, 0);
     return STATUS_OK;
 }
 
@@ -532,42 +633,45 @@ binder_status_t ShizukuService::handleNewProcess(const AParcel* in, AParcel* out
     }
 
     // 读取命令数组
-    int32_t cmdCount;
-    AParcel_readInt32(in, &cmdCount);
+    int32_t cmdCount = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &cmdCount);
     std::vector<std::string> cmd;
     for (int32_t i = 0; i < cmdCount; i++) {
-        const char* str = nullptr;
-        AParcel_readString(in, &str, nullptr);
-        if (str)
-            cmd.push_back(str);
+        std::string str;
+        BW.readString(in, str);
+        cmd.push_back(str);
     }
 
     // 读取环境变量数组
-    int32_t envCount;
-    AParcel_readInt32(in, &envCount);
+    int32_t envCount = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &envCount);
     std::vector<std::string> env;
     for (int32_t i = 0; i < envCount; i++) {
-        const char* str = nullptr;
-        AParcel_readString(in, &str, nullptr);
-        if (str)
-            env.push_back(str);
+        std::string str;
+        BW.readString(in, str);
+        env.push_back(str);
     }
 
     // 读取工作目录
-    const char* dir = nullptr;
-    AParcel_readString(in, &dir, nullptr);
+    std::string dir;
+    BW.readString(in, dir);
 
     LOGI("newProcess: cmd[0]=%s, uid=%d", cmd.empty() ? "(empty)" : cmd[0].c_str(), uid);
 
     // 创建进程
-    auto* holder = createProcess(cmd, env, dir ? dir : "");
+    auto* holder = createProcess(cmd, env, dir);
     if (!holder) {
         LOGE("Failed to create process");
         return STATUS_FAILED_TRANSACTION;
     }
 
+    // AIDL protocol: write status code first
+    WRITE_NO_EXCEPTION();
     // 返回 IRemoteProcess binder
-    AParcel_writeStrongBinder(out, holder->getBinder());
+    if (BW.AParcel_writeStrongBinder)
+        BW.AParcel_writeStrongBinder(out, holder->getBinder());
 
     return STATUS_OK;
 }
@@ -587,41 +691,43 @@ binder_status_t ShizukuService::handleGetSELinuxContext(const AParcel* in, AParc
         }
     }
 
-    AParcel_writeString(out, context, strlen(context));
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeString)
+        BW.AParcel_writeString(out, context, strlen(context));
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleGetSystemProperty(const AParcel* in, AParcel* out) {
-    const char* name = nullptr;
-    const char* defaultValue = nullptr;
-    AParcel_readString(in, &name, nullptr);
-    AParcel_readString(in, &defaultValue, nullptr);
+    std::string name;
+    std::string defaultValue;
+    BW.readString(in, name);
+    BW.readString(in, defaultValue);
 
     char value[92] = {0};
-    if (name && __system_property_get(name, value) > 0) {
-        AParcel_writeString(out, value, strlen(value));
+    WRITE_NO_EXCEPTION();
+    if (!name.empty() && __system_property_get(name.c_str(), value) > 0) {
+        if (BW.AParcel_writeString)
+            BW.AParcel_writeString(out, value, strlen(value));
     } else {
-        AParcel_writeString(out, defaultValue ? defaultValue : "",
-                            defaultValue ? strlen(defaultValue) : 0);
+        if (BW.AParcel_writeString)
+            BW.AParcel_writeString(out, defaultValue.c_str(), defaultValue.length());
     }
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleSetSystemProperty(const AParcel* in, AParcel* out) {
-    (void)out;
-
     uid_t uid = getCallingUid();
     if (!checkCallerPermission(uid)) {
         return STATUS_PERMISSION_DENIED;
     }
 
-    const char* name = nullptr;
-    const char* value = nullptr;
-    AParcel_readString(in, &name, nullptr);
-    AParcel_readString(in, &value, nullptr);
+    std::string name;
+    std::string value;
+    BW.readString(in, name);
+    BW.readString(in, value);
 
-    if (name && value) {
-        __system_property_set(name, value);
+    if (!name.empty() && !value.empty()) {
+        __system_property_set(name.c_str(), value.c_str());
     }
     return STATUS_OK;
 }
@@ -629,97 +735,190 @@ binder_status_t ShizukuService::handleSetSystemProperty(const AParcel* in, AParc
 binder_status_t ShizukuService::handleCheckSelfPermission(const AParcel* in, AParcel* out) {
     (void)in;
     uid_t uid = getCallingUid();
-    bool allowed = checkCallerPermission(uid);
-    AParcel_writeBool(out, allowed);
+    pid_t pid = BW.AIBinder_getCallingPid ? BW.AIBinder_getCallingPid() : 0;
+
+    bool allowed = false;
+
+    // 1. 检查 Runtime Cache (findClient)
+    // findClient 需要准确的 PID。如果同一个 UID 的不同进程请求，可能需要注意。
+    // Shizuku Client 建立连接后通常复用。
+    if (auto* client = findClient(uid, pid)) {
+        if (client->allowed) {
+            allowed = true;
+        }
+    }
+
+    // 2. 如果缓存没过，检查 KSU Root 权限
+    if (!allowed && checkCallerPermission(uid)) {
+        allowed = true;
+        // 更新缓存
+        auto* client = requireClient(uid, pid);
+        client->allowed = true;
+    }
+
+    LOGD("checkSelfPermission: uid=%d pid=%d allowed=%d", uid, pid, allowed);
+
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeBool)
+        BW.AParcel_writeBool(out, allowed);
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleRequestPermission(const AParcel* in, AParcel* out) {
-    (void)out;
-
-    int32_t requestCode;
-    AParcel_readInt32(in, &requestCode);
+    int32_t requestCode = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &requestCode);
 
     uid_t uid = getCallingUid();
-    pid_t pid = AIBinder_getCallingPid();
+    pid_t pid = BW.AIBinder_getCallingPid ? BW.AIBinder_getCallingPid() : 0;
 
-    // 自动授权 KSU 白名单中的 App
+    // 1. 如果已经在 KSU 白名单或 Root，直接通过
     if (checkCallerPermission(uid)) {
-        LOGI("Auto-granting permission for uid %d (in KSU allowlist)", uid);
-        auto* client = requireClient(uid, pid);
-        client->allowed = true;
+        LOGI("Auto-granting permission for uid %d (in KSU allowlist or root)", uid);
+        if (auto* client = requireClient(uid, pid)) {
+            client->allowed = true;
+            if (client->applicationBinder) {
+                // 回调通知
+                // IShizukuApplication::dispatchRequestPermissionResult = 2 (oneway)
+                // void dispatchRequestPermissionResult(int requestCode, in Bundle data);
+                // 构造 Bundle 比较麻烦，需要 writeInt(length), writeInt(magic)...
+                // 暂时略过回掉，因为 client->allowed = true 后，客户端下一次 checkSelfPermission
+                // 就会通过 通常 requestPermission 不需要即使回调，客户端轮询或者等待 Activity
+                // Result
+            }
+        }
     } else {
-        LOGW("Permission request from non-root app uid=%d, denied", uid);
+        // 2. 启动 Manager Activity 请求授权
+        LOGI("Requesting permission for uid %d pid %d via Manager Activity", uid, pid);
+
+        pid_t forks = fork();
+        if (forks == 0) {
+            // Child process
+            std::string uidStr = std::to_string(uid);
+            std::string pidStr = std::to_string(pid);
+            std::string reqStr = std::to_string(requestCode);
+
+            // am start -n com.anatdx.yukisu/com.anatdx.yukisu.ui.shizuku.RequestPermissionActivity
+            // --ei uid <uid> --ei pid <pid> --ei request_code <code> --user 0
+            execlp("am", "am", "start", "-n",
+                   "com.anatdx.yukisu/com.anatdx.yukisu.ui.shizuku.RequestPermissionActivity",
+                   "--ei", "uid", uidStr.c_str(), "--ei", "pid", pidStr.c_str(), "--ei",
+                   "request_code", reqStr.c_str(), "--user", "0", nullptr);
+            _exit(127);  // execlp failed
+        } else if (forks > 0) {
+            // Parent process, wait for child to avoid zombie?
+            // Better to let init handle it or waitpid WNOHANG
+            int status;
+            waitpid(forks, &status,
+                    0);  // Blocking wait for 'am' to finish starting activity is fine
+        }
     }
 
+    WRITE_NO_EXCEPTION();
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleAttachApplication(const AParcel* in, AParcel* out) {
-    (void)out;
-
     AIBinder* appBinder = nullptr;
-    AParcel_readStrongBinder(in, &appBinder);
+    if (BW.AParcel_readStrongBinder)
+        BW.AParcel_readStrongBinder(in, &appBinder);
 
     // 读取 Bundle args (简化处理)
     // Bundle 序列化比较复杂，这里只记录客户端
 
     uid_t uid = getCallingUid();
-    pid_t pid = AIBinder_getCallingPid();
+    pid_t pid = BW.AIBinder_getCallingPid ? BW.AIBinder_getCallingPid() : 0;
 
     auto* client = requireClient(uid, pid);
     client->applicationBinder = appBinder;
 
     LOGI("attachApplication: uid=%d, pid=%d, allowed=%d", uid, pid, client->allowed);
 
+    WRITE_NO_EXCEPTION();
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleExit(const AParcel* in, AParcel* out) {
     (void)in;
-    (void)out;
 
     uid_t uid = getCallingUid();
     if (uid != 0 && uid != 2000) {
         LOGW("exit called by non-root uid %d, ignoring", uid);
+        WRITE_NO_EXCEPTION();
         return STATUS_OK;
     }
 
     LOGI("Shizuku service exit requested");
     stop();
+    WRITE_NO_EXCEPTION();
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleIsHidden(const AParcel* in, AParcel* out) {
-    int32_t uid;
-    AParcel_readInt32(in, &uid);
+    int32_t uid = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &uid);
 
     // 简化：所有 App 都不隐藏
-    AParcel_writeBool(out, false);
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeBool)
+        BW.AParcel_writeBool(out, false);
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleGetFlagsForUid(const AParcel* in, AParcel* out) {
-    int32_t uid, mask;
-    AParcel_readInt32(in, &uid);
-    AParcel_readInt32(in, &mask);
+    int32_t uid = 0, mask = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &uid);
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &mask);
 
     // 简化实现
-    AParcel_writeInt32(out, 0);
+    WRITE_NO_EXCEPTION();
+    if (BW.AParcel_writeInt32)
+        BW.AParcel_writeInt32(out, 0);
     return STATUS_OK;
 }
 
 binder_status_t ShizukuService::handleUpdateFlagsForUid(const AParcel* in, AParcel* out) {
-    (void)out;
+    int32_t uid = 0, mask = 0, value = 0;
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &uid);
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &mask);
+    if (BW.AParcel_readInt32)
+        BW.AParcel_readInt32(in, &value);
 
-    int32_t uid, mask, value;
-    AParcel_readInt32(in, &uid);
-    AParcel_readInt32(in, &mask);
-    AParcel_readInt32(in, &value);
+    // Only allow Manager (or Root/Shell/KSU-allowed apps) to call this
+    uid_t callingUid = getCallingUid();
+    if (callingUid != 0 && callingUid != 2000 && !checkCallerPermission(callingUid)) {
+        LOGW("updateFlagsForUid: permission denied for caller %d", callingUid);
+        return STATUS_PERMISSION_DENIED;
+    }
 
-    // 简化实现：忽略
+    // Shizuku Constants: FLAG_ALLOWED = 8 (1<<3), MASK_PERMISSION = 4 (1<<2) ?
+    // 实际上我们在 Manager 端应该发送正确的 flag。
+    // 这里只要被调用，且 value & 8，就授权。
+    bool is_allowed = (value & 8) != 0;
+
+    // 但是这里要注意，如果 mask 包含 MASK_PERMISSION (4), 则更新 allowed
+    if ((mask & 4) != 0) {
+        LOGI("updateFlagsForUid: uid=%d allowed=%d", uid, is_allowed);
+        std::lock_guard<std::mutex> lock(clientsMutex_);
+        // 遍历更新所有匹配 UID 的客户端
+        for (auto& pair : clients_) {
+            if (pair.second->uid == (uid_t)uid) {
+                pair.second->allowed = is_allowed;
+            }
+        }
+    }
+
+    WRITE_NO_EXCEPTION();
     return STATUS_OK;
 }
+
+#undef WRITE_NO_EXCEPTION
+#undef BW
 
 // ==================== 启动函数 ====================
 
@@ -735,5 +934,3 @@ void start_shizuku_service() {
 
 }  // namespace shizuku
 }  // namespace ksud
-
-#endif // #ifdef __ANDROID__
