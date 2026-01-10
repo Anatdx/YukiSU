@@ -69,9 +69,7 @@ static bool kernel_enable_zygisk(int ksu_fd, bool enable) {
 
 // Wait for zygote
 static bool kernel_wait_zygote(int ksu_fd, int* pid, bool* is_64bit, uint32_t timeout_ms) {
-    ksu_zygisk_wait_cmd cmd;
-    cmd.pid = 0;
-    cmd.is_64bit = 0;
+    ksu_zygisk_wait_cmd cmd = {};  // Zero-initialize including padding
     cmd.timeout_ms = timeout_ms;
 
     int ret = ioctl(ksu_fd, KSU_IOCTL_ZYGISK_WAIT_ZYGOTE, &cmd);
