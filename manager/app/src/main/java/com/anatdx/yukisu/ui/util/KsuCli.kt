@@ -91,17 +91,6 @@ object KsuCli {
             val apkKsudVersion = getApkKsudVersion()
             val installedKsudVersion = getInstalledKsudVersion()
             
-            Log.i(TAG, "checkAndInstallKsud: apk=$apkKsudVersion, installed=$installedKsudVersion")
-            
-    /**
-     * Check if ksud needs to be installed or updated.
-     * Called after SuperKey authentication succeeds.
-     */
-    private fun checkAndInstallKsud() {
-        try {
-            val apkKsudVersion = getApkKsudVersion()
-            val installedKsudVersion = getInstalledKsudVersion()
-            
             Log.i(TAG, "checkAndInstallKsud check: apk=$apkKsudVersion, installed=$installedKsudVersion")
             
             if (installedKsudVersion == null) {
