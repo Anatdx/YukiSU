@@ -414,12 +414,11 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			}
 			rcu_read_unlock();
 
-			// Only stop execve hook if zygisk is NOT enabled
-			// If zygisk is enabled, we need to keep detecting
-			// app_process
-			if (!ksu_zygisk_is_enabled()) {
-				stop_execve_hook();
-			}
+			// Don't stop execve hook here - keep it alive for
+			// potential zygisk support. The daemon will explicitly
+			// disable the hook if zygisk is not needed.
+			// This allows zygisk daemon to start after first zygote
+			// and still catch subsequent zygote restarts.
 		}
 
 		// Notify zygisk subsystem (will pause if zygisk enabled)

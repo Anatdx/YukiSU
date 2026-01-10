@@ -74,21 +74,21 @@ bool ksu_zygisk_is_enabled(void)
  * 2. Wake up the daemon
  * 3. Send SIGSTOP to ourselves (the zygote)
  * 4. Daemon will send SIGCONT when injection is complete
+ *
+ * NOTE: We always record app_process even if zygisk is not yet enabled.
+ * This allows the daemon to catch zygote that started before it could enable.
+ * The SIGSTOP is only sent if zygisk is enabled.
  */
 bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 {
 	unsigned long flags;
-
-	if (!zygisk_enabled) {
-		return false;
-	}
-
-	pr_info("ksu_zygisk: detected app_process pid=%d is_64bit=%d\n", pid,
-		is_64bit);
+	bool should_stop;
 
 	spin_lock_irqsave(&zygisk_lock, flags);
+	should_stop = zygisk_enabled;
 
-	// Store pending zygote info
+	// Always store pending zygote info, even if zygisk not yet enabled
+	// This allows late-starting daemon to know about zygote
 	pending_zygote.pid = pid;
 	pending_zygote.is_64bit = is_64bit;
 	pending_zygote.valid = true;
@@ -96,15 +96,21 @@ bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 
 	spin_unlock_irqrestore(&zygisk_lock, flags);
 
-	// Wake up waiting daemon
+	pr_info(
+	    "ksu_zygisk: detected app_process pid=%d is_64bit=%d enabled=%d\n",
+	    pid, is_64bit, should_stop);
+
+	// Wake up waiting daemon (if any)
 	wake_up_interruptible(&zygisk_wait_queue);
 
-	// Stop ourselves - daemon will continue us after injection
-	// Use SIGSTOP so we're in a known stopped state
-	pr_info("ksu_zygisk: stopping zygote pid=%d for injection\n", pid);
+	if (!should_stop) {
+		// Zygisk not enabled yet, don't stop zygote
+		// Daemon will have to use ptrace to catch it later
+		return false;
+	}
 
-	// Send SIGSTOP to current process
-	// The daemon will PTRACE_ATTACH and inject, then SIGCONT
+	// Stop ourselves - daemon will continue us after injection
+	pr_info("ksu_zygisk: stopping zygote pid=%d for injection\n", pid);
 	send_sig(SIGSTOP, current, 0);
 
 	return true;

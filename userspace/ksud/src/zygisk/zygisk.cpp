@@ -14,9 +14,12 @@
 #include <cerrno>
 #include <cstring>
 #include <thread>
+#include <vector>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/ioctl.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -129,6 +132,55 @@ static void spawn_tracer(int target_pid, bool is_64bit) {
     }
 }
 
+// Check if zygote is already running and kill it to allow re-injection
+static void kill_existing_zygote() {
+    // Read /proc to find zygote processes
+    DIR* proc = opendir("/proc");
+    if (!proc) {
+        return;
+    }
+
+    std::vector<pid_t> zygote_pids;
+    struct dirent* entry;
+    while ((entry = readdir(proc)) != nullptr) {
+        // Only process numeric directories (PIDs)
+        if (entry->d_type != DT_DIR)
+            continue;
+        char* endptr;
+        pid_t pid = strtol(entry->d_name, &endptr, 10);
+        if (*endptr != '\0' || pid <= 0)
+            continue;
+
+        // Read cmdline
+        char cmdline_path[64];
+        snprintf(cmdline_path, sizeof(cmdline_path), "/proc/%d/cmdline", pid);
+        int fd = open(cmdline_path, O_RDONLY);
+        if (fd < 0)
+            continue;
+
+        char cmdline[256] = {0};
+        read(fd, cmdline, sizeof(cmdline) - 1);
+        close(fd);
+
+        // Check if it's zygote
+        if (strstr(cmdline, "zygote") != nullptr) {
+            zygote_pids.push_back(pid);
+        }
+    }
+    closedir(proc);
+
+    // Kill all zygote processes
+    for (pid_t pid : zygote_pids) {
+        LOGI("Killing existing zygote pid=%d for re-injection", pid);
+        kill(pid, SIGKILL);
+    }
+
+    if (!zygote_pids.empty()) {
+        // Wait a bit for system to restart zygote
+        usleep(100000);  // 100ms
+    }
+}
+
 // Monitor thread function
 static void monitor_thread_func() {
     LOGI("Zygisk monitor thread started");
@@ -140,11 +192,15 @@ static void monitor_thread_func() {
         return;
     }
 
-    // Enable zygisk in kernel
+    // Enable zygisk in kernel FIRST
     if (!kernel_enable_zygisk(ksu_fd, true)) {
         LOGE("Failed to enable zygisk in kernel");
         return;
     }
+
+    // Check if zygote is already running - if so, kill it
+    // System will restart zygote and we'll catch it this time
+    kill_existing_zygote();
 
     g_running = true;
 
