@@ -21,13 +21,8 @@
 #include <linux/ioctl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
-#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-static inline pid_t gettid() {
-    return syscall(__NR_gettid);
-}
 
 namespace ksud {
 namespace zygisk {
