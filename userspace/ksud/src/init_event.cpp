@@ -278,13 +278,12 @@ int run_daemon() {
     LOGI("Version: %s", VERSION_NAME);
 
     // =========================================================================
-    // Phase 0: ZYGISK MONITOR (CRITICAL - MUST BE FIRST!)
+    // Phase 0: ZYGISK MONITOR (DISABLED - Kernel handles detection)
     // =========================================================================
-    // Zygisk monitor MUST start BEFORE post-fs-data logic runs,
-    // because zygote can start very soon after post-fs-data begins.
-    // The monitor thread will wait for kernel to detect zygote.
-    LOGI("[Phase 0] Starting Zygisk kernel monitor (CRITICAL)...");
-    zygisk::start_zygisk_monitor();
+    // DISABLED: Kernel now auto-detects and pauses zygote from init fork.
+    // No need for userspace monitor thread.
+    // Injection will be done on-demand via kernel IOCTL when needed.
+    LOGI("[Phase 0] Zygisk monitor disabled (kernel auto-detection)");
 
     // =========================================================================
     // Phase 1: POST-FS-DATA
