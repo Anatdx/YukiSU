@@ -12,30 +12,26 @@ namespace ksud {
 namespace zygisk {
 
 /**
- * Start the zygisk monitoring thread.
+ * Enable zygisk and start injection thread (async, non-blocking).
  * This will:
- * 1. Enable zygisk in kernel via IOCTL
- * 2. Wait for zygote detection (blocking on kernel)
- * 3. Spawn tracer to inject when zygote is detected
+ * 1. Enable zygisk in kernel via IOCTL (tells kernel to SIGSTOP init's zygote)
+ * 2. Wait for both zygotes (32 + 64) in background thread
+ * 3. Inject tracer when each zygote is detected
  * 4. Resume zygote after injection
- * 5. Loop for zygote restarts
+ * 5. Disable zygisk and exit thread after both injected
  *
- * Should be called from run_daemon() before joining Binder thread pool.
+ * Called from Phase 0 (before post-fs-data ends) to ensure enable happens
+ * BEFORE init forks zygote.
  */
-void start_zygisk_monitor();
+void enable_and_inject_async();
 
 /**
- * Stop the zygisk monitoring thread.
- */
-void stop_zygisk_monitor();
-
-/**
- * Check if zygisk support is enabled.
+ * Check if zygisk is enabled (checks /data/adb/.yukizenable file).
  */
 bool is_enabled();
 
 /**
- * Enable/disable zygisk support.
+ * Enable/disable zygisk support (placeholder for CLI).
  */
 void set_enabled(bool enable);
 

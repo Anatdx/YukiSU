@@ -117,6 +117,8 @@ set(SOURCES
     src/binder/shizuku_service.cpp
     # Zygisk kernel support
     src/zygisk/zygisk.cpp
+    src/zygisk/ptracer/injector.cpp
+    src/zygisk/ptracer/ptrace_utils.cpp
     ${ASSETS_CPP}
 )
 

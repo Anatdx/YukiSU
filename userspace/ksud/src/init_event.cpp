@@ -278,12 +278,20 @@ int run_daemon() {
     LOGI("Version: %s", VERSION_NAME);
 
     // =========================================================================
-    // Phase 0: ZYGISK MONITOR (DISABLED - Kernel handles detection)
+    // Phase 0: ZYGISK AUTO-INJECTION (File-based control)
     // =========================================================================
-    // DISABLED: Kernel now auto-detects and pauses zygote from init fork.
-    // No need for userspace monitor thread.
-    // Injection will be done on-demand via kernel IOCTL when needed.
-    LOGI("[Phase 0] Zygisk monitor disabled (kernel auto-detection)");
+    // Check if /data/adb/.yukizenable exists
+    // If yes: Enable zygisk NOW (before zygote forks) and start injection thread
+    // If no: Skip zygisk completely
+    // CRITICAL: Enable must happen BEFORE post-fs-data ends, because zygote
+    // forks immediately after post-fs-data completes.
+    const char* enable_flag = "/data/adb/.yukizenable";
+    if (access(enable_flag, F_OK) == 0) {
+        LOGI("[Phase 0] Found %s - enabling Zygisk injection", enable_flag);
+        zygisk::enable_and_inject_async();
+    } else {
+        LOGI("[Phase 0] No %s - Zygisk disabled", enable_flag);
+    }
 
     // =========================================================================
     // Phase 1: POST-FS-DATA

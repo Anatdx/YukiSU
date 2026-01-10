@@ -20,6 +20,7 @@
 #include "umount.hpp"
 #include "utils.hpp"
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
@@ -29,6 +30,63 @@
 #include <vector>
 
 namespace ksud {
+
+// Zygisk control command
+static int cmd_zygisk(const std::vector<std::string>& args) {
+    const char* flag_file = "/data/adb/.yukizenable";
+
+    if (args.empty()) {
+        printf("Zygisk Injection Control\n\n");
+        printf("USAGE: ksud zygisk <enable|disable|status>\n\n");
+        printf("SUBCOMMANDS:\n");
+        printf("  enable   Enable Zygisk auto-injection at boot\n");
+        printf("  disable  Disable Zygisk injection\n");
+        printf("  status   Show current Zygisk status\n\n");
+        printf("NOTES:\n");
+        printf("  - Enabled: Creates %s\n", flag_file);
+        printf("  - Changes take effect after reboot\n");
+        return 1;
+    }
+
+    std::string subcmd = args[0];
+
+    if (subcmd == "enable") {
+        // Create flag file
+        int fd = open(flag_file, O_CREAT | O_WRONLY, 0644);
+        if (fd < 0) {
+            printf("Failed to create %s: %s\n", flag_file, strerror(errno));
+            return 1;
+        }
+        close(fd);
+        printf("Zygisk enabled. Reboot to apply.\n");
+        return 0;
+
+    } else if (subcmd == "disable") {
+        // Remove flag file
+        if (unlink(flag_file) < 0) {
+            if (errno == ENOENT) {
+                printf("Zygisk already disabled.\n");
+                return 0;
+            }
+            printf("Failed to remove %s: %s\n", flag_file, strerror(errno));
+            return 1;
+        }
+        printf("Zygisk disabled. Reboot to apply.\n");
+        return 0;
+
+    } else if (subcmd == "status") {
+        bool enabled = (access(flag_file, F_OK) == 0);
+        printf("Zygisk: %s\n", enabled ? "enabled" : "disabled");
+        if (enabled) {
+            printf("Flag file: %s exists\n", flag_file);
+        }
+        return 0;
+
+    } else {
+        printf("Unknown zygisk subcommand: %s\n", subcmd.c_str());
+        return 1;
+    }
+}
 
 // Check for self update on startup
 static void check_and_apply_update(int argc, char* argv[]) {
@@ -187,6 +245,7 @@ static void print_usage() {
 #ifdef __aarch64__
     printf("  kpm            KPM module manager\n");
 #endif // #ifdef __aarch64__
+    printf("  zygisk         Manage Zygisk injection\n");
     printf("  help           Show this help\n");
     printf("  version        Show version\n");
 }
@@ -667,6 +726,8 @@ int cli_run(int argc, char* argv[]) {
     } else if (cmd == "kpm") {
         return cmd_kpm(args);
 #endif // #ifdef __aarch64__
+    } else if (cmd == "zygisk") {
+        return cmd_zygisk(args);
     }
 
     printf("Unknown command: %s\n", cmd.c_str());

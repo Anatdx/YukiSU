@@ -2,6 +2,7 @@
  * YukiSU Zygisk Support Implementation
  *
  * Uses kernel IOCTL to detect zygote and coordinate injection.
+ * Integrates YukiZygisk ptracer for built-in injection.
  */
 
 #include "zygisk.hpp"
@@ -9,6 +10,7 @@
 #include "../defs.hpp"
 #include "../hymo/hymo_utils.hpp"
 #include "../log.hpp"
+#include "ptracer/injector.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -21,6 +23,7 @@
 #include <linux/ioctl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/ptrace.h>
 #include <sys/system_properties.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -51,14 +54,19 @@ struct ksu_zygisk_enable_cmd {
     uint8_t enable;
 };
 
-// Tracer paths
+// Tracer/payload paths
+// NOTE: Future plan - integrate YukiZygisk tracer into ksud as "super daemon"
+// For now, we support both modes:
+// 1. External tracer binary (current): /data/adb/yukizygisk/bin/zygisk-ptrace64
+// 2. Built-in ptrace (TODO): Direct injection from ksud
 static constexpr const char* TRACER_PATH_64 = "/data/adb/yukizygisk/bin/zygisk-ptrace64";
 static constexpr const char* TRACER_PATH_32 = "/data/adb/yukizygisk/bin/zygisk-ptrace32";
+static constexpr const char* PAYLOAD_PATH_64 = "/data/adb/yukizygisk/lib64/libzygisk.so";
+static constexpr const char* PAYLOAD_PATH_32 = "/data/adb/yukizygisk/lib/libzygisk.so";
 
 // State
-static std::atomic<bool> g_enabled{false};
-static std::atomic<bool> g_running{false};
-static std::thread g_monitor_thread;
+static std::atomic<bool> g_injection_active{false};
+static std::thread g_injection_thread;
 
 // Enable zygisk in kernel
 static bool kernel_enable_zygisk(int ksu_fd, bool enable) {
@@ -106,21 +114,48 @@ static bool kernel_resume_zygote(int ksu_fd, int pid) {
     return true;
 }
 
-// Spawn tracer to inject
-static void spawn_tracer(int target_pid, bool is_64bit) {
+// Inject payload into zygote using built-in ptracer (YukiZygisk injector)
+static bool inject_zygote_builtin(int target_pid, bool is_64bit) {
+    const char* payload = is_64bit ? PAYLOAD_PATH_64 : PAYLOAD_PATH_32;
+
+    LOGI("inject_zygote_builtin: target_pid=%d is_64bit=%d payload=%s", target_pid, is_64bit,
+         payload);
+
+    if (access(payload, R_OK) != 0) {
+        LOGE("Payload not accessible: %s (errno=%d: %s)", payload, errno, strerror(errno));
+        return false;
+    }
+
+    // Use YukiZygisk's injector directly
+    LOGI("Calling YukiZygisk injector for pid=%d...", target_pid);
+    bool success = yuki::ptracer::injectOnMain(target_pid, payload);
+
+    if (success) {
+        LOGI("YukiZygisk injection succeeded for pid=%d", target_pid);
+    } else {
+        LOGE("YukiZygisk injection failed for pid=%d", target_pid);
+    }
+
+    return success;
+}
+
+// Spawn external tracer binary to inject (current implementation)
+static bool spawn_tracer(int target_pid, bool is_64bit) {
     const char* tracer = is_64bit ? TRACER_PATH_64 : TRACER_PATH_32;
 
-    LOGI("spawn_tracer called: target_pid=%d is_64bit=%d tracer=%s", target_pid, is_64bit, tracer);
+    LOGI("spawn_tracer: target_pid=%d is_64bit=%d tracer=%s", target_pid, is_64bit, tracer);
 
     if (access(tracer, X_OK) != 0) {
         LOGE("Tracer not accessible: %s (errno=%d: %s)", tracer, errno, strerror(errno));
-        return;
+        return false;
     }
 
-    LOGI("Spawning tracer for zygote pid=%d (%s)", target_pid, is_64bit ? "64-bit" : "32-bit");
+    LOGI("Spawning external tracer for zygote pid=%d (%s)", target_pid,
+         is_64bit ? "64-bit" : "32-bit");
 
     pid_t pid = fork();
     if (pid == 0) {
+        // Child process - exec tracer
         char pid_str[16];
         snprintf(pid_str, sizeof(pid_str), "%d", target_pid);
         LOGI("Child: execl(%s, zygisk-ptrace, trace, %s)", tracer, pid_str);
@@ -128,11 +163,13 @@ static void spawn_tracer(int target_pid, bool is_64bit) {
         LOGE("execl tracer failed: %s", strerror(errno));
         _exit(1);
     } else if (pid > 0) {
+        // Parent - wait for tracer to finish
         LOGI("Tracer forked with pid=%d, waiting...", pid);
         int status;
         waitpid(pid, &status, 0);
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            LOGI("Tracer completed successfully (exit code 0)");
+            LOGI("Tracer completed successfully");
+            return true;
         } else if (WIFEXITED(status)) {
             LOGE("Tracer exited with code %d", WEXITSTATUS(status));
         } else if (WIFSIGNALED(status)) {
@@ -140,8 +177,27 @@ static void spawn_tracer(int target_pid, bool is_64bit) {
         } else {
             LOGE("Tracer failed with status %d", status);
         }
+        return false;
     } else {
         LOGE("fork failed: %s", strerror(errno));
+        return false;
+    }
+}
+
+// Unified injection dispatcher - tries built-in first, falls back to external
+static void inject_zygote(int target_pid, bool is_64bit) {
+    // Try built-in ptrace injection first (future "super daemon" mode)
+    if (inject_zygote_builtin(target_pid, is_64bit)) {
+        LOGI("Built-in injection succeeded for pid=%d", target_pid);
+        return;
+    }
+
+    // Fall back to external tracer
+    LOGI("Trying external tracer for pid=%d...", target_pid);
+    if (spawn_tracer(target_pid, is_64bit)) {
+        LOGI("External tracer injection succeeded for pid=%d", target_pid);
+    } else {
+        LOGE("All injection methods failed for pid=%d", target_pid);
     }
 }
 
@@ -230,90 +286,103 @@ static void kill_existing_zygote() {
     }
 }
 
-// Monitor thread function
-static void monitor_thread_func() {
-    LOGI("Zygisk monitor thread started (tid=%d)", gettid());
+// Injection thread function - runs ONCE to inject both zygotes then exits
+static void injection_thread_func() {
+    LOGI("Zygisk injection thread started (tid=%d)", gettid());
 
-    // Get KSU fd (ksud already has it via hymo_utils)
+    // Get KSU fd
     int ksu_fd = hymo::grab_ksu_fd();
     if (ksu_fd < 0) {
-        LOGE("Cannot get KSU fd (fd=%d), zygisk disabled", ksu_fd);
+        LOGE("Cannot get KSU fd (fd=%d), injection aborted", ksu_fd);
         return;
     }
     LOGI("Got KSU fd=%d", ksu_fd);
 
-    // NO LONGER NEED TO ENABLE - kernel auto-detects init's zygote
-    // NO LONGER NEED TO KILL - kernel catches it on first spawn
+    // Enable zygisk in kernel NOW - before post-fs-data ends
+    if (!kernel_enable_zygisk(ksu_fd, true)) {
+        LOGE("Failed to enable zygisk in kernel");
+        return;
+    }
+    LOGI("Zygisk enabled in kernel - waiting for zygotes...");
 
-    g_running = true;
-    LOGI("Monitor thread entering main loop");
+    // Wait for and inject BOTH zygotes (32 + 64)
+    int injected_count = 0;
+    const int MAX_ZYGOTES = 2;
 
-    while (g_running && g_enabled) {
+    while (injected_count < MAX_ZYGOTES) {
         int zygote_pid;
         bool is_64bit;
 
-        LOGI("Calling kernel_wait_zygote (timeout=5000ms)...");
-        // Kernel auto-detects and stops init's zygote
-        // We just wait for it and inject
-        if (!kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, 5000)) {
-            LOGI("kernel_wait_zygote returned false (timeout or error)");
-            continue;
+        LOGI("Waiting for zygote #%d/%d (timeout=10s)...", injected_count + 1, MAX_ZYGOTES);
+
+        if (!kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, 10000)) {
+            LOGW("Timeout waiting for zygote #%d", injected_count + 1);
+            break;
         }
 
-        LOGI("Kernel detected zygote: pid=%d is_64bit=%d", zygote_pid, is_64bit);
+        LOGI("Kernel detected zygote #%d: pid=%d is_64bit=%d", injected_count + 1, zygote_pid,
+             is_64bit);
 
-        // CRITICAL: Verify zygote is actually stopped by kernel
-        // If not stopped, this is stale info from before enable - skip it
+        // Verify stopped
         if (!is_process_stopped(zygote_pid)) {
-            LOGW("Zygote pid=%d is not stopped - skipping (stale detection)", zygote_pid);
+            LOGW("Zygote pid=%d not stopped - skipping", zygote_pid);
             continue;
         }
 
         // Inject
-        spawn_tracer(zygote_pid, is_64bit);
+        inject_zygote(zygote_pid, is_64bit);
 
-        // Resume zygote
+        // Resume
         LOGI("Resuming zygote pid=%d", zygote_pid);
         kernel_resume_zygote(ksu_fd, zygote_pid);
+
+        injected_count++;
     }
 
-    LOGI("Zygisk monitor thread stopped");
+    // Disable zygisk after injection completes
+    kernel_enable_zygisk(ksu_fd, false);
+    LOGI("Zygisk injection complete (%d/%d zygotes injected), thread exiting", injected_count,
+         MAX_ZYGOTES);
 }
 
-void start_zygisk_monitor() {
-    if (g_monitor_thread.joinable()) {
-        LOGW("Zygisk monitor already running");
+// Enable zygisk and start injection in background (called from Phase 0)
+void enable_and_inject_async() {
+    if (g_injection_thread.joinable()) {
+        LOGW("Zygisk injection already running");
         return;
     }
 
-    // Check if zygisk files exist
-    if (access(TRACER_PATH_64, X_OK) != 0 && access(TRACER_PATH_32, X_OK) != 0) {
-        LOGI("Zygisk tracer not found, zygisk support disabled");
+    // Check for either external tracer OR payload files
+    bool has_external_tracer =
+        (access(TRACER_PATH_64, X_OK) == 0 || access(TRACER_PATH_32, X_OK) == 0);
+    bool has_payload = (access(PAYLOAD_PATH_64, R_OK) == 0 || access(PAYLOAD_PATH_32, R_OK) == 0);
+
+    if (!has_external_tracer && !has_payload) {
+        LOGE("Zygisk files not found (need tracer binary OR payload .so)");
         return;
     }
 
-    g_enabled = true;
-    g_monitor_thread = std::thread(monitor_thread_func);
-    LOGI("Zygisk monitor started");
-}
-
-void stop_zygisk_monitor() {
-    g_enabled = false;
-    g_running = false;
-
-    if (g_monitor_thread.joinable()) {
-        g_monitor_thread.join();
+    if (has_external_tracer) {
+        LOGI("Using external tracer mode");
+    }
+    if (has_payload) {
+        LOGI("Payload .so files available (built-in mode when implemented)");
     }
 
-    LOGI("Zygisk monitor stopped");
+    // Start injection thread (async, non-blocking)
+    g_injection_active = true;
+    g_injection_thread = std::thread(injection_thread_func);
+    g_injection_thread.detach();  // Don't wait for it
+    LOGI("Zygisk injection thread started (async)");
 }
 
+// Legacy functions for CLI compatibility
 bool is_enabled() {
-    return g_enabled;
+    return access("/data/adb/.yukizenable", F_OK) == 0;
 }
 
 void set_enabled(bool enable) {
-    g_enabled = enable;
+    // Managed by CLI commands, not runtime
 }
 
 }  // namespace zygisk
