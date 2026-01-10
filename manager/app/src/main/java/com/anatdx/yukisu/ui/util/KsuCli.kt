@@ -145,9 +145,9 @@ object KsuCli {
      */
     private fun getApkKsudVersion(): String? {
         return try {
-            val ksudPath = getKsuDaemonPath()
+            val libKsudPath = File(ksuApp.applicationInfo.nativeLibraryDir, "libksud.so").absolutePath
             // Run ksud from APK to get its version
-            val process = ProcessBuilder(ksudPath, "version")
+            val process = ProcessBuilder(libKsudPath, "version")
                 .redirectErrorStream(true)
                 .start()
             val output = process.inputStream.bufferedReader().readText().trim()
@@ -252,11 +252,21 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
 
 fun install() {
     val start = SystemClock.elapsedRealtime()
-    val ksudPath = getKsuDaemonPath()
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so").absolutePath
-    Log.i(TAG, "install: ksud=$ksudPath, magiskboot=$magiskboot")
-    Log.i(TAG, "install: ksud exists=${File(ksudPath).exists()}, magiskboot exists=${File(magiskboot).exists()}")
-    val result = execKsud("install --magiskboot $magiskboot", true)
+    val libPath = ksuApp.applicationInfo.nativeLibraryDir
+    // Always use APK's libksud.so to run install command to avoid Text File Busy errors
+    val ksudPath = File(libPath, "libksud.so").absolutePath
+    val magiskboot = File(libPath, "libmagiskboot.so").absolutePath
+    
+    Log.i(TAG, "install: using libksud=$ksudPath, magiskboot=$magiskboot")
+    
+    // We construct command manually instead of using execKsud (which uses /data/adb/ksud)
+    val cmd = "$ksudPath install --magiskboot $magiskboot"
+    
+    // Use new root shell to ensure clean environment
+    val result = withNewRootShell {
+        ShellUtils.fastCmdResult(this, cmd)
+    }
+    
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
 }
 
