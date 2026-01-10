@@ -69,47 +69,49 @@ bool ksu_zygisk_is_enabled(void)
  * Called from execve hook when app_process is detected.
  * This runs in the context of the process about to exec app_process.
  *
- * Strategy:
- * 1. Store zygote info for the waiting daemon
- * 2. Wake up the daemon
- * 3. Send SIGSTOP to ourselves (the zygote)
- * 4. Daemon will send SIGCONT when injection is complete
+ * Strategy (v2 - Init-based detection):
+ * 1. Check if parent process is init (pid=1)
+ * 2. If yes, this is the real zygote spawned by init
+ * 3. Unconditionally SIGSTOP it and record info
+ * 4. Wake up daemon to inject
+ * 5. Daemon sends SIGCONT when done
  *
- * NOTE: We always record app_process even if zygisk is not yet enabled.
- * This allows the daemon to catch zygote that started before it could enable.
- * The SIGSTOP is only sent if zygisk is enabled.
+ * This eliminates race conditions - we catch zygote before it starts,
+ * regardless of when daemon starts.
  */
 bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 {
 	unsigned long flags;
-	bool should_stop;
+	bool is_init_child = false;
 
+	// Check if parent is init (zygote is forked by init)
+	if (current->real_parent && current->real_parent->pid == 1) {
+		is_init_child = true;
+	}
+
+	if (!is_init_child) {
+		// Not init's child - probably app forked from zygote
+		// Or secondary zygote processes - ignore
+		// Don't spam logs with every app_process
+		return false;
+	}
+
+	// This is init's child - the real zygote!
 	spin_lock_irqsave(&zygisk_lock, flags);
-	should_stop = zygisk_enabled;
-
-	// Always store pending zygote info, even if zygisk not yet enabled
-	// This allows late-starting daemon to know about zygote
 	pending_zygote.pid = pid;
 	pending_zygote.is_64bit = is_64bit;
 	pending_zygote.valid = true;
 	reinit_completion(&pending_zygote.done);
-
 	spin_unlock_irqrestore(&zygisk_lock, flags);
 
-	pr_info(
-	    "ksu_zygisk: detected app_process pid=%d is_64bit=%d enabled=%d\n",
-	    pid, is_64bit, should_stop);
+	pr_info("ksu_zygisk: detected zygote from init: pid=%d is_64bit=%d "
+		"parent=%d\n",
+		pid, is_64bit, current->real_parent->pid);
 
-	// Wake up waiting daemon (if any)
+	// Wake up waiting daemon
 	wake_up_interruptible(&zygisk_wait_queue);
 
-	if (!should_stop) {
-		// Zygisk not enabled yet, don't stop zygote
-		// Daemon will have to use ptrace to catch it later
-		return false;
-	}
-
-	// Stop ourselves - daemon will continue us after injection
+	// Unconditionally stop zygote - daemon will resume it
 	pr_info("ksu_zygisk: stopping zygote pid=%d for injection\n", pid);
 	send_sig(SIGSTOP, current, 0);
 
@@ -128,10 +130,7 @@ int ksu_zygisk_wait_zygote(int *pid, bool *is_64bit, unsigned int timeout_ms)
 	long ret;
 	unsigned long timeout_jiffies;
 
-	if (!zygisk_enabled) {
-		pr_warn("ksu_zygisk: wait called but zygisk is disabled\n");
-		return -ENOENT;
-	}
+	// No longer need enabled check - zygote detection is automatic
 
 	if (timeout_ms == 0) {
 		timeout_jiffies = MAX_SCHEDULE_TIMEOUT;

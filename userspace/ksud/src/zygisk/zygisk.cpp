@@ -21,8 +21,13 @@
 #include <linux/ioctl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/system_properties.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#ifndef PROP_VALUE_MAX
+#define PROP_VALUE_MAX 92
+#endif // #ifndef PROP_VALUE_MAX
 
 namespace ksud {
 namespace zygisk {
@@ -140,6 +145,42 @@ static void spawn_tracer(int target_pid, bool is_64bit) {
     }
 }
 
+// Check if process is in stopped state
+static bool is_process_stopped(pid_t pid) {
+    char stat_path[64];
+    snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", pid);
+
+    int fd = open(stat_path, O_RDONLY);
+    if (fd < 0) {
+        LOGE("Cannot open %s: %s", stat_path, strerror(errno));
+        return false;
+    }
+
+    char stat[512] = {0};
+    ssize_t n = read(fd, stat, sizeof(stat) - 1);
+    close(fd);
+
+    if (n <= 0) {
+        LOGE("Cannot read %s", stat_path);
+        return false;
+    }
+
+    // Format: pid (comm) state ...
+    // state is the first character after the second ')'
+    char* p = strrchr(stat, ')');
+    if (!p || p[1] != ' ') {
+        LOGE("Invalid stat format");
+        return false;
+    }
+
+    char state = p[2];
+    // T = stopped (on a signal)
+    // t = tracing stop
+    bool is_stopped = (state == 'T' || state == 't');
+    LOGI("Process %d state: %c (stopped=%d)", pid, state, is_stopped);
+    return is_stopped;
+}
+
 // Check if zygote is already running and kill it to allow re-injection
 static void kill_existing_zygote() {
     // Read /proc to find zygote processes
@@ -189,9 +230,38 @@ static void kill_existing_zygote() {
     }
 }
 
+// Wait for system property
+static bool wait_for_property(const char* prop, const char* expected_value, int timeout_sec = 30) {
+    char value[PROP_VALUE_MAX] = {0};
+    int elapsed = 0;
+
+    while (elapsed < timeout_sec) {
+        if (__system_property_get(prop, value) > 0) {
+            if (strcmp(value, expected_value) == 0) {
+                LOGI("Property %s = %s", prop, value);
+                return true;
+            }
+        }
+        sleep(1);
+        elapsed++;
+    }
+
+    LOGE("Timeout waiting for property %s = %s", prop, expected_value);
+    return false;
+}
+
 // Monitor thread function
 static void monitor_thread_func() {
     LOGI("Zygisk monitor thread started (tid=%d)", gettid());
+
+    // CRITICAL: Wait for system boot to complete
+    // This prevents interfering with system startup
+    LOGI("Waiting for sys.boot_completed...");
+    if (!wait_for_property("sys.boot_completed", "1", 120)) {
+        LOGE("System boot not completed, aborting zygisk");
+        return;
+    }
+    LOGI("System boot completed, starting zygisk injection");
 
     // Get KSU fd (ksud already has it via hymo_utils)
     int ksu_fd = hymo::grab_ksu_fd();
@@ -201,15 +271,8 @@ static void monitor_thread_func() {
     }
     LOGI("Got KSU fd=%d", ksu_fd);
 
-    // Enable zygisk in kernel FIRST
-    if (!kernel_enable_zygisk(ksu_fd, true)) {
-        LOGE("Failed to enable zygisk in kernel");
-        return;
-    }
-
-    // Check if zygote is already running - if so, kill it
-    // System will restart zygote and we'll catch it this time
-    kill_existing_zygote();
+    // NO LONGER NEED TO ENABLE - kernel auto-detects init's zygote
+    // NO LONGER NEED TO KILL - kernel catches it on first spawn
 
     g_running = true;
     LOGI("Monitor thread entering main loop");
@@ -219,14 +282,21 @@ static void monitor_thread_func() {
         bool is_64bit;
 
         LOGI("Calling kernel_wait_zygote (timeout=5000ms)...");
-        // Wait for kernel to detect and pause zygote
-        // Use 5 second timeout so we can check g_running periodically
+        // Kernel auto-detects and stops init's zygote
+        // We just wait for it and inject
         if (!kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, 5000)) {
             LOGI("kernel_wait_zygote returned false (timeout or error)");
             continue;
         }
 
         LOGI("Kernel detected zygote: pid=%d is_64bit=%d", zygote_pid, is_64bit);
+
+        // CRITICAL: Verify zygote is actually stopped by kernel
+        // If not stopped, this is stale info from before enable - skip it
+        if (!is_process_stopped(zygote_pid)) {
+            LOGW("Zygote pid=%d is not stopped - skipping (stale detection)", zygote_pid);
+            continue;
+        }
 
         // Inject
         spawn_tracer(zygote_pid, is_64bit);
@@ -235,9 +305,6 @@ static void monitor_thread_func() {
         LOGI("Resuming zygote pid=%d", zygote_pid);
         kernel_resume_zygote(ksu_fd, zygote_pid);
     }
-
-    // Disable zygisk in kernel
-    kernel_enable_zygisk(ksu_fd, false);
 
     LOGI("Zygisk monitor thread stopped");
 }
