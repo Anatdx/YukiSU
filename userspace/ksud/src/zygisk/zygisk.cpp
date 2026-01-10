@@ -21,8 +21,13 @@
 #include <linux/ioctl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+static inline pid_t gettid() {
+    return syscall(__NR_gettid);
+}
 
 namespace ksud {
 namespace zygisk {
@@ -105,8 +110,10 @@ static bool kernel_resume_zygote(int ksu_fd, int pid) {
 static void spawn_tracer(int target_pid, bool is_64bit) {
     const char* tracer = is_64bit ? TRACER_PATH_64 : TRACER_PATH_32;
 
+    LOGI("spawn_tracer called: target_pid=%d is_64bit=%d tracer=%s", target_pid, is_64bit, tracer);
+
     if (access(tracer, X_OK) != 0) {
-        LOGE("Tracer not found: %s", tracer);
+        LOGE("Tracer not accessible: %s (errno=%d: %s)", tracer, errno, strerror(errno));
         return;
     }
 
@@ -116,14 +123,20 @@ static void spawn_tracer(int target_pid, bool is_64bit) {
     if (pid == 0) {
         char pid_str[16];
         snprintf(pid_str, sizeof(pid_str), "%d", target_pid);
+        LOGI("Child: execl(%s, zygisk-ptrace, trace, %s)", tracer, pid_str);
         execl(tracer, "zygisk-ptrace", "trace", pid_str, nullptr);
         LOGE("execl tracer failed: %s", strerror(errno));
         _exit(1);
     } else if (pid > 0) {
+        LOGI("Tracer forked with pid=%d, waiting...", pid);
         int status;
         waitpid(pid, &status, 0);
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            LOGI("Tracer completed successfully");
+            LOGI("Tracer completed successfully (exit code 0)");
+        } else if (WIFEXITED(status)) {
+            LOGE("Tracer exited with code %d", WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            LOGE("Tracer killed by signal %d", WTERMSIG(status));
         } else {
             LOGE("Tracer failed with status %d", status);
         }
@@ -183,14 +196,15 @@ static void kill_existing_zygote() {
 
 // Monitor thread function
 static void monitor_thread_func() {
-    LOGI("Zygisk monitor thread started");
+    LOGI("Zygisk monitor thread started (tid=%d)", gettid());
 
     // Get KSU fd (ksud already has it via hymo_utils)
     int ksu_fd = hymo::grab_ksu_fd();
     if (ksu_fd < 0) {
-        LOGE("Cannot get KSU fd, zygisk disabled");
+        LOGE("Cannot get KSU fd (fd=%d), zygisk disabled", ksu_fd);
         return;
     }
+    LOGI("Got KSU fd=%d", ksu_fd);
 
     // Enable zygisk in kernel FIRST
     if (!kernel_enable_zygisk(ksu_fd, true)) {
@@ -203,14 +217,17 @@ static void monitor_thread_func() {
     kill_existing_zygote();
 
     g_running = true;
+    LOGI("Monitor thread entering main loop");
 
     while (g_running && g_enabled) {
         int zygote_pid;
         bool is_64bit;
 
+        LOGI("Calling kernel_wait_zygote (timeout=5000ms)...");
         // Wait for kernel to detect and pause zygote
         // Use 5 second timeout so we can check g_running periodically
         if (!kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, 5000)) {
+            LOGI("kernel_wait_zygote returned false (timeout or error)");
             continue;
         }
 
@@ -220,6 +237,7 @@ static void monitor_thread_func() {
         spawn_tracer(zygote_pid, is_64bit);
 
         // Resume zygote
+        LOGI("Resuming zygote pid=%d", zygote_pid);
         kernel_resume_zygote(ksu_fd, zygote_pid);
     }
 
