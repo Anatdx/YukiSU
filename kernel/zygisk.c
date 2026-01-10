@@ -91,6 +91,7 @@ bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 {
 	unsigned long flags;
 	bool is_init_child = false;
+	bool should_stop = false;
 
 	// Check if parent is init (zygote is forked by init)
 	if (current->real_parent && current->real_parent->pid == 1) {
@@ -105,8 +106,11 @@ bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 	}
 
 	// This is init's child - the real zygote!
-	// Store to appropriate slot based on bitness
+	// Check if zygisk is enabled
 	spin_lock_irqsave(&zygisk_lock, flags);
+	should_stop = zygisk_enabled;
+
+	// Always record (even if disabled) for late-starting daemon
 	if (is_64bit) {
 		pending_zygote64.pid = pid;
 		pending_zygote64.valid = true;
@@ -119,13 +123,18 @@ bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 	spin_unlock_irqrestore(&zygisk_lock, flags);
 
 	pr_info("ksu_zygisk: detected zygote from init: pid=%d is_64bit=%d "
-		"parent=%d\n",
-		pid, is_64bit, current->real_parent->pid);
+		"parent=%d enabled=%d\n",
+		pid, is_64bit, current->real_parent->pid, should_stop);
 
 	// Wake up waiting daemon
 	wake_up_interruptible(&zygisk_wait_queue);
 
-	// Unconditionally stop zygote - daemon will resume it
+	if (!should_stop) {
+		// Zygisk not enabled, don't stop zygote
+		return false;
+	}
+
+	// Zygisk enabled - stop zygote for injection
 	pr_info("ksu_zygisk: stopping zygote pid=%d for injection\n", pid);
 	send_sig(SIGSTOP, current, 0);
 
@@ -144,7 +153,11 @@ int ksu_zygisk_wait_zygote(int *pid, bool *is_64bit, unsigned int timeout_ms)
 	long ret;
 	unsigned long timeout_jiffies;
 
-	// No longer need enabled check - zygote detection is automatic
+	// Check if zygisk is enabled
+	if (!zygisk_enabled) {
+		pr_warn("ksu_zygisk: wait called but zygisk is disabled\n");
+		return -ENOENT;
+	}
 
 	if (timeout_ms == 0) {
 		timeout_jiffies = MAX_SCHEDULE_TIMEOUT;
