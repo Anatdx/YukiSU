@@ -230,38 +230,9 @@ static void kill_existing_zygote() {
     }
 }
 
-// Wait for system property
-static bool wait_for_property(const char* prop, const char* expected_value, int timeout_sec = 30) {
-    char value[PROP_VALUE_MAX] = {0};
-    int elapsed = 0;
-
-    while (elapsed < timeout_sec) {
-        if (__system_property_get(prop, value) > 0) {
-            if (strcmp(value, expected_value) == 0) {
-                LOGI("Property %s = %s", prop, value);
-                return true;
-            }
-        }
-        sleep(1);
-        elapsed++;
-    }
-
-    LOGE("Timeout waiting for property %s = %s", prop, expected_value);
-    return false;
-}
-
 // Monitor thread function
 static void monitor_thread_func() {
     LOGI("Zygisk monitor thread started (tid=%d)", gettid());
-
-    // CRITICAL: Wait for system boot to complete
-    // This prevents interfering with system startup
-    LOGI("Waiting for sys.boot_completed...");
-    if (!wait_for_property("sys.boot_completed", "1", 120)) {
-        LOGE("System boot not completed, aborting zygisk");
-        return;
-    }
-    LOGI("System boot completed, starting zygisk injection");
 
     // Get KSU fd (ksud already has it via hymo_utils)
     int ksu_fd = hymo::grab_ksu_fd();

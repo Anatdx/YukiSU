@@ -21,7 +21,7 @@
 static bool zygisk_enabled __read_mostly = false;
 static DEFINE_SPINLOCK(zygisk_lock);
 
-// Pending zygote info
+// Pending zygote info - separate for 32-bit and 64-bit
 struct zygote_info {
 	pid_t pid;
 	bool is_64bit;
@@ -29,9 +29,16 @@ struct zygote_info {
 	struct completion done;
 };
 
-static struct zygote_info pending_zygote = {
+// Two zygotes: zygote (32-bit) and zygote64 (64-bit)
+static struct zygote_info pending_zygote32 = {
     .pid = 0,
     .is_64bit = false,
+    .valid = false,
+};
+
+static struct zygote_info pending_zygote64 = {
+    .pid = 0,
+    .is_64bit = true,
     .valid = false,
 };
 
@@ -41,7 +48,8 @@ static DECLARE_WAIT_QUEUE_HEAD(zygisk_wait_queue);
 void ksu_zygisk_init(void)
 {
 	pr_info("ksu_zygisk: initializing\n");
-	init_completion(&pending_zygote.done);
+	init_completion(&pending_zygote32.done);
+	init_completion(&pending_zygote64.done);
 }
 
 void ksu_zygisk_exit(void)
@@ -97,11 +105,17 @@ bool ksu_zygisk_on_app_process(pid_t pid, bool is_64bit)
 	}
 
 	// This is init's child - the real zygote!
+	// Store to appropriate slot based on bitness
 	spin_lock_irqsave(&zygisk_lock, flags);
-	pending_zygote.pid = pid;
-	pending_zygote.is_64bit = is_64bit;
-	pending_zygote.valid = true;
-	reinit_completion(&pending_zygote.done);
+	if (is_64bit) {
+		pending_zygote64.pid = pid;
+		pending_zygote64.valid = true;
+		reinit_completion(&pending_zygote64.done);
+	} else {
+		pending_zygote32.pid = pid;
+		pending_zygote32.valid = true;
+		reinit_completion(&pending_zygote32.done);
+	}
 	spin_unlock_irqrestore(&zygisk_lock, flags);
 
 	pr_info("ksu_zygisk: detected zygote from init: pid=%d is_64bit=%d "
@@ -141,12 +155,12 @@ int ksu_zygisk_wait_zygote(int *pid, bool *is_64bit, unsigned int timeout_ms)
 	pr_info("ksu_zygisk: daemon waiting for zygote (timeout=%u ms)\n",
 		timeout_ms);
 
-	// Wait for a zygote to be detected
+	// Wait for any zygote to be detected
 	ret = wait_event_interruptible_timeout(
 	    zygisk_wait_queue, ({
 		    bool valid;
 		    spin_lock_irqsave(&zygisk_lock, flags);
-		    valid = pending_zygote.valid;
+		    valid = pending_zygote64.valid || pending_zygote32.valid;
 		    spin_unlock_irqrestore(&zygisk_lock, flags);
 		    valid;
 	    }),
@@ -162,14 +176,21 @@ int ksu_zygisk_wait_zygote(int *pid, bool *is_64bit, unsigned int timeout_ms)
 		return -ETIMEDOUT;
 	}
 
-	// Get the zygote info
+	// Get the zygote info - prefer 64-bit first, then 32-bit
 	spin_lock_irqsave(&zygisk_lock, flags);
-	if (pending_zygote.valid) {
-		*pid = pending_zygote.pid;
-		*is_64bit = pending_zygote.is_64bit;
-		pending_zygote.valid = false; // Consumed
+	if (pending_zygote64.valid) {
+		*pid = pending_zygote64.pid;
+		*is_64bit = pending_zygote64.is_64bit;
+		pending_zygote64.valid = false; // Consumed
 		spin_unlock_irqrestore(&zygisk_lock, flags);
-
+		pr_info("ksu_zygisk: returning zygote pid=%d is_64bit=%d\n",
+			*pid, *is_64bit);
+		return 0;
+	} else if (pending_zygote32.valid) {
+		*pid = pending_zygote32.pid;
+		*is_64bit = pending_zygote32.is_64bit;
+		pending_zygote32.valid = false; // Consumed
+		spin_unlock_irqrestore(&zygisk_lock, flags);
 		pr_info("ksu_zygisk: returning zygote pid=%d is_64bit=%d\n",
 			*pid, *is_64bit);
 		return 0;
