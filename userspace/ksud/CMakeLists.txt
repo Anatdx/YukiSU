@@ -90,6 +90,7 @@ set(SOURCES
     src/umount.cpp
     src/debug.cpp
     src/kpm.cpp
+    src/property_monitor.cpp
     # Core features
     src/core/hide_bootloader.cpp
     # Flash kernel packages

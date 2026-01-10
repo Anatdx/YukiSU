@@ -13,6 +13,7 @@
 #include "module/module.hpp"
 #include "module/module_config.hpp"
 #include "profile/profile.hpp"
+#include "property_monitor.hpp"
 #include "sepolicy/sepolicy.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
@@ -233,16 +234,8 @@ void on_services() {
     // Service stage is the correct timing - after boot_completed is set
     hide_bootloader_status();
 
-    // Start Murasaki Binder service (in background)
-    // 使用真正的 Android Binder 向 ServiceManager 注册
-
-    LOGI("Starting Murasaki Binder service...");
-    murasaki::start_murasaki_binder_service_async();
-
-    // Start Shizuku compatible service
-    // 让现有 Shizuku/Sui 生态的 App 可以直接使用
-    LOGI("Starting Shizuku compatible service...");
-    shizuku::start_shizuku_service();
+    // Note: Binder services are initialized in run_daemon() now
+    // This function is kept for standalone `ksud services` command
 
     run_stage("service", false);
     LOGI("services completed");
@@ -281,30 +274,52 @@ void on_boot_completed() {
 }
 
 int run_daemon() {
-    LOGI("Starting ksud daemon...");
+    LOGI("=== YukiSU Daemon Starting ===");
+    LOGI("Version: %s", VERSION_NAME);
 
-    // Switch to global mount namespace
-    // This is crucial for visibility across Apps
+    // =========================================================================
+    // Phase 0: ZYGISK MONITOR (CRITICAL - MUST BE FIRST!)
+    // =========================================================================
+    // Zygisk monitor MUST start BEFORE post-fs-data logic runs,
+    // because zygote can start very soon after post-fs-data begins.
+    // The monitor thread will wait for kernel to detect zygote.
+    LOGI("[Phase 0] Starting Zygisk kernel monitor (CRITICAL)...");
+    zygisk::start_zygisk_monitor();
+
+    // =========================================================================
+    // Phase 1: POST-FS-DATA
+    // =========================================================================
+    LOGI("[Phase 1] Executing post-fs-data...");
+    on_post_data_fs();
+
+    // =========================================================================
+    // Phase 2: SERVICES
+    // =========================================================================
+    LOGI("[Phase 2] Executing services...");
+    on_services();
+
+    // =========================================================================
+    // Phase 3: BINDER SERVICES
+    // =========================================================================
+    LOGI("[Phase 3] Initializing Binder services...");
+
+    // Switch to global mount namespace for Binder visibility
     if (!switch_mnt_ns(1)) {
         LOGE("Failed to switch to global mount namespace (PID 1)");
     } else {
         LOGI("Switched to global mount namespace");
     }
 
-    // Patch SEPolicy to allow Binder communication
-    // Essential for App <-> ksud (su domain) communication
-    // And for allowing Apps to find the service (which defaults to default_android_service type)
+    // Patch SEPolicy for Binder communication
     LOGI("Patching SEPolicy for Binder service...");
-    const char* rules =
-        "allow appdomain su binder { call transfer };"
-        "allow shell su binder { call transfer };"
-        "allow su appdomain binder { call transfer };"
-        "allow su shell binder { call transfer };"
-        "allow appdomain default_android_service service_manager find;"
-        "allow shell default_android_service service_manager find;"
-        // Also allow untrusted_app explicitly just in case appdomain is not sufficient
-        "allow untrusted_app_all su binder { call transfer };"
-        "allow untrusted_app_all default_android_service service_manager find;";
+    const char* rules = "allow appdomain su binder { call transfer };"
+                        "allow shell su binder { call transfer };"
+                        "allow su appdomain binder { call transfer };"
+                        "allow su shell binder { call transfer };"
+                        "allow appdomain default_android_service service_manager find;"
+                        "allow shell default_android_service service_manager find;"
+                        "allow untrusted_app_all su binder { call transfer };"
+                        "allow untrusted_app_all default_android_service service_manager find;";
 
     int sepolicy_ret = sepolicy_live_patch(rules);
     if (sepolicy_ret != 0) {
@@ -324,12 +339,17 @@ int run_daemon() {
     LOGI("Initializing Shizuku compatible service...");
     shizuku::start_shizuku_service();
 
-    // 启动 Zygisk 内核监控（如果 zygisk 已安装）
-    LOGI("Starting Zygisk kernel monitor...");
-    zygisk::start_zygisk_monitor();
+    // =========================================================================
+    // Phase 4: PROPERTY MONITOR (boot-completed)
+    // =========================================================================
+    LOGI("[Phase 4] Starting property monitor for boot-completed...");
+    property::start_property_monitor();
 
-    // 加入 Binder 线程池（阻塞）
-    LOGI("Joining Binder thread pool...");
+    // =========================================================================
+    // Phase 5: MAIN LOOP
+    // =========================================================================
+    LOGI("[Phase 5] Entering main loop (Binder thread pool)...");
+    LOGI("=== YukiSU Daemon Ready ===");
     murasaki::MurasakiBinderService::getInstance().joinThreadPool();
 
     return 0;

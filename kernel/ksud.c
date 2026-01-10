@@ -51,22 +51,33 @@ bool ksu_boot_completed __read_mostly = false;
 static const char KERNEL_SU_RC[] =
     "\n"
 
+    // =========================================================================
+    // YukiSU Daemon Service Definition
+    //
+    // The daemon runs continuously and handles ALL stages:
+    // - post-fs-data: Executed immediately on daemon start
+    // - services: Executed after post-fs-data completes
+    // - boot-completed: Triggered by property monitor when sys.boot_completed=1
+    //
+    // Additionally provides:
+    // - Murasaki Binder service (for App<->Root communication)
+    // - Shizuku compatible service
+    // - Zygisk kernel monitor (for zygote injection)
+    // =========================================================================
+
+    "service ksud_daemon " KSUD_PATH " daemon\n"
+    "	class core\n"
+    "	user root\n"
+    "	group root\n"
+    "	seclabel u:r:" KERNEL_SU_DOMAIN ":s0\n"
+    "	disabled\n"
+    "\n"
+
+    // Start daemon at post-fs-data stage
+    // The daemon itself will handle all subsequent stages
     "on post-fs-data\n"
     "	start logd\n"
-    // We should wait for the post-fs-data finish
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " post-fs-data\n"
-    "\n"
-
-    "on nonencrypted\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
-    "\n"
-
-    "on property:vold.decrypt=trigger_restart_framework\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
-    "\n"
-
-    "on property:sys.boot_completed=1\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " boot-completed\n"
+    "	start ksud_daemon\n"
     "\n"
 
     "\n";
