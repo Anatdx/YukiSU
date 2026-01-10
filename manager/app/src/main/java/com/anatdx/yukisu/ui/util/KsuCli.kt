@@ -96,14 +96,47 @@ object KsuCli {
             // Install if: ksud not installed, or version mismatch
             if (installedKsudVersion == null || apkKsudVersion != installedKsudVersion) {
                 Log.i(TAG, "Installing ksud: apk=$apkKsudVersion, installed=$installedKsudVersion")
+                // Kill daemon first to allow file replacement
+                stopKsudDaemon()
                 install()
+                // Restart daemon after install
+                startKsudDaemon()
             } else {
                 Log.d(TAG, "ksud is up-to-date: $installedKsudVersion")
             }
         } catch (e: Exception) {
             Log.e(TAG, "checkAndInstallKsud failed, falling back to install", e)
             // Fallback: always install on error
+            stopKsudDaemon()
             install()
+            startKsudDaemon()
+        }
+    }
+    
+    /**
+     * Stop ksud daemon before updating.
+     */
+    private fun stopKsudDaemon() {
+        try {
+            Log.i(TAG, "Stopping ksud daemon for update...")
+            ShellUtils.fastCmd(SHELL, "pkill -9 -f 'ksud daemon' 2>/dev/null || true")
+            // Give it a moment to die
+            Thread.sleep(100)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to stop ksud daemon", e)
+        }
+    }
+    
+    /**
+     * Start ksud daemon after updating.
+     */
+    private fun startKsudDaemon() {
+        try {
+            Log.i(TAG, "Starting ksud daemon after update...")
+            // Start daemon in background
+            ShellUtils.fastCmd(SHELL, "/data/adb/ksud daemon &")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start ksud daemon", e)
         }
     }
     
