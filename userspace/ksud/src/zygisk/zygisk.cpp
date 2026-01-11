@@ -54,13 +54,7 @@ struct ksu_zygisk_enable_cmd {
     uint8_t enable;
 };
 
-// Tracer/payload paths
-// NOTE: Future plan - integrate YukiZygisk tracer into ksud as "super daemon"
-// For now, we support both modes:
-// 1. External tracer binary (current): /data/adb/yukizygisk/bin/zygisk-ptrace64
-// 2. Built-in ptrace (TODO): Direct injection from ksud
-static constexpr const char* TRACER_PATH_64 = "/data/adb/yukizygisk/bin/zygisk-ptrace64";
-static constexpr const char* TRACER_PATH_32 = "/data/adb/yukizygisk/bin/zygisk-ptrace32";
+// Payload paths for zygisk injection
 static constexpr const char* PAYLOAD_PATH_64 = "/data/adb/yukizygisk/lib64/libzygisk.so";
 static constexpr const char* PAYLOAD_PATH_32 = "/data/adb/yukizygisk/lib/libzygisk.so";
 
@@ -126,21 +120,20 @@ static bool kernel_resume_zygote(int ksu_fd, int pid) {
     return true;
 }
 
-// Inject payload into zygote using built-in ptracer (YukiZygisk injector)
-static bool inject_zygote_builtin(int target_pid, bool is_64bit) {
+// Inject zygote using built-in ptrace injector
+static void inject_zygote(int target_pid, bool is_64bit) {
     const char* payload = is_64bit ? PAYLOAD_PATH_64 : PAYLOAD_PATH_32;
 
-    LOGI("inject_zygote_builtin: target_pid=%d is_64bit=%d payload=%s", target_pid, is_64bit,
-         payload);
+    LOGI("inject_zygote: target_pid=%d is_64bit=%d payload=%s", target_pid, is_64bit, payload);
 
-    // Check payload exists BEFORE attaching to avoid leaving process stopped
+    // Check payload exists BEFORE injecting
     if (access(payload, R_OK) != 0) {
         LOGE("Payload not accessible: %s (errno=%d: %s) - ABORT injection", payload, errno,
              strerror(errno));
-        return false;  // Don't attach if we can't inject
+        return;
     }
 
-    // Use YukiZygisk's injector directly
+    // Use YukiZygisk's injector
     LOGI("Calling YukiZygisk injector for pid=%d...", target_pid);
     bool success = yuki::ptracer::injectOnMain(target_pid, payload);
 
@@ -148,70 +141,6 @@ static bool inject_zygote_builtin(int target_pid, bool is_64bit) {
         LOGI("YukiZygisk injection succeeded for pid=%d", target_pid);
     } else {
         LOGE("YukiZygisk injection failed for pid=%d", target_pid);
-    }
-
-    return success;
-}
-
-// Spawn external tracer binary to inject (current implementation)
-static bool spawn_tracer(int target_pid, bool is_64bit) {
-    const char* tracer = is_64bit ? TRACER_PATH_64 : TRACER_PATH_32;
-
-    LOGI("spawn_tracer: target_pid=%d is_64bit=%d tracer=%s", target_pid, is_64bit, tracer);
-
-    if (access(tracer, X_OK) != 0) {
-        LOGE("Tracer not accessible: %s (errno=%d: %s)", tracer, errno, strerror(errno));
-        return false;
-    }
-
-    LOGI("Spawning external tracer for zygote pid=%d (%s)", target_pid,
-         is_64bit ? "64-bit" : "32-bit");
-
-    pid_t pid = fork();
-    if (pid == 0) {
-        // Child process - exec tracer
-        char pid_str[16];
-        snprintf(pid_str, sizeof(pid_str), "%d", target_pid);
-        LOGI("Child: execl(%s, zygisk-ptrace, trace, %s)", tracer, pid_str);
-        execl(tracer, "zygisk-ptrace", "trace", pid_str, nullptr);
-        LOGE("execl tracer failed: %s", strerror(errno));
-        _exit(1);
-    } else if (pid > 0) {
-        // Parent - wait for tracer to finish
-        LOGI("Tracer forked with pid=%d, waiting...", pid);
-        int status;
-        waitpid(pid, &status, 0);
-        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            LOGI("Tracer completed successfully");
-            return true;
-        } else if (WIFEXITED(status)) {
-            LOGE("Tracer exited with code %d", WEXITSTATUS(status));
-        } else if (WIFSIGNALED(status)) {
-            LOGE("Tracer killed by signal %d", WTERMSIG(status));
-        } else {
-            LOGE("Tracer failed with status %d", status);
-        }
-        return false;
-    } else {
-        LOGE("fork failed: %s", strerror(errno));
-        return false;
-    }
-}
-
-// Unified injection dispatcher - tries built-in first, falls back to external
-static void inject_zygote(int target_pid, bool is_64bit) {
-    // Try built-in ptrace injection first (future "super daemon" mode)
-    if (inject_zygote_builtin(target_pid, is_64bit)) {
-        LOGI("Built-in injection succeeded for pid=%d", target_pid);
-        return;
-    }
-
-    // Fall back to external tracer
-    LOGI("Trying external tracer for pid=%d...", target_pid);
-    if (spawn_tracer(target_pid, is_64bit)) {
-        LOGI("External tracer injection succeeded for pid=%d", target_pid);
-    } else {
-        LOGE("All injection methods failed for pid=%d", target_pid);
     }
 }
 
@@ -359,95 +288,53 @@ static void injection_thread_func() {
         close(fd5);
     }
 
-    // Wait for and inject BOTH zygotes (32 + 64)
-    int injected_count = 0;
-    const int MAX_ZYGOTES = 2;
+    // Poll kernel for zygote detection (100ms interval, 15s total timeout)
+    int zygote_pid = -1;
+    bool is_64bit = false;
+    const int POLL_INTERVAL_MS = 100;
+    const int MAX_POLL_ATTEMPTS = 150;  // 15 seconds total
 
-    // DEBUG: Entering wait loop
-    int fd6 = open("/data/local/tmp/zygisk_entering_wait_loop", O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd6 >= 0) {
-        close(fd6);
-    }
+    LOGI("Polling kernel for zygote detection (100ms interval, 15s timeout)...");
 
-    while (injected_count < MAX_ZYGOTES) {
-        int zygote_pid;
-        bool is_64bit;
-
-        LOGI("Waiting for zygote #%d/%d (timeout=10s)...", injected_count + 1, MAX_ZYGOTES);
-
-        // DEBUG: Before wait
-        int fd7 = open("/data/local/tmp/zygisk_before_wait", O_WRONLY | O_CREAT | O_APPEND, 0666);
-        if (fd7 >= 0) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "wait_%d\n", injected_count + 1);
-            write(fd7, buf, strlen(buf));
-            close(fd7);
-        }
-
-        if (!kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, 10000)) {
-            LOGW("Timeout waiting for zygote #%d", injected_count + 1);
-
-            // DEBUG: Timeout
-            int fd8 =
-                open("/data/local/tmp/zygisk_wait_timeout", O_WRONLY | O_CREAT | O_APPEND, 0666);
-            if (fd8 >= 0) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "timeout_%d\n", injected_count + 1);
-                write(fd8, buf, strlen(buf));
-                close(fd8);
-            }
+    bool caught = false;
+    for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+        // Ask kernel: "Did you catch a zygote yet?"
+        if (kernel_wait_zygote(ksu_fd, &zygote_pid, &is_64bit, POLL_INTERVAL_MS)) {
+            caught = true;
+            LOGI("Kernel caught zygote after %d attempts (%.1fs): pid=%d is_64bit=%d", attempt + 1,
+                 (attempt + 1) * POLL_INTERVAL_MS / 1000.0, zygote_pid, is_64bit);
             break;
         }
-
-        LOGI("Kernel detected zygote #%d: pid=%d is_64bit=%d", injected_count + 1, zygote_pid,
-             is_64bit);
-
-        // DEBUG: Got zygote PID
-        int fd9 =
-            open("/data/local/tmp/zygisk_got_zygote_pid", O_WRONLY | O_CREAT | O_APPEND, 0666);
-        if (fd9 >= 0) {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "pid=%d is_64bit=%d\n", zygote_pid, is_64bit);
-            write(fd9, buf, strlen(buf));
-            close(fd9);
-        }
-
-        // Verify stopped (sanity check - kernel should have stopped it)
-        if (!is_process_stopped(zygote_pid)) {
-            LOGW("Zygote pid=%d not stopped by kernel - race condition?", zygote_pid);
-            // Still resume to be safe
-            kernel_resume_zygote(ksu_fd, zygote_pid);
-            continue;
-        }
-
-        // Inject (logs success/failure internally)
-        inject_zygote(zygote_pid, is_64bit);
-
-        // CRITICAL: Always resume zygote, even if injection failed
-        // Trust kernel IOCTL - do NOT use kill(SIGCONT) as fallback
-        LOGI("Resuming zygote pid=%d", zygote_pid);
-        if (!kernel_resume_zygote(ksu_fd, zygote_pid)) {
-            LOGE("FATAL: kernel_resume_zygote failed for pid=%d", zygote_pid);
-            // Do NOT use kill() - it will break kernel state machine
-        }
-
-        injected_count++;
+        // No zygote yet, continue polling...
     }
 
-    // Disable zygisk after injection completes
-    kernel_enable_zygisk(ksu_fd, false);
-    LOGI("Zygisk injection complete (%d/%d zygotes injected), thread exiting", injected_count,
-         MAX_ZYGOTES);
-
-    // DEBUG: Thread exiting normally
-    int fd_exit =
-        open("/data/local/tmp/zygisk_thread_exit_normal", O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd_exit >= 0) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "injected=%d/%d\n", injected_count, MAX_ZYGOTES);
-        write(fd_exit, buf, strlen(buf));
-        close(fd_exit);
+    if (!caught) {
+        LOGE("Kernel did not catch zygote within timeout (15s) - injection aborted");
+        return;
     }
+
+    // Verify process is stopped by kernel
+    if (!is_process_stopped(zygote_pid)) {
+        LOGE("Zygote pid=%d not stopped by kernel - cannot inject safely", zygote_pid);
+        // Resume to avoid hanging system
+        kernel_resume_zygote(ksu_fd, zygote_pid);
+        return;
+    }
+
+    LOGI("Zygote pid=%d confirmed stopped, injecting...", zygote_pid);
+
+    // Inject libzygisk.so
+    inject_zygote(zygote_pid, is_64bit);
+
+    // CRITICAL: Always resume zygote, even if injection failed
+    LOGI("Resuming zygote pid=%d", zygote_pid);
+    if (!kernel_resume_zygote(ksu_fd, zygote_pid)) {
+        LOGE("FATAL: kernel_resume_zygote failed for pid=%d", zygote_pid);
+    }
+
+    // Keep zygisk enabled - kernel will continue monitoring for other zygotes
+    // User can disable via CLI command if needed
+    LOGI("Zygisk injection complete (zygisk remains enabled), thread exiting");
 }
 
 // Enable zygisk and start injection in background (called from Phase 0)
@@ -466,26 +353,23 @@ void enable_and_inject_async() {
         return;
     }
 
-    // Check for either external tracer OR payload files
-    bool has_external_tracer =
-        (access(TRACER_PATH_64, X_OK) == 0 || access(TRACER_PATH_32, X_OK) == 0);
+    // Check for payload files
     bool has_payload = (access(PAYLOAD_PATH_64, R_OK) == 0 || access(PAYLOAD_PATH_32, R_OK) == 0);
 
     // DEBUG: File check result
     int fd2 = open("/data/local/tmp/zygisk_file_check", O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd2 >= 0) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "tracer=%d payload=%d\n", has_external_tracer, has_payload);
+        snprintf(buf, sizeof(buf), "payload=%d\n", has_payload);
         write(fd2, buf, strlen(buf));
         close(fd2);
     }
 
-    LOGI("Zygisk file check: tracer=%d payload=%d", has_external_tracer, has_payload);
+    LOGI("Zygisk file check: payload=%d", has_payload);
 
-    if (!has_external_tracer && !has_payload) {
-        LOGE("Zygisk files not found - need tracer binary OR payload .so");
-        LOGE("Checked paths: %s %s %s %s", TRACER_PATH_64, TRACER_PATH_32, PAYLOAD_PATH_64,
-             PAYLOAD_PATH_32);
+    if (!has_payload) {
+        LOGE("Zygisk payload files not found");
+        LOGE("Checked paths: %s %s", PAYLOAD_PATH_64, PAYLOAD_PATH_32);
 
         // DEBUG: Mark early return
         int fd3 = open("/data/local/tmp/zygisk_no_files", O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -495,12 +379,7 @@ void enable_and_inject_async() {
         return;
     }
 
-    if (has_external_tracer) {
-        LOGI("Using external tracer mode");
-    }
-    if (has_payload) {
-        LOGI("Payload .so files available for built-in injection");
-    }
+    LOGI("Payload .so files available for built-in injection");
 
     // Start injection thread (async, non-blocking)
     // CRITICAL: Thread must be detached IMMEDIATELY to avoid blocking daemon
