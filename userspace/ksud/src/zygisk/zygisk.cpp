@@ -301,16 +301,18 @@ static void injection_thread_func() {
     LOGI("Got KSU fd=%d", ksu_fd);
 
     // Enable zygisk in kernel NOW - before post-fs-data ends
+    LOGI("Calling kernel_enable_zygisk(fd=%d, enable=true)...", ksu_fd);
     if (!kernel_enable_zygisk(ksu_fd, true)) {
-        LOGE("Failed to enable zygisk in kernel");
+        LOGE("Failed to enable zygisk in kernel - IOCTL returned error");
+        LOGE("Possible causes: 1) Kernel module not loaded 2) IOCTL not implemented");
+        LOGE("Injection thread aborting - zygote will start normally");
         return;
     }
-    LOGI("Zygisk enabled in kernel - waiting for zygotes...");
+    LOGI("Zygisk successfully enabled in kernel - waiting for zygotes...");
 
     // Wait for and inject BOTH zygotes (32 + 64)
     int injected_count = 0;
     const int MAX_ZYGOTES = 2;
-    std::vector<int> resumed_pids;  // Track resumed PIDs to avoid double-resume
 
     while (injected_count < MAX_ZYGOTES) {
         int zygote_pid;
@@ -326,36 +328,27 @@ static void injection_thread_func() {
         LOGI("Kernel detected zygote #%d: pid=%d is_64bit=%d", injected_count + 1, zygote_pid,
              is_64bit);
 
-        // Check if already resumed (avoid duplicate processing)
-        if (std::find(resumed_pids.begin(), resumed_pids.end(), zygote_pid) != resumed_pids.end()) {
-            LOGW("Zygote pid=%d already processed - skipping", zygote_pid);
-            continue;
-        }
-
-        // Verify stopped
+        // Verify stopped (sanity check - kernel should have stopped it)
         if (!is_process_stopped(zygote_pid)) {
-            LOGW("Zygote pid=%d not stopped - skipping", zygote_pid);
-            // CRITICAL: Must resume even if we skip injection
-            LOGI("Resuming skipped zygote pid=%d", zygote_pid);
+            LOGW("Zygote pid=%d not stopped by kernel - race condition?", zygote_pid);
+            // Still resume to be safe
             kernel_resume_zygote(ksu_fd, zygote_pid);
-            resumed_pids.push_back(zygote_pid);
             continue;
         }
 
-        // Inject (try both methods)
-        LOGI("Starting injection for zygote pid=%d...", zygote_pid);
-        inject_zygote(zygote_pid, is_64bit);
-
-        // CRITICAL: Always resume zygote after injection attempt
-        // Even if injection fails, we MUST resume to avoid boot hang
-        LOGI("Resuming zygote pid=%d (post-injection)", zygote_pid);
-        if (!kernel_resume_zygote(ksu_fd, zygote_pid)) {
-            LOGE("Failed to resume zygote pid=%d - system will hang!", zygote_pid);
-            // Last resort: send SIGCONT directly
-            LOGW("Sending SIGCONT directly to pid=%d as fallback", zygote_pid);
-            kill(zygote_pid, SIGCONT);
+        // Inject
+        bool inject_success = inject_zygote(zygote_pid, is_64bit);
+        if (!inject_success) {
+            LOGW("Injection failed for zygote pid=%d, resuming anyway", zygote_pid);
         }
-        resumed_pids.push_back(zygote_pid);
+
+        // CRITICAL: Always resume zygote, even if injection failed
+        // Trust kernel IOCTL - do NOT use kill(SIGCONT) as fallback
+        LOGI("Resuming zygote pid=%d", zygote_pid);
+        if (!kernel_resume_zygote(ksu_fd, zygote_pid)) {
+            LOGE("FATAL: kernel_resume_zygote failed for pid=%d", zygote_pid);
+            // Do NOT use kill() - it will break kernel state machine
+        }
 
         injected_count++;
     }
@@ -368,6 +361,8 @@ static void injection_thread_func() {
 
 // Enable zygisk and start injection in background (called from Phase 0)
 void enable_and_inject_async() {
+    LOGI("=== enable_and_inject_async called ===");
+
     if (g_injection_thread.joinable()) {
         LOGW("Zygisk injection already running");
         return;
@@ -378,8 +373,12 @@ void enable_and_inject_async() {
         (access(TRACER_PATH_64, X_OK) == 0 || access(TRACER_PATH_32, X_OK) == 0);
     bool has_payload = (access(PAYLOAD_PATH_64, R_OK) == 0 || access(PAYLOAD_PATH_32, R_OK) == 0);
 
+    LOGI("Zygisk file check: tracer=%d payload=%d", has_external_tracer, has_payload);
+
     if (!has_external_tracer && !has_payload) {
-        LOGE("Zygisk files not found (need tracer binary OR payload .so)");
+        LOGE("Zygisk files not found - need tracer binary OR payload .so");
+        LOGE("Checked paths: %s %s %s %s", TRACER_PATH_64, TRACER_PATH_32, PAYLOAD_PATH_64,
+             PAYLOAD_PATH_32);
         return;
     }
 
@@ -387,14 +386,20 @@ void enable_and_inject_async() {
         LOGI("Using external tracer mode");
     }
     if (has_payload) {
-        LOGI("Payload .so files available (built-in mode when implemented)");
+        LOGI("Payload .so files available for built-in injection");
     }
 
     // Start injection thread (async, non-blocking)
+    // CRITICAL: Thread must be detached IMMEDIATELY to avoid blocking daemon
     g_injection_active = true;
-    g_injection_thread = std::thread(injection_thread_func);
-    g_injection_thread.detach();  // Don't wait for it
-    LOGI("Zygisk injection thread started (async)");
+    try {
+        g_injection_thread = std::thread(injection_thread_func);
+        g_injection_thread.detach();  // Detach before ANY potential blocking
+        LOGI("Zygisk injection thread started (async, detached)");
+    } catch (const std::exception& e) {
+        LOGE("Failed to start injection thread: %s", e.what());
+        g_injection_active = false;
+    }
 }
 
 // Legacy functions for CLI compatibility
