@@ -86,6 +86,18 @@ static bool kernel_wait_zygote(int ksu_fd, int* pid, bool* is_64bit, uint32_t ti
     cmd.timeout_ms = timeout_ms;
 
     int ret = ioctl(ksu_fd, KSU_IOCTL_ZYGISK_WAIT_ZYGOTE, &cmd);
+
+    // DEBUG: IOCTL result
+    int fd_ioctl =
+        open("/data/local/tmp/zygisk_ioctl_wait_result", O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd_ioctl >= 0) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "ret=%d errno=%d(%s) pid=%d is_64bit=%d\n", ret, errno,
+                 strerror(errno), cmd.pid, cmd.is_64bit);
+        write(fd_ioctl, buf, strlen(buf));
+        close(fd_ioctl);
+    }
+
     if (ret < 0) {
         // EINTR: interrupted by signal, caller should retry
         // ETIMEDOUT: timeout (expected, not an error)
