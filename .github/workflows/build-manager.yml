@@ -9,6 +9,7 @@ on:
       - '.github/workflows/build-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
+      - '.github/workflows/libzygisk.yml'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/build-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
+      - '.github/workflows/libzygisk.yml'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
@@ -33,8 +35,12 @@ jobs:
     uses: ./.github/workflows/ksuinit.yml
     secrets: inherit
 
+  build-libzygisk:
+    uses: ./.github/workflows/libzygisk.yml
+    secrets: inherit
+
   build-ksud:
-    needs: [build-lkm, build-ksuinit]
+    needs: [build-lkm, build-ksuinit, build-libzygisk]
     strategy:
       matrix:
         include:

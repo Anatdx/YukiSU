@@ -91,6 +91,8 @@ jobs:
             Spoofed-Manager/*.apk.asc
             android*-lkm/*_kernelsu.ko
             android*-lkm/*_kernelsu.ko.sig
+            libzygisk-*/lib*/*.so
+            libzygisk-*/lib*/*.so.sig
             AnyKernel3-*.zip
             boot-images-*/Image-*/*.img.gz
             kernel-WSA*.zip

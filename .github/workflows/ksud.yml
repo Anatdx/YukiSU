@@ -45,6 +45,30 @@ jobs:
           cp ksuinit/ksuinit ./userspace/ksud/assets/
         fi
 
+    - name: Prepare libzygisk.so
+      run: |
+        mkdir -p ./userspace/ksud/assets/lib64
+        mkdir -p ./userspace/ksud/assets/lib
+        
+        # Copy 64-bit libzygisk.so (arm64-v8a or x86_64)
+        if [ -d libzygisk-arm64-v8a/lib64 ]; then
+          cp libzygisk-arm64-v8a/lib64/libzygisk.so ./userspace/ksud/assets/lib64/
+        elif [ -d libzygisk-x86_64/lib64 ]; then
+          cp libzygisk-x86_64/lib64/libzygisk.so ./userspace/ksud/assets/lib64/
+        fi
+        
+        # Copy 32-bit libzygisk.so (armeabi-v7a or x86)
+        if [ -d libzygisk-armeabi-v7a/lib ]; then
+          cp libzygisk-armeabi-v7a/lib/libzygisk.so ./userspace/ksud/assets/lib/
+        elif [ -d libzygisk-x86/lib ]; then
+          cp libzygisk-x86/lib/libzygisk.so ./userspace/ksud/assets/lib/
+        fi
+        
+        # Show what was copied
+        echo "Libzygisk files:"
+        ls -lh ./userspace/ksud/assets/lib64/ 2>/dev/null || true
+        ls -lh ./userspace/ksud/assets/lib/ 2>/dev/null || true
+
     - name: Prepare binary tools (busybox, resetprop, bootctl)
       run: |
         mkdir -p ./userspace/ksud/assets
@@ -111,6 +135,7 @@ jobs:
         export STRIP=$TOOLCHAIN/bin/llvm-strip
         
         cmake .. \
+          -G Ninja \
           -DCMAKE_SYSTEM_NAME=Android \
           -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
           -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
@@ -120,7 +145,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=$CXX \
           -DCMAKE_BUILD_TYPE=Release
         
-        make -j$(nproc)
+        ninja
         
         # Strip the binary
         $STRIP ksud

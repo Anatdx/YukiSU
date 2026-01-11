@@ -32,6 +32,7 @@ jobs:
         export STRIP=$TOOLCHAIN/bin/llvm-strip
         
         cmake .. \
+          -G Ninja \
           -DCMAKE_SYSTEM_NAME=Android \
           -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
           -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
@@ -39,7 +40,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=$CXX \
           -DCMAKE_BUILD_TYPE=Release
         
-        make -j$(nproc)
+        ninja
         
         # Strip the binary
         $STRIP ksuinit

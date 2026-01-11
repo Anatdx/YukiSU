@@ -45,12 +45,16 @@ def main():
     assets_dir = Path(sys.argv[1])
     output_file = Path(sys.argv[2])
     
-    # Collect all files in assets directory
+    # Collect all files in assets directory (including subdirectories)
     assets = []
     if assets_dir.exists():
-        for f in sorted(assets_dir.iterdir()):
-            if f.is_file() and not f.name.startswith('.'):
-                assets.append(f)
+        for root, dirs, files in os.walk(assets_dir):
+            for f in sorted(files):
+                filepath = Path(root) / f
+                if not f.startswith('.'):
+                    # Store relative path from assets_dir
+                    rel_path = filepath.relative_to(assets_dir)
+                    assets.append((filepath, str(rel_path)))
     
     # Generate C++ source
     output = '''// Auto-generated file - DO NOT EDIT
@@ -101,10 +105,12 @@ const char* get_install_module_script() {
     
     # Generate arrays for each asset
     asset_infos = []
-    for filepath in assets:
+    for filepath, rel_path in assets:
         name, hex_data, size, original_size = generate_asset_array(filepath)
-        output += f'// Asset: {filepath.name}\n'
-        output += f'static const unsigned char asset_{name}[] = {{\n'
+        # Use relative path as the asset name
+        asset_name = str(rel_path).replace('/', '_').replace('.', '_').replace('-', '_')
+        output += f'// Asset: {rel_path}\n'
+        output += f'static const unsigned char asset_{asset_name}[] = {{\n'
         
         # Split into lines of 16 bytes
         bytes_list = hex_data.split(', ')
@@ -112,10 +118,10 @@ const char* get_install_module_script() {
             output += '    ' + ', '.join(bytes_list[i:i+16]) + ',\n'
         
         output += f'}};\n'
-        output += f'static const size_t asset_{name}_size = {size};\n'
-        output += f'static const size_t asset_{name}_original_size = {original_size};\n\n'
+        output += f'static const size_t asset_{asset_name}_size = {size};\n'
+        output += f'static const size_t asset_{asset_name}_original_size = {original_size};\n\n'
         
-        asset_infos.append((filepath.name, name, size, original_size))
+        asset_infos.append((rel_path, asset_name, size, original_size))
     
     # Generate asset registry
     output += '''
@@ -129,8 +135,8 @@ struct AssetEntry {
 static const AssetEntry asset_registry[] = {
 '''
     
-    for filename, name, size, original_size in asset_infos:
-        output += f'    {{"{filename}", asset_{name}, asset_{name}_size, asset_{name}_original_size}},\n'
+    for rel_path, asset_name, size, original_size in asset_infos:
+        output += f'    {{"{rel_path}", asset_{asset_name}, asset_{asset_name}_size, asset_{asset_name}_original_size}},\n'
     
     output += '''    {nullptr, nullptr, 0, 0}  // sentinel
 };
@@ -223,7 +229,29 @@ int ensure_binaries(bool ignore_if_exist) {
             continue;
         }
         
-        std::string dest = std::string(BINARY_DIR) + name;
+        std::string dest;
+        mode_t mode = 0755;
+        
+        // libzygisk.so goes to /data/adb/yukizygisk/lib64/ or /data/adb/yukizygisk/lib/
+        if (name.find("lib64/libzygisk.so") != std::string::npos) {
+            const char* ZYGISK_DIR = "/data/adb/yukizygisk/lib64";
+            if (!ensure_dir_exists(ZYGISK_DIR)) {
+                LOGE("Failed to create Zygisk directory: %s", ZYGISK_DIR);
+                return 1;
+            }
+            dest = std::string(ZYGISK_DIR) + "/libzygisk.so";
+            mode = 0644;  // libzygisk.so is loaded, not executed
+        } else if (name.find("lib/libzygisk.so") != std::string::npos) {
+            const char* ZYGISK_DIR = "/data/adb/yukizygisk/lib";
+            if (!ensure_dir_exists(ZYGISK_DIR)) {
+                LOGE("Failed to create Zygisk directory: %s", ZYGISK_DIR);
+                return 1;
+            }
+            dest = std::string(ZYGISK_DIR) + "/libzygisk.so";
+            mode = 0644;
+        } else {
+            dest = std::string(BINARY_DIR) + name;
+        }
         
         if (ignore_if_exist) {
             struct stat st;
@@ -236,7 +264,7 @@ int ensure_binaries(bool ignore_if_exist) {
             LOGE("Failed to extract binary: %s", name.c_str());
             return 1;
         }
-        chmod(dest.c_str(), 0755);
+        chmod(dest.c_str(), mode);
     }
     
     // Ensure ksud symlink exists (like Rust version's link_ksud_to_bin)
@@ -262,8 +290,8 @@ int ensure_binaries(bool ignore_if_exist) {
         f.write(output)
     
     print(f"Generated {output_file} with {len(assets)} assets")
-    for filename, name, size, original_size in asset_infos:
-        print(f"  - {filename}: {size} bytes (original: {original_size})")
+    for rel_path, asset_name, size, original_size in asset_infos:
+        print(f"  - {rel_path}: {size} bytes (original: {original_size})")
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,99 @@
+name: Build libzygisk
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    strategy:
+      matrix:
+        abi:
+          - arm64-v8a
+          - armeabi-v7a
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Setup NDK
+      run: |
+        echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
+
+    - name: Build libzygisk.so for ${{ matrix.abi }}
+      run: |
+        cd userspace/libzygisk
+        mkdir -p build/${{ matrix.abi }} && cd build/${{ matrix.abi }}
+        
+        # 配置 CMake with Ninja
+        cmake ../.. \
+          -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+          -DANDROID_ABI=${{ matrix.abi }} \
+          -DANDROID_PLATFORM=android-26 \
+          -DANDROID_STL=c++_static \
+          -DCMAKE_BUILD_TYPE=Release
+        
+        # 构建 with Ninja
+        ninja
+        
+        # Strip the library
+        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip libzygisk.so
+        
+        # 显示信息
+        ls -lh libzygisk.so
+        file libzygisk.so
+        
+        # 确定输出目录
+        if [ "${{ matrix.abi }}" = "arm64-v8a" ] || [ "${{ matrix.abi }}" = "x86_64" ]; then
+          LIB_DIR="lib64"
+        else
+          LIB_DIR="lib"
+        fi
+        
+        # 创建输出目录
+        mkdir -p /tmp/libzygisk-output/$LIB_DIR
+        cp libzygisk.so /tmp/libzygisk-output/$LIB_DIR/
+
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        trust_level: 5
+
+    - name: Sign libzygisk.so with GPG
+      run: |
+        cd userspace/libzygisk/build/${{ matrix.abi }}
+        echo "Signing libzygisk.so..."
+        gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+          --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+          --output "libzygisk.so.sig" "libzygisk.so"
+        
+        if [ -f "libzygisk.so.sig" ]; then
+          echo "Signature created successfully"
+          ls -lh libzygisk.so.sig
+          
+          # 确定输出目录
+          if [ "${{ matrix.abi }}" = "arm64-v8a" ] || [ "${{ matrix.abi }}" = "x86_64" ]; then
+            LIB_DIR="lib64"
+          else
+            LIB_DIR="lib"
+          fi
+          
+          # 复制签名文件
+          cp libzygisk.so.sig /tmp/libzygisk-output/$LIB_DIR/
+        else
+          echo "Error: Signature file not created!"
+          exit 1
+        fi
+
+    - name: Upload libzygisk.so artifact
+      uses: actions/upload-artifact@v5
+      with:
+        name: libzygisk-${{ matrix.abi }}
+        path: /tmp/libzygisk-output/**/*
