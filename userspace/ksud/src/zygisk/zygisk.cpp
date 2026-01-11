@@ -292,13 +292,37 @@ static void kill_existing_zygote() {
 static void injection_thread_func() {
     LOGI("Zygisk injection thread started (tid=%d)", gettid());
 
+    // DEBUG: Thread function entered
+    int fd = open("/data/local/tmp/zygisk_thread_func_entered", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd >= 0) {
+        close(fd);
+    }
+
     // Get KSU fd
     int ksu_fd = hymo::grab_ksu_fd();
     if (ksu_fd < 0) {
         LOGE("Cannot get KSU fd (fd=%d), injection aborted", ksu_fd);
+
+        // DEBUG: KSU fd failed
+        int fd2 = open("/data/local/tmp/zygisk_ksu_fd_failed", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd2 >= 0) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "fd=%d\n", ksu_fd);
+            write(fd2, buf, strlen(buf));
+            close(fd2);
+        }
         return;
     }
     LOGI("Got KSU fd=%d", ksu_fd);
+
+    // DEBUG: Got KSU fd
+    int fd3 = open("/data/local/tmp/zygisk_got_ksu_fd", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd3 >= 0) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "fd=%d\n", ksu_fd);
+        write(fd3, buf, strlen(buf));
+        close(fd3);
+    }
 
     // Enable zygisk in kernel NOW - before post-fs-data ends
     LOGI("Calling kernel_enable_zygisk(fd=%d, enable=true)...", ksu_fd);
@@ -306,9 +330,22 @@ static void injection_thread_func() {
         LOGE("Failed to enable zygisk in kernel - IOCTL returned error");
         LOGE("Possible causes: 1) Kernel module not loaded 2) IOCTL not implemented");
         LOGE("Injection thread aborting - zygote will start normally");
+
+        // DEBUG: kernel_enable_zygisk failed
+        int fd4 =
+            open("/data/local/tmp/zygisk_kernel_enable_failed", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd4 >= 0) {
+            close(fd4);
+        }
         return;
     }
     LOGI("Zygisk successfully enabled in kernel - waiting for zygotes...");
+
+    // DEBUG: Kernel enabled successfully
+    int fd5 = open("/data/local/tmp/zygisk_kernel_enabled", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd5 >= 0) {
+        close(fd5);
+    }
 
     // Wait for and inject BOTH zygotes (32 + 64)
     int injected_count = 0;
