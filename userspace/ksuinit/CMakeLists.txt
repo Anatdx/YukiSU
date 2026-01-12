@@ -11,10 +11,10 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
-# 极限体积优化
+# 体积优化
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden")
-set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -DNDEBUG -flto")
+set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DNDEBUG -flto")
 # 使用 lld 链接器加速链接过程 (特别是 LTO)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -Wl,--gc-sections -Wl,--strip-all -flto")
 
