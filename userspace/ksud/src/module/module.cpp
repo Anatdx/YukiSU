@@ -207,6 +207,95 @@ static bool exec_customize_sh(const std::string& modpath, const std::string& zip
     if (!file_exists(busybox))
         busybox = "/system/bin/sh";
 
+    // Create wrapper script with utility functions
+    std::string wrapper = modpath + "/.customize_wrapper.sh";
+    std::ofstream wrapper_file(wrapper);
+    if (!wrapper_file) {
+        printf("! Failed to create wrapper script\n");
+        return false;
+    }
+
+    // Write shell utility functions
+    wrapper_file << R"WRAPPER(#!/system/bin/sh
+# Utility functions for customize.sh
+
+ui_print() {
+  echo "$1"
+}
+
+abort() {
+  ui_print "$1"
+  exit 1
+}
+
+set_perm() {
+  chown $2:$3 $1 2>/dev/null
+  chmod $4 $1 2>/dev/null
+}
+
+set_perm_recursive() {
+  find $1 -type d 2>/dev/null | while read dir; do
+    set_perm $dir $2 $3 $4
+  done
+  find $1 -type f -o -type l 2>/dev/null | while read file; do
+    set_perm $file $2 $3 $5
+  done
+}
+
+mktouch() {
+  mkdir -p ${1%/*} 2>/dev/null
+  [ -z $2 ] && touch $1 || echo $2 > $1
+  chmod 644 $1
+}
+
+grep_prop() {
+  local REGEX="s/$1=//p"
+  shift
+  local FILES=$@
+  [ -z "$FILES" ] && FILES='/system/build.prop'
+  cat $FILES 2>/dev/null | sed -n "$REGEX" | head -n 1
+}
+
+grep_get_prop() {
+  local result=$(grep_prop $@)
+  if [ -z "$result" ]; then
+    getprop "$1"
+  else
+    echo $result
+  fi
+}
+
+# Detect API level and architecture
+API=$(getprop ro.build.version.sdk)
+ABI=$(getprop ro.product.cpu.abi)
+if [ "$ABI" = "x86" ]; then
+  ARCH=x86
+  ABI32=x86
+  IS64BIT=false
+elif [ "$ABI" = "arm64-v8a" ]; then
+  ARCH=arm64
+  ABI32=armeabi-v7a
+  IS64BIT=true
+elif [ "$ABI" = "x86_64" ]; then
+  ARCH=x64
+  ABI32=x86
+  IS64BIT=true
+else
+  ARCH=arm
+  ABI=armeabi-v7a
+  ABI32=armeabi-v7a
+  IS64BIT=false
+fi
+
+export API ARCH ABI ABI32 IS64BIT
+
+# Now source the actual customize.sh
+. )WRAPPER";
+    wrapper_file << customize << "\n";
+    wrapper_file.close();
+
+    chmod(wrapper.c_str(), 0755);
+
     pid_t pid = fork();
     if (pid < 0)
         return false;
@@ -220,13 +309,19 @@ static bool exec_customize_sh(const std::string& modpath, const std::string& zip
         setenv("KSU_VER_CODE", VERSION_CODE, 1);
         setenv("MODPATH", modpath.c_str(), 1);
         setenv("ZIPFILE", zipfile.c_str(), 1);
+        setenv("NVBASE", "/data/adb", 1);
+        setenv("BOOTMODE", "true", 1);
 
-        execl(busybox.c_str(), "sh", customize.c_str(), nullptr);
+        execl(busybox.c_str(), "sh", wrapper.c_str(), nullptr);
         _exit(127);
     }
 
     int status;
     waitpid(pid, &status, 0);
+
+    // Clean up wrapper
+    unlink(wrapper.c_str());
+
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
