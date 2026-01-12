@@ -15,7 +15,7 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden")
 # 使用 lld 链接器加速链接过程 (特别是 LTO)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -Wl,--gc-sections -Wl,--strip-all -flto")
-set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto")
+set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
 
 # Fetch third-party dependencies
 include(FetchContent)

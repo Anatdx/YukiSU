@@ -12,7 +12,6 @@ namespace ksud {
 // - copy_asset_to_file()
 // - list_supported_kmi()
 // - ensure_binaries()
-// - get_install_module_script()
 
 // This file is kept for any additional asset-related utilities
 

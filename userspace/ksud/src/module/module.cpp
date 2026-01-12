@@ -8,6 +8,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <climits>
@@ -131,96 +132,234 @@ static bool extract_zip(const std::string& zip_path, const std::string& dest_dir
     return result.exit_code == 0;
 }
 
-// Set SELinux context for module files
-static void restore_syscon(const std::string& path) {
-    // Try to set system_file context
-    exec_command({"restorecon", "-R", path});
+// Set permissions recursively
+static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid, mode_t dir_mode,
+                               mode_t file_mode,
+                               const char* secontext = "u:object_r:system_file:s0") {
+    DIR* dir = opendir(path.c_str());
+    if (!dir)
+        return;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        std::string fullpath = path + "/" + entry->d_name;
+        struct stat st;
+        if (lstat(fullpath.c_str(), &st) != 0)
+            continue;
+
+        if (S_ISDIR(st.st_mode)) {
+            chown(fullpath.c_str(), uid, gid);
+            chmod(fullpath.c_str(), dir_mode);
+            // Set SELinux context using chcon command
+            exec_command({"chcon", secontext, fullpath});
+            set_perm_recursive(fullpath, uid, gid, dir_mode, file_mode, secontext);
+        } else {
+            chown(fullpath.c_str(), uid, gid);
+            chmod(fullpath.c_str(), file_mode);
+            exec_command({"chcon", secontext, fullpath});
+        }
+    }
+    closedir(dir);
 }
 
-// Execute the install script using busybox sh
-static bool exec_install_script(const std::string& zip_path) {
-    const char* install_script = get_install_module_script();
-    if (!install_script || install_script[0] == '\0') {
-        LOGE("Install script not available");
+// Handle partition symlinks (vendor, system_ext, product, odm)
+static void handle_partition(const std::string& modpath, const std::string& partition) {
+    std::string part_path = modpath + "/system/" + partition;
+    if (!file_exists(part_path))
+        return;
+
+    std::string native_part = "/" + partition;
+    struct stat st;
+
+    // Only move if it's a native directory (not a symlink)
+    if (stat(native_part.c_str(), &st) == 0 && S_ISDIR(st.st_mode) &&
+        lstat(native_part.c_str(), &st) == 0 && !S_ISLNK(st.st_mode)) {
+        printf("- Handle partition /%s\n", partition.c_str());
+
+        std::string new_path = modpath + "/" + partition;
+        std::string cmd = "mv -f " + part_path + " " + new_path;
+        system(cmd.c_str());
+
+        std::string link_path = modpath + "/system/" + partition;
+        symlink(("../" + partition).c_str(), link_path.c_str());
+    }
+}
+
+// Mark file for removal (create character device node)
+static void mark_remove(const std::string& path) {
+    std::string dir = path.substr(0, path.find_last_of('/'));
+    exec_command({"mkdir", "-p", dir});
+    mknod(path.c_str(), S_IFCHR | 0644, makedev(0, 0));
+}
+
+// Execute customize.sh if present
+static bool exec_customize_sh(const std::string& modpath, const std::string& zipfile) {
+    std::string customize = modpath + "/customize.sh";
+    if (!file_exists(customize))
+        return true;
+
+    printf("- Executing customize.sh\n");
+
+    std::string busybox = BUSYBOX_PATH;
+    if (!file_exists(busybox))
+        busybox = "/system/bin/sh";
+
+    pid_t pid = fork();
+    if (pid < 0)
         return false;
+
+    if (pid == 0) {
+        chdir(modpath.c_str());
+
+        setenv("ASH_STANDALONE", "1", 1);
+        setenv("KSU", "true", 1);
+        setenv("KSU_VER", VERSION_NAME, 1);
+        setenv("KSU_VER_CODE", VERSION_CODE, 1);
+        setenv("MODPATH", modpath.c_str(), 1);
+        setenv("ZIPFILE", zipfile.c_str(), 1);
+
+        execl(busybox.c_str(), "sh", customize.c_str(), nullptr);
+        _exit(127);
     }
 
-    // Get full path of zip file
+    int status;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+// Native C++ module installation - replaces shell script
+static bool exec_install_script(const std::string& zip_path) {
+    printf("- Extracting module files\n");
+
+    // Get absolute path
     char realpath_buf[PATH_MAX];
     if (!realpath(zip_path.c_str(), realpath_buf)) {
-        LOGE("Failed to get realpath for %s", zip_path.c_str());
+        printf("! Invalid zip path: %s\n", zip_path.c_str());
         return false;
     }
     std::string zipfile = realpath_buf;
 
-    // Use busybox for script execution (preferred, like Rust version)
-    std::string busybox = BUSYBOX_PATH;
-    if (!file_exists(busybox)) {
-        // Fallback to system sh if busybox not available
-        LOGW("Busybox not found at %s, falling back to /system/bin/sh", BUSYBOX_PATH);
-        busybox = "/system/bin/sh";
-    }
+    // Create temp directory
+    std::string tmpdir = "/dev/tmp";
+    exec_command({"rm", "-rf", tmpdir});
+    exec_command({"mkdir", "-p", tmpdir});
+    exec_command({"chcon", "u:object_r:system_file:s0", tmpdir});
 
-    // Prepare all environment variable values BEFORE fork
-    std::string ver_code_str = std::to_string(get_version());
-    const char* old_path = getenv("PATH");
-    std::string binary_dir = std::string(BINARY_DIR);
-    if (!binary_dir.empty() && binary_dir.back() == '/')
-        binary_dir.pop_back();
-    std::string new_path;
-    if (old_path && old_path[0] != '\0') {
-        new_path = std::string(old_path) + ":" + binary_dir;  // Original PATH first (like Rust)
-    } else {
-        new_path = binary_dir;
-    }
-
-    // Make copies of string data that child process will use
-    const char* busybox_path = busybox.c_str();
-    const char* zipfile_path = zipfile.c_str();
-    const char* ver_code = ver_code_str.c_str();
-    const char* path_env = new_path.c_str();
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        LOGE("Failed to fork for install script");
+    // Extract module.prop first
+    auto result = exec_command({"unzip", "-o", "-q", zipfile, "module.prop", "-d", tmpdir});
+    if (result.exit_code != 0) {
+        printf("! Unable to extract zip file\n");
+        exec_command({"rm", "-rf", tmpdir});
         return false;
     }
 
-    if (pid == 0) {
-        // Child process - disable stdout buffering for real-time output
-        setvbuf(stdout, nullptr, _IONBF, 0);
+    // Parse module.prop
+    auto props = parse_module_prop(tmpdir + "/module.prop");
+    std::string mod_id = props.count("id") ? props["id"] : "";
+    std::string mod_name = props.count("name") ? props["name"] : "";
+    std::string mod_author = props.count("author") ? props["author"] : "";
 
-        // Set environment variables (only use const char* pointers)
-        setenv("ASH_STANDALONE", "1", 1);
-        setenv("KSU", "true", 1);
-        setenv("KSU_SUKISU", "true", 1);
-        setenv("KSU_KERNEL_VER_CODE", ver_code, 1);
-        setenv("KSU_VER_CODE", VERSION_CODE, 1);
-        setenv("KSU_VER", VERSION_NAME, 1);
-        setenv("OUTFD", "1", 1);  // stdout
-        setenv("ZIPFILE", zipfile_path, 1);
-        setenv("PATH", path_env, 1);
-
-        // Execute script via sh -c
-        execl(busybox_path, "sh", "-c", install_script, nullptr);
-        _exit(127);
+    if (mod_id.empty()) {
+        printf("! Module ID not found in module.prop\n");
+        exec_command({"rm", "-rf", tmpdir});
+        return false;
     }
 
-    // Parent - wait for child
-    int status;
-    waitpid(pid, &status, 0);
+    printf("\n");
+    printf("******************************\n");
+    printf(" %s \n", mod_name.c_str());
+    printf(" by %s \n", mod_author.c_str());
+    printf("******************************\n");
+    printf(" Powered by YukiSU \n");
+    printf("******************************\n");
+    printf("\n");
 
-    if (WIFEXITED(status)) {
-        int exit_code = WEXITSTATUS(status);
-        if (exit_code != 0) {
-            LOGE("Install script failed with code %d", exit_code);
+    // Determine module root path
+    std::string modroot = std::string(MODULE_DIR) + "../modules_update";
+    exec_command({"mkdir", "-p", modroot});
+
+    std::string modpath = modroot + "/" + mod_id;
+    exec_command({"rm", "-rf", modpath});
+    exec_command({"mkdir", "-p", modpath});
+
+    // Check for customize.sh to determine if we should skip extraction
+    result = exec_command({"unzip", "-o", "-q", zipfile, "customize.sh", "-d", modpath});
+
+    bool skip_unzip = false;
+    if (result.exit_code == 0 && file_exists(modpath + "/customize.sh")) {
+        // Check if customize.sh contains SKIPUNZIP=1
+        std::ifstream f(modpath + "/customize.sh");
+        std::string line;
+        while (std::getline(f, line)) {
+            if (line.find("SKIPUNZIP=1") != std::string::npos) {
+                skip_unzip = true;
+                break;
+            }
+        }
+    }
+
+    if (!skip_unzip) {
+        printf("- Extracting module files\n");
+        // Extract everything except META-INF
+        result = exec_command({"unzip", "-o", "-q", zipfile, "-x", "META-INF/*", "-d", modpath});
+        if (result.exit_code != 0) {
+            printf("! Failed to extract module files\n");
+            exec_command({"rm", "-rf", modpath});
+            exec_command({"rm", "-rf", tmpdir});
             return false;
         }
-    } else {
-        LOGE("Install script terminated abnormally");
-        return false;
+
+        // Set default permissions
+        printf("- Setting permissions\n");
+        set_perm_recursive(modpath, 0, 0, 0755, 0644);
+
+        // Special permissions for bin/xbin directories
+        std::string bin_dirs[] = {modpath + "/system/bin", modpath + "/system/xbin",
+                                  modpath + "/system/system_ext/bin"};
+        for (const auto& bindir : bin_dirs) {
+            if (file_exists(bindir))
+                set_perm_recursive(bindir, 0, 2000, 0755, 0755);
+        }
+
+        // Vendor directory with special secontext
+        std::string vendor_dir = modpath + "/system/vendor";
+        if (file_exists(vendor_dir))
+            set_perm_recursive(vendor_dir, 0, 2000, 0755, 0755, "u:object_r:vendor_file:s0");
     }
 
+    // Execute customize.sh if present
+    if (file_exists(modpath + "/customize.sh")) {
+        if (!exec_customize_sh(modpath, zipfile)) {
+            printf("! customize.sh failed\n");
+            exec_command({"rm", "-rf", modpath});
+            exec_command({"rm", "-rf", tmpdir});
+            return false;
+        }
+    }
+
+    // Handle partition symlinks
+    handle_partition(modpath, "vendor");
+    handle_partition(modpath, "system_ext");
+    handle_partition(modpath, "product");
+    handle_partition(modpath, "odm");
+
+    // Update existing module if in BOOTMODE
+    std::string final_module = std::string(MODULE_DIR) + mod_id;
+    exec_command({"mkdir", "-p", std::string(MODULE_DIR)});
+    exec_command({"touch", final_module + "/update"});
+    exec_command({"rm", "-f", final_module + "/remove"});
+    exec_command({"rm", "-f", final_module + "/disable"});
+    exec_command({"cp", "-f", modpath + "/module.prop", final_module + "/module.prop"});
+
+    // Clean up
+    exec_command({"rm", "-f", modpath + "/customize.sh"});
+    exec_command({"rm", "-f", modpath + "/README.md"});
+    exec_command({"rm", "-rf", tmpdir});
+
+    printf("- Done\n");
     return true;
 }
 
@@ -259,6 +398,54 @@ int module_install(const std::string& zip_path) {
     }
 
     LOGI("Module installed successfully");
+
+    // Ensure metamodule directory exists
+    mkdir(METAMODULE_DIR, 0755);
+
+    // After successful installation, check all modules and create metamodule links if needed
+    DIR* dir = opendir(MODULE_DIR);
+    if (dir) {
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            if (entry->d_name[0] == '.')
+                continue;
+            if (entry->d_type != DT_DIR)
+                continue;
+
+            std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+            std::string prop_path = module_path + "/module.prop";
+
+            // Skip if no module.prop
+            if (!file_exists(prop_path))
+                continue;
+
+            // Parse module properties
+            auto props = parse_module_prop(prop_path);
+            std::string metamodule_val = props.count("metamodule") ? props["metamodule"] : "";
+            bool is_metamodule =
+                (metamodule_val == "1" || metamodule_val == "true" || metamodule_val == "TRUE");
+
+            if (is_metamodule) {
+                // Create symlink in metamodule directory
+                std::string link_path = std::string(METAMODULE_DIR) + entry->d_name;
+
+                // Remove existing symlink if any
+                unlink(link_path.c_str());
+
+                // Create symlink
+                if (symlink(module_path.c_str(), link_path.c_str()) == 0) {
+                    LOGI("Created metamodule symlink: %s -> %s", link_path.c_str(),
+                         module_path.c_str());
+                    printf("- Created metamodule symlink for %s\n", entry->d_name);
+                } else {
+                    LOGE("Failed to create metamodule symlink for %s: %s", entry->d_name,
+                         strerror(errno));
+                }
+            }
+        }
+        closedir(dir);
+    }
+
     return 0;
 }
 

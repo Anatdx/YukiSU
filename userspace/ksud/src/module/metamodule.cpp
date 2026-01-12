@@ -134,9 +134,11 @@ int metamodule_exec_mount_script() {
         return ret;
     }
 
-    // No external metamodule - use built-in hymo mount
+    // No external metamodule
+    // Check if user wants to use built-in mount
     if (!should_use_builtin_mount()) {
-        LOGI("Built-in mount disabled, skipping module mount");
+        LOGI("Built-in mount disabled, skipping built-in hymo mount");
+        LOGI("To use module mounting, install a metamodule or remove .disable_builtin_mount");
         return 0;
     }
 
