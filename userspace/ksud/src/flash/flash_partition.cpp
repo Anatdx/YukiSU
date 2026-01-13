@@ -501,10 +501,10 @@ bool map_logical_partitions(const std::string& slot_suffix) {
     int success_count = 0;
     int total_count = 0;
 
-    // First, try to load the super partition metadata for the target slot
-    std::string super_device = find_partition_block_device("super", slot_suffix);
+    // Super partition is slotless, don't pass slot_suffix
+    std::string super_device = find_partition_block_device("super", "");
     if (super_device.empty()) {
-        LOGW("Super partition not found for slot %s", slot_suffix.c_str());
+        LOGW("Super partition not found");
     } else {
         LOGI("Super partition: %s", super_device.c_str());
     }

@@ -436,22 +436,6 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                                 }
                                             }
                                         )
-                                        Text(
-                                            text = when (checkboxState) {
-                                                ToggleableState.On -> stringResource(R.string.partition_deselect_all)
-                                                else -> stringResource(R.string.partition_select_all)
-                                            },
-                                            modifier = Modifier.clickable {
-                                                when (checkboxState) {
-                                                    ToggleableState.Off, ToggleableState.Indeterminate -> {
-                                                        selectedPartitions = selectablePartitions.map { it.name }.toSet()
-                                                    }
-                                                    ToggleableState.On -> {
-                                                        selectedPartitions = emptySet()
-                                                    }
-                                                }
-                                            }
-                                        )
                                         Spacer(Modifier.weight(1f))
                                         Button(onClick = {
                                             scope.launch {
