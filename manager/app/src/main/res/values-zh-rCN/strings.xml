@@ -594,6 +594,7 @@
     <string name="partition_collapse">收起</string>
     <string name="partition_selected_count">已选择 %d 个分区</string>
     <string name="partition_select_all">全选</string>
+    <string name="partition_deselect_all">全不选</string>
     <string name="partition_batch_backup">批量备份</string>
     <string name="partition_common">常用分区</string>
     <string name="partition_all">所有分区</string>

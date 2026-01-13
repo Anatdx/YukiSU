@@ -143,7 +143,10 @@ PartitionInfo get_partition_info(const std::string& partition_name,
     info.name = partition_name;
     info.block_device = find_partition_block_device(partition_name, slot_suffix);
     info.exists = !info.block_device.empty() && fs::exists(info.block_device);
-    info.is_logical = is_partition_logical(partition_name);
+
+    // 基于实际的块设备路径判断是否为逻辑分区
+    info.is_logical =
+        !info.block_device.empty() && info.block_device.find("/dev/block/mapper/") == 0;
 
     if (info.exists) {
         info.size = get_file_size(info.block_device);

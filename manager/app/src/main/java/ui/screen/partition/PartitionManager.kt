@@ -286,12 +286,27 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        TextButton(onClick = {
+                                        // 全选按钮（排除逻辑分区和不可备份分区）
+                                        IconButton(onClick = {
                                             val displayList = if (showAllPartitions) allPartitionList else partitionList
-                                            val selectablePartitions = displayList.filterNot { it.excludeFromBatch }
+                                            val selectablePartitions = displayList.filterNot { 
+                                                it.excludeFromBatch || it.isLogical 
+                                            }
                                             selectedPartitions = selectablePartitions.map { it.name }.toSet()
                                         }) {
-                                            Text(stringResource(R.string.partition_select_all))
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = stringResource(R.string.partition_select_all)
+                                            )
+                                        }
+                                        // 全不选按钮
+                                        IconButton(onClick = {
+                                            selectedPartitions = emptySet()
+                                        }) {
+                                            Icon(
+                                                Icons.Default.Cancel,
+                                                contentDescription = stringResource(R.string.partition_deselect_all)
+                                            )
                                         }
                                         Button(onClick = {
                                             scope.launch {

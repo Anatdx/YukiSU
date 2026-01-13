@@ -591,6 +591,7 @@
     <string name="partition_collapse">Collapse</string>
     <string name="partition_selected_count">Selected %d partitions</string>
     <string name="partition_select_all">Select All</string>
+    <string name="partition_deselect_all">Deselect All</string>
     <string name="partition_batch_backup">Batch Backup</string>
     <string name="partition_common">Common Partitions</string>
     <string name="partition_all">All Partitions</string>
