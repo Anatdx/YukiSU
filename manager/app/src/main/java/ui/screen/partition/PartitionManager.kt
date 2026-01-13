@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     var multiSelectMode by remember { mutableStateOf(false) }
     var selectedPartitions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedSlot by remember { mutableStateOf<String?>(null) }  // 新增：选中的槽位
+    var partitionTypeFilter by remember { mutableStateOf("all") }  // all, physical, logical
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     
@@ -146,6 +148,42 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                 android.util.Log.e("PartitionManager", "Failed to refresh partitions", e)
             } finally {
                 isLoading = false
+            }
+        }
+    }
+    
+    // 映射逻辑分区函数
+    val mapLogicalPartitions: suspend (String) -> Unit = { slot ->
+        withContext(Dispatchers.Main) {
+            snackbarHost.showSnackbar(context.getString(R.string.partition_mapping, slot))
+        }
+        
+        withContext(Dispatchers.IO) {
+            val logs = mutableListOf<String>()
+            val success = PartitionManagerHelper.mapLogicalPartitions(
+                context = context,
+                slot = slot,
+                onStdout = { line -> 
+                    android.util.Log.d("MapLogicalPartitions", "stdout: $line")
+                    logs.add(line)
+                },
+                onStderr = { line -> 
+                    android.util.Log.e("MapLogicalPartitions", "stderr: $line")
+                    logs.add("ERROR: $line")
+                }
+            )
+            
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    snackbarHost.showSnackbar(context.getString(R.string.partition_map_success))
+                    // 刷新分区列表
+                    scope.launch {
+                        refreshPartitions(selectedSlot)
+                    }
+                } else {
+                    val errorMsg = logs.lastOrNull() ?: context.getString(R.string.partition_unknown)
+                    snackbarHost.showSnackbar(context.getString(R.string.partition_map_failed, errorMsg))
+                }
             }
         }
     }
@@ -238,6 +276,85 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                 }
                             )
                         }
+                        
+                        // 映射逻辑分区按钮（仅在选择非活跃槽位时显示）
+                        if (slotInfo!!.isAbDevice && selectedSlot != slotInfo!!.currentSlot) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Info,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.secondary
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.partition_map_inactive_desc),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    selectedSlot?.let { mapLogicalPartitions(it) }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(stringResource(R.string.partition_map_inactive))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 分区类型筛选器
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = partitionTypeFilter == "all",
+                                onClick = { partitionTypeFilter = "all" },
+                                label = { Text(stringResource(R.string.partition_filter_all)) },
+                                leadingIcon = if (partitionTypeFilter == "all") {
+                                    { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                                } else null
+                            )
+                            FilterChip(
+                                selected = partitionTypeFilter == "physical",
+                                onClick = { partitionTypeFilter = "physical" },
+                                label = { Text(stringResource(R.string.partition_filter_physical)) },
+                                leadingIcon = if (partitionTypeFilter == "physical") {
+                                    { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                                } else null
+                            )
+                            FilterChip(
+                                selected = partitionTypeFilter == "logical",
+                                onClick = { partitionTypeFilter = "logical" },
+                                label = { Text(stringResource(R.string.partition_filter_logical)) },
+                                leadingIcon = if (partitionTypeFilter == "logical") {
+                                    { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                                } else null
+                            )
+                        }
                     }
                     
                     // 操作按钮行
@@ -286,30 +403,56 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        // 切换式全选/全不选按钮
+                                        // 三态复选框：未选、部分选、全选
                                         val displayList = if (showAllPartitions) allPartitionList else partitionList
                                         val selectablePartitions = displayList.filterNot { 
                                             it.excludeFromBatch || it.isLogical 
-                                        }
-                                        val allSelected = selectablePartitions.all { it.name in selectedPartitions }
-                                        
-                                        IconButton(onClick = {
-                                            if (allSelected) {
-                                                // 已全选，切换为全不选
-                                                selectedPartitions = emptySet()
-                                            } else {
-                                                // 未全选，切换为全选
-                                                selectedPartitions = selectablePartitions.map { it.name }.toSet()
+                                        }.filter {
+                                            when (partitionTypeFilter) {
+                                                "physical" -> !it.isLogical
+                                                "logical" -> it.isLogical
+                                                else -> true
                                             }
-                                        }) {
-                                            Icon(
-                                                if (allSelected) Icons.Default.Cancel else Icons.Default.CheckCircle,
-                                                contentDescription = stringResource(
-                                                    if (allSelected) R.string.partition_deselect_all 
-                                                    else R.string.partition_select_all
-                                                )
-                                            )
                                         }
+                                        val selectedCount = selectablePartitions.count { it.name in selectedPartitions }
+                                        val checkboxState = when {
+                                            selectedCount == 0 -> ToggleableState.Off
+                                            selectedCount == selectablePartitions.size -> ToggleableState.On
+                                            else -> ToggleableState.Indeterminate
+                                        }
+                                        
+                                        TriStateCheckbox(
+                                            state = checkboxState,
+                                            onClick = {
+                                                when (checkboxState) {
+                                                    ToggleableState.Off, ToggleableState.Indeterminate -> {
+                                                        // 未选或部分选 -> 全选
+                                                        selectedPartitions = selectablePartitions.map { it.name }.toSet()
+                                                    }
+                                                    ToggleableState.On -> {
+                                                        // 已全选 -> 全不选
+                                                        selectedPartitions = emptySet()
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        Text(
+                                            text = when (checkboxState) {
+                                                ToggleableState.On -> stringResource(R.string.partition_deselect_all)
+                                                else -> stringResource(R.string.partition_select_all)
+                                            },
+                                            modifier = Modifier.clickable {
+                                                when (checkboxState) {
+                                                    ToggleableState.Off, ToggleableState.Indeterminate -> {
+                                                        selectedPartitions = selectablePartitions.map { it.name }.toSet()
+                                                    }
+                                                    ToggleableState.On -> {
+                                                        selectedPartitions = emptySet()
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        Spacer(Modifier.weight(1f))
                                         Button(onClick = {
                                             scope.launch {
                                                 handleBatchBackup(
@@ -345,7 +488,12 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                     
                     // 分区列表
                     val displayList = if (showAllPartitions) allPartitionList else partitionList
-                    items(displayList) { partition ->
+                    val filteredList = when (partitionTypeFilter) {
+                        "physical" -> displayList.filter { !it.isLogical }
+                        "logical" -> displayList.filter { it.isLogical }
+                        else -> displayList
+                    }
+                    items(filteredList) { partition ->
                         PartitionCard(
                             partition = partition,
                             isSelected = selectedPartitions.contains(partition.name),

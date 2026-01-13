@@ -313,4 +313,52 @@ object PartitionManagerHelper {
             false
         }
     }
+    
+    /**
+     * 映射逻辑分区（用于非活跃槽位）
+     */
+    suspend fun mapLogicalPartitions(
+        context: Context,
+        slot: String,
+        onStdout: (String) -> Unit = {},
+        onStderr: (String) -> Unit = {}
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val shell = getRootShell()
+            
+            val cmd = "${getKsud()} flash map $slot"
+            
+            Log.d(TAG, "Executing map command: $cmd")
+            
+            val stdout = object : CallbackList<String>() {
+                override fun onAddElement(s: String?) {
+                    s?.let {
+                        Log.d(TAG, "Map stdout: $it")
+                        onStdout(it)
+                    }
+                }
+            }
+            
+            val stderr = object : CallbackList<String>() {
+                override fun onAddElement(s: String?) {
+                    s?.let {
+                        Log.e(TAG, "Map stderr: $it")
+                        onStderr(it)
+                    }
+                }
+            }
+            
+            val result = shell.newJob()
+                .add(cmd)
+                .to(stdout, stderr)
+                .exec()
+            
+            Log.d(TAG, "Map result: success=${result.isSuccess}, code=${result.code}")
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to map logical partitions", e)
+            onStderr("Error: ${e.message}")
+            false
+        }
+    }
 }

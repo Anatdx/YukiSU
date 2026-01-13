@@ -594,6 +594,15 @@
     <string name="partition_collapse">收起</string>
     <string name="partition_selected_count">已选择 %d 个分区</string>
     <string name="partition_select_all">全选</string>
+    <string name="partition_filter_type">按类型筛选</string>
+    <string name="partition_filter_all">所有分区</string>
+    <string name="partition_filter_physical">仅物理分区</string>
+    <string name="partition_filter_logical">仅逻辑分区</string>
+    <string name="partition_map_inactive">映射非活跃槽位逻辑分区</string>
+    <string name="partition_map_inactive_desc">非活跃槽位的逻辑分区可能没有设备节点。点击创建它们。</string>
+    <string name="partition_mapping">正在映射槽位 %s 的逻辑分区…</string>
+    <string name="partition_map_success">成功映射逻辑分区</string>
+    <string name="partition_map_failed">映射逻辑分区失败：%s</string>
     <string name="partition_deselect_all">全不选</string>
     <string name="partition_batch_backup">批量备份</string>
     <string name="partition_common">常用分区</string>

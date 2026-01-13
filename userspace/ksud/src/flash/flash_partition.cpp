@@ -465,5 +465,82 @@ bool backup_partition(const std::string& partition_name, const std::string& outp
     return false;
 }
 
+bool map_logical_partitions(const std::string& slot_suffix) {
+    LOGI("Mapping logical partitions for slot %s", slot_suffix.c_str());
+
+    // Get all partitions from mapper directory
+    std::string mapper_dir = "/dev/block/mapper";
+    if (!fs::exists(mapper_dir)) {
+        LOGE("Mapper directory does not exist");
+        return false;
+    }
+
+    std::vector<std::string> logical_partitions;
+    for (const auto& entry : fs::directory_iterator(mapper_dir)) {
+        std::string name = entry.path().filename().string();
+
+        // Skip control devices
+        if (name == "control" || name.find("loop") == 0) {
+            continue;
+        }
+
+        // Only consider partitions for the target slot
+        if (!slot_suffix.empty() && name.length() > slot_suffix.length()) {
+            size_t pos = name.find(slot_suffix);
+            if (pos != std::string::npos && pos == name.length() - slot_suffix.length()) {
+                logical_partitions.push_back(name);
+            }
+        }
+    }
+
+    if (logical_partitions.empty()) {
+        LOGW("No logical partitions found for slot %s", slot_suffix.c_str());
+    }
+
+    // Try to map logical partitions using lptools/dmctl
+    int success_count = 0;
+    int total_count = 0;
+
+    // First, try to load the super partition metadata for the target slot
+    std::string super_device = find_partition_block_device("super", slot_suffix);
+    if (super_device.empty()) {
+        LOGW("Super partition not found for slot %s", slot_suffix.c_str());
+    } else {
+        LOGI("Super partition: %s", super_device.c_str());
+    }
+
+    // Get list of all potential logical partitions
+    const char* common_logical[] = {"system",     "vendor",      "product", "odm",
+                                    "system_ext", "vendor_dlkm", "odm_dlkm"};
+
+    for (const char* part_base : common_logical) {
+        std::string part_name = std::string(part_base) + slot_suffix;
+        total_count++;
+
+        // Check if already mapped
+        std::string mapped_path = "/dev/block/mapper/" + part_name;
+        if (fs::exists(mapped_path)) {
+            LOGD("Partition %s already mapped", part_name.c_str());
+            success_count++;
+            continue;
+        }
+
+        // Try to map using dmctl (device-mapper control)
+        std::string cmd = "dmctl create " + part_name;
+        auto result = exec_cmd(cmd);
+
+        if (fs::exists(mapped_path)) {
+            LOGI("Successfully mapped %s", part_name.c_str());
+            success_count++;
+        } else {
+            LOGD("Could not map %s (may not exist)", part_name.c_str());
+        }
+    }
+
+    LOGI("Mapped %d/%d logical partitions for slot %s", success_count, total_count,
+         slot_suffix.c_str());
+    return success_count > 0;
+}
+
 }  // namespace flash
 }  // namespace ksud

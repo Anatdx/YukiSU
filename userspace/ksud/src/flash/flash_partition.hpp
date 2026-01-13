@@ -136,5 +136,12 @@ std::string get_current_slot_suffix();
  */
 bool is_ab_device();
 
+/**
+ * Map logical partitions for a specific slot (useful for inactive slot)
+ * @param slot_suffix Slot suffix to map logical partitions for (e.g. "_a" or "_b")
+ * @return true on success, false on failure
+ */
+bool map_logical_partitions(const std::string& slot_suffix);
+
 }  // namespace flash
 }  // namespace ksud

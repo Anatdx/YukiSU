@@ -477,6 +477,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         printf("  list [--slot SLOT] [--all] List available partitions\n");
         printf("  info <PARTITION>           Show partition info\n");
         printf("  slots                      Show slot information (A/B devices)\n");
+        printf("  map <SLOT>                 Map logical partitions for inactive slot\n");
         printf("  ak3 <ZIP>                  Flash AnyKernel3 zip\n");
         printf("\nOPTIONS:\n");
         printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
@@ -619,6 +620,24 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         }
 
         return 0;
+
+    } else if (filtered_args[0] == "map" && filtered_args.size() >= 2) {
+        std::string slot = filtered_args[1];
+        // Normalize slot format
+        if (!slot.empty() && slot[0] != '_') {
+            slot = "_" + slot;
+        }
+
+        printf("Mapping logical partitions for slot %s...\n", slot.c_str());
+        if (ksud::flash::map_logical_partitions(slot)) {
+            printf("Mapping successful!\n");
+            printf("You can now use 'ksud flash list --slot %s --all' to see mapped partitions\n",
+                   slot.c_str());
+            return 0;
+        } else {
+            printf("Mapping failed or no partitions to map\n");
+            return 1;
+        }
 
     } else if (filtered_args[0] == "ak3") {
         // Delegate to existing AK3 flash - pass remaining args
