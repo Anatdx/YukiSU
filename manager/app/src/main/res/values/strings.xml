@@ -577,4 +577,12 @@
     <string name="hymofs_info_active_mounts">Active Mounts:</string>
     <string name="hymofs_info_more_mounts">... and %d more</string>
     <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
+
+    <!-- Partition Manager -->
+    <string name="partition_manager">Partition Manager</string>
+    <string name="partition_list">Partition List</string>
+    <string name="slot_information">Slot Information</string>
+    <string name="device_type">Device Type</string>
+    <string name="current_slot">Current Slot</string>
+    <string name="other_slot">Other Slot</string>
 </resources>

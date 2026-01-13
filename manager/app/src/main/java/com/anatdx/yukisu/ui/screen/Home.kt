@@ -39,6 +39,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.PartitionManagerScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -394,6 +395,16 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
+                // 分区管理器按钮
+                IconButton(onClick = {
+                    navigator.navigate(PartitionManagerScreenDestination)
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Storage,
+                        contentDescription = stringResource(R.string.partition_manager)
+                    )
+                }
+                
                 // HymoFS 配置按钮
                 IconButton(onClick = {
                     navigator.navigate(HymoFSConfigScreenDestination)

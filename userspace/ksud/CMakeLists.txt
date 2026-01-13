@@ -93,6 +93,7 @@ set(SOURCES
     src/core/hide_bootloader.cpp
     # Flash kernel packages
     src/flash/flash_ak3.cpp
+    src/flash/flash_partition.cpp
     # HymoFS module management
     src/hymo/hymo_cli.cpp
     src/hymo/hymo_utils.cpp

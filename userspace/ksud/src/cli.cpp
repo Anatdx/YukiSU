@@ -8,6 +8,7 @@
 #include "debug.hpp"
 #include "defs.hpp"
 #include "flash/flash_ak3.hpp"
+#include "flash/flash_partition.hpp"
 #include "hymo/hymo_cli.hpp"
 #include "init_event.hpp"
 #include "log.hpp"
@@ -136,7 +137,7 @@ static void print_usage() {
     printf("  boot-patch     Patch boot image\n");
     printf("  boot-restore   Restore boot image\n");
     printf("  boot-info      Show boot information\n");
-    printf("  flash          Flash kernel packages (AK3)\n");
+    printf("  flash          Flash partition images\n");
     printf("  umount         Manage umount paths\n");
     printf("  kernel         Kernel interface\n");
     printf("  debug          For developers\n");
@@ -464,6 +465,157 @@ static int cmd_boot_info(const std::vector<std::string>& args) {
     return 1;
 }
 
+// Flash subcommand handlers
+static int cmd_flash_new(const std::vector<std::string>& args) {
+    using namespace flash;
+
+    if (args.empty()) {
+        printf("USAGE: ksud flash <SUBCOMMAND> [OPTIONS]\n\n");
+        printf("SUBCOMMANDS:\n");
+        printf("  image <IMAGE> <PARTITION>  Flash image to partition\n");
+        printf("  backup <PARTITION> <OUT>   Backup partition to file\n");
+        printf("  list [--slot SLOT]         List available partitions\n");
+        printf("  info <PARTITION>           Show partition info\n");
+        printf("  slots                      Show slot information (A/B devices)\n");
+        printf("  ak3 <ZIP>                  Flash AnyKernel3 zip\n");
+        printf("\nOPTIONS:\n");
+        printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
+        printf("                             Default: current active slot\n");
+        printf("\nEXAMPLES:\n");
+        printf("  ksud flash image boot.img boot\n");
+        printf("  ksud flash image boot.img boot --slot _b\n");
+        printf("  ksud flash backup boot /sdcard/boot-backup.img --slot _a\n");
+        printf("  ksud flash list\n");
+        printf("  ksud flash slots\n");
+        return 1;
+    }
+
+    const std::string& subcmd = args[0];
+
+    // Parse common options
+    std::string target_slot;
+    std::vector<std::string> filtered_args;
+
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] == "--slot" && i + 1 < args.size()) {
+            target_slot = args[++i];
+            // Normalize slot format (_a, a -> _a)
+            if (!target_slot.empty() && target_slot[0] != '_') {
+                target_slot = "_" + target_slot;
+            }
+        } else {
+            filtered_args.push_back(args[i]);
+        }
+    }
+
+    if (filtered_args[0] == "image" && filtered_args.size() >= 3) {
+        std::string image_path = filtered_args[1];
+        std::string partition = filtered_args[2];
+
+        printf("Flashing %s to %s", image_path.c_str(), partition.c_str());
+        if (!target_slot.empty()) {
+            printf(" (slot: %s)", target_slot.c_str());
+        }
+        printf("...\n");
+
+        if (ksud::flash::flash_partition(image_path, partition, target_slot)) {
+            printf("Flash successful!\n");
+            return 0;
+        } else {
+            printf("Flash failed!\n");
+            return 1;
+        }
+
+    } else if (filtered_args[0] == "backup" && filtered_args.size() >= 3) {
+        std::string partition = filtered_args[1];
+        std::string output = filtered_args[2];
+
+        printf("Backing up %s to %s", partition.c_str(), output.c_str());
+        if (!target_slot.empty()) {
+            printf(" (slot: %s)", target_slot.c_str());
+        }
+        printf("...\n");
+
+        if (ksud::flash::backup_partition(partition, output, target_slot)) {
+            printf("Backup successful!\n");
+            return 0;
+        } else {
+            printf("Backup failed!\n");
+            return 1;
+        }
+
+    } else if (filtered_args[0] == "list") {
+        std::string slot =
+            target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
+        auto partitions = ksud::flash::get_available_partitions();
+
+        printf("Available partitions");
+        if (ksud::flash::is_ab_device() && !slot.empty()) {
+            printf(" (slot: %s)", slot.c_str());
+        }
+        printf(":\n");
+
+        for (const auto& p : partitions) {
+            auto info = ksud::flash::get_partition_info(p, slot);
+            const char* type = info.is_logical ? "logical" : "physical";
+            printf("  %-20s [%s, %lu bytes]\n", p.c_str(), type, (unsigned long)info.size);
+        }
+        return 0;
+
+    } else if (filtered_args[0] == "info" && filtered_args.size() >= 2) {
+        std::string partition = filtered_args[1];
+        std::string slot =
+            target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
+        auto info = ksud::flash::get_partition_info(partition, slot);
+
+        if (!info.exists) {
+            printf("Partition %s not found\n", partition.c_str());
+            return 1;
+        }
+
+        printf("Partition: %s\n", info.name.c_str());
+        printf("Block device: %s\n", info.block_device.c_str());
+        printf("Type: %s\n", info.is_logical ? "logical" : "physical");
+        printf("Size: %lu bytes (%.2f MB)\n", (unsigned long)info.size,
+               info.size / 1024.0 / 1024.0);
+
+        if (ksud::flash::is_ab_device()) {
+            printf("Slot: %s\n", slot.c_str());
+        }
+        return 0;
+
+    } else if (filtered_args[0] == "slots") {
+        // Show slot information for A/B devices
+        if (!ksud::flash::is_ab_device()) {
+            printf("This device is not A/B partitioned\n");
+            return 0;
+        }
+
+        std::string current_slot = ksud::flash::get_current_slot_suffix();
+        std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
+
+        printf("Slot Information:\n");
+        printf("  Current slot: %s\n", current_slot.c_str());
+        printf("  Other slot:   %s\n", other_slot.c_str());
+
+        // Try to get bootctl info if available
+        auto result = exec_command({"getprop", "ro.boot.slot_suffix"});
+        if (result.exit_code == 0) {
+            printf("  Property ro.boot.slot_suffix: %s\n", trim(result.stdout_str).c_str());
+        }
+
+        return 0;
+
+    } else if (filtered_args[0] == "ak3") {
+        // Delegate to existing AK3 flash - pass remaining args
+        return cmd_flash(args);
+    }
+
+    printf("Unknown flash subcommand: %s\n", subcmd.c_str());
+    printf("Run 'ksud flash' for usage\n");
+    return 1;
+}
+
 int cli_run(int argc, char* argv[]) {
     // Initialize logging
     log_init("KernelSU");
@@ -567,7 +719,7 @@ int cli_run(int argc, char* argv[]) {
     } else if (cmd == "hymo") {
         return hymo::cmd_hymo(args);
     } else if (cmd == "flash") {
-        return cmd_flash(args);
+        return cmd_flash_new(args);
     }
 
     printf("Unknown command: %s\n", cmd.c_str());
