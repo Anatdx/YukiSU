@@ -11,6 +11,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,6 +67,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     var showAllPartitions by remember { mutableStateOf(false) }
     var multiSelectMode by remember { mutableStateOf(false) }
     var selectedPartitions by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedSlot by remember { mutableStateOf<String?>(null) }  // 新增：选中的槽位
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     
@@ -133,6 +135,21 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
         }
     }
     
+    // 刷新分区列表函数
+    val refreshPartitions: suspend (String?) -> Unit = { slot ->
+        withContext(Dispatchers.IO) {
+            isLoading = true
+            try {
+                partitionList = PartitionManagerHelper.getPartitionList(context, slot, scanAll = false)
+                allPartitionList = PartitionManagerHelper.getPartitionList(context, slot, scanAll = true)
+            } catch (e: Exception) {
+                android.util.Log.e("PartitionManager", "Failed to refresh partitions", e)
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+    
     // 加载分区信息
     LaunchedEffect(Unit) {
         scope.launch {
@@ -143,12 +160,15 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                     slotInfo = PartitionManagerHelper.getSlotInfo(context)
                     android.util.Log.d("PartitionManager", "Slot info loaded: isAB=${slotInfo?.isAbDevice}, current=${slotInfo?.currentSlot}")
                     
+                    // 默认选择当前槽位
+                    selectedSlot = slotInfo?.currentSlot
+                    
                     // 加载常用分区
-                    partitionList = PartitionManagerHelper.getPartitionList(context, slotInfo?.currentSlot, scanAll = false)
+                    partitionList = PartitionManagerHelper.getPartitionList(context, selectedSlot, scanAll = false)
                     android.util.Log.d("PartitionManager", "Loaded ${partitionList.size} common partitions")
                     
                     // 加载所有分区
-                    allPartitionList = PartitionManagerHelper.getPartitionList(context, slotInfo?.currentSlot, scanAll = true)
+                    allPartitionList = PartitionManagerHelper.getPartitionList(context, selectedSlot, scanAll = true)
                     android.util.Log.d("PartitionManager", "Loaded ${allPartitionList.size} total partitions")
                     
                     partitionList.forEach { p ->
@@ -204,10 +224,19 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 槽位信息卡片
+                    // 槽位信息卡片和槽位选择器
                     if (slotInfo != null) {
                         item {
-                            SlotInfoCard(slotInfo = slotInfo!!)
+                            SlotInfoCard(
+                                slotInfo = slotInfo!!,
+                                selectedSlot = selectedSlot,
+                                onSlotChange = { newSlot ->
+                                    selectedSlot = newSlot
+                                    scope.launch {
+                                        refreshPartitions(newSlot)
+                                    }
+                                }
+                            )
                         }
                     }
                     
@@ -218,28 +247,6 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 多选模式按钮
-                            Button(
-                                onClick = {
-                                    multiSelectMode = !multiSelectMode
-                                    if (!multiSelectMode) {
-                                        selectedPartitions = emptySet()
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    if (multiSelectMode) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(stringResource(
-                                    if (multiSelectMode) R.string.partition_cancel_select 
-                                    else R.string.partition_multi_select
-                                ))
-                            }
-                            
                             // 展开/收起按钮
                             OutlinedButton(
                                 onClick = { showAllPartitions = !showAllPartitions },
@@ -337,6 +344,17 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                     selectedPartition = partition
                                     showPartitionDialog = true
                                 }
+                            },
+                            onLongClick = {
+                                // 长按进入多选模式并选中当前项
+                                if (!multiSelectMode) {
+                                    multiSelectMode = true
+                                }
+                                selectedPartitions = if (selectedPartitions.contains(partition.name)) {
+                                    selectedPartitions - partition.name
+                                } else {
+                                    selectedPartitions + partition.name
+                                }
                             }
                         )
                     }
@@ -367,7 +385,11 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
 }
 
 @Composable
-fun SlotInfoCard(slotInfo: SlotInfo) {
+fun SlotInfoCard(
+    slotInfo: SlotInfo,
+    selectedSlot: String?,
+    onSlotChange: (String?) -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
@@ -403,14 +425,38 @@ fun SlotInfoCard(slotInfo: SlotInfo) {
                     label = stringResource(R.string.partition_device_type),
                     value = stringResource(R.string.partition_ab_device)
                 )
-                InfoRow(
-                    label = stringResource(R.string.partition_current_slot),
-                    value = slotInfo.currentSlot ?: stringResource(R.string.partition_unknown)
-                )
-                InfoRow(
-                    label = stringResource(R.string.partition_other_slot),
-                    value = slotInfo.otherSlot ?: stringResource(R.string.partition_unknown)
-                )
+                
+                // 槽位切换按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Current Slot 按钮
+                    FilterChip(
+                        selected = selectedSlot == slotInfo.currentSlot,
+                        onClick = { onSlotChange(slotInfo.currentSlot) },
+                        label = { 
+                            Text("${stringResource(R.string.partition_current_slot)}: ${slotInfo.currentSlot ?: stringResource(R.string.partition_unknown)}") 
+                        },
+                        leadingIcon = if (selectedSlot == slotInfo.currentSlot) {
+                            { Icon(Icons.Default.Check, contentDescription = null, Modifier.size(18.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    // Other Slot 按钮
+                    FilterChip(
+                        selected = selectedSlot == slotInfo.otherSlot,
+                        onClick = { onSlotChange(slotInfo.otherSlot) },
+                        label = { 
+                            Text("${stringResource(R.string.partition_other_slot)}: ${slotInfo.otherSlot ?: stringResource(R.string.partition_unknown)}") 
+                        },
+                        leadingIcon = if (selectedSlot == slotInfo.otherSlot) {
+                            { Icon(Icons.Default.Check, contentDescription = null, Modifier.size(18.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             } else {
                 InfoRow(
                     label = stringResource(R.string.partition_device_type),
@@ -426,12 +472,16 @@ fun PartitionCard(
     partition: PartitionInfo,
     isSelected: Boolean = false,
     multiSelectMode: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = if (isSelected) {
             CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         } else {
@@ -611,7 +661,7 @@ fun PartitionActionDialog(
                     onClick = onBackup,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Filled.Download, contentDescription = null)
+                    Icon(Icons.Filled.Upload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.partition_backup_to_file))
                 }
@@ -639,7 +689,7 @@ fun PartitionActionDialog(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Icon(Icons.Filled.Upload, contentDescription = null)
+                    Icon(Icons.Filled.Download, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.partition_flash_image))
                 }

@@ -14,7 +14,9 @@ constexpr const char* COMMON_PARTITIONS[] = {"boot",   "init_boot",   "recovery"
 // Dangerous partitions that require confirmation
 constexpr const char* DANGEROUS_PARTITIONS[] = {"persist", "modem", "fsg",      "bluetooth",
                                                 "dsp",     "nvram", "prodinfo", "seccfg"};
-
+// Partitions without slot suffix (even on A/B devices)
+constexpr const char* SLOTLESS_PARTITIONS[] = {"userdata", "data", "persist", "metadata",
+                                               "cache",    "misc", "frp"};
 // Partitions to exclude from batch backup (logical partitions are excluded automatically)
 constexpr const char* EXCLUDED_FROM_BATCH[] = {"userdata", "data"};
 

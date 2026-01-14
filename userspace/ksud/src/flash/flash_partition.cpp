@@ -88,23 +88,41 @@ bool is_ab_device() {
 std::string find_partition_block_device(const std::string& partition_name,
                                         const std::string& slot_suffix) {
     std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
-    std::string full_name = partition_name + suffix;
 
-    // Try multiple common locations
-    std::vector<std::string> candidates = {
-        "/dev/block/by-name/" + full_name,
-        "/dev/block/mapper/" + full_name,
-        "/dev/block/bootdevice/by-name/" + full_name,
-    };
-
-    for (const auto& path : candidates) {
-        if (fs::exists(path)) {
-            LOGD("Found partition %s at %s", partition_name.c_str(), path.c_str());
-            return path;
+    // Check if this partition should not have slot suffix
+    bool is_slotless = false;
+    for (const char* slotless : SLOTLESS_PARTITIONS) {
+        if (partition_name == slotless) {
+            is_slotless = true;
+            break;
         }
     }
 
-    LOGW("Partition %s not found", full_name.c_str());
+    // Build candidate names: try with suffix first, then without
+    std::vector<std::string> names_to_try;
+    if (!is_slotless && !suffix.empty()) {
+        names_to_try.push_back(partition_name + suffix);
+    }
+    names_to_try.push_back(partition_name);
+
+    // Try multiple common locations
+    std::vector<std::string> base_paths = {
+        "/dev/block/by-name/",
+        "/dev/block/mapper/",
+        "/dev/block/bootdevice/by-name/",
+    };
+
+    for (const auto& name : names_to_try) {
+        for (const auto& base : base_paths) {
+            std::string path = base + name;
+            if (fs::exists(path)) {
+                LOGD("Found partition %s at %s", partition_name.c_str(), path.c_str());
+                return path;
+            }
+        }
+    }
+
+    LOGW("Partition %s not found", partition_name.c_str());
     return "";
 }
 
