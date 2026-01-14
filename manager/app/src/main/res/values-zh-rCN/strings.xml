@@ -671,4 +671,7 @@
     <string name="kernel_flash_failed">内核刷入失败：%s</string>
     <string name="kernel_loading">正在加载内核信息…</string>
     <string name="kernel_refresh">刷新</string>
+    <string name="install_advanced_tools">高级工具</string>
+    <string name="kernel_manager_desc">查看内核信息、刷入镜像、管理 AVB</string>
+    <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
 </resources>

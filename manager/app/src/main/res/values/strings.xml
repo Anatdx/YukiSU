@@ -668,4 +668,7 @@
     <string name="kernel_flash_failed">Kernel flash failed: %s</string>
     <string name="kernel_loading">Loading kernel information…</string>
     <string name="kernel_refresh">Refresh</string>
+    <string name="install_advanced_tools">Advanced Tools</string>
+    <string name="kernel_manager_desc">View kernel info, flash images, manage AVB</string>
+    <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
 </resources>

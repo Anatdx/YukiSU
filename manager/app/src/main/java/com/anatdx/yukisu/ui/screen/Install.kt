@@ -21,9 +21,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +50,8 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.KernelFlashScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.KernelManagerScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.PartitionManagerScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.anatdx.yukisu.R
@@ -514,6 +519,77 @@ fun InstallScreen(
                         }
                     }
                 }
+
+                // 高级功能入口
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.install_advanced_tools),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // 内核管理入口
+                ElevatedCard(
+                    onClick = { navigator.navigate(KernelManagerScreenDestination) },
+                    colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
+                    elevation = getCardElevation(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(R.string.kernel_manager))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.kernel_manager_desc))
+                        },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.DeveloperMode,
+                                contentDescription = null
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                }
+
+                // 分区管理入口
+                ElevatedCard(
+                    onClick = { navigator.navigate(PartitionManagerScreenDestination) },
+                    colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
+                    elevation = getCardElevation(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(R.string.partition_manager))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.partition_manager_desc))
+                        },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Storage,
+                                contentDescription = null
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
 
                 Button(
                     modifier = Modifier.fillMaxWidth(),

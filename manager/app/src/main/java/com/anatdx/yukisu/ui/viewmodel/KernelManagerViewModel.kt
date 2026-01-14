@@ -52,25 +52,42 @@ class KernelManagerViewModel : ViewModel() {
                     val bootInfoJson = execKsudCommand("flash boot-info")
                     if (bootInfoJson.isNotEmpty()) {
                         val bootInfo = JSONObject(bootInfoJson)
-                        currentSlot = bootInfo.optString("current_slot", "")
-                        val slotCount = bootInfo.optInt("slot_count", 1)
-                        hasOtherSlot = slotCount == 2
+                        val isAb = bootInfo.optBoolean("is_ab", false)
+                        hasOtherSlot = isAb
                         
-                        if (hasOtherSlot) {
-                            otherSlot = if (currentSlot == "_a") "_b" else "_a"
+                        if (isAb) {
+                            currentSlot = bootInfo.optString("current_slot", "")
+                            otherSlot = bootInfo.optString("other_slot", "")
                         }
                     }
                     
                     // Get current kernel version
-                    currentKernelVersion = execKsudCommand("flash kernel").trim()
+                    val kernelOutput = execKsudCommand("flash kernel").trim()
+                    // Parse "Kernel version: Linux version ..." -> "Linux version ..."
+                    currentKernelVersion = if (kernelOutput.contains(":")) {
+                        kernelOutput.substringAfter(":").trim()
+                    } else {
+                        kernelOutput
+                    }
                     
                     // Get other slot kernel version if exists
-                    if (hasOtherSlot) {
-                        otherKernelVersion = execKsudCommand("flash kernel --slot $otherSlot").trim()
+                    if (hasOtherSlot && otherSlot.isNotEmpty()) {
+                        val otherKernelOutput = execKsudCommand("flash kernel --slot $otherSlot").trim()
+                        otherKernelVersion = if (otherKernelOutput.contains(":")) {
+                            otherKernelOutput.substringAfter(":").trim()
+                        } else {
+                            otherKernelOutput
+                        }
                     }
                     
                     // Get AVB status
-                    avbStatus = execKsudCommand("flash avb").trim()
+                    val avbOutput = execKsudCommand("flash avb").trim()
+                    // Parse "AVB/dm-verity status: enabled" -> "enabled"
+                    avbStatus = if (avbOutput.contains(":")) {
+                        avbOutput.substringAfter(":").trim()
+                    } else {
+                        avbOutput
+                    }
                     
                 } catch (e: Exception) {
                     e.printStackTrace()
