@@ -77,7 +77,6 @@
 ## Лицензии
 
 - Файлы в директории 'kernel' под [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) лицензией.
-- Изображения файлов `ic_launcher(?!.*alt.*).*` с наклейками аниме-персонажей защищены авторским правом [怡子曰曰](https://space.bilibili.com/10545509). Права на бренд, изображённый на картинках, принадлежат [明风 OuO](https://space.bilibili.com/274939213), а векторизацию выполнил @MiRinChan. Перед использованием этих файлов, помимо соблюдения условий [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt), необходимо также получить разрешение двух авторов на использование этих художественных материалов.
 - За исключением тех файлов/директорий упомянутых выше, всё остальное под [GPL-3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) лицензией.
 
 ## Благодарности
