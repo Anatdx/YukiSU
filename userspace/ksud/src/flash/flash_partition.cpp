@@ -38,6 +38,42 @@ static std::string find_magiskboot() {
             return path;
     }
 
+    // Check next to our own executable (e.g. libksud.so -> libmagiskboot.so)
+    char self_path[PATH_MAX];
+    if (readlink("/proc/self/exe", self_path, sizeof(self_path)) != -1) {
+        fs::path bin_path = self_path;
+        fs::path lib_dir = bin_path.parent_path();
+        fs::path magiskboot_lib = lib_dir / "libmagiskboot.so";
+
+        if (fs::exists(magiskboot_lib)) {
+            // Found it! But we might need to copy it to execute it if it lacks +x
+            if (access(magiskboot_lib.c_str(), X_OK) == 0) {
+                return magiskboot_lib.string();
+            } else {
+                // Copy to tmp to execute
+                static std::string tmp_mb;
+                if (!tmp_mb.empty() && fs::exists(tmp_mb))
+                    return tmp_mb;
+
+                char tmp_template[] = "/data/local/tmp/ksu_mb_XXXXXX";
+                int fd = mkstemp(tmp_template);
+                if (fd >= 0) {
+                    close(fd);
+                    fs::remove(tmp_template);  // copy_file needs dest to not exist or overwrite
+                    try {
+                        fs::copy_file(magiskboot_lib, tmp_template,
+                                      fs::copy_options::overwrite_existing);
+                        chmod(tmp_template, 0755);
+                        tmp_mb = tmp_template;
+                        return tmp_mb;
+                    } catch (...) {
+                        fprintf(stderr, "Failed to copy libmagiskboot.so to tmp\n");
+                    }
+                }
+            }
+        }
+    }
+
     // Try PATH
     auto res = exec_command_sync({"which", "magiskboot"});
     if (res.exit_code == 0 && !res.stdout_str.empty()) {
@@ -46,6 +82,7 @@ static std::string find_magiskboot() {
             return path;
     }
 
+    fprintf(stderr, "magiskboot binary not found!\n");
     return "";
 }
 
@@ -661,21 +698,21 @@ std::string get_kernel_version(const std::string& slot_suffix) {
 
     std::string device = find_partition_block_device(boot_partition_name, slot_suffix);
     if (device.empty()) {
-        LOGE("Could not find boot partition device for slot '%s'", slot_suffix.c_str());
+        fprintf(stderr, "Could not find boot partition device for slot '%s'\n",
+                slot_suffix.c_str());
         return "";
     }
 
     // Use magiskboot to unpack the boot image
     std::string magiskboot = find_magiskboot();
     if (magiskboot.empty()) {
-        LOGE("Failed to find magiskboot");
         return "";
     }
 
     // Create a temporary directory for unpacking
     char tmp_dir_template[] = "/data/local/tmp/ksu_unpack_XXXXXX";
     if (mkdtemp(tmp_dir_template) == nullptr) {
-        LOGE("Failed to create temp directory");
+        fprintf(stderr, "Failed to create temp directory: %s\n", strerror(errno));
         return "";
     }
     std::string tmp_dir = tmp_dir_template;
@@ -683,13 +720,13 @@ std::string get_kernel_version(const std::string& slot_suffix) {
     // We need to change working directory because magiskboot unpacks to current dir
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) == nullptr) {
-        LOGE("Failed to get current working directory");
+        fprintf(stderr, "Failed to get current working directory\n");
         rmdir(tmp_dir.c_str());
         return "";
     }
 
     if (chdir(tmp_dir.c_str()) != 0) {
-        LOGE("Failed to change directory to %s", tmp_dir.c_str());
+        fprintf(stderr, "Failed to change directory to %s\n", tmp_dir.c_str());
         rmdir(tmp_dir.c_str());
         return "";
     }
@@ -741,11 +778,13 @@ std::string get_kernel_version(const std::string& slot_suffix) {
                             content_buffer.substr(content_buffer.length() - search_str.length());
                     }
                 }
+            } else {
+                fprintf(stderr, "Failed to open kernel file after unpack\n");
             }
         }
     } else {
-        LOGE("magiskboot unpack failed with code %d:\n%s", unpack_result.exit_code,
-             unpack_result.stderr_str.c_str());
+        fprintf(stderr, "magiskboot unpack failed with code %d:\n%s\n", unpack_result.exit_code,
+                unpack_result.stderr_str.c_str());
     }
 
     // Cleanup
