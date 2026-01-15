@@ -1,27 +1,53 @@
 #include "flash_partition.hpp"
-#include "../defs.hpp"
-#include "../log.hpp"
-#include "../utils.hpp"
-
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <zlib.h>
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
-
-// Use PicoSHA2 instead of OpenSSL for SHA-256
+#include <sstream>  // for std::istringstream
+#include <string>
+#include <vector>
+#include "../log.hpp"
+#include "../utils.hpp"
 #include "picosha2.h"
 
-namespace fs = std::filesystem;
+// miniz is header-only in this context or linked
+#define MINIZ_HEADER_FILE_ONLY
+#include "miniz.h"
 
 namespace ksud {
 namespace flash {
+
+namespace fs = std::filesystem;
+
+// Helper wrapper to match my previous logic
+static ExecResult exec_command_sync(const std::vector<std::string>& args) {
+    return exec_command(args);
+}
+
+// Find magiskboot binary
+static std::string find_magiskboot() {
+    std::vector<std::string> candidates = {"/data/adb/ksu/bin/magiskboot",
+                                           "/data/adb/ap/bin/magiskboot",
+                                           "/data/adb/magisk/magiskboot", "/system/bin/magiskboot"};
+
+    for (const auto& path : candidates) {
+        if (access(path.c_str(), X_OK) == 0)
+            return path;
+    }
+
+    // Try PATH
+    auto res = exec_command_sync({"which", "magiskboot"});
+    if (res.exit_code == 0 && !res.stdout_str.empty()) {
+        std::string path = trim(res.stdout_str);
+        if (access(path.c_str(), X_OK) == 0)
+            return path;
+    }
+
+    return "";
+}
 
 // Helper: Convert bytes to hex string
 static std::string bytes_to_hex(const unsigned char* data, size_t len) {
@@ -69,17 +95,17 @@ static uint64_t get_file_size(const std::string& path) {
 
 // Helper: Execute command and get output
 static std::string exec_cmd(const std::string& cmd) {
-    auto result = exec_command({"/system/bin/sh", "-c", cmd});
+    auto result = exec_command_sync({"/system/bin/sh", "-c", cmd});
     return trim(result.stdout_str);
 }
 
 std::string get_current_slot_suffix() {
-    auto result = exec_command({"getprop", "ro.boot.slot_suffix"});
+    auto result = exec_command_sync({"getprop", "ro.boot.slot_suffix"});
     return trim(result.stdout_str);
 }
 
 bool is_ab_device() {
-    auto result = exec_command({"getprop", "ro.build.ab_update"});
+    auto result = exec_command_sync({"getprop", "ro.build.ab_update"});
     if (trim(result.stdout_str) != "true") {
         return false;
     }
@@ -628,101 +654,104 @@ bool patch_vbmeta_disable_verification() {
 }
 
 std::string get_kernel_version(const std::string& slot_suffix) {
-    // The kernel version string is ALWAYS in the 'boot' partition.
     std::string boot_partition_name = "boot";
+    if (!find_partition_block_device("init_boot", slot_suffix).empty()) {
+        boot_partition_name = "init_boot";
+    }
 
     std::string device = find_partition_block_device(boot_partition_name, slot_suffix);
     if (device.empty()) {
-        fprintf(stderr, "Could not find boot partition device for slot '%s'\\n",
-                slot_suffix.c_str());
+        LOGE("Could not find boot partition device for slot '%s'", slot_suffix.c_str());
         return "";
     }
 
-    int fd = open(device.c_str(), O_RDONLY | O_CLOEXEC);
-    if (fd < 0) {
-        perror("Failed to open boot partition device");
+    // Use magiskboot to unpack the boot image
+    std::string magiskboot = find_magiskboot();
+    if (magiskboot.empty()) {
+        LOGE("Failed to find magiskboot");
         return "";
     }
 
-    char buffer[4096];
-    ssize_t bytes_read;
+    // Create a temporary directory for unpacking
+    char tmp_dir_template[] = "/data/local/tmp/ksu_unpack_XXXXXX";
+    if (mkdtemp(tmp_dir_template) == nullptr) {
+        LOGE("Failed to create temp directory");
+        return "";
+    }
+    std::string tmp_dir = tmp_dir_template;
+
+    // We need to change working directory because magiskboot unpacks to current dir
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) == nullptr) {
+        LOGE("Failed to get current working directory");
+        rmdir(tmp_dir.c_str());
+        return "";
+    }
+
+    if (chdir(tmp_dir.c_str()) != 0) {
+        LOGE("Failed to change directory to %s", tmp_dir.c_str());
+        rmdir(tmp_dir.c_str());
+        return "";
+    }
+
+    auto unpack_result = exec_command_sync({magiskboot, "unpack", device});
+
     std::string result;
-    const unsigned char gzip_magic[2] = {0x1f, 0x8b};
-    off_t gzip_offset = -1;
-
-    // Find GZIP header
-    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-        for (ssize_t i = 0; i < bytes_read - 1; ++i) {
-            if ((unsigned char)buffer[i] == gzip_magic[0] &&
-                (unsigned char)buffer[i + 1] == gzip_magic[1]) {
-                gzip_offset = lseek(fd, 0, SEEK_CUR) - bytes_read + i;
-                goto found_gzip;
-            }
-        }
-    }
-
-found_gzip:
-    if (gzip_offset != -1) {
-        lseek(fd, gzip_offset, SEEK_SET);
-
-        std::vector<char> compressed_data;
-        while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-            compressed_data.insert(compressed_data.end(), buffer, buffer + bytes_read);
-        }
-
-        z_stream strm = {};
-        strm.zalloc = Z_NULL;
-        strm.zfree = Z_NULL;
-        strm.opaque = Z_NULL;
-        strm.avail_in = compressed_data.size();
-        strm.next_in = (Bytef*)compressed_data.data();
-
-        if (inflateInit2(&strm, 16 + MAX_WBITS) == Z_OK) {
-            std::vector<char> decompressed_data(32 * 1024 * 1024);  // 32MB buffer
-            strm.avail_out = decompressed_data.size();
-            strm.next_out = (Bytef*)decompressed_data.data();
-
-            int ret = inflate(&strm, Z_FINISH);
-            inflateEnd(&strm);
-
-            if (ret == Z_STREAM_END || ret == Z_OK) {
-                std::string decompressed_str(decompressed_data.data(), strm.total_out);
-                size_t pos = decompressed_str.find("Linux version ");
-                if (pos != std::string::npos) {
-                    size_t end_pos = decompressed_str.find('\n', pos);
-                    if (end_pos != std::string::npos) {
-                        result = decompressed_str.substr(pos, end_pos - pos);
-                    }
-                }
-            } else {
-                fprintf(stderr, "zlib inflate failed with error code: %d\\n", ret);
-            }
-        } else {
-            fprintf(stderr, "zlib inflateInit2 failed\\n");
-        }
-    }
-
-    // Fallback to raw string search if GZIP fails or not found
-    if (result.empty()) {
-        lseek(fd, 0, SEEK_SET);
-        std::string content_buffer;
-        while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-            content_buffer.append(buffer, bytes_read);
-            size_t pos = content_buffer.find("Linux version ");
-            if (pos != std::string::npos) {
-                size_t end_pos = content_buffer.find('\n', pos);
-                if (end_pos != std::string::npos) {
-                    result = content_buffer.substr(pos, end_pos - pos);
+    if (unpack_result.exit_code == 0) {
+        // Try to read the 'kernel' file
+        // Since we are in the temp dir, we can just read "kernel"
+        // But we can also use strings command directly on it if available
+        auto strings_result = exec_command_sync({"strings", "kernel"});
+        if (strings_result.exit_code == 0) {
+            std::istringstream iss(strings_result.stdout_str);
+            std::string line;
+            while (std::getline(iss, line)) {
+                if (line.find("Linux version ") != std::string::npos) {
+                    result = line;
                     break;
                 }
             }
+        } else {
+            // Fallback: read file manually if strings command failed
+            std::ifstream kernel_file("kernel", std::ios::binary);
+            if (kernel_file) {
+                // Read chunks and search
+                const std::string search_str = "Linux version ";
+                char buffer[4096];
+                std::string content_buffer;
+                // Limit search
+                size_t max_bytes = 64 * 1024 * 1024;
+                size_t total_read = 0;
+
+                while (total_read < max_bytes && kernel_file.read(buffer, sizeof(buffer))) {
+                    size_t bytes_read = kernel_file.gcount();
+                    total_read += bytes_read;
+                    content_buffer.append(buffer, bytes_read);
+
+                    size_t pos = content_buffer.find(search_str);
+                    if (pos != std::string::npos) {
+                        size_t end_pos = content_buffer.find('\n', pos);
+                        if (end_pos != std::string::npos) {
+                            result = content_buffer.substr(pos, end_pos - pos);
+                            break;
+                        }
+                    }
+                    if (content_buffer.length() > search_str.length()) {
+                        content_buffer =
+                            content_buffer.substr(content_buffer.length() - search_str.length());
+                    }
+                }
+            }
         }
+    } else {
+        LOGE("magiskboot unpack failed with code %d:\n%s", unpack_result.exit_code,
+             unpack_result.stderr_str.c_str());
     }
 
-    close(fd);
-    if (result.empty()) {
-        fprintf(stderr, "Kernel version string not found in %s\\n", device.c_str());
-    }
+    // Cleanup
+    chdir(cwd);
+    exec_command_sync({"rm", "-rf", tmp_dir});
+
     return result;
 }
 
@@ -735,9 +764,9 @@ std::string get_boot_slot_info() {
     std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
 
     // Get slot info from properties
-    auto result_a = exec_command({"getprop", "ro.boot.slot_suffix"});
-    auto unbootable = exec_command({"getprop", "ro.boot.slot.unbootable"});
-    auto successful = exec_command({"getprop", "ro.boot.slot.successful"});
+    auto result_a = exec_command_sync({"getprop", "ro.boot.slot_suffix"});
+    auto unbootable = exec_command_sync({"getprop", "ro.boot.slot.unbootable"});
+    auto successful = exec_command_sync({"getprop", "ro.boot.slot.successful"});
 
     std::string json = "{";
     json += "\"is_ab\":true,";
