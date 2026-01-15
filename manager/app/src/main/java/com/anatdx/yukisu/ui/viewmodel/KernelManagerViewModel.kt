@@ -108,34 +108,6 @@ class KernelManagerViewModel : ViewModel() {
         }
     }
 
-    suspend fun flashAK3(context: Context, uri: Uri): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val tempFile = File(context.cacheDir, "ak3_temp.zip")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                tempFile.outputStream().use { output -> input.copyTo(output) }
-            }
-
-            val shell = getRootShell()
-            val ksud = getKsud()
-            val stdout = mutableListOf<String>()
-            val stderr = mutableListOf<String>()
-
-            val execResult = shell.newJob()
-                .add("$ksud flash ak3 ${tempFile.absolutePath}")
-                .to(stdout, stderr)
-                .exec()
-            tempFile.delete()
-
-            if (execResult.isSuccess) {
-                Result.success(context.getString(R.string.kernel_flash_success))
-            } else {
-                Result.failure(Exception(stderr.joinToString("\n").ifEmpty { stdout.joinToString("\n") }))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     suspend fun flashKernelImage(context: Context, uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
             val bootPartition = detectBootPartition()
@@ -149,11 +121,54 @@ class KernelManagerViewModel : ViewModel() {
             val stdout = mutableListOf<String>()
             val stderr = mutableListOf<String>()
 
+            // CORRECTED ORDER: <image> <partition>
+            val command = "$ksud flash image ${tempFile.absolutePath} $bootPartition"
+            Log.i("KernelManager", "Executing: $command")
+
             val execResult = shell.newJob()
-                .add("$ksud flash image ${tempFile.absolutePath} $bootPartition")
+                .add(command)
                 .to(stdout, stderr)
                 .exec()
             tempFile.delete()
+
+            Log.i("KernelManager", "CMD: '$command' | EXIT: ${execResult.code}")
+            Log.i("KernelManager", "STDOUT: ${stdout.joinToString("\n")}")
+            Log.i("KernelManager", "STDERR: ${stderr.joinToString("\n")}")
+
+            if (execResult.isSuccess) {
+                Result.success(context.getString(R.string.kernel_flash_success))
+            } else {
+                Result.failure(Exception(stderr.joinToString("\n").ifEmpty { stdout.joinToString("\n") }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun flashAK3(context: Context, uri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val tempFile = File(context.cacheDir, "ak3_temp.zip")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output -> input.copyTo(output) }
+            }
+
+            val shell = getRootShell()
+            val ksud = getKsud()
+            val stdout = mutableListOf<String>()
+            val stderr = mutableListOf<String>()
+
+            val command = "$ksud flash ak3 ${tempFile.absolutePath}"
+            Log.i("KernelManager", "Executing: $command")
+
+            val execResult = shell.newJob()
+                .add(command)
+                .to(stdout, stderr)
+                .exec()
+            tempFile.delete()
+
+            Log.i("KernelManager", "CMD: '$command' | EXIT: ${execResult.code}")
+            Log.i("KernelManager", "STDOUT: ${stdout.joinToString("\n")}")
+            Log.i("KernelManager", "STDERR: ${stderr.joinToString("\n")}")
 
             if (execResult.isSuccess) {
                 Result.success(context.getString(R.string.kernel_flash_success))
@@ -179,10 +194,17 @@ class KernelManagerViewModel : ViewModel() {
             val stdout = mutableListOf<String>()
             val stderr = mutableListOf<String>()
 
+            val command = "$ksud flash backup $bootPartition ${outputFile.absolutePath}"
+            Log.i("KernelManager", "Executing: $command")
+
             val execResult = shell.newJob()
-                .add("$ksud flash backup $bootPartition ${outputFile.absolutePath}")
+                .add(command)
                 .to(stdout, stderr)
                 .exec()
+
+            Log.i("KernelManager", "CMD: '$command' | EXIT: ${execResult.code}")
+            Log.i("KernelManager", "STDOUT: ${stdout.joinToString("\n")}")
+            Log.i("KernelManager", "STDERR: ${stderr.joinToString("\n")}")
 
             if (execResult.isSuccess && outputFile.exists()) {
                 Result.success(outputFile.absolutePath)
@@ -206,11 +228,18 @@ class KernelManagerViewModel : ViewModel() {
             val stdout = mutableListOf<String>()
             val stderr = mutableListOf<String>()
 
+            val command = "$ksud module install ${tempFile.absolutePath}"
+            Log.i("KernelManager", "Executing: $command")
+
             val execResult = shell.newJob()
-                .add("$ksud module install ${tempFile.absolutePath}")
+                .add(command)
                 .to(stdout, stderr)
                 .exec()
             tempFile.delete()
+
+            Log.i("KernelManager", "CMD: '$command' | EXIT: ${execResult.code}")
+            Log.i("KernelManager", "STDOUT: ${stdout.joinToString("\n")}")
+            Log.i("KernelManager", "STDERR: ${stderr.joinToString("\n")}")
 
             if (execResult.isSuccess) {
                 Result.success(context.getString(R.string.kernel_flash_success))
@@ -229,10 +258,17 @@ class KernelManagerViewModel : ViewModel() {
             val stdout = mutableListOf<String>()
             val stderr = mutableListOf<String>()
 
+            val command = "$ksud flash avb disable"
+            Log.i("KernelManager", "Executing: $command")
+
             val execResult = shell.newJob()
-                .add("$ksud flash avb disable")
+                .add(command)
                 .to(stdout, stderr)
                 .exec()
+
+            Log.i("KernelManager", "CMD: '$command' | EXIT: ${execResult.code}")
+            Log.i("KernelManager", "STDOUT: ${stdout.joinToString("\n")}")
+            Log.i("KernelManager", "STDERR: ${stderr.joinToString("\n")}")
 
             if (execResult.isSuccess) {
                 Result.success(Unit)
