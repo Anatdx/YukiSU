@@ -9,6 +9,7 @@
 #include <sstream>  // for std::istringstream
 #include <string>
 #include <vector>
+#include "../boot/tools.hpp"
 #include "../log.hpp"
 #include "../utils.hpp"
 #include "picosha2.h"
@@ -25,65 +26,6 @@ namespace fs = std::filesystem;
 // Helper wrapper to match my previous logic
 static ExecResult exec_command_sync(const std::vector<std::string>& args) {
     return exec_command(args);
-}
-
-// Find magiskboot binary
-static std::string find_magiskboot() {
-    std::vector<std::string> candidates = {"/data/adb/ksu/bin/magiskboot",
-                                           "/data/adb/ap/bin/magiskboot",
-                                           "/data/adb/magisk/magiskboot", "/system/bin/magiskboot"};
-
-    for (const auto& path : candidates) {
-        if (access(path.c_str(), X_OK) == 0)
-            return path;
-    }
-
-    // Check next to our own executable (e.g. libksud.so -> libmagiskboot.so)
-    char self_path[PATH_MAX];
-    if (readlink("/proc/self/exe", self_path, sizeof(self_path)) != -1) {
-        fs::path bin_path = self_path;
-        fs::path lib_dir = bin_path.parent_path();
-        fs::path magiskboot_lib = lib_dir / "libmagiskboot.so";
-
-        if (fs::exists(magiskboot_lib)) {
-            // Found it! But we might need to copy it to execute it if it lacks +x
-            if (access(magiskboot_lib.c_str(), X_OK) == 0) {
-                return magiskboot_lib.string();
-            } else {
-                // Copy to tmp to execute
-                static std::string tmp_mb;
-                if (!tmp_mb.empty() && fs::exists(tmp_mb))
-                    return tmp_mb;
-
-                char tmp_template[] = "/data/local/tmp/ksu_mb_XXXXXX";
-                int fd = mkstemp(tmp_template);
-                if (fd >= 0) {
-                    close(fd);
-                    fs::remove(tmp_template);  // copy_file needs dest to not exist or overwrite
-                    try {
-                        fs::copy_file(magiskboot_lib, tmp_template,
-                                      fs::copy_options::overwrite_existing);
-                        chmod(tmp_template, 0755);
-                        tmp_mb = tmp_template;
-                        return tmp_mb;
-                    } catch (...) {
-                        fprintf(stderr, "Failed to copy libmagiskboot.so to tmp\n");
-                    }
-                }
-            }
-        }
-    }
-
-    // Try PATH
-    auto res = exec_command_sync({"which", "magiskboot"});
-    if (res.exit_code == 0 && !res.stdout_str.empty()) {
-        std::string path = trim(res.stdout_str);
-        if (access(path.c_str(), X_OK) == 0)
-            return path;
-    }
-
-    fprintf(stderr, "magiskboot binary not found!\n");
-    return "";
 }
 
 // Helper: Convert bytes to hex string

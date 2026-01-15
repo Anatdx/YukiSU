@@ -82,6 +82,7 @@ set(SOURCES
     src/module/module_config.cpp
     src/module/metamodule.cpp
     src/boot/boot_patch.cpp
+    src/boot/tools.cpp
     src/boot/apk_sign.cpp
     src/profile/profile.cpp
     src/sepolicy/sepolicy.cpp
