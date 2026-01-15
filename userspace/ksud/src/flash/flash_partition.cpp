@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <zlib.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -627,8 +628,7 @@ bool patch_vbmeta_disable_verification() {
 }
 
 std::string get_kernel_version(const std::string& slot_suffix) {
-    // The kernel version string is ALWAYS in the 'boot' partition, even on GKI devices.
-    // 'init_boot' only contains the ramdisk.
+    // The kernel version string is ALWAYS in the 'boot' partition.
     std::string boot_partition_name = "boot";
 
     std::string device = find_partition_block_device(boot_partition_name, slot_suffix);
@@ -644,41 +644,96 @@ std::string get_kernel_version(const std::string& slot_suffix) {
         return "";
     }
 
-    // Read the device in chunks and search for the version string
+    // KernelFlasher's logic: Find GZIP header, decompress, then find the string.
     char buffer[4096];
     ssize_t bytes_read;
-    const std::string search_str = "Linux version ";
-    std::string content_buffer;
     std::string result;
+    const unsigned char gzip_magic[2] = {0x1f, 0x8b};
 
-    // Limit the search to the first 64MB to avoid scanning huge partitions
-    constexpr size_t MAX_SEARCH_BYTES = 64 * 1024 * 1024;
-    size_t total_bytes_read = 0;
+    lseek(fd, 0, SEEK_SET);
+    off_t gzip_offset = -1;
 
-    while (total_bytes_read < MAX_SEARCH_BYTES &&
-           (bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-        total_bytes_read += bytes_read;
-        content_buffer.append(buffer, bytes_read);
-        size_t pos = content_buffer.find(search_str);
-        if (pos != std::string::npos) {
-            // Found the string, find the end of the line (newline character)
-            size_t end_pos = content_buffer.find('\n', pos);
-            if (end_pos != std::string::npos) {
-                result = content_buffer.substr(pos, end_pos - pos);
-                break;  // Exit the loop once found
+    // Find GZIP header
+    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = 0; i < bytes_read - 1; ++i) {
+            if ((unsigned char)buffer[i] == gzip_magic[0] &&
+                (unsigned char)buffer[i + 1] == gzip_magic[1]) {
+                gzip_offset = lseek(fd, 0, SEEK_CUR) - bytes_read + i;
+                goto found_gzip;
             }
-        }
-        // To handle cases where the string might span across two chunks,
-        // we keep the tail end of the buffer for the next iteration.
-        if (content_buffer.length() > search_str.length()) {
-            content_buffer = content_buffer.substr(content_buffer.length() - search_str.length());
         }
     }
 
+found_gzip:
+    if (gzip_offset == -1) {
+        // If no GZIP header, try a simple string search as a fallback (for uncompressed kernels)
+        lseek(fd, 0, SEEK_SET);
+        std::string content_buffer;
+        while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+            content_buffer.append(buffer, bytes_read);
+            size_t pos = content_buffer.find("Linux version ");
+            if (pos != std::string::npos) {
+                size_t end_pos = content_buffer.find('\n', pos);
+                if (end_pos != std::string::npos) {
+                    result = content_buffer.substr(pos, end_pos - pos);
+                    break;
+                }
+            }
+        }
+        close(fd);
+        if (result.empty())
+            fprintf(stderr, "GZIP header not found and no raw kernel version string in %s\\n",
+                    device.c_str());
+        return result;
+    }
+
+    // Decompress GZIP stream starting from the offset
+    lseek(fd, gzip_offset, SEEK_SET);
+
+    std::vector<char> compressed_data;
+    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+        compressed_data.insert(compressed_data.end(), buffer, buffer + bytes_read);
+    }
     close(fd);
 
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = compressed_data.size();
+    strm.next_in = (Bytef*)compressed_data.data();
+
+    // The 16 + MAX_WBITS is a trick to decode GZIP streams with zlib.
+    if (inflateInit2(&strm, 16 + MAX_WBITS) != Z_OK) {
+        fprintf(stderr, "zlib inflateInit2 failed\\n");
+        return "";
+    }
+
+    std::vector<char> decompressed_data(16 * 1024 * 1024);  // 16MB buffer for decompressed kernel
+    strm.avail_out = decompressed_data.size();
+    strm.next_out = (Bytef*)decompressed_data.data();
+
+    int ret = inflate(&strm, Z_FINISH);
+    inflateEnd(&strm);
+
+    if (ret != Z_STREAM_END && ret != Z_OK) {
+        fprintf(stderr, "zlib inflate failed with error code: %d\\n", ret);
+        return "";
+    }
+
+    // Search for the string in the decompressed data
+    std::string decompressed_str(decompressed_data.data(), strm.total_out);
+    size_t pos = decompressed_str.find("Linux version ");
+    if (pos != std::string::npos) {
+        size_t end_pos = decompressed_str.find('\n', pos);
+        if (end_pos != std::string::npos) {
+            result = decompressed_str.substr(pos, end_pos - pos);
+        }
+    }
+
     if (result.empty()) {
-        fprintf(stderr, "Kernel version string not found in %s\\n", device.c_str());
+        fprintf(stderr, "Kernel version string not found in decompressed GZIP data from %s\\n",
+                device.c_str());
     }
 
     return result;
