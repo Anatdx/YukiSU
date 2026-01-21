@@ -448,13 +448,17 @@ void persistent_allow_list(void)
 		return;
 	}
 
-	cb = kzalloc(sizeof(struct callback_head), GFP_KERNEL);
+	struct callback_head *cb =
+	    kzalloc(sizeof(struct callback_head), GFP_KERNEL);
 	if (!cb) {
 		pr_err("save_allow_list alloc cb err\b");
 		goto put_task;
 	}
 	cb->func = do_persistent_allow_list;
-	task_work_add(tsk, cb, TWA_RESUME);
+	if (task_work_add(tsk, cb, TWA_RESUME)) {
+		kfree(cb);
+		pr_warn("save_allow_list add task_work failed\n");
+	}
 
 put_task:
 	put_task_struct(tsk);

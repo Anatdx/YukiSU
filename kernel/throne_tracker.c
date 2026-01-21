@@ -502,11 +502,13 @@ void track_throne(bool prune_only)
 			package = strsep(&tmp, delim);
 			uid = strsep(&tmp, delim);
 			if (!uid || !package) {
+				kfree(data);
 				pr_err("update_uid: package or uid is NULL!\n");
 				break;
 			}
 
 			if (kstrtou32(uid, 10, &res)) {
+				kfree(data);
 				pr_err("track_throne: appid parse err\n");
 				break;
 			}
