@@ -640,37 +640,7 @@
     <string name="partition_no_selection">No partition selected</string>
     <string name="partition_back">Back</string>
     
-    <!-- Kernel Manager -->
-    <string name="kernel_manager">Kernel Manager</string>
-    <string name="kernel_slot_info">Slot Information</string>
-    <string name="kernel_version">Kernel Version</string>
-    <string name="kernel_header_version">Header Version</string>
-    <string name="kernel_boot_format">Boot Format</string>
-    <string name="kernel_ramdisk_format">Ramdisk Format</string>
-    <string name="kernel_actions">Kernel Actions</string>
-    <string name="kernel_flash_ak3">Flash AnyKernel3 ZIP</string>
-    <string name="kernel_flash_image">Flash Kernel Image</string>
-    <string name="kernel_extract">Extract Kernel</string>
-    <string name="kernel_flash_module">Flash KernelSU Module</string>
-    <string name="kernel_avb_status">AVB/dm-verity Status</string>
-    <string name="kernel_avb_enabled">Enabled</string>
-    <string name="kernel_avb_disabled">Disabled</string>
-    <string name="kernel_avb_disable">Disable AVB</string>
-    <string name="kernel_avb_disable_warning">This will disable Android Verified Boot and dm-verity. Continue?</string>
-    <string name="kernel_avb_disabling">Disabling AVB…</string>
-    <string name="kernel_avb_disable_success">AVB disabled successfully. Reboot required.</string>
-    <string name="kernel_avb_disable_failed">Failed to disable AVB: %s</string>
-    <string name="kernel_extracting">Extracting kernel from %s…</string>
-    <string name="kernel_extract_success">Kernel extracted: %s</string>
-    <string name="kernel_extract_failed">Kernel extraction failed: %s</string>
-    <string name="kernel_flashing_progress">Flashing kernel…</string>
-    <string name="kernel_flash_success">Kernel flashed successfully! Reboot recommended.</string>
-    <string name="kernel_flash_failed">Kernel flash failed: %s</string>
-    <string name="kernel_loading">Loading kernel information…</string>
-    <string name="kernel_refresh">Refresh</string>
-    <string name="kernel_flash_file">Flash File via Install Screen</string>
-    <string name="kernel_flash_file_desc">Select a ZIP or IMG to flash using the main installation flow</string>
+    <!-- Advanced Tools -->
     <string name="install_advanced_tools">Advanced Tools</string>
-    <string name="kernel_manager_desc">View kernel info, flash images, manage AVB</string>
     <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
 </resources>

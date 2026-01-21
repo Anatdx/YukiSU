@@ -50,7 +50,6 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.KernelFlashScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.KernelManagerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PartitionManagerScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
@@ -528,37 +527,6 @@ fun InstallScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-
-                // 内核管理入口
-                ElevatedCard(
-                    onClick = { navigator.navigate(KernelManagerScreenDestination) },
-                    colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                    elevation = getCardElevation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                ) {
-                    ListItem(
-                        headlineContent = {
-                            Text(stringResource(R.string.kernel_manager))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.kernel_manager_desc))
-                        },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.DeveloperMode,
-                                contentDescription = null
-                            )
-                        },
-                        trailingContent = {
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                }
 
                 // 分区管理入口
                 ElevatedCard(

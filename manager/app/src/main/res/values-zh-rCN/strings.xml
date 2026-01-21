@@ -643,37 +643,7 @@
     <string name="partition_no_selection">没有选择要备份的分区</string>
     <string name="partition_back">返回</string>
     
-    <!-- Kernel Manager -->
-    <string name="kernel_manager">内核管理器</string>
-    <string name="kernel_slot_info">槽位信息</string>
-    <string name="kernel_version">内核版本</string>
-    <string name="kernel_header_version">头部版本</string>
-    <string name="kernel_boot_format">Boot 格式</string>
-    <string name="kernel_ramdisk_format">Ramdisk 格式</string>
-    <string name="kernel_actions">内核操作</string>
-    <string name="kernel_flash_ak3">刷入 AnyKernel3 ZIP</string>
-    <string name="kernel_flash_image">刷入内核镜像</string>
-    <string name="kernel_extract">提取内核</string>
-    <string name="kernel_flash_module">刷入 KernelSU 模块</string>
-    <string name="kernel_avb_status">AVB/dm-verity 状态</string>
-    <string name="kernel_avb_enabled">已启用</string>
-    <string name="kernel_avb_disabled">已禁用</string>
-    <string name="kernel_avb_disable">禁用 AVB</string>
-    <string name="kernel_avb_disable_warning">这将禁用 Android 验证启动和 dm-verity。是否继续？</string>
-    <string name="kernel_avb_disabling">正在禁用 AVB…</string>
-    <string name="kernel_avb_disable_success">AVB 禁用成功。需要重启。</string>
-    <string name="kernel_avb_disable_failed">禁用 AVB 失败：%s</string>
-    <string name="kernel_extracting">正在从 %s 提取内核…</string>
-    <string name="kernel_extract_success">内核已提取：%s</string>
-    <string name="kernel_extract_failed">内核提取失败：%s</string>
-    <string name="kernel_flashing_progress">正在刷入内核…</string>
-    <string name="kernel_flash_success">内核刷入成功！建议重启。</string>
-    <string name="kernel_flash_failed">内核刷入失败：%s</string>
-    <string name="kernel_loading">正在加载内核信息…</string>
-    <string name="kernel_refresh">刷新</string>
-    <string name="kernel_flash_file">通过安装页面刷入文件</string>
-    <string name="kernel_flash_file_desc">选择 ZIP 或 IMG 文件以使用主流程刷写</string>
+    <!-- Advanced Tools -->
     <string name="install_advanced_tools">高级工具</string>
-    <string name="kernel_manager_desc">查看内核信息、刷入镜像、管理 AVB</string>
     <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
 </resources>
