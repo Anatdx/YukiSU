@@ -1396,6 +1396,7 @@ private fun SettingsTab(
                 // Uname inputs
                 var unameRelease by remember { mutableStateOf("") }
                 var unameVersion by remember { mutableStateOf("") }
+                val coroutineScope = rememberCoroutineScope()
                 
                 OutlinedTextField(
                     value = unameRelease,
@@ -1423,8 +1424,6 @@ private fun SettingsTab(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val coroutineScope = rememberCoroutineScope()
-                    
                     OutlinedButton(
                         onClick = {
                             coroutineScope.launch {
