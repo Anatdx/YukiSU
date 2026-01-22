@@ -387,34 +387,6 @@
     <string name="home_zygisk_implement">Zygisk implement</string>
     <string name="home_meta_module_implement">Meta Module implement</string>
     <string name="home_hook_type">Hook type</string>
-    <!-- KPM patching related strings -->
-    <string name="kpm_patch_options">KPM Patch</string>
-    <string name="kpm_patch_description">For adding additional KPM features</string>
-    <string name="enable_kpm_patch">KPM Patch</string>
-    <string name="kpm_patch_switch_description">Apply KPM patch to kernel image before flashing</string>
-    <string name="enable_kpm_undo_patch">KPM Undo Patch</string>
-    <string name="kpm_undo_patch_switch_description">Undo previously applied KPM patch</string>
-    <string name="kpm_patch_enabled">KPM patch enabled</string>
-    <string name="kpm_undo_patch_enabled">KPM undo patch enabled</string>
-    <string name="kpm_patch_mode">KPM Patch Mode</string>
-    <string name="kpm_undo_patch_mode">KPM Undo Patch Mode</string>
-    <!-- KPM workflow related -->
-    <string name="kpm_preparing_tools">Preparing KPM tools</string>
-    <string name="kpm_applying_patch">Applying KPM patch</string>
-    <string name="kpm_undoing_patch">Undoing KPM patch</string>
-    <string name="kpm_found_image_file">Found Image file: %s</string>
-    <string name="kpm_patch_success">KPM patch applied successfully</string>
-    <string name="kpm_undo_patch_success">KPM patch undone successfully</string>
-    <string name="kpm_file_repacked">File repacked successfully</string>
-    <!-- KPM error messages -->
-    <string name="kpm_extract_zip_failed">Failed to extract zip file</string>
-    <string name="kpm_image_file_not_found">Image file not found</string>
-    <string name="kpm_patch_failed">KPM patch failed</string>
-    <string name="kpm_undo_patch_failed">KPM undo patch failed</string>
-    <string name="kpm_patch_operation_failed">KPM patch operation failed: %s</string>
-    <!-- KPM option radio group strings -->
-    <string name="kpm_follow_kernel_file">Follow Kernel</string>
-    <string name="kpm_follow_kernel_description">Use kernel as-is without any KPM modifications</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">Confirm Installation</string>
     <string name="confirm_multiple_installation">Confirm Installation (%d files)</string>
@@ -502,81 +474,6 @@
     <string name="signature_bypass_desc">Disable APK signature verification. Manager will only be recognized through SuperKey authentication.</string>
     <string name="gki_priority_title">GKI Priority Mode</string>
     <string name="gki_priority_desc">When enabled, GKI takes priority over LKM. The LKM will not trigger GKI yield and both will run independently.</string>
-
-    <!-- HymoFS Configuration -->
-    <string name="hymofs_title">HymoFS Configuration</string>
-    <string name="hymofs_tab_status">Status</string>
-    <string name="hymofs_tab_modules">Modules</string>
-    <string name="hymofs_tab_settings">Settings</string>
-    <string name="hymofs_tab_rules">Rules</string>
-    <string name="hymofs_tab_logs">Logs</string>
-    <string name="hymofs_storage">Storage</string>
-    <string name="hymofs_modules_count">Modules</string>
-    <string name="hymofs_system_info">System Info</string>
-    <string name="hymofs_version">Version: %s</string>
-    <string name="hymofs_status_available">HymoFS kernel is available and working</string>
-    <string name="hymofs_status_not_present">HymoFS kernel is not present</string>
-    <string name="hymofs_status_kernel_too_old">Kernel version is too old for HymoFS</string>
-    <string name="hymofs_status_module_too_old">Module version is too old for current kernel</string>
-    <string name="hymofs_builtin_mount">Built-in Mount</string>
-    <string name="hymofs_builtin_mount_desc">Use built-in hymo mount instead of external metamodule. Disable this if you want to use another metamodule.</string>
-    <string name="hymofs_verbose">Verbose Logging</string>
-    <string name="hymofs_verbose_desc">Enable detailed daemon logs</string>
-    <string name="hymofs_force_ext4">Force EXT4</string>
-    <string name="hymofs_force_ext4_desc">Always use EXT4 image instead of tmpfs</string>
-    <string name="hymofs_prefer_erofs">Prefer EROFS</string>
-    <string name="hymofs_prefer_erofs_desc">Use EROFS (read-only, compressed) if available</string>
-    <string name="hymofs_disable_umount">Disable Umount</string>
-    <string name="hymofs_disable_umount_desc">Don\'t unmount on process isolation</string>
-    <string name="hymofs_kernel_debug">Kernel Debug</string>
-    <string name="hymofs_kernel_debug_desc">Enable HymoFS kernel debug logging</string>
-    <string name="hymofs_stealth">Stealth Mode</string>
-    <string name="hymofs_stealth_desc">Hide mount traces and reorder mount IDs</string>
-    <string name="hymofs_avc_spoof">AVC Log Spoofing</string>
-    <string name="hymofs_avc_spoof_desc">Spoof SELinux AVC deny logs</string>
-    <string name="hymofs_enable_nuke">Enable Nuke</string>
-    <string name="hymofs_enable_nuke_desc">Allow nuking ext4 sysfs entries</string>
-    <string name="hymofs_ignore_protocol">Ignore Protocol Mismatch</string>
-    <string name="hymofs_ignore_protocol_desc">Continue even if kernel/userspace versions don\'t match</string>
-    <string name="hymofs_moduledir">Module Directory</string>
-    <string name="hymofs_moduledir_desc">Base directory for modules (default: /data/adb/modules)</string>
-    <string name="hymofs_tempdir">Temporary Mount Point</string>
-    <string name="hymofs_tempdir_desc">Base path for temporary mounts (leave empty for auto)</string>
-    <string name="hymofs_mountsource">OverlayFS Mount Source</string>
-    <string name="hymofs_mountsource_desc">Name to use for overlayfs mount source (default: KSU)</string>
-    <string name="hymofs_logs_copy">Copy</string>
-    <string name="hymofs_logs_copy_success">Log copied to clipboard</string>
-    <string name="hymofs_logs_filter_all">All</string>
-    <string name="hymofs_logs_filter_info">Info</string>
-    <string name="hymofs_logs_filter_warn">Warn</string>
-    <string name="hymofs_logs_filter_error">Error</string>
-    <string name="hymofs_partitions">Active Partitions</string>
-    <string name="hymofs_partitions_desc">Partitions to scan for module modifications (comma-separated)</string>
-    <string name="hymofs_partitions_scan">Scan Partitions</string>
-    <string name="hymofs_partitions_add">Add Partition</string>
-    <string name="hymofs_partitions_placeholder">Enter partition names (e.g., mi_ext, my_stock)</string>
-    <string name="hymofs_general">General</string>
-    <string name="hymofs_advanced">Advanced</string>
-    <string name="hymofs_fix_mounts">Fix Mount IDs</string>
-    <string name="hymofs_rules_clear_all">Clear All Rules</string>
-    <string name="hymofs_rules_clear_confirm">Are you sure you want to clear all active HymoFS rules? This will take effect immediately.</string>
-    <string name="hymofs_rules_clear">Clear</string>
-    <string name="hymofs_rules_cancel">Cancel</string>
-    <string name="hymofs_rules_not_available">HymoFS kernel not available. Rules tab requires HymoFS kernel support.</string>
-    <string name="hymofs_rules_refresh">Refresh</string>
-    <string name="hymofs_rules_count">%d active rules</string>
-    <string name="hymofs_rules_empty">No active rules</string>
-    <string name="hymofs_logs_daemon">Daemon Log</string>
-    <string name="hymofs_logs_kernel">Kernel Log</string>
-    <string name="hymofs_kernel_title">HymoFS Kernel</string>
-    <string name="hymofs_version_label">Version: %s</string>
-    <string name="hymofs_stats_hymofs">HymoFS</string>
-    <string name="hymofs_info_kernel">Kernel</string>
-    <string name="hymofs_info_selinux">SELinux</string>
-    <string name="hymofs_info_mount_base">Mount Base</string>
-    <string name="hymofs_info_active_mounts">Active Mounts:</string>
-    <string name="hymofs_info_more_mounts">... and %d more</string>
-    <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>
