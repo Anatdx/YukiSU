@@ -220,7 +220,7 @@ bool is_sid_match(const struct cred *cred, u32 cached_sid,
 		return false;
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct *tsec;
+	const struct task_security_struct *tsec = cred->security;
 #else
 	const struct cred_security_struct *tsec = selinux_cred(cred);
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
