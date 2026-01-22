@@ -27,13 +27,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Checkout meta-hymo repository
-      uses: actions/checkout@v5
-      with:
-        repository: Anatdx/meta-hymo
-        path: meta-hymo
-        fetch-depth: 1
-
     - name: Download artifacts
       uses: actions/download-artifact@v4
     
@@ -103,11 +96,6 @@ jobs:
             exit 1
             ;;
         esac
-
-    - name: Sync HymoFS source code
-      run: |
-        cd userspace/ksud
-        python3 scripts/sync_hymo.py
 
     - name: Build ksud
       run: |

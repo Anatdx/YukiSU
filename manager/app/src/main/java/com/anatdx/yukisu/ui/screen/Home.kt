@@ -38,7 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -394,16 +393,6 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
-                // HymoFS 配置按钮
-                IconButton(onClick = {
-                    navigator.navigate(HymoFSConfigScreenDestination)
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Tune,
-                        contentDescription = stringResource(R.string.hymofs_title)
-                    )
-                }
-
                 // 重启按钮
                 var showDropdown by remember { mutableStateOf(false) }
                 KsuIsValid {
