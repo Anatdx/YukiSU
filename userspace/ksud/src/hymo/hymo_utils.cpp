@@ -1,6 +1,7 @@
 // utils.cpp - Utility functions implementation
 #include "hymo_utils.hpp"
 #include <fcntl.h>
+#include <linux/loop.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include "hymo_defs.hpp"
 
 namespace hymo {
@@ -144,33 +146,160 @@ bool has_files_recursive(const fs::path& path) {
     return false;
 }
 
-bool mount_image(const fs::path& image_path, const fs::path& target) {
+// Loop device helpers
+static int setup_loop_device(const std::string& image_path, std::string& loop_path,
+                             bool read_only) {
+    int control_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
+    if (control_fd < 0) {
+        LOG_ERROR("Failed to open /dev/loop-control: " + std::string(strerror(errno)));
+        return -1;
+    }
+
+    int loop_nr = ioctl(control_fd, LOOP_CTL_GET_FREE);
+    close(control_fd);
+
+    if (loop_nr < 0) {
+        LOG_ERROR("Failed to allocate loop device");
+        return -1;
+    }
+
+    loop_path = "/dev/block/loop" + std::to_string(loop_nr);
+    if (access(loop_path.c_str(), F_OK) != 0) {
+        struct stat st;
+        // Check if /dev/block directory exists, if not fallback to /dev/loop
+        if (stat("/dev/block", &st) == 0 && S_ISDIR(st.st_mode)) {
+            // Maybe we need to mknod? try /dev/loop first as it is more standard
+            loop_path = "/dev/loop" + std::to_string(loop_nr);
+        } else {
+            loop_path = "/dev/loop" + std::to_string(loop_nr);
+        }
+    }
+
+    // Double check accessibility
+    if (access(loop_path.c_str(), F_OK) != 0) {
+        // Try opposite convention
+        if (loop_path.find("/dev/block/") != std::string::npos)
+            loop_path = "/dev/loop" + std::to_string(loop_nr);
+        else
+            loop_path = "/dev/block/loop" + std::to_string(loop_nr);
+    }
+
+    int loop_fd = open(loop_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (loop_fd < 0) {
+        LOG_ERROR("Failed to open loop device " + loop_path + ": " + strerror(errno));
+        return -1;
+    }
+
+    int file_fd = open(image_path.c_str(), read_only ? O_RDONLY : O_RDWR | O_CLOEXEC);
+    if (file_fd < 0) {
+        LOG_ERROR("Failed to open image " + image_path + ": " + strerror(errno));
+        close(loop_fd);
+        return -1;
+    }
+
+    if (ioctl(loop_fd, LOOP_SET_FD, file_fd) < 0) {
+        LOG_ERROR("Failed to bind loop device: " + std::string(strerror(errno)));
+        close(file_fd);
+        close(loop_fd);
+        return -1;
+    }
+    close(file_fd);
+
+    struct loop_info64 info;
+    memset(&info, 0, sizeof(info));
+    info.lo_flags = LO_FLAGS_AUTOCLEAR;
+    if (read_only)
+        info.lo_flags |= LO_FLAGS_READ_ONLY;
+
+    if (ioctl(loop_fd, LOOP_SET_STATUS64, &info) < 0) {
+        LOG_ERROR("Failed to set loop status: " + std::string(strerror(errno)));
+        ioctl(loop_fd, LOOP_CLR_FD, 0);
+        close(loop_fd);
+        return -1;
+    }
+
+    return loop_fd;
+}
+
+bool mount_image(const fs::path& image_path, const fs::path& target, const std::string& fs_type,
+                 const std::string& options) {
     if (!ensure_dir_exists(target)) {
         return false;
     }
 
-    // Detect filesystem type (for EROFS support)
-    std::string fstype = "ext4";  // default
-    if (image_path.extension() == ".erofs") {
-        fstype = "erofs";
+    unsigned long flags = 0;
+    std::string data;
+    bool read_only = false;
+    bool remount = false;
+    bool bind = false;
+
+    std::stringstream ss(options);
+    std::string segment;
+    while (std::getline(ss, segment, ',')) {
+        if (segment == "loop")
+            continue;
+        else if (segment == "rw")
+            read_only = false;
+        else if (segment == "ro") {
+            flags |= MS_RDONLY;
+            read_only = true;
+        } else if (segment == "noatime")
+            flags |= MS_NOATIME;
+        else if (segment == "noexec")
+            flags |= MS_NOEXEC;
+        else if (segment == "nosuid")
+            flags |= MS_NOSUID;
+        else if (segment == "nodev")
+            flags |= MS_NODEV;
+        else if (segment == "sync")
+            flags |= MS_SYNCHRONOUS;
+        else if (segment == "bind") {
+            flags |= MS_BIND;
+            bind = true;
+        } else if (segment == "remount") {
+            flags |= MS_REMOUNT;
+            remount = true;
+        } else {
+            if (!data.empty())
+                data += ",";
+            data += segment;
+        }
     }
 
-    // Build mount command
-    std::string cmd;
-    if (fstype == "erofs") {
-        // EROFS is always read-only
-        cmd = "mount -t erofs -o loop,ro " + image_path.string() + " " + target.string();
+    std::string source;
+    int loop_fd = -1;
+
+    // Determine safe source
+    if (bind || remount) {
+        source = image_path.string();
+    } else if (fs::is_regular_file(image_path)) {
+        // Setup loop device for file
+        source = "";
+        loop_fd = setup_loop_device(image_path.string(), source, read_only);
+        if (loop_fd < 0)
+            return false;
     } else {
-        // ext4 with read-write
-        cmd = "mount -t ext4 -o loop,rw,noatime " + image_path.string() + " " + target.string();
+        source = image_path.string();
     }
 
-    int ret = system(cmd.c_str());
+    int ret = mount(source.c_str(), target.c_str(), fs_type.c_str(), flags, data.c_str());
 
     if (ret != 0) {
-        LOG_ERROR("Failed to mount image " + image_path.string() + " to " + target.string());
+        LOG_ERROR("mount failed: " + std::string(strerror(errno)) + " (src=" + source +
+                  ", tgt=" + target.string() + ", type=" + fs_type + ")");
+        if (loop_fd >= 0) {
+            // If mount failed, explicitly clear loop device to avoid leaking it
+            // even though AUTOCLEAR is set, it might need fd close to trigger
+            ioctl(loop_fd, LOOP_CLR_FD, 0);
+            close(loop_fd);
+        }
         return false;
     }
+
+    // Success - if we used loop, we can close the fd now.
+    // MOUNT holds the reference, so AUTOCLEAR won't trigger until umount.
+    if (loop_fd >= 0)
+        close(loop_fd);
 
     return true;
 }
@@ -178,27 +307,16 @@ bool mount_image(const fs::path& image_path, const fs::path& target) {
 bool repair_image(const fs::path& image_path) {
     LOG_INFO("Running e2fsck on " + image_path.string());
 
-    // Use e2fsck -y -f to force check and auto-fix
     std::string cmd = "e2fsck -y -f " + image_path.string() + " >/dev/null 2>&1";
     int ret = system(cmd.c_str());
-
-    // e2fsck exit codes:
-    // 0 - No errors
-    // 1 - File system errors corrected
-    // 2 - File system errors corrected, system should be rebooted
-    // 4 - File system errors left uncorrected
-    // 8 - Operational error
-    // 16 - Usage or syntax error
-    // 32 - E2fsck canceled by user request
-    // 128 - Shared library error
 
     if (WIFEXITED(ret)) {
         int code = WEXITSTATUS(ret);
         if (code <= 2) {
-            LOG_INFO("Image repair successful (code " + std::to_string(code) + ")");
+            LOG_INFO("Image repair success (code " + std::to_string(code) + ")");
             return true;
         } else {
-            LOG_ERROR("e2fsck failed with exit code: " + std::to_string(code));
+            LOG_ERROR("e2fsck failed: " + std::to_string(code));
             return false;
         }
     }
@@ -248,6 +366,18 @@ bool sync_dir(const fs::path& src, const fs::path& dst) {
         return false;
     }
     return native_cp_r(src, dst);
+}
+
+// Check if tmpfs supports xattr on this device
+bool check_tmpfs_xattr() {
+    fs::path temp_dir = select_temp_dir() / "xattr_check";
+    if (!mount_tmpfs(temp_dir)) {
+        return false;
+    }
+    bool supported = is_xattr_supported(temp_dir);
+    umount2(temp_dir.c_str(), MNT_DETACH);
+    rmdir(temp_dir.c_str());
+    return supported;
 }
 
 // Process utilities
@@ -335,6 +465,9 @@ bool send_unmountable(const fs::path& target) {
 
     if (ioctl(fd, KSU_IOCTL_ADD_TRY_UMOUNT, &cmd) == 0) {
         sent_unmounts.insert(path_str);
+        LOG_DEBUG("Registered unmountable path: " + path_str);
+    } else {
+        LOG_WARN("Failed to register unmountable path: " + path_str);
     }
 #endif // #ifdef __ANDROID__
     return true;

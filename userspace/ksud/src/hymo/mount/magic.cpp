@@ -192,7 +192,7 @@ static bool mount_mirror(const fs::path& path, const fs::path& work_dir_path,
         if (entry.is_regular_file()) {
             std::ofstream f(work_path);
             f.close();
-            mount(target_path.c_str(), work_path.c_str(), nullptr, MS_BIND, nullptr);
+            mount(target_path.c_str(), work_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
         } else if (entry.is_directory()) {
             fs::create_directory(work_path);
             auto perms = fs::status(entry.path()).permissions();
@@ -224,7 +224,7 @@ static bool mount_file(const fs::path& path, const fs::path& work_dir_path, cons
     }
 
     if (!node.module_path.empty()) {
-        mount(node.module_path.c_str(), target_path.c_str(), nullptr, MS_BIND, nullptr);
+        mount(node.module_path.c_str(), target_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
         if (!disable_umount) {
             send_unmountable(target_path);
         }
@@ -329,7 +329,7 @@ static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_pat
         fs::permissions(work_dir_path, perms);
         copy_path_context(src_path, work_dir_path);
 
-        mount(work_dir_path.c_str(), work_dir_path.c_str(), nullptr, MS_BIND, nullptr);
+        mount(work_dir_path.c_str(), work_dir_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
     } catch (...) {
         return false;
     }
@@ -407,7 +407,8 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
     fs::path tmp_dir = tmp_path / "workdir";
     ensure_dir_exists(tmp_dir);
 
-    mount(mount_source.c_str(), tmp_dir.c_str(), "tmpfs", 0, "");
+    // Mount tmpfs with proper parameters
+    mount("tmpfs", tmp_dir.c_str(), "tmpfs", 0, "mode=0755");
     mount(nullptr, tmp_dir.c_str(), nullptr, MS_PRIVATE, nullptr);
 
     bool result = do_magic_mount("/", tmp_dir, *root, false, disable_umount);

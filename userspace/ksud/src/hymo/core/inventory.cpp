@@ -153,10 +153,17 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
         return {};
     }
 
-    // Standard module files/dirs to ignore
-    std::set<std::string> ignored = {"META-INF", "common",     "system",    "vendor",
-                                     "product",  "system_ext", "odm",       "oem",
-                                     ".git",     ".github",    "lost+found"};
+    // Module metadata directories to ignore
+    std::set<std::string> module_metadata = {"META-INF", "common",     ".git",
+                                             ".github",  "lost+found", "webroot"};
+
+    // BUILTIN_PARTITIONS from defs.hpp
+    std::set<std::string> builtin_set(BUILTIN_PARTITIONS.begin(), BUILTIN_PARTITIONS.end());
+
+    // System directories that are mountpoints but NOT Android partitions
+    std::set<std::string> system_dirs = {"tmp", "proc", "sys",  "dev",   "run",
+                                         "mnt", "boot", "root", "etc",   "home",
+                                         "var", "opt",  "srv",  "media", "usr"};
 
     try {
         for (const auto& mod_entry : fs::directory_iterator(source_dir)) {
@@ -169,19 +176,25 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
 
                 std::string name = entry.path().filename().string();
 
-                // Skip if it's a standard partition or metadata
-                if (ignored.find(name) != ignored.end())
+                // Skip module metadata directories
+                if (module_metadata.find(name) != module_metadata.end())
                     continue;
 
-                // Check if it corresponds to a real directory in root AND is a
-                // mountpoint
-                std::string root_path_str = "/" + name;
-                fs::path root_path = root_path_str;
+                // Skip builtin partitions (already handled by default)
+                if (builtin_set.find(name) != builtin_set.end())
+                    continue;
 
-                if (fs::exists(root_path) && fs::is_directory(root_path)) {
-                    if (is_mountpoint(root_path_str)) {
-                        candidates.insert(name);
-                    }
+                // Skip system directories (not Android partitions)
+                if (system_dirs.find(name) != system_dirs.end())
+                    continue;
+
+                // Only include if:
+                // 1. Directory exists in root filesystem
+                // 2. It is actually a mountpoint (real partition)
+                std::string root_path_str = "/" + name;
+
+                if (is_mountpoint(root_path_str)) {
+                    candidates.insert(name);
                 }
             }
         }

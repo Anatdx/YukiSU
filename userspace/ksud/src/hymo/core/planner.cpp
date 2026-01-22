@@ -9,6 +9,7 @@
 #include "../hymo_defs.hpp"
 #include "../hymo_utils.hpp"
 #include "../mount/hymofs.hpp"
+#include "user_rules.hpp"
 
 namespace hymo {
 
@@ -54,11 +55,7 @@ static bool has_meaningful_content(const fs::path& base,
     return false;
 }
 
-// Helper: Resolve symlinks in directory path, but keep the filename as is.
-// This ensures that rules for /sdcard/foo (where /sdcard ->
-// /storage/emulated/0) are correctly mapped to /storage/emulated/0/foo, while
-// preserving the ability to target a symlink file itself (e.g. replacing a
-// symlink).
+// Helper: Resolve symlinks in directory symlinks but preserve filename logic
 static std::string resolve_path_for_hymofs(const std::string& path_str) {
     try {
         fs::path p(path_str);
@@ -238,15 +235,6 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
             if (default_mode == "magic" && !magic_active && module.rules.empty()) {
                 // Should not happen as we are in has_rules block
             } else if (default_mode == "magic" && !magic_active) {
-                // If default is magic but no specific magic rules found (and we have
-                // other rules), we might still want to magic mount the root? But if we
-                // have rules, we probably want specific behavior. Let's assume if
-                // default is magic, we add the root unless explicitly excluded? For
-                // now, let's stick to explicit rules or default behavior if no rules
-                // match. If default is magic, and we have a rule for
-                // /system/bin=hymofs. We probably want everything else to be magic. But
-                // magic mount is coarse. Let's just add the root to magic_paths if
-                // default is magic.
                 magic_paths.insert(content_path);
                 magic_ids.insert(module.id);
             }
@@ -494,6 +482,9 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
     for (const auto& path : hide_rules) {
         HymoFS::hide_path(path);
     }
+
+    // Apply user-defined hide rules
+    apply_user_hide_rules();
 
     LOG_INFO("HymoFS mappings updated.");
 }

@@ -53,7 +53,9 @@ bool RuntimeState::save() const {
         if (i < active_mounts.size() - 1)
             file << ", ";
     }
-    file << "]\n";
+    file << "],\n";
+
+    file << "  \"pid\": " << pid << "\n";
 
     file << "}\n";
 
@@ -121,6 +123,18 @@ RuntimeState load_runtime_state() {
             state.hymofs_module_ids = parse_json_array(line);
         } else if (line.find("\"active_mounts\"") != std::string::npos) {
             state.active_mounts = parse_json_array(line);
+        } else if (line.find("\"pid\"") != std::string::npos) {
+            if (line.find(":") != std::string::npos) {
+                try {
+                    std::string val = line.substr(line.find(":") + 1);
+                    // Remove trailing comma if any
+                    if (val.find(",") != std::string::npos)
+                        val = val.substr(0, val.find(","));
+                    state.pid = std::stoi(val);
+                } catch (...) {
+                    state.pid = 0;
+                }
+            }
         }
     }
 

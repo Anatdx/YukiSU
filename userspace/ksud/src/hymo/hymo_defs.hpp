@@ -1,3 +1,4 @@
+// Synced from hymo v2.0.0-1-g3eea955
 // Constants and definitions
 #pragma once
 
@@ -14,8 +15,10 @@ constexpr const char* RUN_DIR = "/data/adb/hymo/run/";
 constexpr const char* STATE_FILE = "/data/adb/hymo/run/daemon_state.json";
 constexpr const char* DAEMON_LOG_FILE = "/data/adb/hymo/daemon.log";
 constexpr const char* SYSTEM_RW_DIR = "/data/adb/hymo/rw";
+constexpr const char* MODULE_PROP_FILE = "/data/adb/modules/hymo/module.prop";
 
 // Marker files
+constexpr const char* CONFIG_FILENAME = "config.json";
 constexpr const char* DISABLE_FILE_NAME = "disable";
 constexpr const char* REMOVE_FILE_NAME = "remove";
 constexpr const char* SKIP_MOUNT_FILE_NAME = "skip_mount";

@@ -114,13 +114,32 @@ static bool mount_overlayfs_modern(const std::string& lowerdir_config,
     return success;
 }
 
+// Escape commas in paths for overlay mount options
+static std::string escape_overlay_path(const std::string& path) {
+    std::string result;
+    result.reserve(path.size() + 10);
+    for (char c : path) {
+        if (c == ',') {
+            result += "\\,";
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
 static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
                                    const std::optional<std::string>& upperdir,
                                    const std::optional<std::string>& workdir,
                                    const std::string& dest, const std::string& mount_source) {
-    std::string data = "lowerdir=" + lowerdir_config;
+    // Escape commas in all paths
+    std::string safe_lowerdir = escape_overlay_path(lowerdir_config);
+    std::string data = "lowerdir=" + safe_lowerdir;
+
     if (upperdir && workdir) {
-        data += ",upperdir=" + *upperdir + ",workdir=" + *workdir;
+        std::string safe_upper = escape_overlay_path(*upperdir);
+        std::string safe_work = escape_overlay_path(*workdir);
+        data += ",upperdir=" + safe_upper + ",workdir=" + safe_work;
     }
 
     if (mount(mount_source.c_str(), dest.c_str(), "overlay", 0, data.c_str()) != 0) {

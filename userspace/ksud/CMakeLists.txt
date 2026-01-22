@@ -47,15 +47,21 @@ set(VERSION_CPP ${CMAKE_SOURCE_DIR}/src/defs.cpp)
 # Create generated directory
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
-# Generate version file at configure time
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_version.py ${VERSION_CPP}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE VERSION_RESULT
-)
-if(NOT VERSION_RESULT EQUAL 0)
-    message(WARNING "Failed to generate version file, using defaults")
+# Sync HymoFS source code from standalone repository (optional)
+# Set SYNC_HYMO=ON to enable automatic sync during build
+option(SYNC_HYMO "Sync HymoFS source from standalone repository" OFF)
+if(SYNC_HYMO)
+    message(STATUS "Syncing HymoFS source code from standalone repository...")
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/sync_hymo.py
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE SYNC_RESULT
+    )
+    if(NOT SYNC_RESULT EQUAL 0)
+        message(WARNING "Failed to sync HymoFS source, using existing version")
+    else()
+        message(STATUS "HymoFS source synced successfully")
+    endif()
 endif()
 
 # Generate version file at configure time
@@ -63,7 +69,8 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 execute_process(
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_version.py ${VERSION_CPP}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE VERSION_RESULT)
+    RESULT_VARIABLE VERSION_RESULT
+)
 if(NOT VERSION_RESULT EQUAL 0)
     message(WARNING "Failed to generate version file, using defaults")
 endif()
@@ -116,6 +123,7 @@ set(SOURCES
     src/hymo/core/state.cpp
     src/hymo/core/storage.cpp
     src/hymo/core/sync.cpp
+    src/hymo/core/user_rules.cpp
     src/hymo/mount/hymofs.cpp
     src/hymo/mount/magic.cpp
     src/hymo/mount/overlay.cpp
@@ -124,6 +132,7 @@ set(SOURCES
 
 # 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
 include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
 include_directories(${GENERATED_DIR})

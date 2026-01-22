@@ -16,6 +16,7 @@ struct RuntimeState {
     bool nuke_active = false;
     bool hymofs_mismatch = false;
     std::string mismatch_message;
+    int pid = 0;
 
     bool save() const;
 };

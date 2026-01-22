@@ -15,20 +15,48 @@ struct ModuleRuleConfig {
     std::string mode;
 };
 
+enum class FilesystemType { AUTO, EXT4, EROFS_FS, TMPFS };
+
+// Convert string to FilesystemType
+inline FilesystemType filesystem_type_from_string(const std::string& str) {
+    if (str == "ext4")
+        return FilesystemType::EXT4;
+    if (str == "erofs")
+        return FilesystemType::EROFS_FS;
+    if (str == "tmpfs")
+        return FilesystemType::TMPFS;
+    return FilesystemType::AUTO;
+}
+
+// Convert FilesystemType to string
+inline std::string filesystem_type_to_string(FilesystemType type) {
+    switch (type) {
+    case FilesystemType::EXT4:
+        return "ext4";
+    case FilesystemType::EROFS_FS:
+        return "erofs";
+    case FilesystemType::TMPFS:
+        return "tmpfs";
+    default:
+        return "auto";
+    }
+}
+
 struct Config {
     fs::path moduledir = "/data/adb/modules";
     fs::path tempdir;
     std::string mountsource = "KSU";
     bool verbose = false;
-    bool force_ext4 = false;
-    bool prefer_erofs = false;
+    FilesystemType fs_type = FilesystemType::AUTO;
     bool disable_umount = false;
     bool enable_nuke = true;
     bool ignore_protocol_mismatch = false;
     bool enable_kernel_debug = false;
-    bool enable_stealth = true;  // Default to true
-    bool avc_spoof = false;
+    bool enable_stealth = true;
+    bool hymofs_enabled = true;
     std::string mirror_path;
+    std::string uname_release;
+    std::string uname_version;
     std::vector<std::string> partitions;
     std::map<std::string, std::string> module_modes;
     std::map<std::string, std::vector<ModuleRuleConfig>> module_rules;

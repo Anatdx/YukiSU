@@ -4,6 +4,7 @@
 #include "../utils.hpp"
 
 #include <fcntl.h>
+#include <linux/limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <filesystem>

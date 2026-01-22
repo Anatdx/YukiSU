@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
-#include "defs.hpp"
+#include "hymo_defs.hpp"
 #include "hymo_magic.h"
 
 namespace fs = std::filesystem;
@@ -23,7 +23,6 @@ public:
     static bool add_rule(const std::string& src, const std::string& target, int type = 0);
     static bool delete_rule(const std::string& src);
     static bool set_mirror_path(const std::string& path);
-    static bool set_avc_log_spoofing(bool enabled);
     static bool hide_path(const std::string& path);
     static bool add_merge_rule(const std::string& src, const std::string& target);
 
@@ -32,10 +31,12 @@ public:
     static bool remove_rules_from_directory(const fs::path& target_base,
                                             const fs::path& module_dir);
 
-    // Inspection methods
+    // Debug & Stealth
     static std::string get_active_rules();
     static bool set_debug(bool enable);
     static bool set_stealth(bool enable);
+    static bool set_enabled(bool enable);
+    static bool set_uname(const std::string& release, const std::string& version);
     static bool fix_mounts();
     static bool hide_overlay_xattrs(const std::string& path);
 };

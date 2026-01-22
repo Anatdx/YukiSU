@@ -34,12 +34,14 @@ bool lsetfilecon(const fs::path& path, const std::string& context);
 std::string lgetfilecon(const fs::path& path);
 bool copy_path_context(const fs::path& src, const fs::path& dst);
 
-// Mount utilities
 bool mount_tmpfs(const fs::path& target);
-bool mount_image(const fs::path& image_path, const fs::path& target);
+bool mount_image(const fs::path& image_path, const fs::path& target,
+                 const std::string& fs_type = "ext4",
+                 const std::string& options = "loop,rw,noatime");
 bool repair_image(const fs::path& image_path);
 bool sync_dir(const fs::path& src, const fs::path& dst);
 bool has_files_recursive(const fs::path& path);
+bool check_tmpfs_xattr();
 
 // KSU utilities
 bool send_unmountable(const fs::path& target);
