@@ -16,7 +16,13 @@ KSUD_DIR = SCRIPT_DIR.parent
 YUKISU_DIR = KSUD_DIR.parent.parent  # YukiSU root
 WORKSPACE_DIR = YUKISU_DIR.parent    # hymoworker
 HYMO_REPO_URL = "https://github.com/Anatdx/meta-hymo"
-HYMO_REPO_DIR = WORKSPACE_DIR / "meta-hymo"
+
+# Try CI environment path first (YukiSU/meta-hymo), then local path (hymoworker/meta-hymo)
+if (YUKISU_DIR / "meta-hymo").exists():
+    HYMO_REPO_DIR = YUKISU_DIR / "meta-hymo"
+else:
+    HYMO_REPO_DIR = WORKSPACE_DIR / "meta-hymo"
+
 HYMO_EMBEDDED_DIR = KSUD_DIR / "src" / "hymo"
 
 # Files to sync (relative to hymo/src/)
