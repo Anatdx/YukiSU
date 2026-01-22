@@ -662,3 +662,4 @@
     <string name="hymofs_uname_version">内核版本字符串</string>
     <string name="hymofs_uname_reset">重置</string>
     <string name="hymofs_uname_apply">应用</string>
+</resources>
