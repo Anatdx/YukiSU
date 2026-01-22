@@ -536,6 +536,12 @@ void track_throne(bool prune_only)
 			locked_manager_appid);
 		ksu_invalidate_manager_appid();
 		locked_manager_appid = KSU_INVALID_UID;
+
+#ifdef CONFIG_KSU_SUPERKEY
+		// Re-register prctl kprobe when package list changes
+		extern void ksu_superkey_register_prctl_kprobe(void);
+		ksu_superkey_register_prctl_kprobe();
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 	}
 
 	need_search = !manager_exist;

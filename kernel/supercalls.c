@@ -1309,6 +1309,9 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 		superkey_on_auth_success(uid);
 		ksu_set_manager_uid(uid);
 
+		// Unregister prctl kprobe after successful authentication
+		ksu_superkey_unregister_prctl_kprobe();
+
 		// Allow reboot syscall for this process
 		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
 		    current->seccomp.filter) {
@@ -1433,6 +1436,39 @@ static struct kprobe prctl_kp = {
     .symbol_name = SYS_PRCTL_SYMBOL,
     .pre_handler = prctl_handler_pre,
 };
+
+static bool prctl_kprobe_registered = false;
+static DEFINE_MUTEX(prctl_kprobe_lock);
+
+void ksu_superkey_unregister_prctl_kprobe(void)
+{
+	mutex_lock(&prctl_kprobe_lock);
+	if (prctl_kprobe_registered) {
+		unregister_kprobe(&prctl_kp);
+		prctl_kprobe_registered = false;
+		pr_info("SuperKey: prctl kprobe unregistered after "
+			"authentication\n");
+	}
+	mutex_unlock(&prctl_kprobe_lock);
+}
+
+void ksu_superkey_register_prctl_kprobe(void)
+{
+	int rc;
+	mutex_lock(&prctl_kprobe_lock);
+	if (!prctl_kprobe_registered) {
+		rc = register_kprobe(&prctl_kp);
+		if (rc) {
+			pr_err(
+			    "SuperKey: prctl kprobe re-register failed: %d\n",
+			    rc);
+		} else {
+			prctl_kprobe_registered = true;
+			pr_info("SuperKey: prctl kprobe re-registered\n");
+		}
+	}
+	mutex_unlock(&prctl_kprobe_lock);
+}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
 void ksu_supercalls_init(void)
@@ -1462,8 +1498,10 @@ void ksu_supercalls_init(void)
 	rc = register_kprobe(&prctl_kp);
 	if (rc) {
 		pr_err("prctl kprobe failed: %d\n", rc);
+		prctl_kprobe_registered = false;
 	} else {
 		pr_info("prctl kprobe registered for SuperKey auth\n");
+		prctl_kprobe_registered = true;
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
@@ -1478,7 +1516,12 @@ void ksu_supercalls_exit(void)
 
 	// SuperKey prctl kprobe - always unregister regardless of HymoFS
 #ifdef CONFIG_KSU_SUPERKEY
-	unregister_kprobe(&prctl_kp);
+	mutex_lock(&prctl_kprobe_lock);
+	if (prctl_kprobe_registered) {
+		unregister_kprobe(&prctl_kp);
+		prctl_kprobe_registered = false;
+	}
+	mutex_unlock(&prctl_kprobe_lock);
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
