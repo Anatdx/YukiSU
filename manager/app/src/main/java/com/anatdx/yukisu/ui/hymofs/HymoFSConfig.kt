@@ -76,7 +76,7 @@ fun HymoFSConfigScreen(
     var config by remember { mutableStateOf(HymoFSManager.HymoConfig()) }
     var modules by remember { mutableStateOf(emptyList<HymoFSManager.ModuleInfo>()) }
     var activeRules by remember { mutableStateOf(emptyList<HymoFSManager.ActiveRule>()) }
-    var systemInfo by remember { mutableStateOf(HymoFSManager.SystemInfo("", "", "", emptyList(), emptyList(), false, null)) }
+    var systemInfo by remember { mutableStateOf(HymoFSManager.SystemInfo("", "", "", emptyList(), emptyList(), false, null, "", "")) }
     var storageInfo by remember { mutableStateOf(HymoFSManager.StorageInfo("-", "-", "-", "0%", "unknown")) }
     var logContent by remember { mutableStateOf("") }
     var showKernelLog by remember { mutableStateOf(false) }

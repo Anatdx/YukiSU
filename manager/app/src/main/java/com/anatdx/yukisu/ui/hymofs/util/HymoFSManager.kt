@@ -70,7 +70,9 @@ object HymoFSManager {
         val activeMounts: List<String>,
         val hymofsModuleIds: List<String>,
         val hymofsMismatch: Boolean,
-        val mismatchMessage: String?
+        val mismatchMessage: String?,
+        val unameRelease: String = "",
+        val unameVersion: String = ""
     )
     
     /**
@@ -340,6 +342,13 @@ object HymoFSManager {
             val selinuxResult = Shell.cmd("getenforce").exec()
             val selinux = if (selinuxResult.isSuccess) selinuxResult.out.firstOrNull() ?: "Unknown" else "Unknown"
             
+            // Get uname info
+            val unameReleaseResult = Shell.cmd("uname -r").exec()
+            val unameRelease = if (unameReleaseResult.isSuccess) unameReleaseResult.out.firstOrNull() ?: "" else ""
+            
+            val unameVersionResult = Shell.cmd("uname -v").exec()
+            val unameVersion = if (unameVersionResult.isSuccess) unameVersionResult.out.firstOrNull() ?: "" else ""
+            
             // Get daemon state
             val stateResult = Shell.cmd("cat '$HYMO_STATE_FILE' 2>/dev/null").exec()
             var mountBase = "Unknown"
@@ -365,10 +374,10 @@ object HymoFSManager {
                 }
             }
             
-            SystemInfo(kernel, selinux, mountBase, activeMounts, hymofsModuleIds, hymofsMismatch, mismatchMessage)
+            SystemInfo(kernel, selinux, mountBase, activeMounts, hymofsModuleIds, hymofsMismatch, mismatchMessage, unameRelease, unameVersion)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get system info", e)
-            SystemInfo("Unknown", "Unknown", "Unknown", emptyList(), emptyList(), false, null)
+            SystemInfo("Unknown", "Unknown", "Unknown", emptyList(), emptyList(), false, null, "", "")
         }
     }
     
