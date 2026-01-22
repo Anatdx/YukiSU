@@ -87,7 +87,6 @@ EXPORT_SYMBOL(ksu_execveat_hook);
 EXPORT_SYMBOL(ksu_input_hook);
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
-u32 ksu_file_sid;
 void on_post_fs_data(void)
 {
 	static bool done = false;
