@@ -207,37 +207,6 @@ void cache_sid(void)
 	}
 }
 
-bool is_task_ksu_domain(const struct cred *cred)
-{
-	struct lsm_context ctx;
-	bool result;
-	if (!cred) {
-		return false;
-	}
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-	const struct task_security_struct *tsec;
-#else
-	const struct cred_security_struct *tsec;
-#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
-	tsec = cred->security;
-	if (!tsec) {
-		return false;
-	}
-	int err = __security_secid_to_secctx(tsec->sid, &ctx);
-	if (err) {
-		return false;
-	}
-	result = strncmp(KERNEL_SU_CONTEXT, ctx.context, ctx.len) == 0;
-	__security_release_secctx(&ctx);
-	return result;
-}
-
-bool is_ksu_domain(void)
-{
-	current_sid();
-	return is_task_ksu_domain(current_cred());
-}
-
 /*
  * Fast path: compare task's SID directly against cached value.
  * Falls back to string comparison if cache is not initialized.
@@ -265,8 +234,6 @@ bool is_sid_match(const struct cred *cred, u32 cached_sid,
 
 	// Slow path fallback: string comparison (only before cache is
 	// initialized)
-	struct lsm_context ctx;
-	bool result;
 	int err = __security_secid_to_secctx(tsec->sid, &ctx);
 	if (err) {
 		return false;
