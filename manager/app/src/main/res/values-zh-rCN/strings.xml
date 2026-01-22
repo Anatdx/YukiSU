@@ -646,4 +646,19 @@
     <!-- Advanced Tools -->
     <string name="install_advanced_tools">高级工具</string>
     <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
-</resources>
+    
+    <!-- HymoFS Hide Rules -->
+    <string name="hymofs_hide_rules">用户隐藏规则</string>
+    <string name="hymofs_hide_rules_desc">添加自定义路径以从特定应用中隐藏。这些路径将在模块文件之外额外隐藏。</string>
+    <string name="hymofs_hide_common_paths">常用路径</string>
+    <string name="hymofs_hide_path_input">要隐藏的路径</string>
+    <string name="hymofs_hide_active_rules">活动规则 (%d)</string>
+    
+    <!-- HymoFS Uname Spoofing -->
+    <string name="hymofs_uname_spoof">内核版本伪装</string>
+    <string name="hymofs_uname_spoof_desc">覆盖报告给应用的内核版本信息。用于绕过某些检测。</string>
+    <string name="hymofs_uname_current">当前内核信息</string>
+    <string name="hymofs_uname_release">内核版本号</string>
+    <string name="hymofs_uname_version">内核版本字符串</string>
+    <string name="hymofs_uname_reset">重置</string>
+    <string name="hymofs_uname_apply">应用</string>

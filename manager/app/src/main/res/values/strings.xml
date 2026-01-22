@@ -643,4 +643,19 @@
     <!-- Advanced Tools -->
     <string name="install_advanced_tools">Advanced Tools</string>
     <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
-</resources>
+    
+    <!-- HymoFS Hide Rules -->
+    <string name="hymofs_hide_rules">User Hide Rules</string>
+    <string name="hymofs_hide_rules_desc">Add custom paths to hide from specific apps. These paths will be hidden in addition to module files.</string>
+    <string name="hymofs_hide_common_paths">Common Paths</string>
+    <string name="hymofs_hide_path_input">Path to hide</string>
+    <string name="hymofs_hide_active_rules">Active Rules (%d)</string>
+    
+    <!-- HymoFS Uname Spoofing -->
+    <string name="hymofs_uname_spoof">Kernel Version Spoofing</string>
+    <string name="hymofs_uname_spoof_desc">Override kernel version information reported to apps. Useful for bypassing some detection.</string>
+    <string name="hymofs_uname_current">Current Kernel Info</string>
+    <string name="hymofs_uname_release">Kernel Release</string>
+    <string name="hymofs_uname_version">Kernel Version</string>
+    <string name="hymofs_uname_reset">Reset</string>
+    <string name="hymofs_uname_apply">Apply</string>

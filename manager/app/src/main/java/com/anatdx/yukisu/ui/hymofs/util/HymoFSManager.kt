@@ -598,4 +598,163 @@ object HymoFSManager {
             emptyList()
         }
     }
+    
+    /**
+     * Hot mount a module (without reboot)
+     */
+    suspend fun hotMount(moduleId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hot-mount '$moduleId'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hot mount module $moduleId", e)
+            false
+        }
+    }
+    
+    /**
+     * Hot unmount a module (without reboot)
+     */
+    suspend fun hotUnmount(moduleId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hot-unmount '$moduleId'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hot unmount module $moduleId", e)
+            false
+        }
+    }
+    
+    /**
+     * Check for conflicts between modules
+     * Returns list of conflict information
+     */
+    data class Conflict(
+        val path: String,
+        val modules: List<String>,
+        val severity: String  // "error", "warning"
+    )
+    
+    suspend fun checkConflicts(): List<Conflict> = withContext(Dispatchers.IO) {
+        try {
+            val modules = getModules()
+            val conflicts = mutableListOf<Conflict>()
+            val pathToModules = mutableMapOf<String, MutableList<String>>()
+            
+            // Scan each module for files
+            modules.filter { it.enabled && it.mode != "none" }.forEach { module ->
+                val moduleDir = File(module.path)
+                if (!moduleDir.exists() || !moduleDir.isDirectory) return@forEach
+                
+                // Recursively scan files
+                scanModuleFiles(moduleDir, "", pathToModules, module.id)
+            }
+            
+            // Find paths with multiple modules
+            pathToModules.forEach { (path, moduleList) ->
+                if (moduleList.size > 1) {
+                    conflicts.add(
+                        Conflict(
+                            path = path,
+                            modules = moduleList,
+                            severity = if (path.startsWith("/system/bin") || 
+                                          path.startsWith("/system/lib")) "error" else "warning"
+                        )
+                    )
+                }
+            }
+            
+            conflicts
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to check conflicts", e)
+            emptyList()
+        }
+    }
+    
+    private fun scanModuleFiles(
+        dir: File,
+        relativePath: String,
+        pathToModules: MutableMap<String, MutableList<String>>,
+        moduleId: String
+    ) {
+        dir.listFiles()?.forEach { file ->
+            val newPath = if (relativePath.isEmpty()) file.name else "$relativePath/${file.name}"
+            
+            if (file.isDirectory) {
+                scanModuleFiles(file, newPath, pathToModules, moduleId)
+            } else {
+                val fullPath = "/$newPath"
+                pathToModules.getOrPut(fullPath) { mutableListOf() }.add(moduleId)
+            }
+        }
+    }
+    
+    /**
+     * Get user-defined hide rules
+     */
+    suspend fun getUserHideRules(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide list").exec()
+            if (result.isSuccess) {
+                result.out.filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get user hide rules", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Add a user-defined hide rule
+     */
+    suspend fun addUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide add '$path'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add hide rule for $path", e)
+            false
+        }
+    }
+    
+    /**
+     * Remove a user-defined hide rule
+     */
+    suspend fun removeUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide remove '$path'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove hide rule for $path", e)
+            false
+        }
+    }
+    
+    /**
+     * Set kernel uname spoofing
+     */
+    suspend fun setUname(release: String, version: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo set-uname '$release' '$version'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set uname", e)
+            false
+        }
+    }
+    
+    /**
+     * Clear kernel uname spoofing
+     */
+    suspend fun clearUname(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo set-uname '' ''").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear uname", e)
+            false
+        }
+    }
 }

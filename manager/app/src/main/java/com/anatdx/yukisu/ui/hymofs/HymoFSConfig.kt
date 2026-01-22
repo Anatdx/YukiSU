@@ -81,6 +81,7 @@ fun HymoFSConfigScreen(
     var logContent by remember { mutableStateOf("") }
     var showKernelLog by remember { mutableStateOf(false) }
     var builtinMountEnabled by remember { mutableStateOf(true) }
+    var hideRules by remember { mutableStateOf(emptyList<String>()) }
 
     // Load data
     fun loadData() {
@@ -94,6 +95,7 @@ fun HymoFSConfigScreen(
                 systemInfo = HymoFSManager.getSystemInfo()
                 storageInfo = HymoFSManager.getStorageInfo()
                 builtinMountEnabled = HymoFSManager.isBuiltinMountEnabled()
+                hideRules = HymoFSManager.getUserHideRules()
                 if (hymofsStatus == HymoFSStatus.AVAILABLE) {
                     activeRules = HymoFSManager.getActiveRules()
                 }
@@ -172,6 +174,7 @@ fun HymoFSConfigScreen(
                     HymoFSTab.MODULES -> ModulesTab(
                         modules = modules,
                         hymofsAvailable = hymofsStatus == HymoFSStatus.AVAILABLE,
+                        systemInfo = systemInfo,
                         onModeChanged = { moduleId, mode ->
                             coroutineScope.launch {
                                 if (HymoFSManager.setModuleMode(moduleId, mode)) {
@@ -187,6 +190,8 @@ fun HymoFSConfigScreen(
                         config = config,
                         hymofsStatus = hymofsStatus,
                         snackbarHostState = snackbarHostState,
+                        hideRules = hideRules,
+                        systemInfo = systemInfo,
                         onConfigChanged = { newConfig ->
                             coroutineScope.launch {
                                 if (HymoFSManager.saveConfig(newConfig)) {
@@ -217,6 +222,36 @@ fun HymoFSConfigScreen(
                                     snackbarHostState.showSnackbar("Mount IDs reordered")
                                 } else {
                                     snackbarHostState.showSnackbar("Failed to fix mounts")
+                                }
+                            }
+                        },
+                        onAddHideRule = { path ->
+                            coroutineScope.launch {
+                                if (HymoFSManager.addUserHideRule(path)) {
+                                    hideRules = HymoFSManager.getUserHideRules()
+                                    snackbarHostState.showSnackbar("Hide rule added")
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to add hide rule")
+                                }
+                            }
+                        },
+                        onRemoveHideRule = { path ->
+                            coroutineScope.launch {
+                                if (HymoFSManager.removeUserHideRule(path)) {
+                                    hideRules = HymoFSManager.getUserHideRules()
+                                    snackbarHostState.showSnackbar("Hide rule removed")
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to remove hide rule")
+                                }
+                            }
+                        },
+                        onSetUname = { release, version ->
+                            coroutineScope.launch {
+                                if (HymoFSManager.setUname(release, version)) {
+                                    systemInfo = HymoFSManager.getSystemInfo()
+                                    snackbarHostState.showSnackbar("Uname spoofing updated. Reboot to apply.")
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to set uname")
                                 }
                             }
                         },
@@ -558,8 +593,164 @@ private fun InfoRow(label: String, value: String) {
 private fun ModulesTab(
     modules: List<HymoFSManager.ModuleInfo>,
     hymofsAvailable: Boolean,
+    systemInfo: HymoFSManager.SystemInfo,
     onModeChanged: (String, String) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    // State for search and filter
+    var searchQuery by remember { mutableStateOf("") }
+    var filterMode by remember { mutableStateOf("all") }
+    var showConflicts by remember { mutableStateOf(false) }
+    var conflicts by remember { mutableStateOf<List<HymoFSManager.Conflict>>(emptyList()) }
+    var checkingConflicts by remember { mutableStateOf(false) }
+    
+    // Filtered modules
+    val filteredModules = remember(modules, searchQuery, filterMode, systemInfo) {
+        modules.filter { module ->
+            val matchSearch = module.name.contains(searchQuery, ignoreCase = true) ||
+                            module.id.contains(searchQuery, ignoreCase = true)
+            
+            val matchFilter = when (filterMode) {
+                "all" -> true
+                "hymofs" -> systemInfo.hymofsModuleIds.contains(module.id)
+                else -> module.mode == filterMode
+            }
+            
+            matchSearch && matchFilter
+        }
+    }
+    
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Search and filter bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Search field
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Search modules...") },
+                leadingIcon = { Icon(Icons.Filled.Search, null) },
+                singleLine = true
+            )
+            
+            // Filter dropdown
+            var filterExpanded by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(
+                    onClick = { filterExpanded = true },
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Text(filterMode.uppercase())
+                    Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(20.dp))
+                }
+                DropdownMenu(
+                    expanded = filterExpanded,
+                    onDismissRequest = { filterExpanded = false }
+                ) {
+                    listOf("all", "hymofs", "overlay", "magic", "auto", "none").forEach { mode ->
+                        DropdownMenuItem(
+                            text = { Text(mode.uppercase()) },
+                            onClick = {
+                                filterMode = mode
+                                filterExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Action bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    coroutineScope.launch {
+                        checkingConflicts = true
+                        conflicts = HymoFSManager.checkConflicts()
+                        checkingConflicts = false
+                        showConflicts = conflicts.isNotEmpty()
+                    }
+                },
+                enabled = !checkingConflicts
+            ) {
+                if (checkingConflicts) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Filled.Warning, null, Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                Text("Check Conflicts")
+            }
+            
+            Text(
+                text = "${filteredModules.size} / ${modules.size} modules",
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .padding(start = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
+        // Conflicts dialog
+        if (showConflicts) {
+            AlertDialog(
+                onDismissRequest = { showConflicts = false },
+                title = { Text("Module Conflicts (${conflicts.size})") },
+                text = {
+                    LazyColumn {
+                        items(conflicts) { conflict ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (conflict.severity == "error") 
+                                        MaterialTheme.colorScheme.errorContainer 
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = conflict.path,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "Modules: ${conflict.modules.joinToString(", ")}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showConflicts = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+    
     val modes = if (hymofsAvailable) {
         listOf("auto", "hymofs", "overlay", "magic", "none")
     } else {
@@ -571,15 +762,34 @@ private fun ModulesTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(modules) { module ->
+        items(filteredModules, key = { it.id }) { module ->
             ModuleCard(
                 module = module,
                 modes = modes,
-                onModeChanged = { mode -> onModeChanged(module.id, mode) }
+                isMounted = systemInfo.hymofsModuleIds.contains(module.id),
+                onModeChanged = { mode -> onModeChanged(module.id, mode) },
+                onHotMount = {
+                    coroutineScope.launch {
+                        val success = if (systemInfo.hymofsModuleIds.contains(module.id)) {
+                            HymoFSManager.hotUnmount(module.id)
+                        } else {
+                            HymoFSManager.hotMount(module.id)
+                        }
+                        if (success) {
+                            android.widget.Toast.makeText(
+                                context,
+                                if (systemInfo.hymofsModuleIds.contains(module.id)) 
+                                    "Unmounted ${module.name}" 
+                                else "Mounted ${module.name}",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
             )
         }
         
-        if (modules.isEmpty()) {
+        if (filteredModules.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -587,14 +797,24 @@ private fun ModulesTab(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "No modules found",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "No matching modules" else "No modules found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
+    }
     }
 }
 
@@ -603,7 +823,9 @@ private fun ModulesTab(
 private fun ModuleCard(
     module: HymoFSManager.ModuleInfo,
     modes: List<String>,
-    onModeChanged: (String) -> Unit
+    isMounted: Boolean,
+    onModeChanged: (String) -> Unit,
+    onHotMount: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     
@@ -620,11 +842,28 @@ private fun ModuleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = module.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = module.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (isMounted) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF1B5E20).copy(alpha = 0.3f)
+                            ) {
+                                Text(
+                                    text = "MOUNTED",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = module.id,
                         style = MaterialTheme.typography.bodySmall,
@@ -669,7 +908,7 @@ private fun ModuleCard(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Mode selector
+            // Mode selector and hot mount button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -712,6 +951,18 @@ private fun ModuleCard(
                         }
                     }
                 }
+                
+                // Hot mount/unmount button
+                IconButton(
+                    onClick = onHotMount,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        if (isMounted) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                        contentDescription = if (isMounted) "Unmount" else "Mount",
+                        tint = if (isMounted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -723,10 +974,15 @@ private fun SettingsTab(
     config: HymoFSManager.HymoConfig,
     hymofsStatus: HymoFSStatus,
     snackbarHostState: SnackbarHostState,
+    hideRules: List<String>,
+    systemInfo: HymoFSManager.SystemInfo,
     onConfigChanged: (HymoFSManager.HymoConfig) -> Unit,
     onSetDebug: (Boolean) -> Unit,
     onSetStealth: (Boolean) -> Unit,
     onFixMounts: () -> Unit,
+    onAddHideRule: (String) -> Unit,
+    onRemoveHideRule: (String) -> Unit,
+    onSetUname: (String, String) -> Unit,
     builtinMountEnabled: Boolean,
     onBuiltinMountChanged: (Boolean) -> Unit
 ) {
@@ -962,6 +1218,244 @@ private fun SettingsTab(
                         Icon(Icons.Filled.Build, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.hymofs_fix_mounts))
+                    }
+                }
+            }
+        }
+        
+        // User Hide Rules
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = getCardElevation()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = stringResource(R.string.hymofs_hide_rules),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                Text(
+                    text = stringResource(R.string.hymofs_hide_rules_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                // Path input with common suggestions
+                var newPath by remember { mutableStateOf("") }
+                val commonPaths = listOf(
+                    "/dev/scene",
+                    "/sdcard/MT2",
+                    "/sdcard/Android/data/bin.mt.plus",
+                    "/data/data/bin.mt.plus",
+                    "/data/local/tmp/frida-server"
+                )
+                
+                // Common paths chips
+                Text(
+                    text = stringResource(R.string.hymofs_hide_common_paths),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    items(commonPaths) { path ->
+                        AssistChip(
+                            onClick = { newPath = path },
+                            label = { Text(path, fontSize = 12.sp) }
+                        )
+                    }
+                }
+                
+                // Add new path
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newPath,
+                        onValueChange = { newPath = it },
+                        modifier = Modifier.weight(1f),
+                        label = { Text(stringResource(R.string.hymofs_hide_path_input)) },
+                        placeholder = { Text("/path/to/hide") },
+                        singleLine = true
+                    )
+                    IconButton(
+                        onClick = {
+                            if (newPath.isNotBlank() && !hideRules.contains(newPath)) {
+                                onAddHideRule(newPath)
+                                newPath = ""
+                            }
+                        },
+                        enabled = newPath.isNotBlank() && !hideRules.contains(newPath)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                    }
+                }
+                
+                if (hideRules.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.hymofs_hide_active_rules, hideRules.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    
+                    // Active hide rules
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        hideRules.forEach { path ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = path,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { onRemoveHideRule(path) }
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Kernel Uname Spoofing
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = getCardElevation()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = stringResource(R.string.hymofs_uname_spoof),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                Text(
+                    text = stringResource(R.string.hymofs_uname_spoof_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                // Current values
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerHigh)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.hymofs_uname_current),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Text(
+                            text = "Release: ${systemInfo.unameRelease}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Version: ${systemInfo.unameVersion}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Uname inputs
+                var unameRelease by remember { mutableStateOf("") }
+                var unameVersion by remember { mutableStateOf("") }
+                
+                OutlinedTextField(
+                    value = unameRelease,
+                    onValueChange = { unameRelease = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.hymofs_uname_release)) },
+                    placeholder = { Text("5.15.0-generic") },
+                    singleLine = true
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = unameVersion,
+                    onValueChange = { unameVersion = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.hymofs_uname_version)) },
+                    placeholder = { Text("#1 SMP PREEMPT Wed Jan 1 00:00:00 UTC 2025") },
+                    singleLine = true
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val coroutineScope = rememberCoroutineScope()
+                    
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                if (HymoFSManager.clearUname()) {
+                                    unameRelease = ""
+                                    unameVersion = ""
+                                    snackbarHostState.showSnackbar("Uname spoofing cleared. Reboot to apply.")
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to clear uname")
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.Clear, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.hymofs_uname_reset))
+                    }
+                    
+                    Button(
+                        onClick = {
+                            onSetUname(unameRelease, unameVersion)
+                            unameRelease = ""
+                            unameVersion = ""
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = unameRelease.isNotBlank() && unameVersion.isNotBlank()
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.hymofs_uname_apply))
                     }
                 }
             }
