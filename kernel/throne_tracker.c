@@ -196,7 +196,7 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 			pr_info("Crowning manager: %s (appid=%d)\n", pkg,
 				np->appid);
 
-			ksu_set_manager_uid(np->appid);
+			ksu_set_manager_appid(np->appid);
 			locked_manager_appid = np->appid;
 			break;
 		}

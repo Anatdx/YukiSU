@@ -11,23 +11,6 @@
 #include "selinux_defs.h"
 #endif // #ifdef CONFIG_KSU_LKM
 
-/*
- * Cached SID values for frequently checked contexts.
- * These are resolved once at init and used for fast u32 comparison
- * instead of expensive string operations on every check.
- *
- * A value of 0 means "no cached SID is available" for that context.
- * This covers both the initial "not yet cached" state and any case
- * where resolving the SID (e.g. via security_secctx_to_secid) failed.
- * In all such cases we intentionally fall back to the slower
- * string-based comparison path; this degrades performance only and
- * does not cause a functional failure.
- */
-static u32 cached_su_sid __read_mostly = 0;
-static u32 cached_zygote_sid __read_mostly = 0;
-static u32 cached_init_sid __read_mostly = 0;
-u32 ksu_file_sid __read_mostly = 0;
-
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
 	u32 sid;
@@ -222,8 +205,9 @@ bool is_sid_match(const struct cred *cred, u32 cached_sid,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
 	const struct task_security_struct *tsec = cred->security;
 #else
-	const struct cred_security_struct *tsec = selinux_cred(cred);
+	const struct cred_security_struct *tsec;
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
+	tsec = cred->security;
 	if (!tsec) {
 		return false;
 	}
@@ -238,29 +222,19 @@ bool is_sid_match(const struct cred *cred, u32 cached_sid,
 	if (err) {
 		return false;
 	}
-	result = strncmp(fallback_context, ctx.context, ctx.len) == 0;
+	result = strncmp(context, ctx.context, ctx.len) == 0;
 	__security_release_secctx(&ctx);
 	return result;
 }
 
-bool is_task_ksu_domain(const struct cred *cred)
-{
-	return is_sid_match(cred, cached_su_sid, KERNEL_SU_CONTEXT);
-}
-
-bool is_ksu_domain()
-{
-	return is_task_ksu_domain(current_cred());
-}
-
 bool is_zygote(const struct cred *cred)
 {
-	return is_sid_match(cred, cached_zygote_sid, ZYGOTE_CONTEXT);
+	return is_context(cred, "u:r:zygote:s0");
 }
 
 bool is_init(const struct cred *cred)
 {
-	return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
+	return is_context(cred, "u:r:init:s0");
 }
 
 u32 ksu_get_ksu_file_sid()

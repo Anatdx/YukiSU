@@ -74,7 +74,7 @@ static void stop_vfs_read_hook(void);
 static void stop_execve_hook(void);
 static void stop_input_hook(void);
 
-#ifndef CONFIG_KSU_MANUAL_HOOK
+#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
 static struct work_struct stop_vfs_read_work;
 static struct work_struct stop_execve_hook_work;
 static struct work_struct stop_input_hook_work;
@@ -85,7 +85,7 @@ bool ksu_input_hook __read_mostly = true;
 EXPORT_SYMBOL(ksu_vfs_read_hook);
 EXPORT_SYMBOL(ksu_execveat_hook);
 EXPORT_SYMBOL(ksu_input_hook);
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
+#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
 
 void on_post_fs_data(void)
 {
@@ -96,13 +96,13 @@ void on_post_fs_data(void)
 	}
 	done = true;
 	pr_info("on_post_fs_data!\n");
-#ifdef CONFIG_KSU_MANUAL_HOOK
-	// Manual hook mode: Apply SELinux rules here since we can't
+#if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
+	// HymoFS/Manual hook mode: Apply SELinux rules here since we can't
 	// detect init second_stage without argv parameter in execve hook
-	pr_info("Applying KernelSU SELinux rules (manual hook mode)\n");
+	pr_info("Applying KernelSU SELinux rules (inline hook mode)\n");
 	apply_kernelsu_rules();
 	setup_ksu_cred();
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
+#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
 	ksu_load_allow_list();
 	ksu_observer_init();
 	// sanity check, this may influence the performance
@@ -298,7 +298,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 					pr_info("/system/bin/init second_stage "
 						"executed\n");
 					apply_kernelsu_rules();
-					cache_sid();
 					setup_ksu_cred();
 					init_second_stage_executed = true;
 				}
@@ -326,7 +325,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 					pr_info(
 					    "/init second_stage executed\n");
 					apply_kernelsu_rules();
-					cache_sid();
 					setup_ksu_cred();
 					init_second_stage_executed = true;
 				}
@@ -369,7 +367,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 						pr_info("/init second_stage "
 							"executed\n");
 						apply_kernelsu_rules();
-						cache_sid();
 						setup_ksu_cred();
 						init_second_stage_executed =
 						    true;
