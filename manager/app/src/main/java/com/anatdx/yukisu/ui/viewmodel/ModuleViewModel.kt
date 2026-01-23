@@ -86,6 +86,8 @@ class ModuleViewModel : ViewModel() {
         val hasActionScript: Boolean,
         val metamodule: Boolean,
         val dirId: String, // real module id (dir name)
+        val actionIconPath: String? = null,
+        val webUiIconPath: String? = null,
         var config: ModuleConfig? = null,
 
     )
@@ -166,7 +168,9 @@ class ModuleViewModel : ViewModel() {
                             obj.getBooleanCompat("web"),
                             obj.getBooleanCompat("action"),
                             obj.getBooleanCompat("metamodule"),
-                            obj.optString("dir_id", obj.getString("id"))
+                            obj.optString("dir_id", obj.getString("id")),
+                            obj.optString("actionIcon").takeIf { it.isNotBlank() },
+                            obj.optString("webuiIcon").takeIf { it.isNotBlank() }
                         )
                     }.toList()
 
@@ -305,12 +309,14 @@ fun ModuleViewModel.ModuleInfo.copy(
     hasActionScript: Boolean = this.hasActionScript,
     metamodule: Boolean = this.metamodule,
     dirId: String = this.dirId,
+    actionIconPath: String? = this.actionIconPath,
+    webUiIconPath: String? = this.webUiIconPath,
     config: ModuleConfig? = this.config,
 ): ModuleViewModel.ModuleInfo {
     return ModuleViewModel.ModuleInfo(
         id, name, author, version, versionCode, description,
         enabled, update, remove, updateJson, hasWebUi, hasActionScript, metamodule,
-        dirId, config
+        dirId, actionIconPath, webUiIconPath, config
     )
 }
 

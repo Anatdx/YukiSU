@@ -1,7 +1,10 @@
 package com.anatdx.yukisu.ui.screen
 
+import android.annotation.SuppressLint
 import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +34,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+@SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 @Destination<RootGraph>
 fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String) {
@@ -38,9 +42,15 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
     var tempText : String
     val logContent = rememberSaveable { StringBuilder() }
     val snackBarHost = LocalSnackbarHost.current
+    val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     var isActionRunning by rememberSaveable { mutableStateOf(true) }
+
+    val fromShortcut = remember(activity) {
+        val intent = activity?.intent
+        intent?.getStringExtra("shortcut_type") == "module_action"
+    }
 
     BackHandler(enabled = isActionRunning) {
         // Disable back button if action is running
@@ -68,6 +78,16 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
             )
         }
         isActionRunning = false
+        if (fromShortcut) {
+            activity?.let { act ->
+                Toast.makeText(
+                    act,
+                    act.getString(R.string.module_action_success),
+                    Toast.LENGTH_SHORT
+                ).show()
+                act.finish()
+            }
+        }
     }
 
     Scaffold(
@@ -96,7 +116,11 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
                     text = { Text(text = stringResource(R.string.close)) },
                     icon = { Icon(Icons.Filled.Close, contentDescription = null) },
                     onClick = {
-                        navigator.popBackStack()
+                        if (fromShortcut && activity != null) {
+                            activity.finish()
+                        } else {
+                            navigator.popBackStack()
+                        }
                     }
                 )
             }
