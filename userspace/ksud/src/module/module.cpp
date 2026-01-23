@@ -79,6 +79,41 @@ static std::string escape_json(const std::string& s) {
     return result;
 }
 
+// Resolve module icon path with security checks
+static std::string resolve_module_icon_path(const std::string& icon_value,
+                                            const std::string& module_id,
+                                            const std::string& module_path,
+                                            const std::string& key_name) {
+    if (icon_value.empty()) {
+        return "";
+    }
+
+    // Reject absolute paths
+    if (icon_value[0] == '/') {
+        LOGW("Module %s: %s contains absolute path, rejected\n", module_id.c_str(),
+             key_name.c_str());
+        return "";
+    }
+
+    // Reject parent directory traversal
+    if (icon_value.find("..") != std::string::npos) {
+        LOGW("Module %s: %s contains parent directory traversal, rejected\n", module_id.c_str(),
+             key_name.c_str());
+        return "";
+    }
+
+    // Construct full path and verify it exists
+    std::string full_path = module_path + "/" + icon_value;
+    if (!file_exists(full_path)) {
+        LOGW("Module %s: %s file does not exist: %s\n", module_id.c_str(), key_name.c_str(),
+             full_path.c_str());
+        return "";
+    }
+
+    // Return the relative path (icon_value) as it will be accessed via su://
+    return icon_value;
+}
+
 static std::map<std::string, std::string> parse_module_prop(const std::string& path) {
     std::map<std::string, std::string> props;
     std::ifstream ifs(path);
