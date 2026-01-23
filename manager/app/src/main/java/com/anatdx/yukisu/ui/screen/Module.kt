@@ -544,25 +544,26 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
             title = { Text(stringResource(R.string.module_shortcut_type_title)) },
             text = {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    TextButton(
+                    FilledTonalButton(
                         onClick = {
                             showShortcutTypeDialog = false
                             openShortcutDialogForType(ShortcutType.Action)
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Action", modifier = Modifier.fillMaxWidth())
+                        Text("Action")
                     }
-                    TextButton(
+                    FilledTonalButton(
                         onClick = {
                             showShortcutTypeDialog = false
                             openShortcutDialogForType(ShortcutType.WebUI)
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("WebUI", modifier = Modifier.fillMaxWidth())
+                        Text("WebUI")
                     }
                 }
             },
