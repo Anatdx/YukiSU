@@ -963,7 +963,7 @@ private fun ModuleList(
                                     )
                                 }
                             },
-                            onClick = { clickedModule ->
+                            onClick = { clickedModule: ModuleViewModel.ModuleInfo ->
                                 onClickModule(clickedModule.dirId, clickedModule.name, clickedModule.hasWebUi)
                             },
                             onAddShortcut = {
@@ -975,6 +975,7 @@ private fun ModuleList(
                     }
                 }
             }
+        }
         }
 
         DownloadListener(context, onInstallModule)
@@ -1160,6 +1161,7 @@ private fun ModuleList(
             }
         )
     }
+}
 }
 
 @Composable
