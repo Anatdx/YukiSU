@@ -35,6 +35,8 @@ struct ModuleInfo {
     bool action;
     bool mount;
     bool metamodule;
+    std::string actionIcon;
+    std::string webuiIcon;
 };
 
 // Escape special characters for JSON string
@@ -790,6 +792,16 @@ int module_list() {
         info.metamodule =
             (metamodule_val == "1" || metamodule_val == "true" || metamodule_val == "TRUE");
 
+        // Resolve icon paths
+        if (props.count("actionIcon")) {
+            info.actionIcon =
+                resolve_module_icon_path(props["actionIcon"], info.id, module_path, "actionIcon");
+        }
+        if (props.count("webuiIcon")) {
+            info.webuiIcon =
+                resolve_module_icon_path(props["webuiIcon"], info.id, module_path, "webuiIcon");
+        }
+
         modules.push_back(info);
     }
 
@@ -812,8 +824,14 @@ int module_list() {
         printf("    \"web\": \"%s\",\n", m.web ? "true" : "false");
         printf("    \"action\": \"%s\",\n", m.action ? "true" : "false");
         printf("    \"mount\": \"%s\",\n", m.mount ? "true" : "false");
-        printf("    \"metamodule\": \"%s\"\n", m.metamodule ? "true" : "false");
-        printf("  }%s\n", i < modules.size() - 1 ? "," : "");
+        printf("    \"metamodule\": \"%s\"", m.metamodule ? "true" : "false");
+        if (!m.actionIcon.empty()) {
+            printf(",\n    \"actionIcon\": \"%s\"", escape_json(m.actionIcon).c_str());
+        }
+        if (!m.webuiIcon.empty()) {
+            printf(",\n    \"webuiIcon\": \"%s\"", escape_json(m.webuiIcon).c_str());
+        }
+        printf("\n  }%s\n", i < modules.size() - 1 ? "," : "");
     }
     printf("]\n");
 
