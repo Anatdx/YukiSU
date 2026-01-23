@@ -963,8 +963,8 @@ private fun ModuleList(
                                     )
                                 }
                             },
-                            onClick = {
-                                onClickModule(it.dirId, it.name, it.hasWebUi)
+                            onClick = { clickedModule ->
+                                onClickModule(clickedModule.dirId, clickedModule.name, clickedModule.hasWebUi)
                             },
                             onAddShortcut = {
                                 onModuleAddShortcut(module)
