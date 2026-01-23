@@ -79,6 +79,11 @@ static std::string escape_json(const std::string& s) {
     return result;
 }
 
+static bool file_exists(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+}
+
 // Resolve module icon path with security checks
 static std::string resolve_module_icon_path(const std::string& icon_value,
                                             const std::string& module_id,
@@ -131,11 +136,6 @@ static std::map<std::string, std::string> parse_module_prop(const std::string& p
     }
 
     return props;
-}
-
-static bool file_exists(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
 }
 
 // Validate module ID - must be alphanumeric with underscores/hyphens, no path separators
