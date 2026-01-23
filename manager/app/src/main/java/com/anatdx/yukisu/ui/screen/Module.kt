@@ -498,6 +498,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                             return@ModuleList
                         }
                     },
+                    onAddShortcut = { onModuleAddShortcut(it) },
                     context = context,
                     snackBarHost = snackBarHost
                 )
@@ -535,6 +536,188 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                 )
             }
         }
+
+    // 快捷方式类型选择对话框
+    if (showShortcutTypeDialog) {
+        AlertDialog(
+            onDismissRequest = { showShortcutTypeDialog = false },
+            title = { Text(stringResource(R.string.module_shortcut_type_title)) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            showShortcutTypeDialog = false
+                            openShortcutDialogForType(ShortcutType.Action)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Action", modifier = Modifier.fillMaxWidth())
+                    }
+                    TextButton(
+                        onClick = {
+                            showShortcutTypeDialog = false
+                            openShortcutDialogForType(ShortcutType.WebUI)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("WebUI", modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showShortcutTypeDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // 快捷方式创建/编辑对话框
+    if (showShortcutDialog) {
+        AlertDialog(
+            onDismissRequest = { showShortcutDialog = false },
+            title = { Text(stringResource(R.string.module_shortcut_title)) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // 图标预览
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .padding(vertical = 16.dp)
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(25.dp))
+                    ) {
+                        val preview = shortcutPreviewIcon.value
+                        if (preview != null) {
+                            Image(
+                                bitmap = preview,
+                                modifier = Modifier.size(100.dp),
+                                contentDescription = null,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .background(Color.White)
+                            )
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                                contentDescription = null,
+                                modifier = Modifier.size(150.dp)
+                            )
+                        }
+                    }
+
+                    // 选择图标按钮和撤销按钮
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilledTonalButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { pickShortcutIconLauncher.launch("image/*") },
+                        ) {
+                            Text(stringResource(id = R.string.module_shortcut_icon_pick))
+                        }
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = shortcutIconUri != defaultShortcutIconUri,
+                            enter = expandHorizontally() + slideInHorizontally(initialOffsetX = { it }),
+                            exit = shrinkHorizontally() + slideOutHorizontally(targetOffsetX = { it }),
+                        ) {
+                            IconButton(
+                                onClick = { shortcutIconUri = defaultShortcutIconUri }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Undo,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // 名称输入框
+                    OutlinedTextField(
+                        value = shortcutName,
+                        onValueChange = { shortcutName = it },
+                        label = { Text(stringResource(id = R.string.module_shortcut_name_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // 删除快捷方式按钮（如果存在）
+                    if (hasExistingShortcut) {
+                        FilledTonalButton(
+                            onClick = {
+                                val moduleId = shortcutModuleId
+                                val type = selectedShortcutType
+                                if (!moduleId.isNullOrBlank() && type != null) {
+                                    when (type) {
+                                        ShortcutType.Action -> Shortcut.deleteModuleActionShortcut(context, moduleId)
+                                        ShortcutType.WebUI -> Shortcut.deleteModuleWebUiShortcut(context, moduleId)
+                                    }
+                                }
+                                showShortcutDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(id = R.string.module_shortcut_delete))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val moduleId = shortcutModuleId
+                        val type = selectedShortcutType
+                        if (!moduleId.isNullOrBlank() && shortcutName.isNotBlank() && type != null) {
+                            when (type) {
+                                ShortcutType.Action -> {
+                                    Shortcut.createModuleActionShortcut(
+                                        context = context,
+                                        moduleId = moduleId,
+                                        name = shortcutName,
+                                        iconUri = shortcutIconUri
+                                    )
+                                }
+                                ShortcutType.WebUI -> {
+                                    Shortcut.createModuleWebUiShortcut(
+                                        context = context,
+                                        moduleId = moduleId,
+                                        name = shortcutName,
+                                        iconUri = shortcutIconUri
+                                    )
+                                }
+                            }
+                        }
+                        showShortcutDialog = false
+                    }
+                ) {
+                    Text(
+                        if (hasExistingShortcut) {
+                            stringResource(id = R.string.module_update)
+                        } else {
+                            stringResource(id = android.R.string.ok)
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showShortcutDialog = false }) {
+                    Text(stringResource(id = android.R.string.cancel))
+                }
+            }
+        )
+    }
     }
 }
 
@@ -710,6 +893,7 @@ private fun ModuleList(
     onInstallModule: (Uri) -> Unit,
     onUpdateModule: (Uri) -> Unit,
     onClickModule: (id: String, name: String, hasWebUi: Boolean) -> Unit,
+    onAddShortcut: (ModuleViewModel.ModuleInfo) -> Unit,
     context: Context,
     snackBarHost: SnackbarHostState
 ) {
@@ -967,7 +1151,7 @@ private fun ModuleList(
                                 onClickModule(clickedModule.dirId, clickedModule.name, clickedModule.hasWebUi)
                             },
                             onAddShortcut = {
-                                onModuleAddShortcut(module)
+                                onAddShortcut(module)
                             }
                         )
 
@@ -980,188 +1164,8 @@ private fun ModuleList(
 
         DownloadListener(context, onInstallModule)
 
-    // 快捷方式类型选择对话框
-    if (showShortcutTypeDialog) {
-        AlertDialog(
-            onDismissRequest = { showShortcutTypeDialog = false },
-            title = { Text(stringResource(R.string.module_shortcut_type_title)) },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        onClick = {
-                            showShortcutTypeDialog = false
-                            openShortcutDialogForType(ShortcutType.Action)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Action", modifier = Modifier.fillMaxWidth())
-                    }
-                    TextButton(
-                        onClick = {
-                            showShortcutTypeDialog = false
-                            openShortcutDialogForType(ShortcutType.WebUI)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("WebUI", modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showShortcutTypeDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            }
-        )
-    }
 
-    // 快捷方式创建/编辑对话框
-    if (showShortcutDialog) {
-        AlertDialog(
-            onDismissRequest = { showShortcutDialog = false },
-            title = { Text(stringResource(R.string.module_shortcut_title)) },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // 图标预览
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .padding(vertical = 16.dp)
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(25.dp))
-                    ) {
-                        val preview = shortcutPreviewIcon.value
-                        if (preview != null) {
-                            Image(
-                                bitmap = preview,
-                                modifier = Modifier.size(100.dp),
-                                contentDescription = null,
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .background(Color.White)
-                            )
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                                contentDescription = null,
-                                modifier = Modifier.size(150.dp)
-                            )
-                        }
-                    }
 
-                    // 选择图标按钮和撤销按钮
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilledTonalButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = { pickShortcutIconLauncher.launch("image/*") },
-                        ) {
-                            Text(stringResource(id = R.string.module_shortcut_icon_pick))
-                        }
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = shortcutIconUri != defaultShortcutIconUri,
-                            enter = expandHorizontally() + slideInHorizontally(initialOffsetX = { it }),
-                            exit = shrinkHorizontally() + slideOutHorizontally(targetOffsetX = { it }),
-                        ) {
-                            IconButton(
-                                onClick = { shortcutIconUri = defaultShortcutIconUri }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Undo,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    // 名称输入框
-                    OutlinedTextField(
-                        value = shortcutName,
-                        onValueChange = { shortcutName = it },
-                        label = { Text(stringResource(id = R.string.module_shortcut_name_label)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-
-                    // 删除快捷方式按钮（如果存在）
-                    if (hasExistingShortcut) {
-                        FilledTonalButton(
-                            onClick = {
-                                val moduleId = shortcutModuleId
-                                val type = selectedShortcutType
-                                if (!moduleId.isNullOrBlank() && type != null) {
-                                    when (type) {
-                                        ShortcutType.Action -> Shortcut.deleteModuleActionShortcut(context, moduleId)
-                                        ShortcutType.WebUI -> Shortcut.deleteModuleWebUiShortcut(context, moduleId)
-                                    }
-                                }
-                                showShortcutDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(id = R.string.module_shortcut_delete))
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val moduleId = shortcutModuleId
-                        val type = selectedShortcutType
-                        if (!moduleId.isNullOrBlank() && shortcutName.isNotBlank() && type != null) {
-                            when (type) {
-                                ShortcutType.Action -> {
-                                    Shortcut.createModuleActionShortcut(
-                                        context = context,
-                                        moduleId = moduleId,
-                                        name = shortcutName,
-                                        iconUri = shortcutIconUri
-                                    )
-                                }
-                                ShortcutType.WebUI -> {
-                                    Shortcut.createModuleWebUiShortcut(
-                                        context = context,
-                                        moduleId = moduleId,
-                                        name = shortcutName,
-                                        iconUri = shortcutIconUri
-                                    )
-                                }
-                            }
-                        }
-                        showShortcutDialog = false
-                    }
-                ) {
-                    Text(
-                        if (hasExistingShortcut) {
-                            stringResource(id = R.string.module_update)
-                        } else {
-                            stringResource(id = android.R.string.ok)
-                        }
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showShortcutDialog = false }) {
-                    Text(stringResource(id = android.R.string.cancel))
-                }
-            }
-        )
-    }
-}
 }
 
 @Composable
@@ -1497,5 +1501,4 @@ fun ModuleItemPreview() {
         config = ModuleConfig()
     )
     ModuleItem(EmptyDestinationsNavigator, module, "", {}, {}, {}, {})
-}
 }
