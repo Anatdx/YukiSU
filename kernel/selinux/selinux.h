@@ -16,6 +16,8 @@
 
 #define KERNEL_SU_CONTEXT "u:r:" KERNEL_SU_DOMAIN ":s0"
 #define KSU_FILE_CONTEXT "u:object_r:" KERNEL_SU_FILE ":s0"
+#define ZYGOTE_CONTEXT "u:r:zygote:s0"
+#define INIT_CONTEXT "u:r:init:s0"
 
 void setup_selinux(const char *);
 
