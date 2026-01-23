@@ -1496,3 +1496,4 @@ fun ModuleItemPreview() {
     )
     ModuleItem(EmptyDestinationsNavigator, module, "", {}, {}, {}, {})
 }
+}
