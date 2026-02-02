@@ -95,14 +95,8 @@ set(SOURCES
     # Flash kernel packages
     src/flash/flash_ak3.cpp
     src/flash/flash_partition.cpp
-    # HymoFS module management
-    src/hymo/hymo_cli.cpp
+    # HymoFS (ioctl interface used by services)
     src/hymo/hymo_utils.cpp
-    src/hymo/conf/config.cpp
-    src/hymo/core/executor.cpp
-    src/hymo/core/modules.cpp
-    src/hymo/core/planner.cpp
-    src/hymo/core/sync.cpp
     src/hymo/mount/hymofs.cpp
     # Murasaki Binder service
     src/binder/murasaki_binder.cpp
