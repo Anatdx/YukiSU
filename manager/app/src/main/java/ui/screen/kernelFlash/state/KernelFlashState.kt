@@ -78,9 +78,7 @@ class HorizonKernelState {
 class HorizonKernelWorker(
     private val context: Context,
     private val state: HorizonKernelState,
-    private val slot: String? = null,
-    private val kpmPatchEnabled: Boolean = false,
-    private val kpmUndoPatch: Boolean = false
+    private val slot: String? = null
 ) : Thread() {
     var uri: Uri? = null
     private var onFlashComplete: (() -> Unit)? = null

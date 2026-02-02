@@ -86,8 +86,6 @@ bool set_app_profile(const struct app_profile *profile);
 
 int get_app_profile(struct app_profile *profile);
 
-bool is_KPM_enable();
-
 void get_hook_type(char *hook_type);
 
 // Feature IDs
@@ -186,10 +184,6 @@ struct ksu_hook_type_cmd {
   char hook_type[32]; // Output: hook type string
 };
 
-struct ksu_enable_kpm_cmd {
-  uint8_t enabled; // Output: true if KPM is enabled
-};
-
 // IOCTL command definitions
 #define KSU_IOCTL_GRANT_ROOT _IOC(_IOC_NONE, 'K', 1, 0)
 #define KSU_IOCTL_GET_INFO _IOC(_IOC_READ, 'K', 2, 0)
@@ -209,7 +203,6 @@ struct ksu_enable_kpm_cmd {
 // Other IOCTL command definitions
 #define KSU_IOCTL_GET_FULL_VERSION _IOC(_IOC_READ, 'K', 100, 0)
 #define KSU_IOCTL_HOOK_TYPE _IOC(_IOC_READ, 'K', 101, 0)
-#define KSU_IOCTL_ENABLE_KPM _IOC(_IOC_READ, 'K', 102, 0)
 #define KSU_IOCTL_MANUAL_SU _IOC(_IOC_READ | _IOC_WRITE, 'K', 106, 0)
 
 // SuperKey authentication
@@ -237,11 +230,11 @@ struct ksu_superkey_status_cmd {
 // Magic for SuperKey authentication via prctl (SECCOMP-safe)
 // prctl is not blocked by Android SECCOMP policy, unlike reboot
 // NOTE: Avoid 0xDEAD/0xBEEF patterns - easily detected by root checkers
-#define KSU_PRCTL_SUPERKEY_AUTH 0x59554B49  // "YUKI" in hex
+#define KSU_PRCTL_SUPERKEY_AUTH 0x59554B49 // "YUKI" in hex
 // Magic for getting driver fd for already authenticated manager (SECCOMP-safe)
 // Usage: prctl(KSU_PRCTL_GET_FD, &fd_output, 0, 0, 0)
 // This allows ksud to get driver fd when launched from manager app
-#define KSU_PRCTL_GET_FD 0x59554B4A  // "YUKJ" in hex
+#define KSU_PRCTL_GET_FD 0x59554B4A // "YUKJ" in hex
 
 // Output structure for KSU_PRCTL_GET_FD
 struct ksu_prctl_get_fd_cmd {
@@ -291,8 +284,7 @@ bool legacy_set_app_profile(const struct app_profile *profile);
 bool legacy_get_app_profile(char *key, struct app_profile *profile);
 bool legacy_set_su_enabled(bool enabled);
 bool legacy_is_su_enabled();
-bool legacy_is_KPM_enable();
 bool legacy_get_hook_type(char *hook_type, size_t size);
 void legacy_get_full_version(char *buff);
 
-#endif // KERNELSU_KSU_H
+#endif // #ifndef KERNELSU_KSU_H

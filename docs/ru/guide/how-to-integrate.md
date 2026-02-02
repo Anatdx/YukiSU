@@ -22,15 +22,6 @@ YukiSU может быть интегрирован как в ядра GKI, та
    - См. [`guide/how-to-integrate.md`](how-to-integrate.md)
    - Дополнительная ссылка: [backslashxx hooks](https://github.com/backslashxx/KernelSU/issues/5)
 
-3. **Inline hook (HymoFS):**
-
-   - [HymoFS](https://github.com/backslashxx/HymoFS) — встроенное решение YukiSU для скрытия файловой системы на уровне ядра
-   - Использует inline hooks для перехвата операций VFS для скрытия файлов/каталогов на уровне ядра.
-   - Требуется `CONFIG_KSU_HYMOFS=y`
-   - Опционально: `CONFIG_KSU_HYMOFS_LSMBPS=y` для поддержки LSM BPF
-
-> **Примечание:** YukiSU больше не поддерживает susfs. HymoFS — наша встроенная замена.
-
 ### Как добавить драйвер ядра YukiSU в исходный код ядра
 
 YukiSU теперь использует **единую кодовую базу** для сборок LKM и GKI/non-GKI. Отдельные ветки не нужны.
@@ -71,15 +62,3 @@ CONFIG_HAVE_KPROBES=y
 CONFIG_KPROBE_EVENTS=y
 ```
 
-#### Дополнительные возможности:
-
-```
-# Включить HymoFS (скрытие файловой системы на уровне ядра)
-CONFIG_KSU_HYMOFS=y
-
-# Включить поддержку HymoFS LSM BPF (требуется LSM BPF)
-CONFIG_KSU_HYMOFS_LSMBPS=y
-
-# Включить поддержку KPM (модуль KernelPatch)
-CONFIG_KPM=y
-```

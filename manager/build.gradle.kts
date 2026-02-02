@@ -45,7 +45,7 @@ fun getGitCommitCount(): Int {
 
 fun getGitDescribe(): String {
     return providers.exec {
-        commandLine("git", "describe", "--tags", "--always", "--abbrev=0")
+        commandLine("git", "describe", "--tags", "--always")
     }.standardOutput.asText.get().trim()
 }
 

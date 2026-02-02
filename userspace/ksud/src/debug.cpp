@@ -5,7 +5,9 @@
 #include "utils.hpp"
 
 #include <sys/stat.h>
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 

@@ -19,14 +19,14 @@
 	} while (0)
 #endif // #ifndef preempt_disable_notrace
 
-#if defined(CONFIG_KSU_HYMOFS) || defined(KSU_MANUAL_HOOK)
-// Stub for HymoFS/Manual Hook modes
+#ifdef CONFIG_KSU_MANUAL_HOOK
+// Stub for Manual Hook modes
 static inline bool try_set_access_flag(unsigned long addr)
 {
 	return true;
 }
 #else
 bool try_set_access_flag(unsigned long addr);
-#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 #endif // #ifndef __KSU_UTIL_H

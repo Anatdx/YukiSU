@@ -27,9 +27,8 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
    > **Note:** YukiSU now delegates all module mounting to the installed *metamodule*; the core no longer handles mount operations.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
 4. Support non-GKI and GKI 1.0
-5. KPM Support
-6. Built-in [HymoFS](https://github.com/backslashxx/HymoFS) for kernel-level filesystem hiding (replaces susfs)
-7. Tweaks to the manager theme
+5. Built-in [HymoFS](https://github.com/backslashxx/HymoFS) for kernel-level filesystem hiding (replaces susfs)
+6. Tweaks to the manager theme
 
 > **Note:** YukiSU no longer supports susfs. HymoFS is our built-in solution for filesystem hiding.
 
@@ -55,21 +54,6 @@ See [`guide/how-to-integrate.md`](guide/how-to-integrate.md)
 
 If you need to submit a translation for the manager, please go to [Crowdin](https://crowdin.com/project/YukiSU).
 
-## KPM Support
-
-- Based on KernelPatch, we removed features redundant with KSU and retained only KPM support.
-- Work in Progress: Expanding APatch compatibility by integrating additional functions to ensure compatibility across different implementations.
-
-**Open-source repository**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
-
-**KPM template**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
-
-> [!Note]
->
-> 1. Requires `CONFIG_KPM=y`
-> 2. Non-GKI devices requires `CONFIG_KALLSYMS=y` and `CONFIG_KALLSYMS_ALL=y`
-> 3. For kernels below `4.19`, backporting from `set_memory.h` from `4.19` is required.
-
 ## Troubleshooting
 
 1. Device stuck upon manager app uninstallation?
@@ -93,7 +77,6 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 ## License
 
 - The file in the “kernel” directory is under [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) license.
-- The images of the files `ic_launcher(?!.*alt.*).*` with anime character sticker are copyrighted by [怡子曰曰](https://space.bilibili.com/10545509), the Brand Intellectual Property in the images is owned by [明风 OuO](https://space.bilibili.com/274939213), and the vectorization is done by @MiRinChan. Before using these files, in addition to complying with [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt), you also need to comply with the authorization of the two authors to use these artistic contents.
 - Except for the files or directories mentioned above, all other parts are under [GPL-3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) license.
 
 ## Credit

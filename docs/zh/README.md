@@ -26,9 +26,8 @@
    > **Note:** YukiSU now delegates all module mounting to the installed *metamodule*; the core no longer handles mount operations.
 3. [App Profile](https://kernelsu.org/zh_CN/guide/app-profile.html): 把 Root 权限关进笼子里。
 4. 支持 non-GKI 与 GKI 1.0。
-5. KPM 支持
-6. 内置 [HymoFS](https://github.com/backslashxx/HymoFS)，实现内核级文件系统隐藏（替代 susfs）
-7. 可调整管理器外观
+5. 内置 [HymoFS](https://github.com/backslashxx/HymoFS)，实现内核级文件系统隐藏（替代 susfs）
+6. 可调整管理器外观
 
 > **注意：** YukiSU 不再支持 susfs。HymoFS 是我们内置的文件系统隐藏解决方案。
 
@@ -53,21 +52,6 @@
 ## 参与翻译
 
 要将 YukiSU 翻译成您的语言，或完善现有的翻译，请使用 [Crowdin](https://crowdin.com/project/YukiSU).
-
-## KPM 支持
-
-- 基于 KernelPatch 开发，移除了与 KernelSU 重复的功能。
-- 正在进行（WIP）：通过集成附加功能来扩展 APatch 兼容性，以确保跨不同实现的兼容性。
-
-**开源仓库**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
-
-**KPM 模板**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
-
-> [!Note]
->
-> 1. 需要 `CONFIG_KPM=y`
-> 2. Non-GKI 设备需要 `CONFIG_KALLSYMS=y` and `CONFIG_KALLSYMS_ALL=y`
-> 3. 对于低于 `4.19` 的内核，需要从 `4.19` 的 `set_memory.h` 进行反向移植。
 
 ## 故障排除
 

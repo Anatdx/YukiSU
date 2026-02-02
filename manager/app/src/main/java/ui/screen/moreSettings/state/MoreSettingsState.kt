@@ -50,7 +50,6 @@ class MoreSettingsState(
     var isSimpleMode by mutableStateOf(prefs.getBoolean("is_simple_mode", false))
     var isHideVersion by mutableStateOf(prefs.getBoolean("is_hide_version", false))
     var isHideOtherInfo by mutableStateOf(prefs.getBoolean("is_hide_other_info", false))
-    var isShowKpmInfo by mutableStateOf(prefs.getBoolean("show_kpm_info", false))
     var isHideZygiskImplement by mutableStateOf(prefs.getBoolean("is_hide_zygisk_Implement", false))
     var isHideMetaModuleImplement by mutableStateOf(prefs.getBoolean("is_hide_meta_module_Implement", false))
     var isHideLinkCard by mutableStateOf(prefs.getBoolean("is_hide_link_card", false))

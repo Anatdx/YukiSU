@@ -353,7 +353,8 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 					    filename_user);
 				} else {
 					ksu_handle_execve_sucompat(
-					    filename_user, NULL, NULL, NULL);
+					    NULL, filename_user, NULL, NULL,
+					    NULL);
 				}
 				return;
 			}

@@ -33,7 +33,6 @@ class HomeViewModel : ViewModel() {
         val lkmMode: Boolean? = null,
         val kernelVersion: KernelVersion = getKernelVersion(),
         val isRootAvailable: Boolean = false,
-        val isKpmConfigured: Boolean = false,
         val requireNewKernel: Boolean = false
     )
 
@@ -44,10 +43,8 @@ class HomeViewModel : ViewModel() {
         val deviceModel: String = "",
         val managerVersion: Pair<String, Long> = Pair("", 0L),
         val seLinuxStatus: String = "",
-        val kpmVersion: String = "",
         val superuserCount: Int = 0,
         val moduleCount: Int = 0,
-        val kpmModuleCount: Int = 0,
         val zygiskImplement: String = "",
         val metaModuleImplement: String = ""
     )
@@ -76,8 +73,7 @@ class HomeViewModel : ViewModel() {
         private set
     var isHideLinkCard by mutableStateOf(false)
         private set
-    var showKpmInfo by mutableStateOf(false)
-        private set
+
 
     var isCoreDataLoaded by mutableStateOf(false)
         private set
@@ -104,7 +100,6 @@ class HomeViewModel : ViewModel() {
             isHideLinkCard = settingsPrefs.getBoolean("is_hide_link_card", false)
             isHideZygiskImplement = settingsPrefs.getBoolean("is_hide_zygisk_Implement", false)
             isHideMetaModuleImplement = settingsPrefs.getBoolean("is_hide_meta_module_Implement", false)
-            showKpmInfo = settingsPrefs.getBoolean("show_kpm_info", false)
         }
     }
 
@@ -160,12 +155,6 @@ class HomeViewModel : ViewModel() {
                     false
                 }
 
-                val isKpmConfigured = try {
-                    Natives.isKPMEnabled()
-                } catch (_: Exception) {
-                    false
-                }
-
                 val requireNewKernel = try {
                     isManager && Natives.requireNewKernel()
                 } catch (_: Exception) {
@@ -179,7 +168,6 @@ class HomeViewModel : ViewModel() {
                     lkmMode = lkmMode,
                     kernelVersion = kernelVersion,
                     isRootAvailable = isRootAvailable,
-                    isKpmConfigured = isKpmConfigured,
                     requireNewKernel = requireNewKernel
                 )
 
@@ -213,12 +201,10 @@ class HomeViewModel : ViewModel() {
                 if (!isSimpleMode) {
                     val moduleInfo = loadModuleInfo()
                     systemInfo = systemInfo.copy(
-                        kpmVersion = moduleInfo.first,
-                        superuserCount = moduleInfo.second,
-                        moduleCount = moduleInfo.third,
-                        kpmModuleCount = moduleInfo.fourth,
-                        zygiskImplement = moduleInfo.fifth,
-                        metaModuleImplement = moduleInfo.sixth
+                        superuserCount = moduleInfo.first,
+                        moduleCount = moduleInfo.second,
+                        zygiskImplement = moduleInfo.third,
+                        metaModuleImplement = moduleInfo.fourth
                     )
                 }
 
@@ -374,14 +360,8 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    private suspend fun loadModuleInfo(): Tuple6<String, Int, Int, Int, String, String> {
+    private suspend fun loadModuleInfo(): Tuple4<Int, Int, String, String> {
         return withContext(Dispatchers.IO) {
-            val kpmVersion = try {
-                getKpmVersion()
-            } catch (_: Exception) {
-                "Unknown"
-            }
-
             val superuserCount = try {
                 getSuperuserCount()
             } catch (_: Exception) {
@@ -390,12 +370,6 @@ class HomeViewModel : ViewModel() {
 
             val moduleCount = try {
                 getModuleCount()
-            } catch (_: Exception) {
-                0
-            }
-
-            val kpmModuleCount = try {
-                getKpmModuleCount()
             } catch (_: Exception) {
                 0
             }
@@ -412,7 +386,7 @@ class HomeViewModel : ViewModel() {
                 "None"
             }
 
-            Tuple6(kpmVersion, superuserCount, moduleCount, kpmModuleCount, zygiskImplement, metaModuleImplement)
+            Tuple4(superuserCount, moduleCount, zygiskImplement, metaModuleImplement)
         }
     }
 

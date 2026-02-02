@@ -30,23 +30,37 @@ config KSU_MANUAL_SU
 	help
 	  Use manual su and authorize the corresponding command line and application via fd
 
-config KPM
-	  bool "Enable YukiSU KPM"
-	  depends on KSU && 64BIT
-	  select KALLSYMS
-	  select KALLSYMS_ALL
-	  default n
-	  help
-		Enabling this option will activate the KPM feature of YukiSU.
-		This option is suitable for scenarios where you need to force KPM to be enabled.
-		but it may affect system stability.
-
 config KSU_MANUAL_HOOK
 	bool "Hook KernelSU manually"
-	depends on KSU != m && !KSU_HYMOFS
+	depends on KSU != m
 	help
 	  If enabled, Hook required KernelSU syscalls with manually-patched function.
-	  This can be used together with KSU_HYMOFS for complete functionality.
+	  
+	  When using manual hooks, you need to apply kernel patches to hook:
+	  - fs/exec.c: ksu_handle_execveat
+	  - fs/open.c: ksu_handle_faccessat
+	  - fs/stat.c: ksu_handle_stat, ksu_handle_newfstat_ret (optional)
+	  - kernel/reboot.c: ksu_handle_sys_reboot
+	  
+	  See YukiSU_patch/scope_min_manual_hooks_v1.9.patch for reference.
+
+config KSU_MANUAL_HOOK_INTEGRITY_CHECK
+	bool "Enable manual hook integrity check"
+	depends on KSU_MANUAL_HOOK
+	default y
+	help
+	  Perform compile-time checks to ensure all required manual hooks
+	  are properly implemented. This helps catch integration errors early.
+	  
+	  If enabled and hooks are missing, compilation will fail with clear
+	  error messages indicating which hooks need to be added.
+	  
+	  Advanced users who know what they're doing can disable this check,
+	  but it's STRONGLY RECOMMENDED to keep it enabled to avoid runtime
+	  issues and security vulnerabilities.
+	  
+	  Inspired by ReSukiSU's strict checking approach, but made optional
+	  for flexibility.
 
 config KSU_MANUAL_HOOK_AUTO_SETUID_HOOK
 	bool "Automatically hook setuid by lsm"
@@ -56,6 +70,51 @@ config KSU_MANUAL_HOOK_AUTO_SETUID_HOOK
 	  If turn off this option, you need checkout to kernel/sys.c 
 	  in SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 	  add a ksu_handle_setresuid calls in there
+	  
+	  For kernels 6.8+, LSM hook is automatically available.
+	  For older kernels (< 6.8), you must manually patch kernel/sys.c.
+
+config KSU_TAMPER_SYSCALL_TABLE
+	bool "Tamper syscall table for sucompat (EXPERIMENTAL)"
+	depends on KSU_MANUAL_HOOK
+	default n
+	help
+	  Enable syscall table tampering to hook sucompat syscalls directly.
+	  This backports the feature from scope-minimized manual hooks v1.8+.
+	  
+	  When enabled, this allows skipping manual hooks for:
+	  - sys_execve
+	  - sys_faccessat
+	  - sys_newfstatat
+	  - sys_newfstat (return hook)
+	  - sys_reboot (if kprobe unavailable)
+	  
+	  Compatibility:
+	  - 3.10~4.19 kernels: >95% success rate
+	  - 5.4~6.1 kernels: ~67% success rate
+	  
+	  WARNING: This is experimental and may not work on all kernels.
+	  Only enable if you cannot use standard hooks.
+
+config KSU_KRETPROBES_SUCOMPAT
+	bool "Use kretprobes for getname_flags sucompat (EXPERIMENTAL)"
+	depends on KRETPROBES && !KSU_TAMPER_SYSCALL_TABLE
+	default n
+	help
+	  Hook getname_flags() via kretprobe to implement sucompat.
+	  This is the most stealthy method and improves reliability.
+	  
+	  Advantages:
+	  - Prevents timing-based detection (newfstat vs newfstatat)
+	  - No usercopy operations, more reliable on page faults
+	  - Defeats anti-root detection techniques:
+	    * Delayed syscall detection
+	    * KSU (ND) detection
+	    * sucompat SCA (Disclosure)
+	    * Abnormal Environment (NT)
+	  
+	  WARNING: This is very experimental. Default to N.
+	  Requires CONFIG_KRETPROBES=y in kernel config.
 
 config KSU_LKM
 	bool "Build as Loadable Kernel Module (LKM)"

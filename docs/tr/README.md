@@ -27,9 +27,8 @@ Android cihazlar için çekirdek tabanlı root çözümü, [`SukiSU-Ultra`](http
    > **Not:** YukiSU artık tüm modül bağlama işlemlerini yüklü *metamodule*'e devretmektedir; çekirdek artık bağlama işlemlerini işlememektedir.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Root yetkilerini kafese kilitleyin
 4. GKI olmayan ve GKI 1.0 desteği
-5. KPM Desteği
-6. Çekirdek düzeyinde dosya sistemi gizleme için dahili [HymoFS](https://github.com/backslashxx/HymoFS) (susfs'in yerini alır)
-7. Yönetici teması ayarlamaları
+5. Çekirdek düzeyinde dosya sistemi gizleme için dahili [HymoFS](https://github.com/backslashxx/HymoFS) (susfs'in yerini alır)
+6. Yönetici teması ayarlamaları
 
 > **Not:** YukiSU artık susfs'i desteklememektedir. HymoFS, dosya sistemi gizleme için yerleşik çözümümüzdür.
 
@@ -54,21 +53,6 @@ Android cihazlar için çekirdek tabanlı root çözümü, [`SukiSU-Ultra`](http
 ## Çeviri
 
 Yönetici için çeviri göndermek istiyorsanız, lütfen [Crowdin](https://crowdin.com/project/YukiSU)'a gidin.
-
-## KPM Desteği
-
-- KernelPatch tabanlı olarak KSU ile gereksiz işlevleri kaldırdık ve yalnızca KPM desteğini koruduk.
-- Devam eden çalışma: Farklı uygulamalar arasında uyumluluğu sağlamak için ek işlevler entegre ederek APatch uyumluluğunu genişletiyoruz.
-
-**Açık kaynak deposu**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
-
-**KPM şablonu**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
-
-> [!Note]
->
-> 1. `CONFIG_KPM=y` gerektirir
-> 2. GKI olmayan cihazlar `CONFIG_KALLSYMS=y` ve `CONFIG_KALLSYMS_ALL=y` gerektirir
-> 3. `4.19`'un altındaki çekirdekler için `4.19`'dan `set_memory.h` geri taşıma gerektirir
 
 ## Sorun Giderme
 

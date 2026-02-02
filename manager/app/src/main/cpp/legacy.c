@@ -36,7 +36,6 @@
 
 #define CMD_GET_VERSION_FULL 0xC0FFEE1A
 
-#define CMD_ENABLE_KPM 100
 #define CMD_HOOK_TYPE 101
 #define CMD_GET_MANAGERS 104
 
@@ -81,12 +80,6 @@ bool legacy_is_su_enabled() {
   int enabled = true;
   // if ksuctl failed, we assume su is enabled, and it cannot be disabled.
   ksuctl(CMD_IS_SU_ENABLED, &enabled, NULL);
-  return enabled;
-}
-
-bool legacy_is_KPM_enable() {
-  int enabled = false;
-  ksuctl(CMD_ENABLE_KPM, &enabled, NULL);
   return enabled;
 }
 

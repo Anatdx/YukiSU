@@ -10,6 +10,7 @@
 #include <asm/current.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/ptrace.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -19,14 +20,7 @@
 #include <linux/sched.h>
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
-#ifdef CONFIG_KSU_HYMOFS
-#include "objsec.h"
-#include "selinux/selinux.h"
-#include <linux/namei.h>
-#include <linux/hymofs.h>
-#else
 #include "syscall_hook_manager.h"
-#endif // #ifdef CONFIG_KSU_HYMOFS
 
 #include "allowlist.h"
 #include "app_profile.h"
@@ -50,9 +44,9 @@
 
 bool ksu_su_compat_enabled __read_mostly = true;
 
-#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_HYMOFS)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 EXPORT_SYMBOL(ksu_su_compat_enabled);
-#endif // #if defined(CONFIG_KSU_MANUAL_HOOK) || ...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 static int su_compat_feature_get(u64 *value)
 {
@@ -100,9 +94,10 @@ extern bool ksu_kernel_umount_enabled;
 // the call from execve_handler_pre won't provided correct value for
 // __never_use_argument, use them after fix execve_handler_pre, keeping them for
 // consistence for manually patched code
-int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-				 void *__never_use_argv, void *__never_use_envp,
-				 int *__never_use_flags)
+__attribute__((hot)) int
+ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+			     void *__never_use_argv, void *__never_use_envp,
+			     int *__never_use_flags)
 {
 	struct filename *filename;
 	bool is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
@@ -139,16 +134,16 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	return 0;
 }
 
-// For tracepoint hook: takes user space pointer
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+// For tracepoint hook (and manual execve patch): takes user space pointer
 static char __user *ksud_user_path(void)
 {
 	return userspace_stack_buffer(ksud_path, sizeof(ksud_path));
 }
 
-int ksu_handle_execve_sucompat(const char __user **filename_user,
-			       void *__never_use_argv, void *__never_use_envp,
-			       int *__never_use_flags)
+__attribute__((hot)) int
+ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
+			   void *__never_use_argv, void *__never_use_envp,
+			   int *__never_use_flags)
 {
 	const char __user *fn;
 	char path[sizeof(su_path) + 1];
@@ -173,13 +168,24 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
 	}
 
+	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
+	// (e.g., preempt disabled), temporarily exit it to handle page faults
+	if (ret < 0 && preempt_count()) {
+		pr_info("Access filename failed in atomic context, trying "
+			"rescue\n");
+		preempt_enable_no_resched_notrace();
+		ret = strncpy_from_user(path, fn, sizeof(path));
+		preempt_disable_notrace();
+	}
+
 	if (ret < 0) {
 		pr_warn("Access filename when execve failed: %ld\n", ret);
 		return 0;
 	}
 
-	if (likely(memcmp(path, su_path, sizeof(su_path))))
+	if (likely(memcmp(path, su_path, sizeof(su_path)))) {
 		return 0;
+	}
 
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
@@ -193,9 +199,8 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 
 	return 0;
 }
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
 
-#if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
 {
 	struct filename *filename;
@@ -230,25 +235,49 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
 					    flags);
 }
-#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
+__attribute__((hot))
 
 int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 			 int *__unused_flags)
 {
-	char path[sizeof(su_path) + 1] = {0};
+	const char __user *fn;
+	char path[sizeof(su_path) + 1];
+	long ret;
+	unsigned long addr;
 
 	if (!ksu_su_compat_enabled) {
+		return 0;
+	}
+
+	if (unlikely(!filename_user || !*filename_user)) {
 		return 0;
 	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
 
-#ifdef CONFIG_KSU_LKM
-	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-#else
-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-#endif // #ifdef CONFIG_KSU_LKM
+	addr = untagged_addr((unsigned long)*filename_user);
+	fn = (const char __user *)addr;
+	memset(path, 0, sizeof(path));
+	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
+
+	if (ret < 0 && try_set_access_flag(addr)) {
+		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
+	}
+
+	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
+	// (e.g., preempt disabled), temporarily exit it to handle page faults
+	if (ret < 0 && preempt_count()) {
+		preempt_enable_no_resched_notrace();
+		ret = strncpy_from_user(path, fn, sizeof(path));
+		preempt_disable_notrace();
+	}
+
+	if (ret < 0) {
+		// Failed to access user memory, skip
+		return 0;
+	}
 
 	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
 #if __SULOG_GATE
@@ -261,8 +290,10 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 
 	return 0;
 }
+__attribute__((hot))
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_HYMOFS)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) &&                           \
+    defined(CONFIG_KSU_MANUAL_HOOK)
 int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 {
 	if (!ksu_su_compat_enabled) {
@@ -288,28 +319,48 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 	memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
 	return 0;
 }
+__attribute__((hot))
 #else // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) &&
-      // defined(CONFIG_KSU_HYMOFS)
+      // defined(CONFIG_KSU_MANUAL_HOOK)
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
-	char path[sizeof(su_path) + 1] = {0};
+	const char __user *fn;
+	char path[sizeof(su_path) + 1];
+	long ret;
+	unsigned long addr;
 
 	if (!ksu_su_compat_enabled) {
 		return 0;
 	}
 
-	if (unlikely(!filename_user)) {
+	if (unlikely(!filename_user || !*filename_user)) {
 		return 0;
 	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
 
-#ifdef CONFIG_KSU_LKM
-	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-#else
-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-#endif // #ifdef CONFIG_KSU_LKM
+	addr = untagged_addr((unsigned long)*filename_user);
+	fn = (const char __user *)addr;
+	memset(path, 0, sizeof(path));
+	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
+
+	if (ret < 0 && try_set_access_flag(addr)) {
+		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
+	}
+
+	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
+	// (e.g., preempt disabled), temporarily exit it to handle page faults
+	if (ret < 0 && preempt_count()) {
+		preempt_enable_no_resched_notrace();
+		ret = strncpy_from_user(path, fn, sizeof(path));
+		preempt_disable_notrace();
+	}
+
+	if (ret < 0) {
+		// Failed to access user memory, skip
+		return 0;
+	}
 
 	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
 #if __SULOG_GATE
@@ -324,12 +375,13 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 }
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
-#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_HYMOFS)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 EXPORT_SYMBOL(ksu_handle_execveat);
 EXPORT_SYMBOL(ksu_handle_execveat_sucompat);
+EXPORT_SYMBOL(ksu_handle_execve_sucompat);
 EXPORT_SYMBOL(ksu_handle_faccessat);
 EXPORT_SYMBOL(ksu_handle_stat);
-#endif // #if defined(CONFIG_KSU_MANUAL_HOOK) || ...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 // dead code: devpts handling
 int __maybe_unused ksu_handle_devpts(struct inode *inode)

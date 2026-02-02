@@ -68,7 +68,7 @@
     <string name="failed_to_update_app_profile">Failed to update App Profile for %s</string>
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
-    <string name="settings_umount_modules_default_summary">The global default value for \"Umount modules\" in App Profile. If enabled, it will remove all module modifications to the system for apps that don\'t have a profile set</string>
+    <string name="settings_umount_modules_default_summary">The global default value for "Umount modules" in App Profile. If enabled, it will remove all module modifications to the system for apps that don\'t have a profile set</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>
     <string name="profile_selinux_domain">Domain</string>
     <string name="profile_selinux_rules">Rules</string>
@@ -81,6 +81,7 @@
     <string name="restart_app">Restart</string>
     <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
     <string name="module_changelog">Changelog</string>
+    <string name="module_action_success">Module action executed successfully.</string>
     <string name="settings_profile_template">App Profile Template</string>
     <string name="settings_profile_template_summary">Manage local and online template of App Profile</string>
     <string name="app_profile_template_create">Create template</string>
@@ -126,7 +127,7 @@
     <string name="settings_restore_stock_image">Restore stock image</string>
     <string name="settings_uninstall_temporary_message">Temporarily uninstall KernelSU, restore to original state after next reboot</string>
     <string name="settings_uninstall_permanent_message">Uninstalling KernelSU (root and all modules) completely and permanently</string>
-    <string name="settings_restore_stock_image_message">Restore the stock factory image (if a backup exists), usually used before OTA; if you need to uninstall KernelSU, please use \"Uninstall permanently\"</string>
+    <string name="settings_restore_stock_image_message">Restore the stock factory image (if a backup exists), usually used before OTA; if you need to uninstall KernelSU, please use "Uninstall permanently"</string>
     <string name="flashing">Flashing</string>
     <string name="flash_success">Flash success</string>
     <string name="flash_failed">Flash failed</string>
@@ -387,34 +388,6 @@
     <string name="home_zygisk_implement">Zygisk implement</string>
     <string name="home_meta_module_implement">Meta Module implement</string>
     <string name="home_hook_type">Hook type</string>
-    <!-- KPM patching related strings -->
-    <string name="kpm_patch_options">KPM Patch</string>
-    <string name="kpm_patch_description">For adding additional KPM features</string>
-    <string name="enable_kpm_patch">KPM Patch</string>
-    <string name="kpm_patch_switch_description">Apply KPM patch to kernel image before flashing</string>
-    <string name="enable_kpm_undo_patch">KPM Undo Patch</string>
-    <string name="kpm_undo_patch_switch_description">Undo previously applied KPM patch</string>
-    <string name="kpm_patch_enabled">KPM patch enabled</string>
-    <string name="kpm_undo_patch_enabled">KPM undo patch enabled</string>
-    <string name="kpm_patch_mode">KPM Patch Mode</string>
-    <string name="kpm_undo_patch_mode">KPM Undo Patch Mode</string>
-    <!-- KPM workflow related -->
-    <string name="kpm_preparing_tools">Preparing KPM tools</string>
-    <string name="kpm_applying_patch">Applying KPM patch</string>
-    <string name="kpm_undoing_patch">Undoing KPM patch</string>
-    <string name="kpm_found_image_file">Found Image file: %s</string>
-    <string name="kpm_patch_success">KPM patch applied successfully</string>
-    <string name="kpm_undo_patch_success">KPM patch undone successfully</string>
-    <string name="kpm_file_repacked">File repacked successfully</string>
-    <!-- KPM error messages -->
-    <string name="kpm_extract_zip_failed">Failed to extract zip file</string>
-    <string name="kpm_image_file_not_found">Image file not found</string>
-    <string name="kpm_patch_failed">KPM patch failed</string>
-    <string name="kpm_undo_patch_failed">KPM undo patch failed</string>
-    <string name="kpm_patch_operation_failed">KPM patch operation failed: %s</string>
-    <!-- KPM option radio group strings -->
-    <string name="kpm_follow_kernel_file">Follow Kernel</string>
-    <string name="kpm_follow_kernel_description">Use kernel as-is without any KPM modifications</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">Confirm Installation</string>
     <string name="confirm_multiple_installation">Confirm Installation (%d files)</string>
@@ -503,6 +476,86 @@
     <string name="gki_priority_title">GKI Priority Mode</string>
     <string name="gki_priority_desc">When enabled, GKI takes priority over LKM. The LKM will not trigger GKI yield and both will run independently.</string>
 
+    <!-- Partition Manager -->
+    <string name="partition_manager">Partition Manager</string>
+    <string name="partition_list">Partition List</string>
+    <string name="partition_slot_info">Slot Information</string>
+    <string name="partition_device_type">Device Type</string>
+    <string name="partition_current_slot">Current Slot</string>
+    <string name="partition_other_slot">Other Slot</string>
+    <string name="partition_multi_select">Multi-select Backup</string>
+    <string name="partition_cancel_select">Cancel Multi-select</string>
+    <string name="partition_show_all">Show All</string>
+    <string name="partition_collapse">Collapse</string>
+    <string name="partition_selected_count">Selected %d partitions</string>
+    <string name="partition_select_all">Select All</string>
+    <string name="partition_filter_type">Filter by Type</string>
+    <string name="partition_filter_all">All Partitions</string>
+    <string name="partition_filter_physical">Physical Only</string>
+    <string name="partition_filter_logical">Logical Only</string>
+    <string name="partition_map_inactive">Map Inactive Slot Logical Partitions</string>
+    <string name="partition_map_inactive_desc">Inactive slot logical partitions may not have device nodes. Click to create them.</string>
+    <string name="partition_mapping">Mapping logical partitions for slot %s…</string>
+    <string name="partition_map_success">Successfully mapped logical partitions</string>
+    <string name="partition_map_failed">Failed to map logical partitions: %s</string>
+    <string name="partition_deselect_all">Deselect All</string>
+    <string name="partition_batch_backup">Batch Backup</string>
+    <string name="partition_common">Common Partitions</string>
+    <string name="partition_all">All Partitions</string>
+    <string name="partition_dangerous_warning">DANGEROUS partition! Improper operation may brick device</string>
+    <string name="partition_info_title">Partition Information</string>
+    <string name="partition_info_type">Type</string>
+    <string name="partition_type_physical">Physical</string>
+    <string name="partition_type_logical">Logical</string>
+    <string name="partition_info_size">Size</string>
+    <string name="partition_info_device">Device</string>
+    <string name="partition_info_slot">Slot</string>
+    <string name="partition_available_operations">Available Operations</string>
+    <string name="partition_backup_to_file">Backup to File</string>
+    <string name="partition_flash_image">Flash Image</string>
+    <string name="partition_dangerous_operation">Dangerous Operation</string>
+    <string name="partition_dangerous_operation_warning">⚠️ Dangerous Operation Warning</string>
+    <string name="partition_flash_warning">Flashing partition may cause device unable to boot!\n\nAre you sure you want to flash %s partition?</string>
+    <string name="partition_dangerous_flash_warning">⚠️ Warning: %s is a dangerous partition!\n\nFlashing this partition may cause:\n• Device unable to boot\n• Loss of important data\n• Network/Bluetooth malfunction\n\nPlease make sure you know what you are doing!\n\nAre you sure you want to flash %s partition?</string>
+    <string name="partition_confirm_flash">Confirm Flash</string>
+    <string name="partition_backing_up">Backing up partition %s…</string>
+    <string name="partition_backup_success">Backup successful: %s</string>
+    <string name="partition_backup_failed">Backup failed: %s</string>
+    <string name="partition_backup_failed_check_log">Backup failed, please check logcat logs</string>
+    <string name="partition_flashing">Flashing %s…</string>
+    <string name="partition_flash_success">Flash successful! Recommend reboot immediately.</string>
+    <string name="partition_flash_failed">Flash failed: %s</string>
+    <string name="partition_flash_failed_check_log">Flash failed, please check logcat logs</string>
+    <string name="partition_cannot_read_file">Cannot read file</string>
+    <string name="partition_load_failed">Failed to load partition info: %s</string>
+    <string name="partition_ab_device">A/B Device</string>
+    <string name="partition_a_only_device">A-only Device</string>
+    <string name="partition_unknown">Unknown</string>
+    <string name="partition_batch_backup_start">Starting batch backup of %d partitions…</string>
+    <string name="partition_batch_backup_progress">Backing up (%d/%d): %s</string>
+    <string name="partition_batch_backup_complete">Batch backup complete! Total %d partitions\nSaved in: %s</string>
+    <string name="partition_batch_backup_partial">Backup complete: %d succeeded, %d failed\nFailed: %s</string>
+    <string name="partition_no_selection">No partition selected</string>
+    <string name="partition_back">Back</string>
+    
+    <!-- Advanced Tools -->
+    <string name="install_advanced_tools">Advanced Tools</string>
+    <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
+
+    <!-- Module Shortcut -->
+    <string name="module_shortcut_title">Create shortcut</string>
+    <string name="module_shortcut_name_label">Shortcut name</string>
+    <string name="module_shortcut_icon_pick">Choose custom icon</string>
+    <string name="module_shortcut_add">Add shortcut</string>
+    <string name="module_shortcut_not_supported">Launcher does not support desktop shortcuts.</string>
+    <string name="module_shortcut_created">Shortcut created on desktop.</string>
+    <string name="module_shortcut_updated">Shortcut updated.</string>
+    <string name="module_shortcut_delete">Delete shortcut</string>
+    <string name="module_shortcut_type_title">Select type</string>
+    <string name="module_shortcut_permission_tip_xiaomi">Please enable \"Create desktop shortcuts\" permission for this app in Xiaomi settings.</string>
+    <string name="module_shortcut_permission_tip_oppo">Please enable \"Desktop shortcut\" permission for this app in OPPO settings.</string>
+    <string name="module_shortcut_permission_tip_default">If shortcut creation fails, please enable desktop shortcut permission for this app in system settings.</string>
+    
     <!-- HymoFS Configuration -->
     <string name="hymofs_title">HymoFS Configuration</string>
     <string name="hymofs_tab_status">Status</string>

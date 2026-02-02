@@ -255,18 +255,6 @@ class WebViewInterface(
         }
         return jsonArray.toString()
     }
-
-    // =================== KPM支持 =============================
-
-    @JavascriptInterface
-    fun listAllKpm(): String {
-        return listKpmModules()
-    }
-
-    @JavascriptInterface
-    fun controlKpm(name: String, args: String): Int {
-        return controlKpmModule(name, args)
-    }
 }
 
 fun hideSystemUI(window: Window) =

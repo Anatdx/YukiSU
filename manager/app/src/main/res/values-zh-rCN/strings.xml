@@ -66,7 +66,7 @@
     <string name="failed_to_update_app_profile">为 %s 更新 App Profile 失败</string>
     <string name="require_kernel_version" formatted="false">当前 KernelSU 版本 %s 过低，管理器无法正常工作，请将内核 KernelSU 版本升级至 %s 或以上！</string>
     <string name="settings_umount_modules_default">默认卸载模块</string>
-    <string name="settings_umount_modules_default_summary">App Profile 中\"卸载模块\"的全局默认值，如果启用，将会为没有设置 Profile 的应用移除所有模块针对系统的修改。</string>
+    <string name="settings_umount_modules_default_summary">App Profile 中"卸载模块"的全局默认值，如果启用，将会为没有设置 Profile 的应用移除所有模块针对系统的修改。</string>
     <string name="profile_umount_modules_summary">启用该选项后将允许 KernelSU 为本应用还原被模块修改过的文件。</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">规则</string>
@@ -79,6 +79,7 @@
     <string name="restart_app">重新启动</string>
     <string name="failed_to_update_sepolicy">为：%s 更新 SELinux 规则失败</string>
     <string name="module_changelog">更新日志</string>
+    <string name="module_action_success">模块动作执行成功。</string>
     <string name="settings_profile_template">App Profile 模版</string>
     <string name="settings_profile_template_summary">管理本地和在线的 App Profile 模版</string>
     <string name="app_profile_template_create">创建模版</string>
@@ -124,7 +125,7 @@
     <string name="settings_restore_stock_image">恢复原厂镜像</string>
     <string name="settings_uninstall_temporary_message">临时卸载 KernelSU，下次重启后恢复至原始状态。</string>
     <string name="settings_uninstall_permanent_message">完全并永久卸载 KernelSU（Root 权限和所有模块）。</string>
-    <string name="settings_restore_stock_image_message">恢复原厂镜像（若存在备份），一般在 OTA 前使用；如果你需要卸载 KernelSU，请使用\"永久卸载\"。</string>
+    <string name="settings_restore_stock_image_message">恢复原厂镜像（若存在备份），一般在 OTA 前使用；如果你需要卸载 KernelSU，请使用"永久卸载"。</string>
     <string name="flashing">刷写中</string>
     <string name="flash_success">刷写完成</string>
     <string name="flash_failed">刷写失败</string>
@@ -401,23 +402,6 @@
     <string name="kpm_undo_patch_enabled">KPM 撤销修补已启用</string>
     <string name="kpm_patch_mode">KPM 修补模式</string>
     <string name="kpm_undo_patch_mode">KPM 撤销修补模式</string>
-    <!-- KPM workflow related -->
-    <string name="kpm_preparing_tools">准备 KPM 修补工具</string>
-    <string name="kpm_applying_patch">正在应用 KPM 修补</string>
-    <string name="kpm_undoing_patch">正在撤销 KPM 修补</string>
-    <string name="kpm_found_image_file">找到 Image 文件: %s</string>
-    <string name="kpm_patch_success">KPM 修补成功</string>
-    <string name="kpm_undo_patch_success">KPM 撤销修补成功</string>
-    <string name="kpm_file_repacked">文件重新打包完成</string>
-    <!-- KPM error messages -->
-    <string name="kpm_extract_zip_failed">解压压缩包失败</string>
-    <string name="kpm_image_file_not_found">未找到 Image 文件</string>
-    <string name="kpm_patch_failed">KPM 修补失败</string>
-    <string name="kpm_undo_patch_failed">KPM 撤销修补失败</string>
-    <string name="kpm_patch_operation_failed">KPM 修补操作失败: %s</string>
-    <!-- KPM option radio group strings -->
-    <string name="kpm_follow_kernel_file">跟随内核</string>
-    <string name="kpm_follow_kernel_description">原样使用内核，不进行任何 KPM 修改</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">确认安装</string>
     <string name="confirm_multiple_installation">确认安装（%d 个文件）</string>
@@ -505,6 +489,86 @@
     <string name="signature_bypass_desc">禁用 APK 签名验证。管理器将仅通过超级密钥认证来识别。</string>
     <string name="gki_priority_title">GKI 优先模式</string>
     <string name="gki_priority_desc">启用后，GKI 优先于 LKM。LKM 将不会触发 GKI 让位，会自行退出。</string>
+
+    <!-- Partition Manager -->
+    <string name="partition_manager">分区管理器</string>
+    <string name="partition_list">分区列表</string>
+    <string name="partition_slot_info">槽位信息</string>
+    <string name="partition_device_type">设备类型</string>
+    <string name="partition_current_slot">当前槽位</string>
+    <string name="partition_other_slot">其他槽位</string>
+    <string name="partition_multi_select">多选备份</string>
+    <string name="partition_cancel_select">取消多选</string>
+    <string name="partition_show_all">显示全部</string>
+    <string name="partition_collapse">收起</string>
+    <string name="partition_selected_count">已选择 %d 个分区</string>
+    <string name="partition_select_all">全选</string>
+    <string name="partition_filter_type">按类型筛选</string>
+    <string name="partition_filter_all">所有分区</string>
+    <string name="partition_filter_physical">仅物理分区</string>
+    <string name="partition_filter_logical">仅逻辑分区</string>
+    <string name="partition_map_inactive">映射非活跃槽位逻辑分区</string>
+    <string name="partition_map_inactive_desc">非活跃槽位的逻辑分区可能没有设备节点。点击创建它们。</string>
+    <string name="partition_mapping">正在映射槽位 %s 的逻辑分区…</string>
+    <string name="partition_map_success">成功映射逻辑分区</string>
+    <string name="partition_map_failed">映射逻辑分区失败：%s</string>
+    <string name="partition_deselect_all">全不选</string>
+    <string name="partition_batch_backup">批量备份</string>
+    <string name="partition_common">常用分区</string>
+    <string name="partition_all">所有分区</string>
+    <string name="partition_dangerous_warning">危险分区！操作不当可能导致设备变砖</string>
+    <string name="partition_info_title">分区信息</string>
+    <string name="partition_info_type">类型</string>
+    <string name="partition_type_physical">物理分区</string>
+    <string name="partition_type_logical">逻辑分区</string>
+    <string name="partition_info_size">大小</string>
+    <string name="partition_info_device">设备</string>
+    <string name="partition_info_slot">槽位</string>
+    <string name="partition_available_operations">可用操作</string>
+    <string name="partition_backup_to_file">备份到文件</string>
+    <string name="partition_flash_image">刷写镜像</string>
+    <string name="partition_dangerous_operation">危险操作</string>
+    <string name="partition_dangerous_operation_warning">⚠️ 危险操作警告</string>
+    <string name="partition_flash_warning">刷写分区可能导致设备无法启动！\n\n确定要刷写 %s 分区吗？</string>
+    <string name="partition_dangerous_flash_warning">⚠️ 警告：%s 是危险分区！\n\n刷写此分区可能导致：\n• 设备无法启动\n• 丢失重要数据\n• 网络/蓝牙功能失效\n\n请确保您知道自己在做什么！\n\n确定要刷写 %s 分区吗？</string>
+    <string name="partition_confirm_flash">确定刷写</string>
+    <string name="partition_backing_up">正在备份分区 %s…</string>
+    <string name="partition_backup_success">备份成功：%s</string>
+    <string name="partition_backup_failed">备份失败：%s</string>
+    <string name="partition_backup_failed_check_log">备份失败，请查看 logcat 日志</string>
+    <string name="partition_flashing">正在刷写 %s…</string>
+    <string name="partition_flash_success">刷写成功！建议立即重启。</string>
+    <string name="partition_flash_failed">刷写失败：%s</string>
+    <string name="partition_flash_failed_check_log">刷写失败，请查看 logcat 日志</string>
+    <string name="partition_cannot_read_file">无法读取文件</string>
+    <string name="partition_load_failed">加载分区信息失败：%s</string>
+    <string name="partition_ab_device">A/B 设备</string>
+    <string name="partition_a_only_device">A-only 设备</string>
+    <string name="partition_unknown">未知</string>
+    <string name="partition_batch_backup_start">开始批量备份 %d 个分区…</string>
+    <string name="partition_batch_backup_progress">备份中 (%d/%d)：%s</string>
+    <string name="partition_batch_backup_complete">批量备份完成！共 %d 个分区\n保存在：%s</string>
+    <string name="partition_batch_backup_partial">备份完成：成功 %d 个，失败 %d 个\n失败：%s</string>
+    <string name="partition_no_selection">没有选择要备份的分区</string>
+    <string name="partition_back">返回</string>
+    
+    <!-- Advanced Tools -->
+    <string name="install_advanced_tools">高级工具</string>
+    <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
+
+    <!-- Module Shortcut -->
+    <string name="module_shortcut_title">创建快捷方式</string>
+    <string name="module_shortcut_name_label">快捷方式名称</string>
+    <string name="module_shortcut_icon_pick">选择自定义图标</string>
+    <string name="module_shortcut_add">添加快捷方式</string>
+    <string name="module_shortcut_not_supported">启动器不支持桌面快捷方式。</string>
+    <string name="module_shortcut_created">已在桌面创建快捷方式。</string>
+    <string name="module_shortcut_updated">快捷方式已更新。</string>
+    <string name="module_shortcut_delete">删除快捷方式</string>
+    <string name="module_shortcut_type_title">选择类型</string>
+    <string name="module_shortcut_permission_tip_xiaomi">请在 Xiaomi 设置中为本应用启用"创建桌面快捷方式"权限。</string>
+    <string name="module_shortcut_permission_tip_oppo">请在 OPPO 设置中为本应用启用"桌面快捷方式"权限。</string>
+    <string name="module_shortcut_permission_tip_default">若创建快捷方式失败，请在系统设置中为本应用启用桌面快捷方式权限。</string>
 
     <!-- HymoFS Configuration -->
     <string name="hymofs_title">HymoFS 配置</string>

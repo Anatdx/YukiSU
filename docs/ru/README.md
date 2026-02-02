@@ -27,9 +27,8 @@
    > **Note:** YukiSU теперь делегирует все операции по монтированию модулей установленному *метамодулю*; ядро ​​больше не обрабатывает операции по монтированию.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Запереть root-доступ в клетку
 4. Поддержка не-GKI и GKI 1.0
-5. Поддержка KPM
-6. Встроенный [HymoFS](https://github.com/backslashxx/HymoFS) для скрытия файловой системы на уровне ядра (замена susfs)
-7. Настройки темы менеджера
+5. Встроенный [HymoFS](https://github.com/backslashxx/HymoFS) для скрытия файловой системы на уровне ядра (замена susfs)
+6. Настройки темы менеджера
 
 > **Примечание:** YukiSU больше не поддерживает susfs. HymoFS — наше встроенное решение для скрытия файловой системы.
 
@@ -55,21 +54,6 @@
 
 Если вам нужно отправить перевод для менеджера, пожалуйста перейдите на [Crowdin](https://crowdin.com/project/YukiSU).
 
-## Поддержка KPM
-
-- На основе KernelPatch мы удалили функции, дублирующие возможности KSU, и оставили только поддержку KPM.
-- Работа в процессе: расширение совместимости с APatch путём интеграции дополнительных функций для обеспечения работы на разных реализациях.
-
-**Open-source репозиторий**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
-
-**Шаблон KPM**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
-
-> [!Note]
->
-> 1. Требует `CONFIG_KPM=y`
-> 2. Не-GKI устройства требуют `CONFIG_KALLSYMS=y` и `CONFIG_KALLSYMS_ALL=y`
-> 3. Для ядер ниже версии `4.19` требуется бэкпортировать `set_memory.h` из версии `4.19`.
-
 ## Устранение неполадок
 
 1. Устройство зависло при удалении приложения-менеджера?
@@ -93,7 +77,6 @@
 ## Лицензии
 
 - Файлы в директории 'kernel' под [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) лицензией.
-- Изображения файлов `ic_launcher(?!.*alt.*).*` с наклейками аниме-персонажей защищены авторским правом [怡子曰曰](https://space.bilibili.com/10545509). Права на бренд, изображённый на картинках, принадлежат [明风 OuO](https://space.bilibili.com/274939213), а векторизацию выполнил @MiRinChan. Перед использованием этих файлов, помимо соблюдения условий [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt), необходимо также получить разрешение двух авторов на использование этих художественных материалов.
 - За исключением тех файлов/директорий упомянутых выше, всё остальное под [GPL-3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) лицензией.
 
 ## Благодарности

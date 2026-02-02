@@ -22,15 +22,6 @@ YukiSU 可以集成到 GKI 和 non-GKI 内核中，并且已反向移植到 4.14
    - 参考 [`guide/how-to-integrate.md`](how-to-integrate.md)
    - 可选参考 [backslashxx的钩子](https://github.com/backslashxx/KernelSU/issues/5)
 
-3. **Inline hook (HymoFS):**
-
-   - [HymoFS](https://github.com/backslashxx/HymoFS) 是 YukiSU 内置的内核级文件系统隐藏与挂载方案
-   - 使用 inline hook 拦截 VFS 操作，在内核级别隐藏文件/目录。
-   - 需要 `CONFIG_KSU_HYMOFS=y`
-   - 可选：`CONFIG_KSU_HYMOFS_LSMBPS=y` 启用 LSM BPF 支持
-
-> **注意：** YukiSU 不再支持 susfs。HymoFS 是我们内置的替代方案。
-
 ### 如何将 YukiSU 内核驱动程序添加到内核源代码中
 
 YukiSU 现在使用 **统一代码库**，同时支持 LKM 和 GKI/non-GKI 构建。不需要单独的分支。
@@ -69,17 +60,4 @@ CONFIG_KSU=y
 CONFIG_KPROBES=y
 CONFIG_HAVE_KPROBES=y
 CONFIG_KPROBE_EVENTS=y
-```
-
-#### 可选功能：
-
-```
-# 启用 HymoFS（内核级文件系统隐藏）
-CONFIG_KSU_HYMOFS=y
-
-# 启用 HymoFS LSM BPF 支持（需要 LSM BPF）
-CONFIG_KSU_HYMOFS_LSMBPS=y
-
-# 启用 KPM（KernelPatch 模块）支持
-CONFIG_KPM=y
 ```

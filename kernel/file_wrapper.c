@@ -594,7 +594,7 @@ static const struct dentry_operations ksu_file_wrapper_d_ops = {
 
 // Borrow kernel's anon_inode_mnt, so that we don't need to mount one by
 // ourselves.
-static struct vfsmount *anon_inode_mnt __read_mostly;
+struct vfsmount *anon_inode_mnt __read_mostly;
 
 static struct inode *
 ksu_anon_inode_make_secure_inode(const char *name,
@@ -734,7 +734,9 @@ done:
 
 	return ret;
 }
+#endif // #ifdef CONFIG_KSU_LKM
 
+// Common initialization function for both LKM and GKI modes
 void ksu_file_wrapper_init(void)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)
@@ -754,4 +756,9 @@ void ksu_file_wrapper_init(void)
 	fput(dummy);
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
 }
-#endif // #ifdef CONFIG_KSU_LKM
+
+// Exit function (no-op for both LKM and GKI)
+void ksu_file_wrapper_exit(void)
+{
+	// File wrapper cleanup is handled automatically
+}

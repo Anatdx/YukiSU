@@ -104,13 +104,11 @@ object AppData {
         // 私有状态流
         private val _superuserCount = MutableStateFlow(0)
         private val _moduleCount = MutableStateFlow(0)
-        private val _kpmModuleCount = MutableStateFlow(0)
         private val _isFullFeatured = MutableStateFlow(false)
 
         // 公开的只读状态流
         val superuserCount: StateFlow<Int> = _superuserCount.asStateFlow()
         val moduleCount: StateFlow<Int> = _moduleCount.asStateFlow()
-        val kpmModuleCount: StateFlow<Int> = _kpmModuleCount.asStateFlow()
         val isFullFeatured: StateFlow<Boolean> = _isFullFeatured.asStateFlow()
 
         /**
@@ -119,7 +117,6 @@ object AppData {
         fun refreshData() {
             _superuserCount.value = getSuperuserCountUse()
             _moduleCount.value = getModuleCountUse()
-            _kpmModuleCount.value = getKpmModuleCountUse()
             _isFullFeatured.value = isFullFeatured()
         }
     }
@@ -145,33 +142,6 @@ object AppData {
             getModuleCount()
         } catch (_: Exception) {
             0
-        }
-    }
-
-    /**
-     * 获取KPM模块计数
-     */
-    fun getKpmModuleCountUse(): Int {
-        return try {
-            if (!rootAvailable()) return 0
-            val kpmVersion = getKpmVersionUse()
-            if (kpmVersion.isEmpty() || kpmVersion.startsWith("Error")) return 0
-            getKpmModuleCount()
-        } catch (_: Exception) {
-            0
-        }
-    }
-
-    /**
-     * 获取KPM版本
-     */
-    fun getKpmVersionUse(): String {
-        return try {
-            if (!rootAvailable()) return ""
-            val version = getKpmVersion()
-            version.ifEmpty { "" }
-        } catch (e: Exception) {
-            "Error: ${e.message}"
         }
     }
 
@@ -203,8 +173,7 @@ object DataRefreshUtils {
             while (isActive) {
                 val prefs = activity.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 settingsStateFlow.value = MainActivity.SettingsState(
-                    isHideOtherInfo = prefs.getBoolean("is_hide_other_info", false),
-                    showKpmInfo = prefs.getBoolean("show_kpm_info", false)
+                    isHideOtherInfo = prefs.getBoolean("is_hide_other_info", false)
                 )
                 delay(1000)
             }

@@ -1,6 +1,5 @@
 #include "metamodule.hpp"
 #include "../defs.hpp"
-#include "../hymo/hymo_cli.hpp"
 #include "../log.hpp"
 #include "../utils.hpp"
 
@@ -72,18 +71,6 @@ int metamodule_exec_stage_script(const std::string& stage, bool block) {
     return run_script(script, block);
 }
 
-// Check if built-in hymo mount should be disabled
-// User can create /data/adb/ksu/.disable_builtin_mount to use external metamodule
-static bool should_use_builtin_mount() {
-    const char* disable_file = "/data/adb/ksu/.disable_builtin_mount";
-    struct stat st;
-    if (stat(disable_file, &st) == 0) {
-        LOGI("Built-in mount disabled by %s", disable_file);
-        return false;
-    }
-    return true;
-}
-
 int metamodule_exec_mount_script() {
     std::string script = std::string(METAMODULE_DIR) + "metamount.sh";
 
@@ -133,25 +120,6 @@ int metamodule_exec_mount_script() {
 
         return ret;
     }
-
-    // No external metamodule - use built-in hymo mount
-    if (!should_use_builtin_mount()) {
-        LOGI("Built-in mount disabled, skipping module mount");
-        return 0;
-    }
-
-    LOGI("No external metamodule found, using built-in hymo mount");
-
-    // Call built-in hymo mount
-    int ret = hymo::cmd_hymo({"mount"});
-
-    if (ret == 0) {
-        LOGI("Built-in hymo mount completed successfully");
-    } else {
-        LOGE("Built-in hymo mount failed with code: %d", ret);
-    }
-
-    return ret;
 }
 
 }  // namespace ksud

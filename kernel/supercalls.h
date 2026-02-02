@@ -6,10 +6,6 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#ifdef CONFIG_KPM
-#include "kpm/kpm.h"
-#endif // #ifdef CONFIG_KPM
-
 // Magic numbers for reboot hook
 #define KSU_INSTALL_MAGIC1 0xDEADBEEF
 #define KSU_INSTALL_MAGIC2 0xCAFEBABE
@@ -143,10 +139,6 @@ struct ksu_hook_type_cmd {
 	char hook_type[32];
 };
 
-struct ksu_enable_kpm_cmd {
-	__u8 enabled;
-};
-
 #ifdef CONFIG_KSU_MANUAL_SU
 struct ksu_manual_su_cmd {
 	__u32 option;
@@ -190,7 +182,6 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_ADD_TRY_UMOUNT _IOC(_IOC_WRITE, 'K', 18, 0)
 #define KSU_IOCTL_GET_FULL_VERSION _IOC(_IOC_READ, 'K', 100, 0)
 #define KSU_IOCTL_HOOK_TYPE _IOC(_IOC_READ, 'K', 101, 0)
-#define KSU_IOCTL_ENABLE_KPM _IOC(_IOC_READ, 'K', 102, 0)
 #define KSU_IOCTL_LIST_TRY_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0)
 
 #ifdef CONFIG_KSU_MANUAL_SU
@@ -227,5 +218,10 @@ struct ksu_ioctl_cmd_map {
 int ksu_install_fd(void);
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
+
+#ifdef CONFIG_KSU_SUPERKEY
+void ksu_superkey_unregister_prctl_kprobe(void);
+void ksu_superkey_register_prctl_kprobe(void);
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 #endif // #ifndef __KSU_H_SUPERCALLS

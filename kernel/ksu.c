@@ -25,13 +25,12 @@
 #include "manager.h"
 #endif // #ifdef CONFIG_KSU_LKM
 
-#ifdef CONFIG_KSU_HYMOFS
-#include <linux/hymofs.h>
-#endif // #ifdef CONFIG_KSU_HYMOFS
-
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 #include "syscall_hook_manager.h"
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
+
+// Manual hook integrity check (if enabled)
+#include "manual_hook_check.h"
 
 #include "allowlist.h"
 #include "feature.h"
@@ -197,10 +196,10 @@ int ksu_yield(void)
 	ksu_observer_exit();
 	ksu_throne_tracker_exit();
 
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
 	ksu_syscall_hook_manager_exit();
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	extern void yukisu_custom_config_exit(void);
 	ksu_sucompat_exit();
@@ -270,9 +269,9 @@ int __init kernelsu_init(void)
 	superkey_init();
 
 	yukisu_custom_config_init();
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_syscall_hook_manager_init();
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 #ifndef CONFIG_KSU_LKM
 	ksu_lsm_hook_init();
@@ -284,16 +283,11 @@ int __init kernelsu_init(void)
 
 	ksu_throne_tracker_init();
 
-#ifdef CONFIG_KSU_HYMOFS
-	hymofs_init();
-#endif // #ifdef CONFIG_KSU_HYMOFS
-
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_init();
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	ksu_file_wrapper_init();
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
-
 #ifdef MODULE
 #ifndef CONFIG_KSU_DEBUG
 	kobject_del(&THIS_MODULE->mkobj.kobj);
@@ -328,15 +322,13 @@ void kernelsu_exit(void)
 	ksu_observer_exit();
 #endif // #ifdef CONFIG_KSU_LKM
 
-#ifdef CONFIG_KSU_HYMOFS
-	hymofs_exit();
-#endif // #ifdef CONFIG_KSU_HYMOFS
-
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
 
 	ksu_syscall_hook_manager_exit();
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
+
+	ksu_file_wrapper_exit();
 
 #ifndef CONFIG_KSU_LKM
 	ksu_observer_exit();

@@ -5,12 +5,10 @@ kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
 
 # Tracepoint hook mode needs syscall_hook_manager and util
-# Only skip when HYMOFS or MANUAL_HOOK is explicitly enabled
-ifneq ($(CONFIG_KSU_HYMOFS), y)
+# Only skip when MANUAL_HOOK is explicitly enabled
 ifneq ($(CONFIG_KSU_MANUAL_HOOK), y)
 kernelsu-objs += syscall_hook_manager.o
 kernelsu-objs += util.o
-endif
 endif
 
 kernelsu-objs += throne_tracker.o
@@ -74,12 +72,10 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-obj-$(CONFIG_KPM) += kpm/
-
 REPO_OWNER := Anatdx
 REPO_NAME := YukiSU
 REPO_BRANCH := HEAD
-KSU_VERSION_API := 1.2.0
+KSU_VERSION_API := 1.3.0
 
 GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
@@ -110,14 +106,14 @@ ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
   ifeq ($(LOCAL_GIT_EXISTS),1)
     $(shell cd $(KSU_SRC); [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow)
     KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC); $(GIT_BIN) rev-list --count $(REPO_BRANCH))
-    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 3135)
+    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 1135)
     $(info -- $(REPO_NAME) version (local .git): $(KSU_VERSION))
   else
     KSU_VERSION := 12000
     $(warning -- Could not fetch version online or via local .git! Using fallback version: $(KSU_VERSION))
   endif
 else
-  KSU_VERSION := $(shell expr 10000 + $(KSU_GITHUB_VERSION_COMMIT) - 3135)
+  KSU_VERSION := $(shell expr 10000 + $(KSU_GITHUB_VERSION_COMMIT) - 1135)
   $(info -- $(REPO_NAME) version (GitHub): $(KSU_VERSION))
 endif
 
@@ -145,9 +141,22 @@ $(info -- Yukisu does NOT support other managers!)
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
 ccflags-y += -DKSU_MANUAL_HOOK
 $(info -- YukiSU: KSU_MANUAL_HOOK)
-else ifeq ($(CONFIG_KSU_HYMOFS), y)
-ccflags-y += -DCONFIG_KSU_HYMOFS
-$(info -- YukiSU: HYMOFS_INLINE_HOOK)
+
+# Manual hook integration detection (for integrity check).
+# We define KSU_HAS_MANUAL_HOOK_* macros only when the kernel source
+# actually contains the corresponding hook call-sites.
+ifeq ($(shell grep -q "ksu_handle_execveat" $(srctree)/fs/exec.c || grep -q "ksu_handle_execve_sucompat" $(srctree)/fs/exec.c; echo $$?),0)
+ccflags-y += -DKSU_HAS_MANUAL_HOOK_EXEC
+endif
+ifeq ($(shell grep -q "ksu_handle_faccessat" $(srctree)/fs/open.c; echo $$?),0)
+ccflags-y += -DKSU_HAS_MANUAL_HOOK_FACCESSAT
+endif
+ifeq ($(shell grep -q "ksu_handle_stat" $(srctree)/fs/stat.c; echo $$?),0)
+ccflags-y += -DKSU_HAS_MANUAL_HOOK_STAT
+endif
+ifeq ($(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c; echo $$?),0)
+ccflags-y += -DKSU_HAS_MANUAL_HOOK_REBOOT
+endif
 else
 ccflags-y += -DKSU_KPROBES_HOOK
 ccflags-y += -DKSU_TP_HOOK
@@ -168,12 +177,6 @@ endif
 $(info -- KERNEL_VERSION: $(KERNEL_VERSION))
 $(info -- KERNEL_TYPE: $(KERNEL_TYPE))
 
-# Check if KPM is enabled
-ifeq ($(CONFIG_KPM), y)
-$(info -- KPM is enabled)
-else
-$(info -- KPM is disabled)
-endif
 
 # SELinux drivers check
 ifeq ($(shell grep -q "current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)

@@ -14,12 +14,7 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
-#ifdef CONFIG_KSU_HYMOFS
-#include <linux/namei.h>
-#include <linux/hymofs.h>
-#else
 #include "syscall_hook_manager.h"
-#endif // #ifdef CONFIG_KSU_HYMOFS
 
 #include "allowlist.h"
 #include "arch.h"
@@ -452,9 +447,7 @@ put_orig_file:
 static int do_manage_mark(void __user *arg)
 {
 	struct ksu_manage_mark_cmd cmd;
-#ifndef CONFIG_KSU_HYMOFS
 	int ret = 0;
-#endif // #ifndef CONFIG_KSU_HYMOFS
 
 	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
 		pr_err("manage_mark: copy_from_user failed\n");
@@ -463,7 +456,7 @@ static int do_manage_mark(void __user *arg)
 
 	switch (cmd.operation) {
 	case KSU_MARK_GET: {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 		// Get task mark status
 		ret = ksu_get_task_mark(cmd.pid);
 		if (ret < 0) {
@@ -476,10 +469,10 @@ static int do_manage_mark(void __user *arg)
 #else
 		cmd.result = 0;
 		break;
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 	}
 	case KSU_MARK_MARK: {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 		if (cmd.pid == 0) {
 			ksu_mark_all_process();
 		} else {
@@ -495,11 +488,11 @@ static int do_manage_mark(void __user *arg)
 		if (cmd.pid != 0) {
 			return 0;
 		}
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	case KSU_MARK_UNMARK: {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 		if (cmd.pid == 0) {
 			ksu_unmark_all_process();
 		} else {
@@ -515,16 +508,16 @@ static int do_manage_mark(void __user *arg)
 		if (cmd.pid != 0) {
 			return 0;
 		}
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	case KSU_MARK_REFRESH: {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 		ksu_mark_running_process();
 		pr_info("manage_mark: refreshed running processes\n");
 #else
 		pr_info("manual_hook: cmd: KSU_MARK_REFRESH: do nothing\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	default: {
@@ -819,8 +812,6 @@ static int do_get_hook_type(void __user *arg)
 
 #if defined(KSU_MANUAL_HOOK)
 	type = "Manual";
-#elif defined(CONFIG_KSU_HYMOFS)
-	type = "Inline (HymoFS)";
 #endif // #if defined(KSU_MANUAL_HOOK)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
@@ -831,21 +822,6 @@ static int do_get_hook_type(void __user *arg)
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("get_hook_type: copy_to_user failed\n");
-		return -EFAULT;
-	}
-
-	return 0;
-}
-
-// 102. ENABLE_KPM - Check if KPM is enabled
-static int do_enable_kpm(void __user *arg)
-{
-	struct ksu_enable_kpm_cmd cmd;
-
-	cmd.enabled = IS_ENABLED(CONFIG_KPM);
-
-	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
-		pr_err("enable_kpm: copy_to_user failed\n");
 		return -EFAULT;
 	}
 
@@ -1056,10 +1032,6 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "GET_HOOK_TYPE",
      .handler = do_get_hook_type,
      .perm_check = manager_or_root},
-    {.cmd = KSU_IOCTL_ENABLE_KPM,
-     .name = "GET_ENABLE_KPM",
-     .handler = do_enable_kpm,
-     .perm_check = manager_or_root},
 #ifdef CONFIG_KSU_MANUAL_SU
     {.cmd = KSU_IOCTL_MANUAL_SU,
      .name = "MANUAL_SU",
@@ -1076,12 +1048,6 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .handler = do_superkey_status,
      .perm_check = always_allow},
 #endif // #ifdef CONFIG_KSU_SUPERKEY
-#ifdef CONFIG_KPM
-    {.cmd = KSU_IOCTL_KPM,
-     .name = "KPM_OPERATION",
-     .handler = do_kpm,
-     .perm_check = manager_or_root},
-#endif // #ifdef CONFIG_KPM
     {.cmd = KSU_IOCTL_LIST_TRY_UMOUNT,
      .name = "LIST_TRY_UMOUNT",
      .handler = list_try_umount,
@@ -1095,7 +1061,6 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL} // Sentinel
 };
 
-#ifndef CONFIG_KSU_HYMOFS
 struct ksu_install_fd_tw {
 	struct callback_head cb;
 	int __user *outp;
@@ -1252,6 +1217,10 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 	return 0;
 }
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+EXPORT_SYMBOL(ksu_handle_sys_reboot);
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
+
 #ifdef KSU_KPROBES_HOOK
 // Reboot hook for installing fd
 static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -1270,80 +1239,8 @@ static struct kprobe reboot_kp = {
     .pre_handler = reboot_handler_pre,
 };
 #endif // #ifdef KSU_KPROBES_HOOK
-#else // #ifndef CONFIG_KSU_HYMOFS
-/* HymoFS inline hook version - direct synchronous fd installation */
-int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
-			  void __user **arg)
-{
-	if (magic1 != KSU_INSTALL_MAGIC1) {
-		return -EINVAL;
-	}
 
-	// Check if this is a request to install KSU fd
-	if (magic2 == KSU_INSTALL_MAGIC2) {
-		int fd = ksu_install_fd();
-		pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
-		if (copy_to_user((int *)*arg, &fd, sizeof(fd))) {
-			pr_err("install ksu fd reply err\n");
-			return -EFAULT;
-		}
-		return 0;
-	}
-
-#ifdef CONFIG_KSU_SUPERKEY
-	// Check if this is a SuperKey authentication request
-	if (magic2 == KSU_SUPERKEY_MAGIC2) {
-		struct ksu_superkey_reboot_cmd cmd_buf;
-		int fd = -1;
-		int result = -EACCES;
-
-		if (copy_from_user(&cmd_buf, *arg, sizeof(cmd_buf))) {
-			pr_err("superkey auth: copy_from_user failed\n");
-			return -EFAULT;
-		}
-
-		cmd_buf.superkey[sizeof(cmd_buf.superkey) - 1] = '\0';
-
-		if (verify_superkey(cmd_buf.superkey)) {
-			uid_t uid = current_uid().val;
-			superkey_on_auth_success(uid);
-			ksu_set_manager_uid(uid);
-
-			fd = ksu_install_fd();
-			if (fd >= 0) {
-				result = 0;
-				pr_info("SuperKey auth: fd %d installed for "
-					"uid %d\n",
-					fd, uid);
-			} else {
-				result = fd;
-				pr_err(
-				    "SuperKey auth: failed to install fd: %d\n",
-				    fd);
-			}
-		} else {
-			// Silent fail - don't reveal KSU existence
-			superkey_on_auth_fail();
-		}
-
-		cmd_buf.result = result;
-		cmd_buf.fd = fd;
-		if (copy_to_user(*arg, &cmd_buf, sizeof(cmd_buf))) {
-			pr_err("superkey auth: copy_to_user failed\n");
-			if (fd >= 0) {
-				do_close_fd(fd);
-			}
-			return -EFAULT;
-		}
-		return 0;
-	}
-#endif // #ifdef CONFIG_KSU_SUPERKEY
-
-	return -EINVAL;
-}
-#endif // #ifndef CONFIG_KSU_HYMOFS
-
-// SuperKey prctl authentication - independent of HymoFS
+// SuperKey prctl authentication
 #ifdef CONFIG_KSU_SUPERKEY
 struct ksu_superkey_prctl_tw {
 	struct callback_head cb;
@@ -1371,6 +1268,9 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 		uid_t uid = current_uid().val;
 		superkey_on_auth_success(uid);
 		ksu_set_manager_uid(uid);
+
+		// Unregister prctl kprobe after successful authentication
+		ksu_superkey_unregister_prctl_kprobe();
 
 		// Allow reboot syscall for this process
 		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
@@ -1496,6 +1396,39 @@ static struct kprobe prctl_kp = {
     .symbol_name = SYS_PRCTL_SYMBOL,
     .pre_handler = prctl_handler_pre,
 };
+
+static bool prctl_kprobe_registered = false;
+static DEFINE_MUTEX(prctl_kprobe_lock);
+
+void ksu_superkey_unregister_prctl_kprobe(void)
+{
+	mutex_lock(&prctl_kprobe_lock);
+	if (prctl_kprobe_registered) {
+		unregister_kprobe(&prctl_kp);
+		prctl_kprobe_registered = false;
+		pr_info("SuperKey: prctl kprobe unregistered after "
+			"authentication\n");
+	}
+	mutex_unlock(&prctl_kprobe_lock);
+}
+
+void ksu_superkey_register_prctl_kprobe(void)
+{
+	int rc;
+	mutex_lock(&prctl_kprobe_lock);
+	if (!prctl_kprobe_registered) {
+		rc = register_kprobe(&prctl_kp);
+		if (rc) {
+			pr_err(
+			    "SuperKey: prctl kprobe re-register failed: %d\n",
+			    rc);
+		} else {
+			prctl_kprobe_registered = true;
+			pr_info("SuperKey: prctl kprobe re-registered\n");
+		}
+	}
+	mutex_unlock(&prctl_kprobe_lock);
+}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
 void ksu_supercalls_init(void)
@@ -1509,7 +1442,6 @@ void ksu_supercalls_init(void)
 			ksu_ioctl_handlers[i].cmd);
 	}
 
-#ifndef CONFIG_KSU_HYMOFS
 #ifdef KSU_KPROBES_HOOK
 	rc = register_kprobe(&reboot_kp);
 	if (rc) {
@@ -1518,30 +1450,34 @@ void ksu_supercalls_init(void)
 		pr_info("reboot kprobe registered successfully\n");
 	}
 #endif // #ifdef KSU_KPROBES_HOOK
-#endif // #ifndef CONFIG_KSU_HYMOFS
 
 	// SuperKey prctl kprobe - always register regardless of HymoFS
 #ifdef CONFIG_KSU_SUPERKEY
 	rc = register_kprobe(&prctl_kp);
 	if (rc) {
 		pr_err("prctl kprobe failed: %d\n", rc);
+		prctl_kprobe_registered = false;
 	} else {
 		pr_info("prctl kprobe registered for SuperKey auth\n");
+		prctl_kprobe_registered = true;
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
 void ksu_supercalls_exit(void)
 {
-#ifndef CONFIG_KSU_HYMOFS
 #ifdef KSU_KPROBES_HOOK
 	unregister_kprobe(&reboot_kp);
 #endif // #ifdef KSU_KPROBES_HOOK
-#endif // #ifndef CONFIG_KSU_HYMOFS
 
 	// SuperKey prctl kprobe - always unregister regardless of HymoFS
 #ifdef CONFIG_KSU_SUPERKEY
-	unregister_kprobe(&prctl_kp);
+	mutex_lock(&prctl_kprobe_lock);
+	if (prctl_kprobe_registered) {
+		unregister_kprobe(&prctl_kp);
+		prctl_kprobe_registered = false;
+	}
+	mutex_unlock(&prctl_kprobe_lock);
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 

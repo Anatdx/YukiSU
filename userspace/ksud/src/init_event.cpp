@@ -7,7 +7,6 @@
 #include "core/ksucalls.hpp"
 #include "core/restorecon.hpp"
 #include "defs.hpp"
-#include "kpm.hpp"
 #include "log.hpp"
 #include "module/metamodule.hpp"
 #include "module/module.hpp"
@@ -193,13 +192,6 @@ int on_post_data_fs() {
 
     // Load feature config (with init_features handling managed features)
     init_features();
-
-#ifdef __aarch64__
-    // Load KPM modules at boot
-    if (kpm_booted_load() != 0) {
-        LOGW("KPM: Failed to load modules at boot");
-    }
-#endif // #ifdef __aarch64__
 
     // Execute metamodule post-fs-data script first (priority)
     metamodule_exec_stage_script("post-fs-data", true);

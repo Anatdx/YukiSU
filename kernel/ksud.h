@@ -20,23 +20,4 @@ extern u32 ksu_file_sid;
 extern bool ksu_module_mounted;
 extern bool ksu_boot_completed;
 
-#ifdef CONFIG_KSU_HYMOFS
-#define MAX_ARG_STRINGS 0x7FFFFFFF
-struct user_arg_ptr {
-#ifdef CONFIG_COMPAT
-	bool is_compat;
-#endif // #ifdef CONFIG_COMPAT
-	union {
-		const char __user *const __user *native;
-#ifdef CONFIG_COMPAT
-		const compat_uptr_t __user *compat;
-#endif // #ifdef CONFIG_COMPAT
-	} ptr;
-};
-
-int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
-			     struct user_arg_ptr *argv,
-			     struct user_arg_ptr *envp, int *flags);
-#endif // #ifdef CONFIG_KSU_HYMOFS
-
 #endif // #ifndef __KSU_H_KSUD

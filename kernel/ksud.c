@@ -74,7 +74,7 @@ static void stop_vfs_read_hook(void);
 static void stop_execve_hook(void);
 static void stop_input_hook(void);
 
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 static struct work_struct stop_vfs_read_work;
 static struct work_struct stop_execve_hook_work;
 static struct work_struct stop_input_hook_work;
@@ -85,9 +85,8 @@ bool ksu_input_hook __read_mostly = true;
 EXPORT_SYMBOL(ksu_vfs_read_hook);
 EXPORT_SYMBOL(ksu_execveat_hook);
 EXPORT_SYMBOL(ksu_input_hook);
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
-u32 ksu_file_sid;
 void on_post_fs_data(void)
 {
 	static bool done = false;
@@ -97,13 +96,6 @@ void on_post_fs_data(void)
 	}
 	done = true;
 	pr_info("on_post_fs_data!\n");
-#if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
-	// HymoFS/Manual hook mode: Apply SELinux rules here since we can't
-	// detect init second_stage without argv parameter in execve hook
-	pr_info("Applying KernelSU SELinux rules (inline hook mode)\n");
-	apply_kernelsu_rules();
-	setup_ksu_cred();
-#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
 	ksu_load_allow_list();
 	ksu_observer_init();
 	// sanity check, this may influence the performance
@@ -160,7 +152,6 @@ void on_boot_completed(void)
 	track_throne(true);
 }
 
-#ifndef CONFIG_KSU_HYMOFS
 #define MAX_ARG_STRINGS 0x7FFFFFFF
 struct user_arg_ptr {
 #ifdef CONFIG_COMPAT
@@ -173,7 +164,6 @@ struct user_arg_ptr {
 #endif // #ifdef CONFIG_COMPAT
 	} ptr;
 };
-#endif // #ifndef CONFIG_KSU_HYMOFS
 
 static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
 {
@@ -238,16 +228,70 @@ static void on_post_fs_data_cbfun(struct callback_head *cb)
 static struct callback_head on_post_fs_data_cb = {.func =
 						      on_post_fs_data_cbfun};
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+static inline void handle_second_stage(void)
+{
+	apply_kernelsu_rules();
+	cache_sid();
+	setup_ksu_cred();
+}
+
+static bool check_argv(struct user_arg_ptr argv, int index,
+		       const char *expected, char *buf, size_t buf_len)
+{
+	const char __user *p;
+	int argc;
+	long ret;
+
+	argc = count(argv, MAX_ARG_STRINGS);
+	if (argc <= index) {
+		return false;
+	}
+
+	p = get_user_arg_ptr(argv, index);
+	if (!p || IS_ERR(p)) {
+		if (p && IS_ERR(p)) {
+			pr_err("check_argv: invalid user pointer, err: %ld\n",
+			       PTR_ERR(p));
+		}
+		return false;
+	}
+
+#ifdef CONFIG_KSU_LKM
+	ret = strncpy_from_user_nofault(buf, p, buf_len);
+#else
+	ret = ksu_strncpy_from_user_nofault(buf, p, buf_len);
+#endif // #ifdef CONFIG_KSU_LKM
+	if (ret <= 0) {
+		pr_err("check_argv: failed to copy pointer, err: %ld\n", ret);
+		return false;
+	}
+
+	buf[buf_len - 1] = '\0';
+
+	return !strcmp(buf, expected);
+}
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
+
 // IMPORTANT NOTE: the call from execve_handler_pre WON'T provided correct value
 // for envp and flags in GKI version
 int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			     struct user_arg_ptr *argv,
 			     struct user_arg_ptr *envp, int *flags)
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	if (!ksu_execveat_hook) {
+		return 0;
+	}
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	struct filename *filename;
 
 	static const char app_process[] = "/system/bin/app_process";
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	static bool first_zygote = true;
+#else
 	static bool first_app_process = true;
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 	/* This applies to versions Android 10+ */
 	static const char system_bin_init[] = "/system/bin/init";
@@ -279,6 +323,15 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 	if (unlikely(!memcmp(filename->name, system_bin_init,
 			     sizeof(system_bin_init) - 1) &&
 		     argv)) {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+		char buf[16];
+		if (!init_second_stage_executed &&
+		    check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
+			pr_info("/system/bin/init second_stage executed\n");
+			handle_second_stage();
+			init_second_stage_executed = true;
+		}
+#else
 		// /system/bin/init executed
 		int argc = count(*argv, MAX_ARG_STRINGS);
 		pr_info("/system/bin/init argc: %d\n", argc);
@@ -306,11 +359,56 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 				pr_err("/system/bin/init parse args err!\n");
 			}
 		}
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	}
 #ifndef CONFIG_KSU_LKM
 	else if (unlikely(!memcmp(filename->name, old_system_init,
 				  sizeof(old_system_init) - 1) &&
 			  argv)) {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+		char buf[16];
+		if (!init_second_stage_executed &&
+		    check_argv(*argv, 1, "--second-stage", buf, sizeof(buf))) {
+			/* This applies to versions between Android 6 ~ 7 */
+			pr_info("/init second_stage executed\n");
+			handle_second_stage();
+			init_second_stage_executed = true;
+		} else if (count(*argv, MAX_ARG_STRINGS) == 1 &&
+			   !init_second_stage_executed && envp) {
+			/* This applies to versions between Android 8 ~ 9  */
+			int envc = count(*envp, MAX_ARG_STRINGS);
+			if (envc > 0) {
+				int n;
+				for (n = 1; n <= envc; n++) {
+					const char __user *p =
+					    get_user_arg_ptr(*envp, n);
+					if (!p || IS_ERR(p)) {
+						continue;
+					}
+					char env[256];
+					if (ksu_strncpy_from_user_nofault(
+						env, p, sizeof(env)) < 0)
+						continue;
+					char *env_name = env;
+					char *env_value = strchr(env, '=');
+					if (env_value == NULL)
+						continue;
+					*env_value = '\0';
+					env_value++;
+					if (!strcmp(env_name,
+						    "INIT_SECOND_STAGE") &&
+					    (!strcmp(env_value, "1") ||
+					     !strcmp(env_value, "true"))) {
+						pr_info("/init second_stage "
+							"executed\n");
+						handle_second_stage();
+						init_second_stage_executed =
+						    true;
+					}
+				}
+			}
+		}
+#else
 		// /init executed
 		int argc = count(*argv, MAX_ARG_STRINGS);
 		pr_info("/init argc: %d\n", argc);
@@ -375,9 +473,32 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 				}
 			}
 		}
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	}
 #endif // #ifndef CONFIG_KSU_LKM
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	if (unlikely(
+		first_zygote &&
+		!memcmp(filename->name, app_process, sizeof(app_process) - 1) &&
+		argv)) {
+		char buf[16];
+		if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
+			pr_info(
+			    "exec zygote, /data prepared, second_stage: %d\n",
+			    init_second_stage_executed);
+			rcu_read_lock();
+			struct task_struct *init_task =
+			    rcu_dereference(current->real_parent);
+			if (init_task)
+				task_work_add(init_task, &on_post_fs_data_cb,
+					      TWA_RESUME);
+			rcu_read_unlock();
+			first_zygote = false;
+			stop_execve_hook();
+		}
+	}
+#else
 	if (unlikely(first_app_process && !memcmp(filename->name, app_process,
 						  sizeof(app_process) - 1))) {
 		first_app_process = false;
@@ -395,6 +516,7 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 
 		stop_execve_hook();
 	}
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 	return 0;
 }
@@ -437,11 +559,11 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 			size_t *count_ptr, loff_t **pos)
 #endif // #ifdef CONFIG_KSU_LKM
 {
-#if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 	if (!ksu_vfs_read_hook) {
 		return 0;
 	}
-#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	struct file *file;
 	char __user *buf;
 	size_t count;
@@ -545,10 +667,10 @@ int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
 	fput(file);
 	return result;
 }
-#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_HYMOFS)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 EXPORT_SYMBOL(ksu_handle_vfs_read);
 EXPORT_SYMBOL(ksu_handle_sys_read);
-#endif // #if defined(CONFIG_KSU_MANUAL_HOOK) || ...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 static unsigned int volumedown_pressed_count = 0;
 
@@ -560,11 +682,11 @@ static bool is_volumedown_enough(unsigned int count)
 int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 				  int *value)
 {
-#if defined(CONFIG_KSU_HYMOFS) || defined(CONFIG_KSU_MANUAL_HOOK)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 	if (!ksu_input_hook) {
 		return 0;
 	}
-#endif // #if defined(CONFIG_KSU_HYMOFS) || defin...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
 		int val = *value;
 		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
@@ -584,9 +706,9 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 
 	return 0;
 }
-#if defined(CONFIG_KSU_MANUAL_HOOK) || defined(CONFIG_KSU_HYMOFS)
+#ifdef CONFIG_KSU_MANUAL_HOOK
 EXPORT_SYMBOL(ksu_handle_input_handle_event);
-#endif // #if defined(CONFIG_KSU_MANUAL_HOOK) || ...
+#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 bool ksu_is_safe_mode()
 {
@@ -611,7 +733,7 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 
 static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
@@ -710,28 +832,28 @@ static void do_stop_input_hook(struct work_struct *work)
 {
 	unregister_kprobe(&input_event_kp);
 }
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 static void stop_vfs_read_hook(void)
 {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	bool ret = schedule_work(&stop_vfs_read_work);
 	pr_info("unregister vfs_read kprobe: %d!\n", ret);
 #else
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 }
 
 static void stop_execve_hook(void)
 {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	bool ret = schedule_work(&stop_execve_hook_work);
 	pr_info("unregister execve kprobe: %d!\n", ret);
 #else
 	ksu_execveat_hook = false;
 	pr_info("stop execve_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 }
 
 static void stop_input_hook(void)
@@ -741,19 +863,19 @@ static void stop_input_hook(void)
 		return;
 	}
 	input_hook_stopped = true;
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	bool ret = schedule_work(&stop_input_hook_work);
 	pr_info("unregister input kprobe: %d!\n", ret);
 #else
 	ksu_input_hook = false;
 	pr_info("stop input_hook\n");
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 }
 
 // ksud: module support
 void ksu_ksud_init(void)
 {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	int ret;
 
 	ret = register_kprobe(&execve_kp);
@@ -768,17 +890,17 @@ void ksu_ksud_init(void)
 	INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
 	INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
 	INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 }
 
 void ksu_ksud_exit(void)
 {
-#if !defined(CONFIG_KSU_HYMOFS) && !defined(CONFIG_KSU_MANUAL_HOOK)
+#ifndef CONFIG_KSU_MANUAL_HOOK
 	unregister_kprobe(&execve_kp);
 	// this should be done before unregister vfs_read_kp
 	// unregister_kprobe(&vfs_read_kp);
 	unregister_kprobe(&input_event_kp);
-#endif // #if !defined(CONFIG_KSU_HYMOFS) && !def...
+#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 #ifndef CONFIG_KSU_LKM
 	is_boot_phase = false;

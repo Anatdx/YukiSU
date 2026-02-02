@@ -38,7 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -291,7 +290,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSimpleMode = viewModel.isSimpleMode,
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
-                        showKpmInfo = viewModel.showKpmInfo,
                         lkmMode = viewModel.systemStatus.lkmMode,
                     )
 
@@ -404,16 +402,6 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
-                // HymoFS 配置按钮
-                IconButton(onClick = {
-                    navigator.navigate(HymoFSConfigScreenDestination)
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Tune,
-                        contentDescription = stringResource(R.string.hymofs_title)
-                    )
-                }
-
                 // 重启按钮
                 var showDropdown by remember { mutableStateOf(false) }
                 KsuIsValid {
@@ -822,7 +810,6 @@ private fun InfoCard(
     isSimpleMode: Boolean,
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
-    showKpmInfo: Boolean,
     lkmMode: Boolean?
 ) {
     ElevatedCard(
@@ -927,26 +914,6 @@ private fun InfoCard(
                     stringResource(R.string.home_meta_module_implement),
                     systemInfo.metaModuleImplement,
                     icon = Icons.Default.Extension,
-                )
-            }
-
-            if (!isSimpleMode) {
-                val displayVersion =
-                    if (systemInfo.kpmVersion.isEmpty() || systemInfo.kpmVersion.startsWith("Error")) {
-                        val statusText = if (Natives.isKPMEnabled()) {
-                            stringResource(R.string.kernel_patched)
-                        } else {
-                            stringResource(R.string.kernel_not_enabled)
-                        }
-                        "${stringResource(R.string.not_supported)} ($statusText)"
-                    } else {
-                        "${stringResource(R.string.supported)} (${systemInfo.kpmVersion})"
-                    }
-
-                InfoCardItem(
-                    stringResource(R.string.home_kpm_version),
-                    displayVersion,
-                    icon = Icons.Default.Archive
                 )
             }
         }

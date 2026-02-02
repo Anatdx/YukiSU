@@ -15,7 +15,7 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden")
 # 使用 lld 链接器加速链接过程 (特别是 LTO)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -Wl,--gc-sections -Wl,--strip-all -flto")
-set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto")
+set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
 
 # Fetch third-party dependencies
 include(FetchContent)
@@ -82,6 +82,7 @@ set(SOURCES
     src/module/module_config.cpp
     src/module/metamodule.cpp
     src/boot/boot_patch.cpp
+    src/boot/tools.cpp
     src/boot/apk_sign.cpp
     src/profile/profile.cpp
     src/sepolicy/sepolicy.cpp
@@ -89,11 +90,11 @@ set(SOURCES
     src/init_event.cpp
     src/umount.cpp
     src/debug.cpp
-    src/kpm.cpp
     # Core features
     src/core/hide_bootloader.cpp
     # Flash kernel packages
     src/flash/flash_ak3.cpp
+    src/flash/flash_partition.cpp
     # HymoFS module management
     src/hymo/hymo_cli.cpp
     src/hymo/hymo_utils.cpp

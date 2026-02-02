@@ -302,18 +302,6 @@ private fun HideOptionsSettings(
         onChange = handlers::handleHideMetaModuleImplementChange
     )
 
-
-    if (Natives.version >= Natives.MINIMAL_SUPPORTED_KPM) {
-        SwitchSettingItem(
-            icon = Icons.Filled.VisibilityOff,
-            title = stringResource(R.string.show_kpm_info),
-            summary = stringResource(R.string.show_kpm_info_summary),
-            checked = state.isShowKpmInfo,
-            onChange = handlers::handleShowKpmInfoChange
-        )
-    }
-
-
     SwitchSettingItem(
         icon = Icons.Filled.VisibilityOff,
         title = stringResource(R.string.hide_link_card),

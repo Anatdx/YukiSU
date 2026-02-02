@@ -17,6 +17,25 @@ extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 extern ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 				       size_t count, loff_t *pos);
 
+// Unified memory copy function with retry logic
+// Inspired by ReSukiSU's approach but adapted for YukiSU's dual-mode
+// architecture
+static inline long ksu_copy_from_user_retry(void *to, const void __user *from,
+					    unsigned long count)
+{
+#ifdef CONFIG_KSU_LKM
+	// LKM mode: use simple nofault -> plain fallback
+	long ret = copy_from_user_nofault(to, from, count);
+	if (likely(!ret))
+		return ret;
+	return copy_from_user(to, from, count);
+#else
+	// Builtin mode: use existing ksu_strncpy_from_user_nofault
+	// which has more sophisticated error handling
+	return ksu_strncpy_from_user_nofault(to, from, count);
+#endif // #ifdef CONFIG_KSU_LKM
+}
+
 #ifndef CONFIG_KSU_LKM
 #include "linux/key.h"
 #include "ss/policydb.h"

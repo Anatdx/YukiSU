@@ -196,7 +196,7 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 			pr_info("Crowning manager: %s (appid=%d)\n", pkg,
 				np->appid);
 
-			ksu_set_manager_uid(np->appid);
+			ksu_set_manager_appid(np->appid);
 			locked_manager_appid = np->appid;
 			break;
 		}
@@ -502,11 +502,13 @@ void track_throne(bool prune_only)
 			package = strsep(&tmp, delim);
 			uid = strsep(&tmp, delim);
 			if (!uid || !package) {
+				kfree(data);
 				pr_err("update_uid: package or uid is NULL!\n");
 				break;
 			}
 
 			if (kstrtou32(uid, 10, &res)) {
+				kfree(data);
 				pr_err("track_throne: appid parse err\n");
 				break;
 			}
@@ -536,6 +538,12 @@ void track_throne(bool prune_only)
 			locked_manager_appid);
 		ksu_invalidate_manager_appid();
 		locked_manager_appid = KSU_INVALID_UID;
+
+#ifdef CONFIG_KSU_SUPERKEY
+		// Re-register prctl kprobe when package list changes
+		extern void ksu_superkey_register_prctl_kprobe(void);
+		ksu_superkey_register_prctl_kprobe();
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 	}
 
 	need_search = !manager_exist;

@@ -27,9 +27,8 @@
    > **Note:** YukiSU はすべてのモジュールマウントをインストールされた *metamodule* に委任しています。コア自体はマウント操作を処理しなくなりました。
 3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html): root 権限をケージに閉じ込める
 4. non-GKI と GKI 1.0 をサポート
-5. KPM サポート
-6. [HymoFS](https://github.com/backslashxx/HymoFS) を内蔵し、カーネルレベルでのファイルシステム隠蔽を実現（susfs の代替）
-7. マネージャーテーマの調整
+5. [HymoFS](https://github.com/backslashxx/HymoFS) を内蔵し、カーネルレベルでのファイルシステム隠蔽を実現（susfs の代替）
+6. マネージャーテーマの調整
 
 > **注意:** YukiSU は susfs をサポートしなくなりました。HymoFS がファイルシステム隠蔽のための内蔵ソリューションです。
 
@@ -54,21 +53,6 @@
 ## 翻訳
 
 マネージャーの翻訳を提出する場合は、[Crowdin](https://crowdin.com/project/YukiSU) にアクセスしてください。
-
-## KPM サポート
-
-- KernelPatch に基づいて、KSU と重複する機能を削除し、KPM サポートのみを保持しました。
-- 進行中: 異なる実装間での互換性を確保するために、追加機能を統合して APatch 互換性を拡張しています。
-
-**オープンソースリポジトリ**: [https://github.com/ShirkNeko/YukiSU_KernelPatch_patch](https://github.com/ShirkNeko/YukiSU_KernelPatch_patch)
-
-**KPM テンプレート**: [https://github.com/udochina/KPM-Build-Anywhere](https://github.com/udochina/KPM-Build-Anywhere)
-
-> [!Note]
->
-> 1. `CONFIG_KPM=y` が必要です
-> 2. non-GKI デバイスには `CONFIG_KALLSYMS=y` と `CONFIG_KALLSYMS_ALL=y` が必要です
-> 3. `4.19` 未満のカーネルでは、`4.19` から `set_memory.h` のバックポートが必要です
 
 ## トラブルシューティング
 

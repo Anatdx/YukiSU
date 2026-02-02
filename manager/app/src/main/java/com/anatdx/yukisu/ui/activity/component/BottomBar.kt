@@ -14,10 +14,8 @@ import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.spec.RouteOrDirection
 import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
-import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.ui.MainActivity
 import com.anatdx.yukisu.ui.activity.util.*
-import com.anatdx.yukisu.ui.activity.util.AppData.getKpmVersionUse
 import com.anatdx.yukisu.ui.screen.BottomBarDestination
 import com.anatdx.yukisu.ui.theme.CardConfig.cardAlpha
 import com.anatdx.yukisu.ui.theme.CardConfig.cardElevation
@@ -29,19 +27,16 @@ import com.anatdx.yukisu.ui.util.*
 fun BottomBar(navController: NavHostController) {
     val navigator = navController.rememberDestinationsNavigator()
     val isFullFeatured by AppData.DataRefreshManager.isFullFeatured.collectAsState()
-    val kpmVersion = getKpmVersionUse()
     val cardColor = MaterialTheme.colorScheme.surfaceContainer
     val activity = LocalContext.current as MainActivity
     val settings by activity.settingsStateFlow.collectAsState()
 
     // 检查是否隐藏红点
     val isHideOtherInfo = settings.isHideOtherInfo
-    val showKpmInfo = settings.showKpmInfo
 
     // 收集计数数据
     val superuserCount by AppData.DataRefreshManager.superuserCount.collectAsState()
     val moduleCount by AppData.DataRefreshManager.moduleCount.collectAsState()
-    val kpmModuleCount by AppData.DataRefreshManager.kpmModuleCount.collectAsState()
 
 
     NavigationBar(
@@ -55,51 +50,7 @@ fun BottomBar(navController: NavHostController) {
         tonalElevation = cardElevation
     ) {
         BottomBarDestination.entries.forEach { destination ->
-            if (destination == BottomBarDestination.Kpm) {
-                if (kpmVersion.isNotEmpty() && !kpmVersion.startsWith("Error") && !showKpmInfo && Natives.version >= Natives.MINIMAL_SUPPORTED_KPM) {
-                    if (!isFullFeatured && destination.rootRequired) return@forEach
-                    val isCurrentDestOnBackStack by navController.isRouteOnBackStackAsState(destination.direction)
-                    NavigationBarItem(
-                        selected = isCurrentDestOnBackStack,
-                        onClick = {
-                            if (!isCurrentDestOnBackStack) {
-                                navigator.popBackStack(destination.direction, false)
-                            }
-                            navigator.navigate(destination.direction) {
-                                popUpTo(NavGraphs.root as RouteOrDirection) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (kpmModuleCount > 0 && !isHideOtherInfo) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.secondary
-                                        ) {
-                                            Text(
-                                                text = kpmModuleCount.toString(),
-                                                style = MaterialTheme.typography.labelSmall
-                                            )
-                                        }
-                                    }
-                                }
-                            ) {
-                                if (isCurrentDestOnBackStack) {
-                                    Icon(destination.iconSelected, stringResource(destination.label))
-                                } else {
-                                    Icon(destination.iconNotSelected, stringResource(destination.label))
-                                }
-                            }
-                        },
-                        label = { Text(stringResource(destination.label),style = MaterialTheme.typography.labelMedium) },
-                        alwaysShowLabel = false
-                    )
-                }
-            } else if (destination == BottomBarDestination.SuperUser) {
+            if (destination == BottomBarDestination.SuperUser) {
                 if (!isFullFeatured && destination.rootRequired) return@forEach
                 val isCurrentDestOnBackStack by navController.isRouteOnBackStackAsState(destination.direction)
 
