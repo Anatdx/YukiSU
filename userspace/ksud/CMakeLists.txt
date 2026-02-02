@@ -100,15 +100,10 @@ set(SOURCES
     src/hymo/hymo_utils.cpp
     src/hymo/conf/config.cpp
     src/hymo/core/executor.cpp
-    src/hymo/core/inventory.cpp
     src/hymo/core/modules.cpp
     src/hymo/core/planner.cpp
-    src/hymo/core/state.cpp
-    src/hymo/core/storage.cpp
     src/hymo/core/sync.cpp
     src/hymo/mount/hymofs.cpp
-    src/hymo/mount/magic.cpp
-    src/hymo/mount/overlay.cpp
     # Murasaki Binder service
     src/binder/murasaki_binder.cpp
     src/binder/murasaki_service.cpp
