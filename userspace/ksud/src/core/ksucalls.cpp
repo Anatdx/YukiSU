@@ -158,6 +158,19 @@ bool check_kernel_safemode() {
     return cmd.in_safe_mode != 0;
 }
 
+std::optional<uid_t> get_manager_uid() {
+    GetManagerUidCmd cmd = {0};
+    int ret = ksuctl(KSU_IOCTL_GET_MANAGER_UID, &cmd);
+    if (ret < 0) {
+        return std::nullopt;
+    }
+    // Kernel uses KSU_INVALID_UID = -1 (transported as u32)
+    if (cmd.uid == 0xFFFFFFFFu) {
+        return std::nullopt;
+    }
+    return static_cast<uid_t>(cmd.uid);
+}
+
 int set_sepolicy(const SetSepolicyCmd& cmd) {
     SetSepolicyCmd ioctl_cmd = cmd;
     return ksuctl(KSU_IOCTL_SET_SEPOLICY, &ioctl_cmd);

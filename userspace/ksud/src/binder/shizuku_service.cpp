@@ -5,6 +5,7 @@
 #include "../core/ksucalls.hpp"
 #include "../log.hpp"
 #include "binder_wrapper.hpp"
+#include "murasaki_access.hpp"
 
 #include <android/binder_parcel.h>
 #include <fcntl.h>
@@ -383,34 +384,9 @@ bool ShizukuService::checkCallerPermission(uid_t uid) {
         // 真正的缓存检查放在 handleCheckSelfPermission 中。
     }
 
-    // 2. 检查 KSU allowlist (.allowlist 文件)
-    // 复用 murasaki_binder.cpp 的逻辑
-    const char* allowlist_path = "/data/adb/ksu/.allowlist";
-    std::ifstream ifs(allowlist_path, std::ios::binary);
-    if (!ifs)
-        return false;
-
-    uint32_t magic, version;
-    ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    ifs.read(reinterpret_cast<char*>(&version), sizeof(version));
-
-    if (magic != 0x7f4b5355)
-        return false;
-
-    // 简化：读取 profile 检查 uid
-    struct {
-        uint32_t version;
-        char key[256];
-        int32_t current_uid;
-        uint8_t allow_su;
-        char padding[3];
-        char rest[512];  // root_profile 等
-    } profile;
-
-    while (ifs.read(reinterpret_cast<char*>(&profile), sizeof(profile))) {
-        if (profile.current_uid == static_cast<int32_t>(uid) && profile.allow_su) {
-            return true;
-        }
+    // 2. 检查 Murasaki/Shizuku 访问授权（由管理器维护）
+    if (::ksud::access::is_murasaki_allowed(uid)) {
+        return true;
     }
 
     // 检查本地权限缓存

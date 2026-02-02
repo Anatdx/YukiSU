@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <sys/types.h>
 
 namespace ksud {
 
@@ -24,6 +25,7 @@ constexpr uint32_t KSU_IOCTL_GET_INFO = _IOR(K, 2, uint64_t);
 constexpr uint32_t KSU_IOCTL_REPORT_EVENT = _IOW(K, 3, uint64_t);
 constexpr uint32_t KSU_IOCTL_SET_SEPOLICY = _IOWR(K, 4, uint64_t);
 constexpr uint32_t KSU_IOCTL_CHECK_SAFEMODE = _IOR(K, 5, uint64_t);
+constexpr uint32_t KSU_IOCTL_GET_MANAGER_UID = _IOR(K, 10, uint64_t);
 constexpr uint32_t KSU_IOCTL_GET_FEATURE = _IOWR(K, 13, uint64_t);
 constexpr uint32_t KSU_IOCTL_SET_FEATURE = _IOW(K, 14, uint64_t);
 constexpr uint32_t KSU_IOCTL_GET_WRAPPER_FD = _IOW(K, 15, uint64_t);
@@ -52,6 +54,10 @@ struct SetSepolicyCmd {
 
 struct CheckSafemodeCmd {
     uint8_t in_safe_mode;
+};
+
+struct GetManagerUidCmd {
+    uint32_t uid;
 };
 
 struct GetFeatureCmd {
@@ -104,6 +110,9 @@ void report_module_mounted();
 bool check_kernel_safemode();
 
 int set_sepolicy(const SetSepolicyCmd& cmd);
+
+// Manager identity (kernel-maintained)
+std::optional<uid_t> get_manager_uid();
 
 // Feature management
 // Returns: pair<value, supported>

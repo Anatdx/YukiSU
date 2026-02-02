@@ -12,6 +12,7 @@
 #include "../sepolicy/sepolicy.hpp"
 #include "../utils.hpp"
 #include "binder_wrapper.hpp"
+#include "murasaki_access.hpp"
 #include "shizuku_service.hpp"
 
 #include <android/binder_parcel.h>
@@ -28,6 +29,10 @@ namespace ksud {
 namespace murasaki {
 
 using namespace hymo;
+
+static inline bool is_manager_uid(uid_t uid) {
+    return ::ksud::access::is_manager_uid(uid);
+}
 
 // 系统属性操作（与 Shizuku 兼容层保持一致）
 extern "C" {
@@ -294,32 +299,10 @@ uid_t MurasakiBinderService::getCallingUid() {
 }
 
 bool MurasakiBinderService::isUidGrantedRoot(uid_t uid) {
-    if (uid == 0)
-        return true;
-
-    const char* allowlist_path = "/data/adb/ksu/.allowlist";
-    std::ifstream ifs(allowlist_path, std::ios::binary);
-    if (!ifs) {
-        return false;
-    }
-
-    uint32_t magic;
-    uint32_t version;
-    if (!ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic)) ||
-        !ifs.read(reinterpret_cast<char*>(&version), sizeof(version))) {
-        return false;
-    }
-    if (magic != KSU_ALLOWLIST_MAGIC) {
-        return false;
-    }
-
-    app_profile profile;
-    while (ifs.read(reinterpret_cast<char*>(&profile), sizeof(profile))) {
-        if (profile.current_uid == static_cast<int32_t>(uid)) {
-            return profile.allow_su != 0;
-        }
-    }
-    return false;
+    // NOTE:
+    // In Murasaki, we treat this as "authorized to use Murasaki/Shizuku" (manager-controlled),
+    // not KernelSU's su allowlist.
+    return ::ksud::access::is_murasaki_allowed(uid);
 }
 
 // ==================== Transaction Handler ====================
@@ -404,7 +387,7 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     case 10: {  // getCallerPrivilegeLevel()
         uid_t uid = service->getCallingUid();
         int32_t level = 0;
-        if (uid == 0) {
+        if (uid == 0 || is_manager_uid(uid)) {
             level = 2;
         } else if (service->isUidGrantedRoot(uid)) {
             level = 1;
@@ -421,29 +404,57 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
         BW.AParcel_writeBool(out, granted);
         return STATUS_OK;
     }
-    case 12: {  // grantRoot(int uid) - TODO: implement persistent allowlist write
-        (void)in;
-        LOGW("grantRoot not implemented yet (return false)");
+    case 12: {  // grantRoot(int uid) - grant Murasaki/Shizuku access for UID
+        uid_t caller = service->getCallingUid();
+        int32_t target_uid = 0;
+        BW.AParcel_readInt32(in, &target_uid);
+
+        bool ok = false;
+        if (caller == 0 || is_manager_uid(caller)) {
+            ok = ::ksud::access::grant_murasaki(static_cast<uid_t>(target_uid));
+        } else {
+            LOGW("grantRoot denied for uid %d", caller);
+        }
+
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeBool(out, false);
+        BW.AParcel_writeBool(out, ok);
         return STATUS_OK;
     }
-    case 13: {  // revokeRoot(int uid) - TODO
-        (void)in;
-        LOGW("revokeRoot not implemented yet (return false)");
+    case 13: {  // revokeRoot(int uid) - revoke Murasaki/Shizuku access for UID
+        uid_t caller = service->getCallingUid();
+        int32_t target_uid = 0;
+        BW.AParcel_readInt32(in, &target_uid);
+
+        bool ok = false;
+        if (caller == 0 || is_manager_uid(caller)) {
+            ok = ::ksud::access::revoke_murasaki(static_cast<uid_t>(target_uid));
+        } else {
+            LOGW("revokeRoot denied for uid %d", caller);
+        }
+
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeBool(out, false);
+        BW.AParcel_writeBool(out, ok);
         return STATUS_OK;
     }
-    case 14: {  // getRootUids() - TODO (return empty array)
+    case 14: {  // getRootUids() - list granted UIDs (manager only)
+        uid_t caller = service->getCallingUid();
         WRITE_NO_EXCEPTION();
-        // int[] format: length then elements
-        BW.AParcel_writeInt32(out, 0);
+
+        if (!(caller == 0 || is_manager_uid(caller))) {
+            BW.AParcel_writeInt32(out, 0);
+            return STATUS_OK;
+        }
+
+        auto list = ::ksud::access::list_murasaki_uids();
+        BW.AParcel_writeInt32(out, static_cast<int32_t>(list.size()));
+        for (int32_t v : list) {
+            BW.AParcel_writeInt32(out, v);
+        }
         return STATUS_OK;
     }
     case 20: {  // getHymoFsService()
         uid_t uid = service->getCallingUid();
-        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        bool allowed = (uid == 0) || is_manager_uid(uid) || service->isUidGrantedRoot(uid);
         if (!allowed) {
             // If not root, return null binder
             WRITE_NO_EXCEPTION();
@@ -456,7 +467,7 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     }
     case 21: {  // getKernelService()
         uid_t uid = service->getCallingUid();
-        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        bool allowed = (uid == 0) || is_manager_uid(uid) || service->isUidGrantedRoot(uid);
         if (!allowed) {
             WRITE_NO_EXCEPTION();
             BW.AParcel_writeStrongBinder(out, nullptr);
@@ -468,7 +479,7 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     }
     case 22: {  // getModuleService()
         uid_t uid = service->getCallingUid();
-        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        bool allowed = (uid == 0) || is_manager_uid(uid) || service->isUidGrantedRoot(uid);
         if (!allowed) {
             WRITE_NO_EXCEPTION();
             BW.AParcel_writeStrongBinder(out, nullptr);
@@ -480,7 +491,9 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     }
     case 30: {  // getShizukuBinder()
         // Return Shizuku compatible binder (if started)
-        AIBinder* sb = ksud::shizuku::ShizukuService::getInstance().getBinder();
+        uid_t uid = service->getCallingUid();
+        bool allowed = (uid == 0) || is_manager_uid(uid) || service->isUidGrantedRoot(uid);
+        AIBinder* sb = allowed ? ksud::shizuku::ShizukuService::getInstance().getBinder() : nullptr;
         WRITE_NO_EXCEPTION();
         BW.AParcel_writeStrongBinder(out, sb);
         return STATUS_OK;
@@ -505,7 +518,7 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
         BW.readString(in, name);
         BW.readString(in, value);
         uid_t uid = service->getCallingUid();
-        if (uid != 0 && !service->isUidGrantedRoot(uid)) {
+        if (uid != 0 && !is_manager_uid(uid) && !service->isUidGrantedRoot(uid)) {
             // Permission denied: keep AIDL "no exception" but do nothing
             LOGW("setSystemProperty denied for uid %d", uid);
             WRITE_NO_EXCEPTION();
@@ -561,7 +574,7 @@ static binder_status_t onTransactHymo(AIBinder* binder, transaction_code_t code,
     BW.AParcel_writeInt32(out, 0)
 
     uid_t caller = svc->getCallingUid();
-    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    bool allowed = (caller == 0) || is_manager_uid(caller) || svc->isUidGrantedRoot(caller);
     if (!allowed) {
         // For all mutating APIs, deny; for readonly, return safe defaults
         switch (code) {
@@ -856,7 +869,7 @@ static binder_status_t onTransactKernel(AIBinder* binder, transaction_code_t cod
     BW.AParcel_writeInt32(out, 0)
 
     uid_t caller = svc->getCallingUid();
-    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    bool allowed = (caller == 0) || is_manager_uid(caller) || svc->isUidGrantedRoot(caller);
     if (!allowed) {
         WRITE_NO_EXCEPTION();
         // Return safe defaults for common return types
@@ -1037,7 +1050,7 @@ static binder_status_t onTransactModule(AIBinder* binder, transaction_code_t cod
     BW.AParcel_writeInt32(out, 0)
 
     uid_t caller = svc->getCallingUid();
-    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    bool allowed = (caller == 0) || is_manager_uid(caller) || svc->isUidGrantedRoot(caller);
     if (!allowed) {
         WRITE_NO_EXCEPTION();
         if (code == 1) {

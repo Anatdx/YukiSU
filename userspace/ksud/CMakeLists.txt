@@ -99,6 +99,7 @@ set(SOURCES
     src/hymo/hymo_utils.cpp
     src/hymo/mount/hymofs.cpp
     # Murasaki Binder service
+    src/binder/murasaki_access.cpp
     src/binder/murasaki_binder.cpp
     src/binder/murasaki_service.cpp
     src/binder/murasaki_ipc.cpp
