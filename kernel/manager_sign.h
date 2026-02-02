@@ -2,14 +2,14 @@
 #define MANAGER_SIGN_H
 
 // First Manager
-#define EXPECTED_SIZE_FIRST 0x16b
+#define EXPECTED_SIZE_FIRST 0x29c
 #define EXPECTED_HASH_FIRST                                                    \
-	"03b53b8bd866c029f2bb34798376977c43874dd589ddaf594080bcef0267a45b"
+	"6eafa78ef61acedcb19facd0387e42046a6614126782620244def709f9a84c7e"
 
 // Second Manager
-#define EXPECTED_SIZE_SECOND 0x1c8
+#define EXPECTED_SIZE_SECOND 0x29c
 #define EXPECTED_HASH_SECOND                                                   \
-	"e76c912ef2def3470f7293b73f983cfc795d7d61c46f85a7013d1fb745deaf89"
+	"39559b380d4c0191eed81b7eba61533b6a2f247bc55bceba4259e983673f58b7"
 
 typedef struct {
 	unsigned size;

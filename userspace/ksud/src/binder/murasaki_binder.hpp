@@ -62,6 +62,13 @@ public:
      */
     AIBinder* getBinder() const { return binder_; }
 
+    /**
+     * 子服务 onTransact 需要用到的权限/身份查询
+     * （IHymoFsService / IKernelService / IModuleService 的 Binder handler 在类外实现）
+     */
+    uid_t getCallingUid();
+    bool isUidGrantedRoot(uid_t uid);
+
 private:
     MurasakiBinderService() = default;
     ~MurasakiBinderService();
@@ -72,12 +79,6 @@ private:
 
     // Binder death handler
     static void onBinderDied(void* cookie);
-
-    // 获取调用方 UID
-    uid_t getCallingUid();
-
-    // 检查权限
-    bool isUidGrantedRoot(uid_t uid);
 
     AIBinder* binder_ = nullptr;
     AIBinder_Class* binderClass_ = nullptr;
