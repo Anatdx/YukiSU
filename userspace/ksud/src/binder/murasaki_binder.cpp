@@ -9,25 +9,40 @@
 #include "../defs.hpp"
 #include "../hymo/mount/hymofs.hpp"
 #include "../log.hpp"
+#include "../sepolicy/sepolicy.hpp"
+#include "../utils.hpp"
 #include "binder_wrapper.hpp"
+#include "shizuku_service.hpp"
 
 #include <android/binder_parcel.h>
 #include <fstream>
 
+#include <signal.h>
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include <map>
+#include <mutex>
 
 namespace ksud {
 namespace murasaki {
 
 using namespace hymo;
 
+// 系统属性操作（与 Shizuku 兼容层保持一致）
+extern "C" {
+int __system_property_get(const char* name, char* value);
+int __system_property_set(const char* name, const char* value);
+}
+
 // 服务版本
 static constexpr int32_t MURASAKI_VERSION = 1;
 
-// Binder interface descriptor
-static constexpr const char* INTERFACE_DESCRIPTOR = "io.murasaki.server.IMurasakiService";
+// AIDL interface descriptors (MUST match murasaki-api/aidl)
+static constexpr const char* DESCRIPTOR_MURASAKI = "io.murasaki.server.IMurasakiService";
+static constexpr const char* DESCRIPTOR_HYMO = "io.murasaki.server.IHymoFsService";
+static constexpr const char* DESCRIPTOR_KERNEL = "io.murasaki.server.IKernelService";
+static constexpr const char* DESCRIPTOR_MODULE = "io.murasaki.server.IModuleService";
 
 namespace {
 
@@ -83,46 +98,30 @@ struct app_profile {
 
 }  // namespace
 
-// Helper: Check if uid is granted root via KernelSU
-// Parses /data/adb/ksu/.allowlist directly to reuse KernelSU's authentication state
-static bool is_uid_granted_root(uid_t uid) {
-    if (uid == 0)
-        return true;
+// ==================== 子服务：IHymoFsService / IKernelService / IModuleService ====================
 
-    // TODO: Define this path in a common header
-    const char* allowlist_path = "/data/adb/ksu/.allowlist";
+static binder_status_t onTransactHymo(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                      AParcel* out);
+static binder_status_t onTransactKernel(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                        AParcel* out);
+static binder_status_t onTransactModule(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                        AParcel* out);
 
-    std::ifstream ifs(allowlist_path, std::ios::binary);
-    if (!ifs) {
-        LOGD("Murasaki: Failed to open allowlist at %s", allowlist_path);
-        return false;
-    }
+struct HymoRuleEntry {
+    int32_t id;
+    std::string a;
+    std::string b;
+    int32_t targetUid;
+    int32_t flags;
+};
 
-    uint32_t magic;
-    uint32_t version;
-
-    if (!ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic)) ||
-        !ifs.read(reinterpret_cast<char*>(&version), sizeof(version))) {
-        return false;
-    }
-
-    if (magic != KSU_ALLOWLIST_MAGIC) {
-        LOGD("Murasaki: Invalid allowlist magic");
-        return false;
-    }
-
-    app_profile profile;
-    while (ifs.read(reinterpret_cast<char*>(&profile), sizeof(profile))) {
-        if (profile.current_uid == static_cast<int32_t>(uid)) {
-            if (profile.allow_su) {
-                return true;
-            }
-            return false;
-        }
-    }
-
-    return false;
-}
+static std::atomic<int32_t> g_rule_id{1};
+static std::mutex g_rules_mutex;
+static std::map<int32_t, HymoRuleEntry> g_hide_rules;
+static std::map<int32_t, HymoRuleEntry> g_redirect_rules;
+static std::atomic<bool> g_stealth{false};
+static std::mutex g_uid_vis_mutex;
+static std::map<int32_t, bool> g_uid_hidden;
 
 MurasakiBinderService& MurasakiBinderService::getInstance() {
     static MurasakiBinderService instance;
@@ -141,6 +140,25 @@ MurasakiBinderService::~MurasakiBinderService() {
         // AIBinder_Class is managed by the system
         binderClass_ = nullptr;
     }
+
+    // Sub-binders are also owned by libbinder/servicemanager lifetime;
+    // just drop strong refs.
+    auto& bw = BinderWrapper::instance();
+    if (hymoBinder_ && bw.AIBinder_decStrong) {
+        bw.AIBinder_decStrong(hymoBinder_);
+        hymoBinder_ = nullptr;
+    }
+    if (kernelBinder_ && bw.AIBinder_decStrong) {
+        bw.AIBinder_decStrong(kernelBinder_);
+        kernelBinder_ = nullptr;
+    }
+    if (moduleBinder_ && bw.AIBinder_decStrong) {
+        bw.AIBinder_decStrong(moduleBinder_);
+        moduleBinder_ = nullptr;
+    }
+    hymoClass_ = nullptr;
+    kernelClass_ = nullptr;
+    moduleClass_ = nullptr;
 }
 
 int MurasakiBinderService::init() {
@@ -167,7 +185,7 @@ int MurasakiBinderService::init() {
 
     // 创建 Binder class
     binderClass_ =
-        bw.AIBinder_Class_define(INTERFACE_DESCRIPTOR,
+        bw.AIBinder_Class_define(DESCRIPTOR_MURASAKI,
                                  Binder_onCreate,   // onCreate - NEW: required, pass-through args
                                  Binder_onDestroy,  // onDestroy
                                  onTransact);
@@ -182,6 +200,24 @@ int MurasakiBinderService::init() {
     if (!binder_) {
         LOGE("Failed to create binder");
         return -ENOMEM;
+    }
+
+    // 创建子服务 Binder（返回给客户端）
+    hymoClass_ = bw.AIBinder_Class_define(DESCRIPTOR_HYMO, Binder_onCreate, Binder_onDestroy,
+                                         onTransactHymo);
+    kernelClass_ = bw.AIBinder_Class_define(DESCRIPTOR_KERNEL, Binder_onCreate, Binder_onDestroy,
+                                           onTransactKernel);
+    moduleClass_ = bw.AIBinder_Class_define(DESCRIPTOR_MODULE, Binder_onCreate, Binder_onDestroy,
+                                           onTransactModule);
+
+    if (hymoClass_) {
+        hymoBinder_ = bw.AIBinder_new(hymoClass_, this);
+    }
+    if (kernelClass_) {
+        kernelBinder_ = bw.AIBinder_new(kernelClass_, this);
+    }
+    if (moduleClass_) {
+        moduleBinder_ = bw.AIBinder_new(moduleClass_, this);
     }
 
     // 注册到 ServiceManager
@@ -257,23 +293,32 @@ uid_t MurasakiBinderService::getCallingUid() {
     return bw.AIBinder_getCallingUid ? bw.AIBinder_getCallingUid() : 0;
 }
 
-bool MurasakiBinderService::checkCallerPermission(uid_t uid, int requiredLevel) {
-    // Level 0 (SHELL): uid >= 2000 (shell uid)
-    // Level 1 (ROOT): uid == 0 or granted root
-    // Level 2 (KERNEL): uid == 0 and is manager or internal
+bool MurasakiBinderService::isUidGrantedRoot(uid_t uid) {
+    if (uid == 0)
+        return true;
 
-    if (requiredLevel == 0) {
-        return true;  // Anyone can call shell-level APIs
+    const char* allowlist_path = "/data/adb/ksu/.allowlist";
+    std::ifstream ifs(allowlist_path, std::ios::binary);
+    if (!ifs) {
+        return false;
     }
 
-    if (requiredLevel == 1) {
-        return uid == 0 || is_uid_granted_root(uid);
+    uint32_t magic;
+    uint32_t version;
+    if (!ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic)) ||
+        !ifs.read(reinterpret_cast<char*>(&version), sizeof(version))) {
+        return false;
+    }
+    if (magic != KSU_ALLOWLIST_MAGIC) {
+        return false;
     }
 
-    if (requiredLevel == 2) {
-        return uid == 0;  // Only root for kernel-level
+    app_profile profile;
+    while (ifs.read(reinterpret_cast<char*>(&profile), sizeof(profile))) {
+        if (profile.current_uid == static_cast<int32_t>(uid)) {
+            return profile.allow_su != 0;
+        }
     }
-
     return false;
 }
 
@@ -291,7 +336,7 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     // Handle INTERFACE_TRANSACTION for Descriptor check
     if (code == 1598968902) {
         if (bw.AParcel_writeString)
-            bw.AParcel_writeString(out, INTERFACE_DESCRIPTOR, -1);
+            bw.AParcel_writeString(out, DESCRIPTOR_MURASAKI, -1);
         return STATUS_OK;
     }
 
@@ -302,246 +347,787 @@ binder_status_t MurasakiBinderService::onTransact(AIBinder* binder, transaction_
     std::string token;
     bw.readString(in, token);
 
-    // IMurasakiService transactions
-    switch (code) {
-    case TRANSACTION_getVersion:
-        return service->handleGetVersion(in, out);
-    case TRANSACTION_getPrivilegeLevel:
-        return service->handleGetPrivilegeLevel(in, out);
-    case TRANSACTION_isKernelModeAvailable:
-        return service->handleIsKernelModeAvailable(in, out);
-    case TRANSACTION_getKernelSuVersion:
-        return service->handleGetKsuVersion(in, out);
-    case TRANSACTION_getSelinuxContext:
-        return service->handleGetSelinuxContext(in, out);
-
-        // Note: getHymoFsService/getKernelService would return sub-binder
-        // For simplicity, we handle all transactions in one service for now
-        // TODO: Implement proper sub-service architecture
-
-    default:
-        break;
-    }
-
-    LOGW("Unknown transaction code: %d", code);
-    return STATUS_UNKNOWN_TRANSACTION;
-}
-// ==================== Handler Implementations ====================
-
-// Helper macro to simplify AParcel calls through wrapper
+    // Helper macro
 #define BW BinderWrapper::instance()
-// AIDL protocol: write status code (0 = success) before return value
 #define WRITE_NO_EXCEPTION()   \
     if (BW.AParcel_writeInt32) \
     BW.AParcel_writeInt32(out, 0)
 
-binder_status_t MurasakiBinderService::handleGetVersion(const AParcel* in, AParcel* out) {
-    (void)in;
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, MURASAKI_VERSION);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleGetKsuVersion(const AParcel* in, AParcel* out) {
-    (void)in;
-    int32_t version = get_version();
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, version);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleGetPrivilegeLevel(const AParcel* in, AParcel* out) {
-    (void)in;
-    uid_t uid = getCallingUid();
-    int32_t level = 0;  // SHELL
-
-    if (uid == 0) {
-        level = 2;  // KERNEL
-    } else if (is_uid_granted_root(uid)) {
-        level = 1;  // ROOT
-    }
-
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, level);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleIsKernelModeAvailable(const AParcel* in,
-                                                                   AParcel* out) {
-    (void)in;
-    bool available = get_version() > 0;
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeBool(out, available);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleGetSelinuxContext(const AParcel* in, AParcel* out) {
-    int32_t pid;
-    BW.AParcel_readInt32(in, &pid);
-
-    // Read from /proc/[pid]/attr/current
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/attr/current", pid == 0 ? getpid() : pid);
-
-    FILE* f = fopen(path, "r");
-    if (!f) {
+    // IMurasakiService.aidl (murasaki-api) transaction ids:
+    // 1 getVersion
+    // 2 getKernelSuVersion
+    // 3 getUid
+    // 4 getSELinuxContext
+    // 10 getCallerPrivilegeLevel
+    // 11 isUidGrantedRoot(int)
+    // 12 grantRoot(int) [TODO]
+    // 13 revokeRoot(int) [TODO]
+    // 14 getRootUids() [TODO]
+    // 20 getHymoFsService
+    // 21 getKernelService
+    // 22 getModuleService
+    // 30 getShizukuBinder
+    // 40 getSystemProperty(name, default)
+    // 41 setSystemProperty(name, value)
+    switch (code) {
+    case 1: {  // getVersion()
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeString(out, "", 0);
+        BW.AParcel_writeInt32(out, MURASAKI_VERSION);
         return STATUS_OK;
     }
-
-    char context[256] = {0};
-    fread(context, 1, sizeof(context) - 1, f);
-    fclose(f);
-
-    // Remove trailing newline
-    size_t len = strlen(context);
-    if (len > 0 && context[len - 1] == '\n') {
-        context[len - 1] = '\0';
-        len--;
-    }
-
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeString(out, context, len);
-    return STATUS_OK;
-}
-
-// HymoFS handlers
-
-binder_status_t MurasakiBinderService::handleHymoAddHideRule(const AParcel* in, AParcel* out) {
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 1)) {
+    case 2: {  // getKernelSuVersion()
+        int32_t version = get_version();
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeInt32(out, version);
         return STATUS_OK;
     }
-
-    const char* path = nullptr;
-    BW.AParcel_readString(in, &path, nullptr);
-
-    int32_t targetUid;
-    BW.AParcel_readInt32(in, &targetUid);
-
-    bool result = HymoFS::hide_path(path ? path : "");
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result ? 0 : -1);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleHymoAddRedirectRule(const AParcel* in, AParcel* out) {
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 1)) {
+    case 3: {  // getUid()
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeInt32(out, static_cast<int32_t>(getuid()));
         return STATUS_OK;
     }
-
-    const char* src = nullptr;
-    const char* target = nullptr;
-    int32_t targetUid;
-
-    BW.AParcel_readString(in, &src, nullptr);
-    BW.AParcel_readString(in, &target, nullptr);
-    BW.AParcel_readInt32(in, &targetUid);
-
-    // type=0 is redirect rule
-    bool result = HymoFS::add_rule(src ? src : "", target ? target : "", 0);
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result ? 0 : -1);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleHymoClearRules(const AParcel* in, AParcel* out) {
-    (void)in;
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 1)) {
+    case 4: {  // getSELinuxContext()
+        char context[256] = {0};
+        FILE* f = fopen("/proc/self/attr/current", "r");
+        if (f) {
+            fread(context, 1, sizeof(context) - 1, f);
+            fclose(f);
+            size_t len = strlen(context);
+            if (len > 0 && context[len - 1] == '\n') {
+                context[len - 1] = '\0';
+            }
+        }
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeString(out, context, strlen(context));
         return STATUS_OK;
     }
-
-    bool result = HymoFS::clear_rules();
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result ? 0 : -1);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleHymoSetStealthMode(const AParcel* in, AParcel* out) {
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 1)) {
+    case 10: {  // getCallerPrivilegeLevel()
+        uid_t uid = service->getCallingUid();
+        int32_t level = 0;
+        if (uid == 0) {
+            level = 2;
+        } else if (service->isUidGrantedRoot(uid)) {
+            level = 1;
+        }
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeInt32(out, level);
         return STATUS_OK;
     }
-
-    bool enable;
-    BW.AParcel_readBool(in, &enable);
-
-    bool result = HymoFS::set_stealth(enable);
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result ? 0 : -1);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleHymoSetDebugMode(const AParcel* in, AParcel* out) {
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 1)) {
+    case 11: {  // isUidGrantedRoot(int uid)
+        int32_t target_uid = 0;
+        BW.AParcel_readInt32(in, &target_uid);
+        bool granted = service->isUidGrantedRoot(static_cast<uid_t>(target_uid));
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeBool(out, granted);
         return STATUS_OK;
     }
-
-    bool enable;
-    BW.AParcel_readBool(in, &enable);
-
-    bool result = HymoFS::set_debug(enable);
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result ? 0 : -1);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleHymoGetActiveRules(const AParcel* in, AParcel* out) {
-    (void)in;
-    std::string rules = HymoFS::get_active_rules();
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeString(out, rules.c_str(), rules.size());
-    return STATUS_OK;
-}
-
-// Kernel handlers
-
-binder_status_t MurasakiBinderService::handleKernelIsUidGrantedRoot(const AParcel* in,
-                                                                    AParcel* out) {
-    int32_t uid;
-    BW.AParcel_readInt32(in, &uid);
-
-    bool granted = is_uid_granted_root(uid);
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeBool(out, granted);
-    return STATUS_OK;
-}
-
-binder_status_t MurasakiBinderService::handleKernelNukeExt4Sysfs(const AParcel* in, AParcel* out) {
-    (void)in;
-    uid_t uid = getCallingUid();
-    if (!checkCallerPermission(uid, 2)) {
+    case 12: {  // grantRoot(int uid) - TODO: implement persistent allowlist write
+        (void)in;
+        LOGW("grantRoot not implemented yet (return false)");
         WRITE_NO_EXCEPTION();
-        BW.AParcel_writeInt32(out, -EPERM);
+        BW.AParcel_writeBool(out, false);
         return STATUS_OK;
     }
-
-    int result = nuke_ext4_sysfs("");
-    WRITE_NO_EXCEPTION();
-    BW.AParcel_writeInt32(out, result);
-    return STATUS_OK;
-}
+    case 13: {  // revokeRoot(int uid) - TODO
+        (void)in;
+        LOGW("revokeRoot not implemented yet (return false)");
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 14: {  // getRootUids() - TODO (return empty array)
+        WRITE_NO_EXCEPTION();
+        // int[] format: length then elements
+        BW.AParcel_writeInt32(out, 0);
+        return STATUS_OK;
+    }
+    case 20: {  // getHymoFsService()
+        uid_t uid = service->getCallingUid();
+        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        if (!allowed) {
+            // If not root, return null binder
+            WRITE_NO_EXCEPTION();
+            BW.AParcel_writeStrongBinder(out, nullptr);
+            return STATUS_OK;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeStrongBinder(out, service->hymoBinder_);
+        return STATUS_OK;
+    }
+    case 21: {  // getKernelService()
+        uid_t uid = service->getCallingUid();
+        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        if (!allowed) {
+            WRITE_NO_EXCEPTION();
+            BW.AParcel_writeStrongBinder(out, nullptr);
+            return STATUS_OK;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeStrongBinder(out, service->kernelBinder_);
+        return STATUS_OK;
+    }
+    case 22: {  // getModuleService()
+        uid_t uid = service->getCallingUid();
+        bool allowed = (uid == 0) || service->isUidGrantedRoot(uid);
+        if (!allowed) {
+            WRITE_NO_EXCEPTION();
+            BW.AParcel_writeStrongBinder(out, nullptr);
+            return STATUS_OK;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeStrongBinder(out, service->moduleBinder_);
+        return STATUS_OK;
+    }
+    case 30: {  // getShizukuBinder()
+        // Return Shizuku compatible binder (if started)
+        AIBinder* sb = ksud::shizuku::ShizukuService::getInstance().getBinder();
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeStrongBinder(out, sb);
+        return STATUS_OK;
+    }
+    case 40: {  // getSystemProperty(String name, String defaultValue)
+        std::string name;
+        std::string def;
+        BW.readString(in, name);
+        BW.readString(in, def);
+        std::string val = def;
+        char buf[92] = {0};
+        if (!name.empty() && __system_property_get(name.c_str(), buf) > 0) {
+            val = buf;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, val.c_str(), val.size());
+        return STATUS_OK;
+    }
+    case 41: {  // setSystemProperty(String name, String value)
+        std::string name;
+        std::string value;
+        BW.readString(in, name);
+        BW.readString(in, value);
+        uid_t uid = service->getCallingUid();
+        if (uid != 0 && !service->isUidGrantedRoot(uid)) {
+            // Permission denied: keep AIDL "no exception" but do nothing
+            LOGW("setSystemProperty denied for uid %d", uid);
+            WRITE_NO_EXCEPTION();
+            return STATUS_OK;
+        }
+        if (!name.empty()) {
+            __system_property_set(name.c_str(), value.c_str());
+        }
+        WRITE_NO_EXCEPTION();
+        return STATUS_OK;
+    }
+    default:
+        LOGW("Unknown IMurasakiService transaction: %d (token=%s)", code, token.c_str());
+        return STATUS_UNKNOWN_TRANSACTION;
+    }
 
 #undef WRITE_NO_EXCEPTION
 #undef BW
+}
 
 void MurasakiBinderService::onBinderDied(void* cookie) {
     (void)cookie;
     LOGW("Murasaki binder died");
+}
+
+// ==================== IHymoFsService implementation ====================
+
+static binder_status_t onTransactHymo(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                      AParcel* out) {
+    auto& bw = BinderWrapper::instance();
+    auto* svc = static_cast<MurasakiBinderService*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
+    if (!svc) {
+        return STATUS_UNEXPECTED_NULL;
+    }
+
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, DESCRIPTOR_HYMO, -1);
+        return STATUS_OK;
+    }
+
+    // Skip Interface Token
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
+
+#define BW BinderWrapper::instance()
+#define WRITE_NO_EXCEPTION()   \
+    if (BW.AParcel_writeInt32) \
+    BW.AParcel_writeInt32(out, 0)
+
+    uid_t caller = svc->getCallingUid();
+    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    if (!allowed) {
+        // For all mutating APIs, deny; for readonly, return safe defaults
+        switch (code) {
+        case 1:  // getVersion
+        case 2:  // isAvailable
+        case 3:  // isStealthMode
+        case 24: // getHideRules
+        case 34: // getRedirectRules
+            break;
+        default:
+            WRITE_NO_EXCEPTION();
+            // Return "failure" shape depending on signature
+            if (code == 10 || code == 22 || code == 32 || code == 40 || code == 41) {
+                BW.AParcel_writeBool(out, false);
+            } else if (code == 20 || code == 21 || code == 30 || code == 31) {
+                BW.AParcel_writeInt32(out, -1);
+            } else {
+                // void or unknown
+            }
+            return STATUS_OK;
+        }
+    }
+
+    switch (code) {
+    case 1: {  // int getVersion()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, HymoFS::get_protocol_version());
+        return STATUS_OK;
+    }
+    case 2: {  // boolean isAvailable()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, HymoFS::is_available());
+        return STATUS_OK;
+    }
+    case 3: {  // boolean isStealthMode()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, g_stealth.load());
+        return STATUS_OK;
+    }
+    case 10: {  // boolean setStealthMode(boolean enabled)
+        bool enabled = false;
+        BW.AParcel_readBool(in, &enabled);
+        bool ok = HymoFS::set_stealth(enabled);
+        if (ok) {
+            g_stealth.store(enabled);
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 20: {  // int addHideRule(String path)
+        std::string path;
+        BW.readString(in, path);
+        bool ok = HymoFS::hide_path(path);
+        int32_t id = -1;
+        if (ok) {
+            id = g_rule_id.fetch_add(1);
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            g_hide_rules[id] = HymoRuleEntry{.id = id, .a = path, .b = "", .targetUid = 0, .flags = 0};
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, id);
+        return STATUS_OK;
+    }
+    case 21: {  // int addHideRuleForUid(String path, int targetUid)
+        std::string path;
+        BW.readString(in, path);
+        int32_t targetUid = 0;
+        BW.AParcel_readInt32(in, &targetUid);
+        bool ok = HymoFS::hide_path(path);
+        int32_t id = -1;
+        if (ok) {
+            id = g_rule_id.fetch_add(1);
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            g_hide_rules[id] =
+                HymoRuleEntry{.id = id, .a = path, .b = "", .targetUid = targetUid, .flags = 0};
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, id);
+        return STATUS_OK;
+    }
+    case 22: {  // boolean removeHideRule(int ruleId)
+        int32_t ruleId = -1;
+        BW.AParcel_readInt32(in, &ruleId);
+        std::string path;
+        {
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            auto it = g_hide_rules.find(ruleId);
+            if (it != g_hide_rules.end()) {
+                path = it->second.a;
+            }
+        }
+        bool ok = false;
+        if (!path.empty()) {
+            ok = HymoFS::delete_rule(path);
+            if (ok) {
+                std::lock_guard<std::mutex> lock(g_rules_mutex);
+                g_hide_rules.erase(ruleId);
+            }
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 23: {  // void clearHideRules()
+        (void)HymoFS::clear_rules();
+        std::lock_guard<std::mutex> lock(g_rules_mutex);
+        g_hide_rules.clear();
+        g_redirect_rules.clear();
+        WRITE_NO_EXCEPTION();
+        return STATUS_OK;
+    }
+    case 24: {  // String[] getHideRules()
+        std::lock_guard<std::mutex> lock(g_rules_mutex);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, static_cast<int32_t>(g_hide_rules.size()));
+        for (const auto& [id, e] : g_hide_rules) {
+            std::string s = std::to_string(id) + ":" + e.a + ":" + std::to_string(e.targetUid);
+            BW.AParcel_writeString(out, s.c_str(), static_cast<int32_t>(s.size()));
+        }
+        return STATUS_OK;
+    }
+    case 30: {  // int addRedirectRule(String sourcePath, String targetPath, int flags)
+        std::string src, dst;
+        BW.readString(in, src);
+        BW.readString(in, dst);
+        int32_t flags = 0;
+        BW.AParcel_readInt32(in, &flags);
+        bool ok = HymoFS::add_rule(src, dst, 0);
+        int32_t id = -1;
+        if (ok) {
+            id = g_rule_id.fetch_add(1);
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            g_redirect_rules[id] = HymoRuleEntry{.id = id, .a = src, .b = dst, .targetUid = 0, .flags = flags};
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, id);
+        return STATUS_OK;
+    }
+    case 31: {  // int addRedirectRuleForUid(String sourcePath, String targetPath, int targetUid, int flags)
+        std::string src, dst;
+        BW.readString(in, src);
+        BW.readString(in, dst);
+        int32_t targetUid = 0;
+        int32_t flags = 0;
+        BW.AParcel_readInt32(in, &targetUid);
+        BW.AParcel_readInt32(in, &flags);
+        bool ok = HymoFS::add_rule(src, dst, 0);
+        int32_t id = -1;
+        if (ok) {
+            id = g_rule_id.fetch_add(1);
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            g_redirect_rules[id] =
+                HymoRuleEntry{.id = id, .a = src, .b = dst, .targetUid = targetUid, .flags = flags};
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, id);
+        return STATUS_OK;
+    }
+    case 32: {  // boolean removeRedirectRule(int ruleId)
+        int32_t ruleId = -1;
+        BW.AParcel_readInt32(in, &ruleId);
+        std::string src;
+        {
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            auto it = g_redirect_rules.find(ruleId);
+            if (it != g_redirect_rules.end()) {
+                src = it->second.a;
+            }
+        }
+        bool ok = false;
+        if (!src.empty()) {
+            ok = HymoFS::delete_rule(src);
+            if (ok) {
+                std::lock_guard<std::mutex> lock(g_rules_mutex);
+                g_redirect_rules.erase(ruleId);
+            }
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 33: {  // void clearRedirectRules()
+        (void)HymoFS::clear_rules();
+        std::lock_guard<std::mutex> lock(g_rules_mutex);
+        g_hide_rules.clear();
+        g_redirect_rules.clear();
+        WRITE_NO_EXCEPTION();
+        return STATUS_OK;
+    }
+    case 34: {  // String[] getRedirectRules()
+        std::lock_guard<std::mutex> lock(g_rules_mutex);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, static_cast<int32_t>(g_redirect_rules.size()));
+        for (const auto& [id, e] : g_redirect_rules) {
+            std::string s = std::to_string(id) + ":" + e.a + ":" + e.b + ":" +
+                            std::to_string(e.targetUid) + ":" + std::to_string(e.flags);
+            BW.AParcel_writeString(out, s.c_str(), static_cast<int32_t>(s.size()));
+        }
+        return STATUS_OK;
+    }
+    case 40: {  // boolean bindMount(String source, String target, int flags) - TODO
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 41: {  // boolean umount(String path) - TODO
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 50: {  // void setUidVisibility(int uid, boolean hidden)
+        int32_t uid = 0;
+        bool hidden = false;
+        BW.AParcel_readInt32(in, &uid);
+        BW.AParcel_readBool(in, &hidden);
+        {
+            std::lock_guard<std::mutex> lock(g_uid_vis_mutex);
+            g_uid_hidden[uid] = hidden;
+        }
+        WRITE_NO_EXCEPTION();
+        return STATUS_OK;
+    }
+    case 51: {  // boolean isUidHidden(int uid)
+        int32_t uid = 0;
+        BW.AParcel_readInt32(in, &uid);
+        bool hidden = false;
+        {
+            std::lock_guard<std::mutex> lock(g_uid_vis_mutex);
+            auto it = g_uid_hidden.find(uid);
+            hidden = it != g_uid_hidden.end() ? it->second : false;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, hidden);
+        return STATUS_OK;
+    }
+    default:
+        LOGW("Unknown IHymoFsService transaction: %d (token=%s)", code, token.c_str());
+        return STATUS_UNKNOWN_TRANSACTION;
+    }
+
+#undef WRITE_NO_EXCEPTION
+#undef BW
+}
+
+// ==================== IKernelService implementation ====================
+
+static int read_pid_uid(int32_t pid) {
+    auto content = ksud::read_file("/proc/" + std::to_string(pid) + "/status");
+    if (!content)
+        return -1;
+    for (const auto& line : ksud::split(*content, '\n')) {
+        if (ksud::starts_with(line, "Uid:")) {
+            // Format: Uid: real effective saved fs
+            auto parts = ksud::split(line, '\t');
+            for (const auto& p : parts) {
+                if (!p.empty() && p[0] >= '0' && p[0] <= '9') {
+                    return atoi(p.c_str());
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+static binder_status_t onTransactKernel(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                        AParcel* out) {
+    auto& bw = BinderWrapper::instance();
+    auto* svc = static_cast<MurasakiBinderService*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
+    if (!svc) {
+        return STATUS_UNEXPECTED_NULL;
+    }
+
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, DESCRIPTOR_KERNEL, -1);
+        return STATUS_OK;
+    }
+
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
+
+#define BW BinderWrapper::instance()
+#define WRITE_NO_EXCEPTION()   \
+    if (BW.AParcel_writeInt32) \
+    BW.AParcel_writeInt32(out, 0)
+
+    uid_t caller = svc->getCallingUid();
+    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    if (!allowed) {
+        WRITE_NO_EXCEPTION();
+        // Return safe defaults for common return types
+        if (code == 1 || code == 10 || code == 21) {
+            BW.AParcel_writeInt32(out, -1);
+        } else if (code == 11 || code == 13 || code == 20 || code == 41 || code == 50 || code == 51 ||
+                   code == 60 || code == 61) {
+            BW.AParcel_writeBool(out, false);
+        } else if (code == 2 || code == 12 || code == 40 || code == 62) {
+            BW.AParcel_writeString(out, "", 0);
+        }
+        return STATUS_OK;
+    }
+
+    switch (code) {
+    case 1: {  // int getVersion()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, 1);
+        return STATUS_OK;
+    }
+    case 2: {  // String getKernelVersion()
+        std::string ver;
+        if (auto s = ksud::read_file("/proc/sys/kernel/osrelease")) {
+            ver = ksud::trim(*s);
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, ver.c_str(), static_cast<int32_t>(ver.size()));
+        return STATUS_OK;
+    }
+    case 10: {  // int getSELinuxEnforce()
+        // 0=Disabled,1=Permissive,2=Enforcing
+        int32_t mode = 0;
+        if (auto s = ksud::read_file("/sys/fs/selinux/enforce")) {
+            std::string v = ksud::trim(*s);
+            if (!v.empty()) {
+                mode = (v[0] == '1') ? 2 : 1;
+            }
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, mode);
+        return STATUS_OK;
+    }
+    case 11: {  // boolean setSELinuxEnforce(boolean enforce)
+        bool enforce = false;
+        BW.AParcel_readBool(in, &enforce);
+        bool ok = ksud::write_file("/sys/fs/selinux/enforce", enforce ? "1" : "0");
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 12: {  // String getProcessContext(int pid)
+        int32_t pid = 0;
+        BW.AParcel_readInt32(in, &pid);
+        std::string ctx;
+        auto p = "/proc/" + std::to_string(pid) + "/attr/current";
+        if (auto s = ksud::read_file(p)) {
+            ctx = ksud::trim(*s);
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, ctx.c_str(), static_cast<int32_t>(ctx.size()));
+        return STATUS_OK;
+    }
+    case 13: {  // boolean injectSepolicy(String rule)
+        std::string rule;
+        BW.readString(in, rule);
+        int ret = sepolicy_live_patch(rule);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ret == 0);
+        return STATUS_OK;
+    }
+    case 14: {  // int injectSepolicyBatch(String[] rules)
+        int32_t n = 0;
+        BW.AParcel_readInt32(in, &n);
+        int32_t ok_count = 0;
+        for (int32_t i = 0; i < n; i++) {
+            std::string rule;
+            BW.readString(in, rule);
+            if (sepolicy_live_patch(rule) == 0) {
+                ok_count++;
+            }
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, ok_count);
+        return STATUS_OK;
+    }
+    case 20: {  // boolean killProcess(int pid, int signal)
+        int32_t pid = 0, sig = 9;
+        BW.AParcel_readInt32(in, &pid);
+        BW.AParcel_readInt32(in, &sig);
+        bool ok = (kill(pid, sig) == 0);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 21: {  // int getProcessUid(int pid)
+        int32_t pid = 0;
+        BW.AParcel_readInt32(in, &pid);
+        int uid = read_pid_uid(pid);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, uid);
+        return STATUS_OK;
+    }
+    case 40: {  // String readSysctl(String name)
+        std::string name;
+        BW.readString(in, name);
+        for (auto& c : name) {
+            if (c == '.')
+                c = '/';
+        }
+        std::string val;
+        if (auto s = ksud::read_file("/proc/sys/" + name)) {
+            val = ksud::trim(*s);
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, val.c_str(), static_cast<int32_t>(val.size()));
+        return STATUS_OK;
+    }
+    case 41: {  // boolean writeSysctl(String name, String value)
+        std::string name, value;
+        BW.readString(in, name);
+        BW.readString(in, value);
+        for (auto& c : name) {
+            if (c == '.')
+                c = '/';
+        }
+        bool ok = ksud::write_file("/proc/sys/" + name, value);
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, ok);
+        return STATUS_OK;
+    }
+    case 62: {  // String execCommand(String command)
+        std::string cmd;
+        BW.readString(in, cmd);
+        auto r = ksud::exec_command({"sh", "-c", cmd});
+        std::string out_str = r.stdout_str;
+        if (!r.stderr_str.empty()) {
+            out_str += r.stderr_str;
+        }
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, out_str.c_str(), static_cast<int32_t>(out_str.size()));
+        return STATUS_OK;
+    }
+    default:
+        LOGW("Unknown IKernelService transaction: %d (token=%s)", code, token.c_str());
+        return STATUS_UNKNOWN_TRANSACTION;
+    }
+
+#undef WRITE_NO_EXCEPTION
+#undef BW
+}
+
+// ==================== IModuleService implementation (stub) ====================
+
+static binder_status_t onTransactModule(AIBinder* binder, transaction_code_t code, const AParcel* in,
+                                        AParcel* out) {
+    auto& bw = BinderWrapper::instance();
+    auto* svc = static_cast<MurasakiBinderService*>(
+        bw.AIBinder_getUserData ? bw.AIBinder_getUserData(binder) : nullptr);
+    if (!svc) {
+        return STATUS_UNEXPECTED_NULL;
+    }
+
+    if (code == 1598968902) {
+        if (bw.AParcel_writeString)
+            bw.AParcel_writeString(out, DESCRIPTOR_MODULE, -1);
+        return STATUS_OK;
+    }
+
+    int32_t strict_policy = 0;
+    if (bw.AParcel_readInt32)
+        bw.AParcel_readInt32(in, &strict_policy);
+    std::string token;
+    bw.readString(in, token);
+
+#define BW BinderWrapper::instance()
+#define WRITE_NO_EXCEPTION()   \
+    if (BW.AParcel_writeInt32) \
+    BW.AParcel_writeInt32(out, 0)
+
+    uid_t caller = svc->getCallingUid();
+    bool allowed = (caller == 0) || svc->isUidGrantedRoot(caller);
+    if (!allowed) {
+        WRITE_NO_EXCEPTION();
+        if (code == 1) {
+            BW.AParcel_writeInt32(out, -1);
+        } else if (code == 10) {
+            BW.AParcel_writeInt32(out, 0);  // empty String[] length
+        } else if (code == 12 || code == 20) {
+            BW.AParcel_writeBool(out, false);
+        } else if (code == 11 || code == 40 || code == 41) {
+            BW.AParcel_writeString(out, "", 0);
+        } else if (code == 30) {
+            BW.AParcel_writeInt32(out, -1);
+        } else if (code == 21 || code == 22 || code == 31) {
+            BW.AParcel_writeBool(out, false);
+        }
+        return STATUS_OK;
+    }
+
+    switch (code) {
+    case 1: {  // int getVersion()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, 1);
+        return STATUS_OK;
+    }
+    case 10: {  // String[] getInstalledModules()
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, 0);
+        return STATUS_OK;
+    }
+    case 11: {  // String getModuleInfo(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, "{}", 2);
+        return STATUS_OK;
+    }
+    case 12: {  // boolean isModuleInstalled(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 20: {  // boolean isModuleEnabled(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 21: {  // boolean enableModule(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 22: {  // boolean disableModule(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 30: {  // int installModule(String zipPath)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeInt32(out, -ENOSYS);
+        return STATUS_OK;
+    }
+    case 31: {  // boolean uninstallModule(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeBool(out, false);
+        return STATUS_OK;
+    }
+    case 40: {  // String runModuleAction(String moduleId, String action)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, "", 0);
+        return STATUS_OK;
+    }
+    case 41: {  // String getModuleWebUIUrl(String moduleId)
+        (void)in;
+        WRITE_NO_EXCEPTION();
+        BW.AParcel_writeString(out, "", 0);
+        return STATUS_OK;
+    }
+    default:
+        LOGW("Unknown IModuleService transaction: %d (token=%s)", code, token.c_str());
+        return STATUS_UNKNOWN_TRANSACTION;
+    }
+
+#undef WRITE_NO_EXCEPTION
+#undef BW
 }
 
 // ==================== Public API ====================

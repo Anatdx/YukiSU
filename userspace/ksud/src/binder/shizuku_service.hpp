@@ -124,6 +124,9 @@ public:
     // 停止服务
     void stop();
 
+    // 获取服务 Binder 对象（用于 Murasaki 兼容层分发）
+    AIBinder* getBinder() const { return binder_; }
+
     // 获取调用者 UID
     uid_t getCallingUid();
 
