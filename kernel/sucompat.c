@@ -91,6 +91,37 @@ static const char ksud_path[] = KSUD_PATH;
 
 extern bool ksu_kernel_umount_enabled;
 
+#ifndef CONFIG_KSU_LKM
+/* Rei: root_impl 为 apatch 时不接管 shell，让 APatch 自己处理 su */
+static bool rei_root_impl_is_apatch(void)
+{
+	struct file *fp;
+	char buf[16];
+	loff_t pos = 0;
+	ssize_t nr;
+	size_t i, j;
+
+	fp = ksu_filp_open_compat(ROOT_IMPL_CONFIG_PATH, O_RDONLY, 0);
+	if (IS_ERR(fp))
+		return false;
+	nr = ksu_kernel_read_compat(fp, buf, sizeof(buf) - 1, &pos);
+	filp_close(fp, NULL);
+	if (nr <= 0)
+		return false;
+	buf[nr < (ssize_t)(sizeof(buf) - 1) ? nr : sizeof(buf) - 1] = '\0';
+	for (i = 0; buf[i] == ' ' || buf[i] == '\t' || buf[i] == '\n'; i++)
+		;
+	for (j = 0; buf[i + j]; j++)
+		;
+	while (j && (buf[i + j - 1] == ' ' || buf[i + j - 1] == '\t' ||
+		    buf[i + j - 1] == '\n'))
+		j--;
+	if (j != 6)
+		return false;
+	return strncmp(buf + i, "apatch", 6) == 0;
+}
+#endif
+
 // the call from execve_handler_pre won't provided correct value for
 // __never_use_argument, use them after fix execve_handler_pre, keeping them for
 // consistence for manually patched code
@@ -119,6 +150,12 @@ ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 
 	if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
 		return 0;
+
+#ifndef CONFIG_KSU_LKM
+	/* Rei: 切到 APatch 后不接管，su 由 APatch 处理 */
+	if (rei_root_impl_is_apatch())
+		return 0;
+#endif
 
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
@@ -187,6 +224,11 @@ ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 		return 0;
 	}
 
+#ifndef CONFIG_KSU_LKM
+	if (rei_root_impl_is_apatch())
+		return 0;
+#endif
+
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
 	ksu_sulog_report_su_attempt(current_uid().val, NULL, su_path, true);
@@ -210,9 +252,10 @@ static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
 	}
 
 	if (current->pid != 1 && is_init(get_current_cred())) {
-		if (unlikely(strcmp(filename->name, KSUD_PATH) == 0)) {
+		if (unlikely(strcmp(filename->name, KSUD_PATH) == 0) ||
+		    unlikely(strcmp(filename->name, REID_DAEMON_PATH) == 0)) {
 			pr_info("hook_manager: escape to root for init "
-				"executing ksud: %d\n",
+				"executing daemon: %d\n",
 				current->pid);
 			escape_to_root_for_init();
 		}

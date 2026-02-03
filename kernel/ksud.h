@@ -4,6 +4,10 @@
 #include <linux/types.h>
 
 #define KSUD_PATH "/data/adb/ksud"
+#define APD_DAEMON_PATH "/data/adb/apd"
+/* Rei: init.rc 统一 exec reid，切换 APatch 后不丢 root；su 由 sucompat 按 root_impl 决定是否接管 */
+#define REID_DAEMON_PATH "/data/adb/reid"
+#define ROOT_IMPL_CONFIG_PATH "/data/adb/ksu/root_impl"
 
 void ksu_ksud_init(void);
 void ksu_ksud_exit(void);

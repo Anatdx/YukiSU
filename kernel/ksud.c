@@ -47,25 +47,25 @@ static bool is_boot_phase = true;
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
 
+/* Use REID_DAEMON_PATH so Rei can switch to APatch without losing root (ksud may be moved to rei/ksud.bak) */
 static const char KERNEL_SU_RC[] =
     "\n"
 
     "on post-fs-data\n"
     "	start logd\n"
-    // We should wait for the post-fs-data finish
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " post-fs-data\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " REID_DAEMON_PATH " post-fs-data\n"
     "\n"
 
     "on nonencrypted\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " REID_DAEMON_PATH " services\n"
     "\n"
 
     "on property:vold.decrypt=trigger_restart_framework\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " REID_DAEMON_PATH " services\n"
     "\n"
 
     "on property:sys.boot_completed=1\n"
-    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " boot-completed\n"
+    "	exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " REID_DAEMON_PATH " boot-completed\n"
     "\n"
 
     "\n";
