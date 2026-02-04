@@ -122,10 +122,11 @@ bool authenticate_superkey(const char *superkey) {
     LogDebug("authenticate_superkey: supercall AUTH success");
     return true;
   }
-  /* ret=-1 (-EPERM): key mismatch or kernel has no superkey configured (KSU_SUPERKEY). */
+  /* Diagnose: kernel has hash (status=1) but key wrong, or kernel has no hash (status=0). */
+  int configured = is_superkey_configured() ? 1 : 0;
   __android_log_print(ANDROID_LOG_WARN, "KernelSU",
-                      "authenticate_superkey failed: ret=%ld (-1=key wrong or kernel superkey not set)",
-                      ret);
+                      "authenticate_superkey failed: ret=%ld kernel_has_superkey=%d (1=key_mismatch 0=LKM_not_set)",
+                      ret, configured);
   return false;
 }
 
