@@ -9,12 +9,7 @@
 #include <sys/prctl.h>
 
 NativeBridgeNP(getVersion, jint) {
-  uint32_t version = get_version();
-  if (version > 0) {
-    return (jint)version;
-  }
-  // try legacy method as fallback
-  return legacy_get_info().version;
+  return (jint)get_version();
 }
 
 // get VERSION FULL

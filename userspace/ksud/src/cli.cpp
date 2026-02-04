@@ -264,8 +264,6 @@ static int cmd_debug(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud debug <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
-        printf("  set-manager [PKG]  Set manager app\n");
-        printf("  get-sign <APK>     Get APK signature\n");
         printf("  su [-g]            Root shell\n");
         printf("  version            Get kernel version\n");
         printf("  mark <get|mark|unmark|refresh> [PID]\n");
@@ -274,11 +272,6 @@ static int cmd_debug(const std::vector<std::string>& args) {
 
     const std::string& subcmd = args[0];
 
-    if (subcmd == "set-manager") {
-        std::string pkg = args.size() > 1 ? args[1] : "com.anatdx.yukisu";
-        return debug_set_manager(pkg);
-    } else if (subcmd == "get-sign" && args.size() > 1) {
-        return debug_get_sign(args[1]);
     } else if (subcmd == "version") {
         printf("Kernel Version: %d\n", get_version());
         return 0;

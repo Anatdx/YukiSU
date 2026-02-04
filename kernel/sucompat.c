@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/ptrace.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
@@ -20,7 +21,6 @@
 #include <linux/sched.h>
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
-#include "syscall_hook_manager.h"
 
 #include "allowlist.h"
 #include "app_profile.h"
@@ -35,12 +35,50 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "sucompat.h"
+#include "supercalls.h"
 #include "util.h"
 
 #include "sulog.h"
 
-#define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
+
+/* APatch-style su path: set via supercall SUPERCALL_SU_RESET_PATH. */
+static char ksu_su_path_storage[SU_PATH_MAX_LEN] = "/system/bin/yk";
+static DEFINE_SPINLOCK(ksu_su_path_lock);
+
+void ksu_su_path_get(char *buf, size_t cap)
+{
+	unsigned long flags;
+
+	if (!buf || cap == 0)
+		return;
+	spin_lock_irqsave(&ksu_su_path_lock, flags);
+	strncpy(buf, ksu_su_path_storage, cap - 1);
+	buf[cap - 1] = '\0';
+	spin_unlock_irqrestore(&ksu_su_path_lock, flags);
+}
+
+int ksu_su_path_reset(const char __user *path)
+{
+	char tmp[SU_PATH_MAX_LEN];
+	unsigned long flags;
+	long len;
+
+	if (!path)
+		return -EINVAL;
+	len = strncpy_from_user(tmp, path, sizeof(tmp) - 1);
+	if (len < 0)
+		return (int)len;
+	tmp[len] = '\0';
+	if (len > 0 && tmp[len - 1] != '\0' && len == sizeof(tmp) - 1)
+		return -E2BIG;
+	spin_lock_irqsave(&ksu_su_path_lock, flags);
+	strncpy(ksu_su_path_storage, tmp, SU_PATH_MAX_LEN - 1);
+	ksu_su_path_storage[SU_PATH_MAX_LEN - 1] = '\0';
+	spin_unlock_irqrestore(&ksu_su_path_lock, flags);
+	pr_info("su_compat: su path set to %s\n", ksu_su_path_storage);
+	return 0;
+}
 
 bool ksu_su_compat_enabled __read_mostly = true;
 
@@ -86,7 +124,6 @@ static char __user *sh_user_path(void)
 }
 
 static const char sh_path[] = SH_PATH;
-static const char su_path[] = SU_PATH;
 static const char ksud_path[] = KSUD_PATH;
 
 extern bool ksu_kernel_umount_enabled;
@@ -100,11 +137,12 @@ ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 			     int *__never_use_flags)
 {
 	struct filename *filename;
+	char path_su[SU_PATH_MAX_LEN];
+	size_t path_su_len;
 	bool is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
 
-	if (!ksu_su_compat_enabled) {
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
 	if (unlikely(!filename_ptr))
 		return 0;
@@ -113,16 +151,17 @@ ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 		return 0;
 
 	filename = *filename_ptr;
-	if (IS_ERR(filename)) {
+	if (IS_ERR(filename))
 		return 0;
-	}
 
-	if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
+	ksu_su_path_get(path_su, sizeof(path_su));
+	path_su_len = strlen(path_su) + 1;
+	if (likely(memcmp(filename->name, path_su, path_su_len)))
 		return 0;
 
 #if __SULOG_GATE
-	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
-	ksu_sulog_report_su_attempt(current_uid().val, NULL, su_path,
+	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path_su);
+	ksu_sulog_report_su_attempt(current_uid().val, NULL, path_su,
 				    is_allowed);
 #endif // #if __SULOG_GATE
 
@@ -146,7 +185,8 @@ ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 			   int *__never_use_flags)
 {
 	const char __user *fn;
-	char path[sizeof(su_path) + 1];
+	char path[SU_PATH_MAX_LEN];
+	char path_su[SU_PATH_MAX_LEN];
 	long ret;
 	unsigned long addr;
 
@@ -164,12 +204,9 @@ ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	memset(path, 0, sizeof(path));
 	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
 
-	if (ret < 0 && try_set_access_flag(addr)) {
+	if (ret < 0 && try_set_access_flag(addr))
 		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-	}
 
-	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
-	// (e.g., preempt disabled), temporarily exit it to handle page faults
 	if (ret < 0 && preempt_count()) {
 		pr_info("Access filename failed in atomic context, trying "
 			"rescue\n");
@@ -183,13 +220,13 @@ ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 		return 0;
 	}
 
-	if (likely(memcmp(path, su_path, sizeof(su_path)))) {
+	ksu_su_path_get(path_su, sizeof(path_su));
+	if (likely(strcmp(path, path_su) != 0))
 		return 0;
-	}
 
 #if __SULOG_GATE
-	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", su_path);
-	ksu_sulog_report_su_attempt(current_uid().val, NULL, su_path, true);
+	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path_su);
+	ksu_sulog_report_su_attempt(current_uid().val, NULL, path_su, true);
 #endif // #if __SULOG_GATE
 
 	pr_info("sys_execve su found\n");
@@ -211,7 +248,7 @@ static inline void ksu_handle_execveat_init(struct filename **filename_ptr)
 
 	if (current->pid != 1 && is_init(get_current_cred())) {
 		if (unlikely(strcmp(filename->name, KSUD_PATH) == 0)) {
-			pr_info("hook_manager: escape to root for init "
+			pr_info("sucompat: escape to root for init "
 				"executing ksud: %d\n",
 				current->pid);
 			escape_to_root_for_init();
@@ -242,17 +279,16 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 			 int *__unused_flags)
 {
 	const char __user *fn;
-	char path[sizeof(su_path) + 1];
+	char path[SU_PATH_MAX_LEN];
+	char path_su[SU_PATH_MAX_LEN];
 	long ret;
 	unsigned long addr;
 
-	if (!ksu_su_compat_enabled) {
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
-	if (unlikely(!filename_user || !*filename_user)) {
+	if (unlikely(!filename_user || !*filename_user))
 		return 0;
-	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
@@ -262,24 +298,20 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	memset(path, 0, sizeof(path));
 	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
 
-	if (ret < 0 && try_set_access_flag(addr)) {
+	if (ret < 0 && try_set_access_flag(addr))
 		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-	}
 
-	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
-	// (e.g., preempt disabled), temporarily exit it to handle page faults
 	if (ret < 0 && preempt_count()) {
 		preempt_enable_no_resched_notrace();
 		ret = strncpy_from_user(path, fn, sizeof(path));
 		preempt_disable_notrace();
 	}
 
-	if (ret < 0) {
-		// Failed to access user memory, skip
+	if (ret < 0)
 		return 0;
-	}
 
-	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+	ksu_su_path_get(path_su, sizeof(path_su));
+	if (unlikely(strcmp(path, path_su) == 0)) {
 #if __SULOG_GATE
 		ksu_sulog_report_syscall(current_uid().val, NULL, "faccessat",
 					 path);
@@ -296,20 +328,22 @@ __attribute__((hot))
     defined(CONFIG_KSU_MANUAL_HOOK)
 int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
 {
-	if (!ksu_su_compat_enabled) {
+	char path_su[SU_PATH_MAX_LEN];
+	size_t path_su_len;
+
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
 
-	if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL)) {
+	if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL))
 		return 0;
-	}
 
-	if (likely(memcmp((*filename)->name, su_path, sizeof(su_path)))) {
+	ksu_su_path_get(path_su, sizeof(path_su));
+	path_su_len = strlen(path_su) + 1;
+	if (likely(memcmp((*filename)->name, path_su, path_su_len)))
 		return 0;
-	}
 
 #if __SULOG_GATE
 	ksu_sulog_report_syscall(current_uid().val, NULL, "newfstatat",
@@ -325,17 +359,16 @@ __attribute__((hot))
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
 	const char __user *fn;
-	char path[sizeof(su_path) + 1];
+	char path[SU_PATH_MAX_LEN];
+	char path_su[SU_PATH_MAX_LEN];
 	long ret;
 	unsigned long addr;
 
-	if (!ksu_su_compat_enabled) {
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
-	if (unlikely(!filename_user || !*filename_user)) {
+	if (unlikely(!filename_user || !*filename_user))
 		return 0;
-	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
@@ -345,24 +378,20 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	memset(path, 0, sizeof(path));
 	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
 
-	if (ret < 0 && try_set_access_flag(addr)) {
+	if (ret < 0 && try_set_access_flag(addr))
 		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-	}
 
-	// ReSukiSU-inspired atomic context rescue: if we're in atomic context
-	// (e.g., preempt disabled), temporarily exit it to handle page faults
 	if (ret < 0 && preempt_count()) {
 		preempt_enable_no_resched_notrace();
 		ret = strncpy_from_user(path, fn, sizeof(path));
 		preempt_disable_notrace();
 	}
 
-	if (ret < 0) {
-		// Failed to access user memory, skip
+	if (ret < 0)
 		return 0;
-	}
 
-	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+	ksu_su_path_get(path_su, sizeof(path_su));
+	if (unlikely(strcmp(path, path_su) == 0)) {
 #if __SULOG_GATE
 		ksu_sulog_report_syscall(current_uid().val, NULL, "newfstatat",
 					 path);

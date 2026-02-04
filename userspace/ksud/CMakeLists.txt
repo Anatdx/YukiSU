@@ -4,6 +4,15 @@ project(ksud VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# CMake 4.x compatibility:
+# Some fetched dependencies (e.g. miniz) may declare an ancient
+# cmake_minimum_required(<3.5) which is rejected by CMake 4+.
+# Setting this cache var allows configuring such subprojects without
+# forcing users to downgrade CMake.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum policy version for subprojects" FORCE)
+endif()
+
 # 使用 ccache 加速编译 (如果可用)
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -19,15 +28,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
 
 # Fetch third-party dependencies
 include(FetchContent)
-
-# PicoSHA2 - SHA-256 implementation
-FetchContent_Declare(
-    picosha2
-    GIT_REPOSITORY https://github.com/okdshin/PicoSHA2.git
-    GIT_TAG v1.0.1
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(picosha2)
 
 # miniz - Lightweight ZIP library
 FetchContent_Declare(
@@ -83,7 +83,6 @@ set(SOURCES
     src/module/metamodule.cpp
     src/boot/boot_patch.cpp
     src/boot/tools.cpp
-    src/boot/apk_sign.cpp
     src/profile/profile.cpp
     src/sepolicy/sepolicy.cpp
     src/su.cpp
@@ -100,7 +99,6 @@ set(SOURCES
 
 # 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
 include_directories(${GENERATED_DIR})
 

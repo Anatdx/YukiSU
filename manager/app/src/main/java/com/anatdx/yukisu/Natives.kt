@@ -71,6 +71,10 @@ object Natives {
     val isLkmMode: Boolean
         external get
 
+    /**
+     * True after successful SuperKey auth in this process (in-memory; no fd).
+     * All kernel communication is via syscall(45) supercall with SuperKey.
+     */
     val isManager: Boolean
         external get
 
@@ -125,10 +129,9 @@ object Natives {
     external fun getUserName(uid: Int): String?
 
     /**
-     * SuperKey authentication
-     * Authenticates the manager with the given SuperKey
-     * @param superKey the secret key to authenticate
-     * @return true if authentication successful, false otherwise
+     * SuperKey authentication (APatch-style: verify key via supercall).
+     * @param superKey the secret key to verify
+     * @return true if key is valid, false otherwise
      */
     external fun authenticateSuperKey(superKey: String): Boolean
     
@@ -145,8 +148,8 @@ object Natives {
     external fun isSuperKeyConfigured(): Boolean
     
     /**
-     * Check if already authenticated via SuperKey
-     * @return true if authenticated via SuperKey, false otherwise
+     * Whether SuperKey auth succeeded in this process (in-memory; no fd).
+     * Equivalent to [isManager] under SuperKey-only backend.
      */
     external fun isSuperKeyAuthenticated(): Boolean
     

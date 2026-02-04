@@ -2,12 +2,16 @@
 #define __KSU_H_SUCOMPAT
 #include <linux/types.h>
 
+/* APatch-style su path: set via supercall SUPERCALL_SU_RESET_PATH, used by sucompat. */
+void ksu_su_path_get(char *buf, size_t cap);
+int ksu_su_path_reset(const char __user *path);
+
 extern bool ksu_su_compat_enabled;
 
 void ksu_sucompat_init(void);
 void ksu_sucompat_exit(void);
 
-// Handler functions exported for hook_manager
+// Handler functions for exec/faccessat/stat hooks
 __attribute__((hot)) int ksu_handle_faccessat(int *dfd,
 					      const char __user **filename_user,
 					      int *mode, int *__unused_flags);

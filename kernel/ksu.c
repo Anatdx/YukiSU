@@ -22,12 +22,7 @@
 #include <generated/utsrelease.h>
 #include "setuid_hook.h"
 #include "sucompat.h"
-#include "manager.h"
 #endif // #ifdef CONFIG_KSU_LKM
-
-#ifndef CONFIG_KSU_MANUAL_HOOK
-#include "syscall_hook_manager.h"
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 // Manual hook integrity check (if enabled)
 #include "manual_hook_check.h"
@@ -39,7 +34,6 @@
 #include "ksud.h"
 #include "supercalls.h"
 #include "superkey.h"
-#include "throne_tracker.h"
 #include "sulog.h"
 
 struct cred *ksu_cred;
@@ -193,19 +187,15 @@ int ksu_yield(void)
 
 	// Clean up in reverse order of init
 	ksu_allowlist_exit();
-	ksu_observer_exit();
-	ksu_throne_tracker_exit();
 
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
-	ksu_syscall_hook_manager_exit();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	extern void yukisu_custom_config_exit(void);
 	ksu_sucompat_exit();
 	ksu_setuid_hook_exit();
 	yukisu_custom_config_exit();
-	ksu_supercalls_exit();
 	ksu_feature_exit();
 
 	pr_info("KernelSU GKI yielded successfully, LKM can take over now\n");
@@ -263,14 +253,15 @@ int __init kernelsu_init(void)
 
 	ksu_feature_init();
 
-	ksu_supercalls_init();
-
 	// Initialize SuperKey authentication (APatch-style)
 	superkey_init();
 
+	// Install KernelPatch-compatible supercall (syscall 45 / truncate)
+	ksu_supercall_install();
+
 	yukisu_custom_config_init();
 #ifndef CONFIG_KSU_MANUAL_HOOK
-	ksu_syscall_hook_manager_init();
+	ksu_ksud_init();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 #ifndef CONFIG_KSU_LKM
@@ -280,12 +271,6 @@ int __init kernelsu_init(void)
 #endif // #ifndef CONFIG_KSU_LKM
 
 	ksu_allowlist_init();
-
-	ksu_throne_tracker_init();
-
-#ifndef CONFIG_KSU_MANUAL_HOOK
-	ksu_ksud_init();
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	ksu_file_wrapper_init();
 #ifdef MODULE
@@ -304,10 +289,6 @@ int __init kernelsu_init(void)
 	return 0;
 }
 
-extern void ksu_observer_exit(void);
-#ifndef CONFIG_KSU_LKM
-extern void ksu_supercalls_exit(void);
-#endif // #ifndef CONFIG_KSU_LKM
 void kernelsu_exit(void)
 {
 #ifdef CONFIG_KSU_LKM
@@ -316,29 +297,20 @@ void kernelsu_exit(void)
 
 	ksu_allowlist_exit();
 
-	ksu_throne_tracker_exit();
-
-#ifdef CONFIG_KSU_LKM
-	ksu_observer_exit();
-#endif // #ifdef CONFIG_KSU_LKM
-
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
-
-	ksu_syscall_hook_manager_exit();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	ksu_file_wrapper_exit();
 
 #ifndef CONFIG_KSU_LKM
-	ksu_observer_exit();
 	ksu_sucompat_exit();
 	ksu_setuid_hook_exit();
 #endif // #ifndef CONFIG_KSU_LKM
 
 	yukisu_custom_config_exit();
 
-	ksu_supercalls_exit();
+	ksu_supercall_uninstall();
 
 	ksu_feature_exit();
 

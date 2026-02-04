@@ -129,16 +129,4 @@ config KSU_LKM
 	  This is automatically enabled when KSU is built as a module (=m).
 	  When building KSU into the kernel (=y), this should be disabled.
 
-config KSU_SUPERKEY
-	bool "Enable SuperKey authentication"
-	depends on KSU
-	default y
-	help
-	  Enable APatch-style SuperKey authentication.
-	  This allows the manager app to authenticate using a password
-	  instead of APK signature verification.
-	  
-	  The SuperKey can be set at compile time via KSU_SUPERKEY="your_key"
-	  or patched into the LKM binary by ksud.
-
 endmenu

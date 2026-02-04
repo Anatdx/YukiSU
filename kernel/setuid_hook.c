@@ -38,14 +38,10 @@
 #include "feature.h"
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
-#include "manager.h"
 #include "seccomp_cache.h"
 #include "selinux/selinux.h"
 #include "setuid_hook.h"
 #include "supercalls.h"
-#ifndef CONFIG_KSU_MANUAL_HOOK
-#include "syscall_hook_manager.h"
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 static bool ksu_enhanced_security_enabled = false;
 
@@ -72,21 +68,10 @@ static const struct ksu_feature_handler enhanced_security_handler = {
 
 static inline bool is_allow_su(void)
 {
-	if (is_manager()) {
-		// we are manager, allow!
-		return true;
-	}
 	return ksu_is_allow_uid_for_current(current_uid().val);
 }
 
 extern void disable_seccomp(struct task_struct *tsk);
-
-/* task_work callback to install manager fd after returning to userspace */
-static void ksu_install_manager_fd_tw_func(struct callback_head *cb)
-{
-	ksu_install_fd();
-	kfree(cb);
-}
 
 /* Manual hook version - KSU handles hiding via syscall hooks */
 int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
@@ -104,11 +89,7 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
-#ifdef CONFIG_KSU_LKM
-				force_sig(SIGKILL);
-#else
 				__force_sig(SIGKILL);
-#endif // #ifdef CONFIG_KSU_LKM
 				return 0;
 			}
 		}
@@ -121,11 +102,7 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
-#ifdef CONFIG_KSU_LKM
-				force_sig(SIGKILL);
-#else
 				__force_sig(SIGKILL);
-#endif // #ifdef CONFIG_KSU_LKM
 				return 0;
 			}
 		}
@@ -133,33 +110,6 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	// Check if this is manager app (using appid to handle multi-user)
-	if (likely(ksu_is_manager_appid_valid()) &&
-	    unlikely(ksu_get_manager_appid() == new_uid % PER_USER_RANGE)) {
-		struct callback_head *cb;
-
-		spin_lock_irq(&current->sighand->siglock);
-		ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
-#ifndef CONFIG_KSU_MANUAL_HOOK
-		// tracepoint hook mode
-		ksu_set_task_tracepoint_flag(current);
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
-		spin_unlock_irq(&current->sighand->siglock);
-
-		// Use task_work to install fd after returning to userspace
-		// (tracepoint context disables preemption, cannot sleep)
-		pr_info("install fd for ksu manager(uid=%d)\n", new_uid);
-		cb = kzalloc(sizeof(*cb), GFP_ATOMIC);
-		if (!cb)
-			return 0;
-		cb->func = ksu_install_manager_fd_tw_func;
-		if (task_work_add(current, cb, TWA_RESUME)) {
-			kfree(cb);
-			pr_warn("install manager fd add task_work failed\n");
-		}
-		return 0;
-	}
-
 	if (ksu_is_allow_uid_for_current(new_uid)) {
 		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
 		    current->seccomp.filter) {
@@ -168,29 +118,12 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 						__NR_reboot);
 			spin_unlock_irq(&current->sighand->siglock);
 		}
-#ifndef CONFIG_KSU_MANUAL_HOOK
-		// tracepoint hook mode
-		ksu_set_task_tracepoint_flag(current);
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 	}
-#ifndef CONFIG_KSU_MANUAL_HOOK
-	// tracepoint hook mode
-	else {
-		ksu_clear_task_tracepoint_flag_if_needed(current);
-	}
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
-
 #else // #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 	if (ksu_is_allow_uid_for_current(new_uid)) {
 		spin_lock_irq(&current->sighand->siglock);
 		disable_seccomp(current);
 		spin_unlock_irq(&current->sighand->siglock);
-
-		if (ksu_get_manager_uid() == new_uid) {
-			pr_info("install fd for ksu manager(uid=%d)\n",
-				new_uid);
-			ksu_install_fd();
-		}
 
 		return 0;
 	}

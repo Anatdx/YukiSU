@@ -55,7 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        spoofed: ["true","false"]
     defaults:
       run:
         working-directory: ./manager
@@ -80,19 +79,8 @@ jobs:
       - name: Determine manager variant for telegram bot
         id: determine
         run: |
-          if [ "${{ matrix.spoofed }}" == "true" ]; then
-            echo "title=Spoofed-Manager" >> $GITHUB_OUTPUT
-            echo "topicid=${{ vars.MESSAGE_SPOOFED_THREAD_ID }}" >> $GITHUB_OUTPUT
-          else
-            echo "title=Manager" >> $GITHUB_OUTPUT
-            echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Run randomizer
-        if: ${{ matrix.spoofed == 'true' && steps.determine.outputs.SKIP != 'true' }}
-        run: |
-          chmod +x randomizer
-          ./randomizer
+          echo "title=Manager" >> $GITHUB_OUTPUT
+          echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> $GITHUB_OUTPUT
 
       - name: Write key
         if: ${{ github.event_name != 'pull_request' }}

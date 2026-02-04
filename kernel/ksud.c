@@ -39,9 +39,7 @@ static bool is_boot_phase = true;
 #endif // #ifdef CONFIG_KSU_LKM
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
-#include "manager.h"
 #include "selinux/selinux.h"
-#include "throne_tracker.h"
 #include "util.h"
 
 bool ksu_module_mounted __read_mostly = false;
@@ -97,7 +95,6 @@ void on_post_fs_data(void)
 	done = true;
 	pr_info("on_post_fs_data!\n");
 	ksu_load_allow_list();
-	ksu_observer_init();
 	// sanity check, this may influence the performance
 	stop_input_hook();
 
@@ -149,7 +146,6 @@ void on_boot_completed(void)
 {
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
-	track_throne(true);
 }
 
 #define MAX_ARG_STRINGS 0x7FFFFFFF

@@ -1,18 +1,13 @@
 kernelsu-objs := ksu.o
 kernelsu-objs += allowlist.o
 kernelsu-objs += app_profile.o
-kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
 
-# Tracepoint hook mode needs syscall_hook_manager and util
-# Only skip when MANUAL_HOOK is explicitly enabled
+# util needed by ksud/sucompat (try_set_access_flag when !CONFIG_KSU_MANUAL_HOOK)
 ifneq ($(CONFIG_KSU_MANUAL_HOOK), y)
-kernelsu-objs += syscall_hook_manager.o
 kernelsu-objs += util.o
 endif
 
-kernelsu-objs += throne_tracker.o
-kernelsu-objs += pkg_observer.o
 kernelsu-objs += setuid_hook.o
 kernelsu-objs += kernel_umount.o
 kernelsu-objs += supercalls.o
@@ -46,21 +41,11 @@ ifeq ($(CONFIG_KSU_LKM), y)
 ccflags-y += -DCONFIG_KSU_LKM
 endif
 
-# SuperKey Support - enabled by default unless explicitly disabled
-# To disable: make ... CONFIG_KSU_SUPERKEY=n
-ifeq ($(CONFIG_KSU_SUPERKEY), y)
+# SuperKey is always enabled
 kernelsu-objs += superkey.o
 ccflags-y += -DCONFIG_KSU_SUPERKEY
 ifneq ($(KSU_SUPERKEY),)
 ccflags-y += -DKSU_SUPERKEY=\"$(KSU_SUPERKEY)\"
-endif
-endif
-
-# Disable signature verification (SuperKey Only mode, GKI mode)
-# Usage: make ... KSU_SIGNATURE_BYPASS=1
-# When enabled, the manager can only be authenticated via SuperKey and APK signature verification is bypassed
-ifdef KSU_SIGNATURE_BYPASS
-ccflags-y += -DKSU_SIGNATURE_BYPASS
 endif
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes
@@ -135,8 +120,6 @@ endif
 
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 ccflags-y += -DKSU_VERSION_FULL=\"$(KSU_VERSION_FULL)\"
-
-$(info -- Yukisu does NOT support other managers!)
 
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
 ccflags-y += -DKSU_MANUAL_HOOK

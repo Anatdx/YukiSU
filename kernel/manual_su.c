@@ -11,7 +11,6 @@
 #include "allowlist.h"
 #include "app_profile.h"
 #include "ksu.h"
-#include "manager.h"
 #include "manual_su.h"
 
 static bool current_verified = false;
@@ -240,7 +239,7 @@ static int handle_escalation_request(struct manual_su_request *request)
 	}
 	rcu_read_unlock();
 
-	if (current_uid().val == 0 || is_manager() ||
+	if (current_uid().val == 0 ||
 	    ksu_is_allow_uid_for_current(current_uid().val))
 		goto allowed;
 

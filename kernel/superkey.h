@@ -7,8 +7,8 @@
 #define SUPERKEY_MAX_LEN 64
 
 extern u64 ksu_superkey_hash;
-extern bool ksu_signature_bypass;
 
+/** Hash a key for comparison with configured superkey. */
 static inline u64 hash_superkey(const char *key)
 {
 	u64 hash = 1000000007ULL;
@@ -23,6 +23,7 @@ static inline u64 hash_superkey(const char *key)
 	return hash;
 }
 
+/** Check if the given key matches the configured superkey (for supercall auth). */
 static inline bool verify_superkey(const char *key)
 {
 	if (!key || !key[0])
@@ -37,18 +38,12 @@ static inline bool superkey_is_set(void)
 	return ksu_superkey_hash != 0;
 }
 
-static inline bool superkey_is_signature_bypassed(void)
-{
-	return ksu_signature_bypass;
-}
-
 void superkey_init(void);
-int superkey_authenticate(const char __user *user_key);
-void superkey_set_manager_uid(uid_t uid);
-bool superkey_is_manager(void);
-void superkey_invalidate(void);
-uid_t superkey_get_manager_uid(void);
-void superkey_on_auth_fail(void);
-void superkey_on_auth_success(uid_t uid);
 
-#endif // #ifndef __KSU_SUPERKEY_H
+/**
+ * Verify user key from supercall/ioctl; returns 0 if valid, -EPERM if not.
+ * Used only for supercall invocation check (and ioctl SUPERKEY_AUTH).
+ */
+int superkey_authenticate(const char __user *user_key);
+
+#endif

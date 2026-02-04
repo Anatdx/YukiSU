@@ -23,9 +23,7 @@
 #include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
-#include "manager.h"
 #include "selinux/selinux.h"
-#include "syscall_hook_manager.h"
 
 #define FILE_MAGIC 0x7f4b5355 // ' KSU', u32
 #define FILE_FORMAT_VERSION 3 // u32
@@ -274,10 +272,6 @@ out:
 
 	if (persist) {
 		persistent_allow_list();
-#ifndef CONFIG_KSU_MANUAL_HOOK
-		// FIXME: use a new flag
-		ksu_mark_running_process();
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 	}
 
 	return result;
@@ -290,12 +284,6 @@ bool __ksu_is_allow_uid(uid_t uid)
 	if (forbid_system_uid(uid)) {
 		// do not bother going through the list if it's system
 		return false;
-	}
-
-	if (likely(ksu_is_manager_uid_valid()) &&
-	    unlikely(ksu_get_manager_uid() == uid)) {
-		// manager is always allowed!
-		return true;
 	}
 
 	if (likely(uid <= BITMAP_UID_MAX)) {
@@ -328,11 +316,6 @@ bool ksu_uid_should_umount(uid_t uid)
 	struct app_profile profile = {.current_uid = uid};
 	bool found = false;
 
-	if (likely(ksu_is_manager_uid_valid()) &&
-	    unlikely(ksu_get_manager_uid() == uid)) {
-		// we should not umount on manager!
-		return false;
-	}
 	found = ksu_get_app_profile(&profile);
 	if (!found) {
 		// no app profile found, it must be non root app

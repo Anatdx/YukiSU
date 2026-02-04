@@ -4,7 +4,50 @@
 #include "app_profile.h"
 #include "ksu.h"
 #include <linux/ioctl.h>
+#include <linux/ptrace.h>
 #include <linux/types.h>
+
+// === syscall(45) supercall (APatch/KernelPatch-style) ===
+#define SUPERCALL_MAGIC 0x4221
+
+/*
+ * Supercall cmd numbers.
+ * Keep in sync with IcePatch uapi (scdefs.h) and KernelPatch patch/include/uapi/scdefs.h.
+ */
+#define SUPERCALL_HELLO 0x1000
+#define SUPERCALL_KLOG 0x1004
+#define SUPERCALL_BUILD_TIME 0x1007
+#define SUPERCALL_KERNELPATCH_VER 0x1008
+#define SUPERCALL_KERNEL_VER 0x1009
+#define SUPERCALL_SU 0x1010
+#define SUPERCALL_SU_GET_PATH 0x1110
+#define SUPERCALL_SU_RESET_PATH 0x1111
+
+#define SUPERCALL_HELLO_MAGIC 0x42214221
+
+#define SU_PATH_MAX_LEN 128
+
+/* YukiSU extensions (non-KernelPatch range), align with IcePatch/APatch superkey usage */
+#define SUPERCALL_YUKISU_GET_FEATURES 0x2000
+#define SUPERCALL_YUKISU_GET_VERSION_FULL 0x2001
+#define SUPERCALL_YUKISU_SUPERKEY_AUTH 0x2002   /* Verify key; returns 0 on success, -EPERM otherwise */
+#define SUPERCALL_YUKISU_SUPERKEY_STATUS 0x2003 /* Returns 1 if SuperKey configured, 0 otherwise */
+
+#define SUPERCALL_CMD_MIN 0x1000
+#define SUPERCALL_CMD_MAX 0x1200
+#define SUPERCALL_YUKISU_CMD_MIN 0x2000
+#define SUPERCALL_YUKISU_CMD_MAX 0x3000
+
+bool ksu_supercall_should_handle(struct pt_regs *regs, long syscall_nr);
+long ksu_supercall_dispatch(struct pt_regs *regs);
+
+bool ksu_supercall_enter(struct pt_regs *regs, long syscall_nr);
+void ksu_supercall_exit(struct pt_regs *regs);
+
+void ksu_supercall_install(void);
+void ksu_supercall_uninstall(void);
+
+// === legacy / prctl / IOCTL (structures only, fd transport removed) ===
 
 // Magic numbers for reboot hook
 #define KSU_INSTALL_MAGIC1 0xDEADBEEF
@@ -71,10 +114,6 @@ struct ksu_uid_granted_root_cmd {
 struct ksu_uid_should_umount_cmd {
 	__u32 uid;
 	__u8 should_umount;
-};
-
-struct ksu_get_manager_uid_cmd {
-	__u32 uid;
 };
 
 struct ksu_get_app_profile_cmd {
@@ -148,18 +187,18 @@ struct ksu_manual_su_cmd {
 };
 #endif // #ifdef CONFIG_KSU_MANUAL_SU
 
-#ifdef CONFIG_KSU_SUPERKEY
 struct ksu_superkey_auth_cmd {
 	char superkey[65];
 	__s32 result;
 };
 
+/* SuperKey status: APatch-style, no manager auth state. */
 struct ksu_superkey_status_cmd {
-	__u8 enabled;
-	__u8 authenticated;
-	__u32 manager_uid;
+	__u8 enabled;  /* 1 if SuperKey is configured */
+	__u8 reserved1;
+	__u16 reserved2;
+	__u32 reserved3; /* legacy: was manager_uid, always 0 */
 };
-#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 // IOCTL definitions
 #define KSU_IOCTL_GRANT_ROOT _IOC(_IOC_NONE, 'K', 1, 0)
@@ -171,7 +210,6 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_GET_DENY_LIST _IOC(_IOC_READ | _IOC_WRITE, 'K', 7, 0)
 #define KSU_IOCTL_UID_GRANTED_ROOT _IOC(_IOC_READ | _IOC_WRITE, 'K', 8, 0)
 #define KSU_IOCTL_UID_SHOULD_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 9, 0)
-#define KSU_IOCTL_GET_MANAGER_UID _IOC(_IOC_READ, 'K', 10, 0)
 #define KSU_IOCTL_GET_APP_PROFILE _IOC(_IOC_READ | _IOC_WRITE, 'K', 11, 0)
 #define KSU_IOCTL_SET_APP_PROFILE _IOC(_IOC_WRITE, 'K', 12, 0)
 #define KSU_IOCTL_GET_FEATURE _IOC(_IOC_READ | _IOC_WRITE, 'K', 13, 0)
@@ -188,29 +226,13 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_MANUAL_SU _IOC(_IOC_READ | _IOC_WRITE, 'K', 106, 0)
 #endif // #ifdef CONFIG_KSU_MANUAL_SU
 
-#ifdef CONFIG_KSU_SUPERKEY
 #define KSU_IOCTL_SUPERKEY_AUTH _IOC(_IOC_READ | _IOC_WRITE, 'K', 107, 0)
 #define KSU_IOCTL_SUPERKEY_STATUS _IOC(_IOC_READ, 'K', 108, 0)
-#endif // #ifdef CONFIG_KSU_SUPERKEY
 
-// Handler types
-typedef int (*ksu_ioctl_handler_t)(void __user *arg);
-typedef bool (*ksu_perm_check_t)(void);
-
-struct ksu_ioctl_cmd_map {
-	unsigned int cmd;
-	const char *name;
-	ksu_ioctl_handler_t handler;
-	ksu_perm_check_t perm_check;
-};
-
-int ksu_install_fd(void);
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
 
-#ifdef CONFIG_KSU_SUPERKEY
 void ksu_superkey_unregister_prctl_kprobe(void);
 void ksu_superkey_register_prctl_kprobe(void);
-#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 #endif // #ifndef __KSU_H_SUPERCALLS

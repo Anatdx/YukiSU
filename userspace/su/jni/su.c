@@ -39,11 +39,11 @@ int main(int argc, char **argv, char **envp) {
         }
     }
 
-    const char *default_args[] = { "/system/bin/su", NULL };
+    const char *default_args[] = { "/system/bin/yk", NULL };
     if (argc < 1 || !argv) {
         argv = (char **)default_args;
     } else {
-        argv[0] = "/system/bin/su";
+        argv[0] = "/system/bin/yk";
     }
 
     execve("/data/adb/ksud", argv, envp);
