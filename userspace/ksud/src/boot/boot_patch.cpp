@@ -42,7 +42,9 @@ static uint64_t hash_superkey(const std::string& key) {
 // Inject superkey hash and flags into LKM file
 static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey,
                                    bool signature_bypass) {
-    uint64_t hash = hash_superkey(superkey);
+    // Trim so LKM hash matches Manager input (Manager trims before authenticate_superkey)
+    std::string key_trimmed = trim(superkey);
+    uint64_t hash = hash_superkey(key_trimmed);
     uint64_t flags = signature_bypass ? SUPERKEY_FLAG_SIGNATURE_BYPASS : 0;
     printf("- SuperKey hash: 0x%016llx\n", (unsigned long long)hash);
     printf("- Signature bypass: %s\n", signature_bypass ? "true" : "false");

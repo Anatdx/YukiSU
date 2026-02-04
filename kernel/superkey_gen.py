@@ -15,10 +15,11 @@ YukiSU SuperKey Hash Generator
 import sys
 
 def hash_superkey(key: str) -> int:
-    """计算超级密码的哈希值，与内核代码一致"""
+    """计算超级密码的哈希值，与内核 superkey.h 一致（按无符号字节）"""
     hash_val = 1000000007
     for c in key:
-        hash_val = (hash_val * 31 + ord(c)) & 0xFFFFFFFFFFFFFFFF  # 64-bit
+        # 与内核 (u64)(unsigned char)key[i] 一致
+        hash_val = (hash_val * 31 + (ord(c) & 0xFF)) & 0xFFFFFFFFFFFFFFFF
     return hash_val
 
 def main():

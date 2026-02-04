@@ -122,9 +122,9 @@ bool authenticate_superkey(const char *superkey) {
     LogDebug("authenticate_superkey: supercall AUTH success");
     return true;
   }
-  /* Always log failure in release so user can adb logcat and see errno. */
+  /* ret=-1 (-EPERM): key mismatch or kernel has no superkey configured (KSU_SUPERKEY). */
   __android_log_print(ANDROID_LOG_WARN, "KernelSU",
-                      "authenticate_superkey failed: syscall ret=%ld (0=ok, -13=wrong key or no key in kernel)",
+                      "authenticate_superkey failed: ret=%ld (-1=key wrong or kernel superkey not set)",
                       ret);
   return false;
 }

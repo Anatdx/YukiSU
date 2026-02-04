@@ -18,7 +18,7 @@ static inline u64 hash_superkey(const char *key)
 		return 0;
 
 	for (i = 0; key[i]; i++) {
-		hash = hash * 31ULL + (u64)key[i];
+		hash = hash * 31ULL + (u64)(unsigned char)key[i];
 	}
 	return hash;
 }
