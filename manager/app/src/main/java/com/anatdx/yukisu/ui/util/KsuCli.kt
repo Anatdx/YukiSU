@@ -393,7 +393,6 @@ fun installBoot(
     ota: Boolean,
     partition: String?,
     superKey: String? = null,
-    signatureBypass: Boolean = false,
     gkiPriority: Boolean = false,
     onFinish: (Boolean, Int) -> Unit,
     onStdout: (String) -> Unit,
@@ -429,10 +428,6 @@ fun installBoot(
     // Add superkey if specified
     if (!superKey.isNullOrBlank()) {
         cmd += " --superkey \"$superKey\""
-        // Add signature bypass flag if enabled
-        if (signatureBypass) {
-            cmd += " --signature-bypass"
-        }
     }
 
     // Add GKI priority flag if enabled (disables LKM priority)

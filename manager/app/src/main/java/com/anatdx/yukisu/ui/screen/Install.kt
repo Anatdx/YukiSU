@@ -137,11 +137,9 @@ fun InstallScreen(
     var partitionsState by remember { mutableStateOf<List<String>>(emptyList()) }
     var hasCustomSelected by remember { mutableStateOf(false) }
     
-    // SuperKey for APatch-style authentication
+    // SuperKey for APatch-style authentication (required for LKM install)
     var superKey by remember { mutableStateOf("") }
     var showSuperKeyInput by remember { mutableStateOf(false) }
-    // Signature bypass - when enabled, only SuperKey authentication works
-    var signatureBypass by remember { mutableStateOf(false) }
     // GKI priority - when enabled, GKI takes priority over LKM (LKM will not trigger yield)
     var gkiPriority by remember { mutableStateOf(false) }
 
@@ -166,8 +164,7 @@ fun InstallScreen(
                         lkm = lkmSelection,
                         ota = isOta,
                         partition = partitionSelection,
-                        superKey = superKey.ifBlank { null },
-                        signatureBypass = signatureBypass,
+                        superKey = superKey.trim().ifBlank { null },
                         gkiPriority = gkiPriority
                     )
                     navigator.navigate(FlashScreenDestination(flashIt))
@@ -397,85 +394,6 @@ fun InstallScreen(
                     }
                 }
 
-                // SuperKey 输入卡片 (仅在 LKM 安装模式下显示)
-                AnimatedVisibility(
-                    visible = installMethod is InstallMethod.DirectInstall || 
-                              installMethod is InstallMethod.DirectInstallToInactiveSlot ||
-                              installMethod is InstallMethod.SelectFile,
-                    enter = fadeIn() + expandVertically(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    ElevatedCard(
-                        colors = getCardColors(MaterialTheme.colorScheme.tertiaryContainer),
-                        elevation = getCardElevation(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = stringResource(id = R.string.superkey_optional_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.tertiary
-                                )
-                            }
-                            Text(
-                                text = stringResource(id = R.string.superkey_optional_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                            OutlinedTextField(
-                                value = superKey,
-                                onValueChange = { superKey = it },
-                                label = { Text(stringResource(id = R.string.superkey_input_hint)) },
-                                placeholder = { Text(stringResource(id = R.string.superkey_input_placeholder)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            
-                            // Signature bypass switch
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(id = R.string.signature_bypass_title),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                    Text(
-                                        text = stringResource(id = R.string.signature_bypass_desc),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                                    )
-                                }
-                                Switch(
-                                    checked = signatureBypass,
-                                    onCheckedChange = { signatureBypass = it },
-                                    enabled = superKey.isNotBlank()
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // GKI priority switch card (独立显示，适用于所有 LKM 安装模式)
                 AnimatedVisibility(
                     visible = installMethod is InstallMethod.DirectInstall || 
@@ -559,9 +477,66 @@ fun InstallScreen(
 
                 Spacer(Modifier.height(16.dp))
 
+                // SuperKey 卡片（必需）：紧挨修补按钮，仅在 LKM 安装模式显示
+                val isLkmInstall = installMethod is InstallMethod.DirectInstall ||
+                    installMethod is InstallMethod.DirectInstallToInactiveSlot ||
+                    installMethod is InstallMethod.SelectFile
+                AnimatedVisibility(
+                    visible = isLkmInstall,
+                    enter = fadeIn() + expandVertically(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    ElevatedCard(
+                        colors = getCardColors(MaterialTheme.colorScheme.tertiaryContainer),
+                        elevation = getCardElevation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(id = R.string.superkey_required),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                            Text(
+                                text = stringResource(id = R.string.superkey_required_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            OutlinedTextField(
+                                value = superKey,
+                                onValueChange = { superKey = it },
+                                label = { Text(stringResource(id = R.string.superkey_input_hint)) },
+                                placeholder = { Text(stringResource(id = R.string.superkey_input_placeholder)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = installMethod != null,
+                    enabled = when {
+                        installMethod == null -> false
+                        isLkmInstall -> superKey.isNotBlank()
+                        else -> true
+                    },
                     onClick = onClickNext,
                     shape = MaterialTheme.shapes.medium,
                     colors = ButtonDefaults.buttonColors(

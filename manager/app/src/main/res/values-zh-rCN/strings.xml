@@ -474,6 +474,7 @@
     <string name="superkey_auth_success">认证成功</string>
     <string name="superkey_auth_failed">认证失败</string>
     <string name="superkey_required">需要超级密钥认证</string>
+    <string name="superkey_required_desc">LKM 安装需要超级密钥认证。</string>
     <string name="superkey_not_configured">内核未配置超级密钥</string>
     <string name="show_password">显示密码</string>
     <string name="hide_password">隐藏密码</string>

@@ -460,6 +460,7 @@
     <string name="superkey_auth_success">Authentication successful</string>
     <string name="superkey_auth_failed">Authentication failed</string>
     <string name="superkey_required">SuperKey authentication required</string>
+    <string name="superkey_required_desc">LKM installation requires SuperKey authentication.</string>
     <string name="superkey_not_configured">SuperKey not configured in kernel</string>
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>

@@ -23,9 +23,6 @@ namespace ksud {
 // SuperKey magic marker (must match kernel's SUPERKEY_MAGIC)
 constexpr uint64_t SUPERKEY_MAGIC = 0x5355504552;  // "SUPER" in hex
 
-// SuperKey flags bit definitions
-constexpr uint64_t SUPERKEY_FLAG_SIGNATURE_BYPASS = 1;  // bit 0: disable signature verification
-
 // LKM Priority magic marker (must match kernel's LKM_PRIORITY_MAGIC)
 // "LKMPRIO" in hex (little-endian)
 constexpr uint64_t LKM_PRIORITY_MAGIC = 0x4F4952504D4B4C;
@@ -39,15 +36,13 @@ static uint64_t hash_superkey(const std::string& key) {
     return hash;
 }
 
-// Inject superkey hash and flags into LKM file
-static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey,
-                                   bool signature_bypass) {
+// Inject superkey hash and flags into LKM file (signature bypass option removed)
+static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey) {
     // Trim so LKM hash matches Manager input (Manager trims before authenticate_superkey)
     std::string key_trimmed = trim(superkey);
     uint64_t hash = hash_superkey(key_trimmed);
-    uint64_t flags = signature_bypass ? SUPERKEY_FLAG_SIGNATURE_BYPASS : 0;
+    uint64_t flags = 0;
     printf("- SuperKey hash: 0x%016llx\n", (unsigned long long)hash);
-    printf("- Signature bypass: %s\n", signature_bypass ? "true" : "false");
 
     std::fstream file(lkm_path, std::ios::in | std::ios::out | std::ios::binary);
     if (!file) {
@@ -276,7 +271,6 @@ struct BootPatchArgs {
     std::string module;             // -m, --module (LKM path)
     std::string init;               // -i, --init
     std::string superkey;           // -s, --superkey
-    bool signature_bypass = false;  // --signature-bypass
     bool lkm_priority = true;       // --lkm-priority
     bool ota = false;               // -u, --ota
     bool flash = false;             // -f, --flash
@@ -308,8 +302,6 @@ static BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args)
         } else if (arg == "-s" || arg == "--superkey") {
             if (i + 1 < args.size())
                 result.superkey = args[++i];
-        } else if (arg == "--signature-bypass") {
-            result.signature_bypass = true;
         } else if (arg == "--lkm-priority") {
             if (i + 1 < args.size()) {
                 std::string val = args[++i];
@@ -544,9 +536,7 @@ int boot_patch(const std::vector<std::string>& args) {
     // Inject SuperKey if specified
     if (!parsed.superkey.empty()) {
         printf("- Injecting SuperKey into LKM\n");
-        inject_superkey_to_lkm(kmod_file, parsed.superkey, parsed.signature_bypass);
-    } else if (parsed.signature_bypass) {
-        printf("- Warning: signature_bypass requires superkey to be set, ignoring\n");
+        inject_superkey_to_lkm(kmod_file, parsed.superkey);
     }
 
     // Inject LKM priority setting
