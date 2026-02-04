@@ -135,25 +135,8 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
-                        // 不保存 SuperKey
+                        // SuperKey 强制模式（APatch 风格）：认证后始终保存，开机自动用 syscall+superkey 认证
                         val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
-                        var skipStoreSuperKey by remember {
-                            mutableStateOf(superKeyPrefs.getBoolean("skip_store_superkey", false))
-                        }
-                        SwitchItem(
-                            icon = Icons.Filled.Key,
-                            title = stringResource(R.string.settings_donot_store_superkey),
-                            summary = stringResource(R.string.settings_donot_store_superkey_summary),
-                            checked = skipStoreSuperKey,
-                            onCheckedChange = {
-                                skipStoreSuperKey = it
-                                superKeyPrefs.edit().putBoolean("skip_store_superkey", it).apply()
-                                if (it) {
-                                    // 如果开启了不保存，立即清除已保存的密钥
-                                    superKeyPrefs.edit().remove("saved_superkey").apply()
-                                }
-                            }
-                        )
 
                         // 清除 SuperKey
                         val clearKeyDialog = rememberConfirmDialog(onConfirm = {

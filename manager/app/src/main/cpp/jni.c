@@ -6,7 +6,6 @@
 #include <linux/capability.h>
 #include <pwd.h>
 #include <string.h>
-#include <sys/prctl.h>
 
 NativeBridgeNP(getVersion, jint) {
   return (jint)get_version();

@@ -154,12 +154,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 val success = Natives.authenticateSuperKey(superKey)
                                 if (success) {
-                                    // 检查是否允许保存 SuperKey
-                                    val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
-                                    if (!skipStore) {
-                                        // 保存 SuperKey 到本地
-                                        superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
-                                    }
+                                    // APatch 风格：超级密钥强制，认证成功后始终保存以便开机自动认证（syscall+superkey）
+                                    superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
                                 }
                                 success
                             }
@@ -198,13 +194,12 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     }
                 )
                 
-                // 自动尝试用保存的 SuperKey 认证
+                // 开机后使用保存的 SuperKey 自动认证（APatch 风格：仅 syscall+superkey，无 prctl）
                 LaunchedEffect(viewModel.isCoreDataLoaded) {
                     if (viewModel.isCoreDataLoaded && !viewModel.systemStatus.isManager) {
                         val savedKey = superKeyPrefs.getString("saved_superkey", null)
                         if (!savedKey.isNullOrBlank()) {
                             try {
-                                // 在 IO 线程执行 Native 调用和 Shell 刷新
                                 val success = withContext(Dispatchers.IO) {
                                     val authSuccess = Natives.authenticateSuperKey(savedKey)
                                     if (authSuccess) {
