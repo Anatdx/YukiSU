@@ -29,6 +29,15 @@ set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
 # Fetch third-party dependencies
 include(FetchContent)
 
+# PicoSHA2 - SHA-256 (used by flash_partition for partition hash)
+FetchContent_Declare(
+    picosha2
+    GIT_REPOSITORY https://github.com/okdshin/PicoSHA2.git
+    GIT_TAG v1.0.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(picosha2)
+
 # miniz - Lightweight ZIP library
 FetchContent_Declare(
     miniz
@@ -99,6 +108,7 @@ set(SOURCES
 
 # 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
 include_directories(${GENERATED_DIR})
 
