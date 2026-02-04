@@ -272,7 +272,7 @@ static int cmd_debug(const std::vector<std::string>& args) {
 
     const std::string& subcmd = args[0];
 
-    } else if (subcmd == "version") {
+    if (subcmd == "version") {
         printf("Kernel Version: %d\n", get_version());
         return 0;
     } else if (subcmd == "su") {
