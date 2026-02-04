@@ -266,17 +266,17 @@ fun SuperKeyDialog(
 
                         Button(
                             onClick = {
-                                if (superKeyInput.isBlank()) {
+                                val key = superKeyInput.trim()
+                                if (key.isBlank()) {
                                     errorMessage = emptyKeyMessage
                                     return@Button
                                 }
-                                
                                 isLoading = true
                                 CoroutineScope(Dispatchers.Main).launch {
                                     try {
-                                        val success = onAuthenticate(superKeyInput)
+                                        val success = onAuthenticate(key)
                                         if (success) {
-                                            val result = SuperKeyAuthResult.Success(superKeyInput)
+                                            val result = SuperKeyAuthResult.Success(key)
                                             state.submitResult(result)
                                             onResult(result)
                                         } else {
