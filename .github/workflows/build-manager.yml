@@ -53,8 +53,6 @@ jobs:
   build-manager:
     needs: build-ksud
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
     defaults:
       run:
         working-directory: ./manager
