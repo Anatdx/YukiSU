@@ -10,7 +10,6 @@ add_library(kernelsu
         SHARED
         jni.c
         ksu.c
-        legacy.c
 )
 
 find_library(log-lib log)

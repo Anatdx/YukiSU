@@ -96,20 +96,4 @@ bool is_superkey_configured(void);
 bool is_superkey_authenticated(void);
 bool ksu_driver_present(void);
 
-// Legacy (prctl-based, separate from ioctl; kept for reference only).
-struct ksu_version_info {
-  int32_t version;
-  int32_t flags;
-};
-struct ksu_version_info legacy_get_info(void);
-bool legacy_get_allow_list(int *uids, int *size);
-bool legacy_is_safe_mode(void);
-bool legacy_uid_should_umount(int uid);
-bool legacy_set_app_profile(const struct app_profile *profile);
-bool legacy_get_app_profile(char *key, struct app_profile *profile);
-bool legacy_set_su_enabled(bool enabled);
-bool legacy_is_su_enabled(void);
-bool legacy_get_hook_type(char *hook_type, size_t size);
-void legacy_get_full_version(char *buff);
-
 #endif
