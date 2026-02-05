@@ -118,19 +118,23 @@ bool authenticate_superkey(const char *superkey) {
     LogDebug("authenticate_superkey: superkey is null");
     return false;
   }
-  long ret = ksu_supercall((long)superkey, KSU_SC_YUKISU_SUPERKEY_AUTH, 0, 0, 0);
-  if (ret == 0) {
+  long auth_ret = ksu_supercall((long)superkey, KSU_SC_YUKISU_SUPERKEY_AUTH, 0, 0, 0);
+  if (auth_ret == 0) {
     s_superkey_authed = true;
     LogDebug("authenticate_superkey: supercall AUTH success");
     return true;
   }
-  int configured = is_superkey_configured() ? 1 : 0;
+  long status_ret = ksu_supercall(0, KSU_SC_YUKISU_SUPERKEY_STATUS, 0, 0, 0);
+  int configured = (status_ret == 1) ? 1 : 0;
   __android_log_print(ANDROID_LOG_WARN, "KernelSU",
-                      "authenticate_superkey failed: ret=%ld kernel_has_superkey=%d (1=key_mismatch 0=LKM_not_set)",
-                      ret, configured);
-  if (configured == 0) {
+                      "authenticate_superkey failed: auth_ret=%ld status_ret=%ld (status 1=key_ok 0=no_key -1=blocked)",
+                      auth_ret, status_ret);
+  if (status_ret == -1) {
     __android_log_print(ANDROID_LOG_WARN, "KernelSU",
-                        "LKM_not_set: ensure (1) installed with SuperKey and rebooted (2) device booted from the flashed slot. Check: adb shell dmesg | grep -i superkey");
+                        "Supercall blocked (status_ret=-1): allow syscall 45 in seccomp or check KernelPatch hook");
+  } else if (configured == 0) {
+    __android_log_print(ANDROID_LOG_WARN, "KernelSU",
+                        "LKM_not_set: install with SuperKey, reboot, boot from flashed slot. dmesg | grep -i superkey");
   }
   return false;
 }
