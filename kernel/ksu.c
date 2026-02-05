@@ -36,6 +36,7 @@
 #include "superkey.h"
 #include "sulog.h"
 #include "syscall_hook_manager.h"
+#include "seccomp_kprobe.h"
 
 struct cred *ksu_cred;
 #ifdef CONFIG_KSU_LKM
@@ -267,6 +268,9 @@ int __init kernelsu_init(void)
 	ksu_ksud_init();
 	ksu_syscall_hook_manager_init();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
+#ifdef CONFIG_KSU_LKM
+	ksu_seccomp_kprobe_init();
+#endif // #ifdef CONFIG_KSU_LKM
 
 #ifndef CONFIG_KSU_LKM
 	ksu_lsm_hook_init();
@@ -301,6 +305,9 @@ void kernelsu_exit(void)
 
 	ksu_allowlist_exit();
 
+#ifdef CONFIG_KSU_LKM
+	ksu_seccomp_kprobe_exit();
+#endif // #ifdef CONFIG_KSU_LKM
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
 	ksu_syscall_hook_manager_exit();

@@ -11,6 +11,11 @@ endif
 
 kernelsu-objs += setuid_hook.o
 kernelsu-objs += kernel_umount.o
+
+# LKM-only: kprobe at seccomp entry to allow syscall 45 before filter runs
+ifeq ($(CONFIG_KSU_LKM), y)
+kernelsu-objs += seccomp_kprobe.o
+endif
 kernelsu-objs += supercalls.o
 kernelsu-objs += feature.o
 kernelsu-objs += ksud.o
