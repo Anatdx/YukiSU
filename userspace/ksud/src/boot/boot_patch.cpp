@@ -669,6 +669,22 @@ int boot_patch(const std::vector<std::string>& args) {
     do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 init init");
     do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 kernelsu.ko kernelsu.ko");
 
+    // Add SuperKey hash file to ramdisk so kernel can read it when LKM .data is not used (e.g. wrong slot)
+    if (!parsed.superkey.empty()) {
+        std::string key_trimmed = trim(parsed.superkey);
+        uint64_t hash = hash_superkey(key_trimmed);
+        std::string hash_file = workdir + "/ksu_superkey_hash";
+        std::ofstream of(hash_file, std::ios::binary);
+        if (of) {
+            of.write(reinterpret_cast<const char*>(&hash), sizeof(hash));
+            of.close();
+            if (do_cpio_cmd(magiskboot, workdir, ramdisk,
+                            "add 0644 ksu_superkey_hash ksu_superkey_hash")) {
+                printf("- Added ksu_superkey_hash to ramdisk (fallback for superkey auth)\n");
+            }
+        }
+    }
+
     // Backup if flashing and not already patched
     if (!already_patched && parsed.flash) {
         if (!do_backup(magiskboot, workdir, ramdisk, bootimage)) {

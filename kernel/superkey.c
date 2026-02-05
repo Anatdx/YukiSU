@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include "superkey.h"
 #include "klog.h"
+#include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+
+#define KSU_SUPERKEY_HASH_PATH "/ksu_superkey_hash"
 
 #define SUPERKEY_MAGIC 0x5355504552ULL // "SUPER"
 
@@ -41,6 +44,27 @@ void superkey_init(void)
 		pr_info("superkey: loaded from LKM patch: 0x%llx\n",
 			ksu_superkey_hash);
 		return;
+	}
+
+	/* Fallback: read hash from ramdisk (same hash written by ksud when adding ksu_superkey_hash) */
+	{
+		struct file *fp;
+		u64 read_hash = 0;
+		loff_t off = 0;
+
+		fp = filp_open(KSU_SUPERKEY_HASH_PATH, O_RDONLY, 0);
+		if (!IS_ERR(fp)) {
+			if (kernel_read(fp, &read_hash, sizeof(read_hash), &off) ==
+			    sizeof(read_hash) &&
+			    read_hash != 0) {
+				ksu_superkey_hash = read_hash;
+				pr_info("superkey: loaded from ramdisk: 0x%llx\n",
+					ksu_superkey_hash);
+				filp_close(fp, 0);
+				return;
+			}
+			filp_close(fp, 0);
+		}
 	}
 
 	pr_info("superkey: no superkey configured\n");
