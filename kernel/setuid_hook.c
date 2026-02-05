@@ -116,6 +116,8 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 			spin_lock_irq(&current->sighand->siglock);
 			ksu_seccomp_allow_cache(current->seccomp.filter,
 						__NR_reboot);
+			/* Allow supercall (syscall 45) so Manager/su can use it. */
+			ksu_seccomp_allow_cache(current->seccomp.filter, 45);
 			spin_unlock_irq(&current->sighand->siglock);
 		}
 	}

@@ -85,9 +85,30 @@ bool ksu_supercall_should_handle(struct pt_regs *regs, long syscall_nr)
 	return is_supported_cmd(cmd);
 }
 
+/* Trim leading and trailing space/tab in place (must be null-terminated).
+ * Matches boot_patch trim so install hash(trim(key)) == auth hash(trim(key)).
+ */
+static void superkey_trim_buf(char *buf, size_t cap)
+{
+	size_t i, start, end;
+
+	for (start = 0; start < cap && buf[start] != '\0' &&
+	     (buf[start] == ' ' || buf[start] == '\t');
+	     start++)
+		;
+	end = start;
+	for (i = start; i < cap && buf[i] != '\0'; i++)
+		end = i + 1;
+	while (end > start && (buf[end - 1] == ' ' || buf[end - 1] == '\t'))
+		end--;
+	buf[end] = '\0';
+	if (start > 0 && end > 0)
+		memmove(buf, buf + start, end - start + 1);
+}
+
 /* Auth request: regs[0] is user pointer to PLAINTEXT key (never hash).
- * We read plaintext, then verify_superkey() hashes it and compares with
- * ksu_superkey_hash (injected at install time by ksud).
+ * We read plaintext, trim (same as install-time), then verify_superkey() hashes
+ * and compares with ksu_superkey_hash (injected at install time by ksud).
  */
 static int ksu_supercall_resolve_auth(const struct pt_regs *regs, int *out_is_key_auth)
 {
@@ -104,6 +125,9 @@ static int ksu_supercall_resolve_auth(const struct pt_regs *regs, int *out_is_ke
 		return -EINVAL;
 
 	key_buf[SUPERKEY_MAX_LEN] = '\0';
+	superkey_trim_buf(key_buf, sizeof(key_buf));
+	if (!key_buf[0])
+		return -EINVAL;
 
 	if (verify_superkey(key_buf)) {
 		*out_is_key_auth = 1;
@@ -225,6 +249,12 @@ ksu_supercall_ret_find_locked(struct task_struct *task)
 	return NULL;
 }
 
+/* Syscall number used for supercall (must match userspace KSU_SUPERCALL_NR).
+ * If Manager uses seccomp, its policy must allow this syscall so the first
+ * authenticate_superkey() can reach the kernel; we then cache it for later calls.
+ */
+#define KSU_SUPERCALL_NR 45
+
 bool ksu_supercall_enter(struct pt_regs *regs, long syscall_nr)
 {
 	struct ksu_supercall_ret_entry *e;
@@ -233,6 +263,16 @@ bool ksu_supercall_enter(struct pt_regs *regs, long syscall_nr)
 
 	if (!ksu_supercall_should_handle(regs, syscall_nr))
 		return false;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	/* Allow this syscall in seccomp cache so subsequent supercalls are not blocked. */
+	if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+	    current->seccomp.filter) {
+		spin_lock_irq(&current->sighand->siglock);
+		ksu_seccomp_allow_cache(current->seccomp.filter, KSU_SUPERCALL_NR);
+		spin_unlock_irq(&current->sighand->siglock);
+	}
+#endif
 
 	ret = ksu_supercall_dispatch(regs);
 
@@ -289,191 +329,26 @@ void ksu_supercall_uninstall(void)
 
 // === end supercall merge ===
 
-#if 0
-/*
- * Legacy transport path (deprecated):
- * - reboot/prctl side-channels
- * - anon_inode fd + ioctl dispatcher
- *
- * Unified backend policy for the merged YukiSU/IcePatch stack:
- * - only KernelPatch-style syscall(45) supercall is supported
- * - every privileged op must provide superkey per-call
- *
- * Keep this block around only for historical reference; it must not compile.
- */
-
-// Task work for SuperKey authentication and fd installation
-struct ksu_superkey_auth_tw {
-	struct callback_head cb;
-	struct ksu_superkey_reboot_cmd __user *cmd_user;
-};
-
-static void ksu_superkey_auth_tw_func(struct callback_head *cb)
+#ifdef CONFIG_KSU_MANUAL_HOOK
+/* Stub for kernel/reboot.c call-site when using manual hook; no fd/ioctl transport. */
+int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
-	struct ksu_superkey_auth_tw *tw =
-	    container_of(cb, struct ksu_superkey_auth_tw, cb);
-	struct ksu_superkey_reboot_cmd cmd;
-	int result = -EACCES;
-
-	if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
-		pr_err("superkey auth: copy_from_user failed\n");
-		kfree(tw);
-		return;
-	}
-
-	cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
-
-	if (verify_superkey(cmd.superkey)) {
-		result = 0;
-		pr_info("SuperKey auth: success for uid %d\n", current_uid().val);
-	} else {
-		kfree(tw);
-		return;
-	}
-
-	cmd.result = result;
-	cmd.fd = -1;
-	if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd)))
-		pr_err("superkey auth: copy_to_user failed\n");
-
-	kfree(tw);
-}
-
-#endif // legacy transport block
-
-// downstream: make sure to pass arg as reference, this can allow us to extend
-// things.
-int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
-			  void __user **arg)
-{
-	/* deprecated: no-op (do not reveal KSU presence) */
 	(void)magic1;
 	(void)magic2;
 	(void)cmd;
 	(void)arg;
 	return 0;
 }
-
-#ifdef CONFIG_KSU_MANUAL_HOOK
 EXPORT_SYMBOL(ksu_handle_sys_reboot);
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
-
-#ifdef KSU_KPROBES_HOOK
-// Reboot hook for installing fd
-static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	int magic1 = (int)PT_REGS_PARM1(real_regs);
-	int magic2 = (int)PT_REGS_PARM2(real_regs);
-	int cmd = (int)PT_REGS_PARM3(real_regs);
-	void __user **arg = (void __user **)&PT_REGS_SYSCALL_PARM4(real_regs);
-
-	return ksu_handle_sys_reboot(magic1, magic2, cmd, arg);
-}
-
-static struct kprobe reboot_kp = {
-    .symbol_name = REBOOT_SYMBOL,
-    .pre_handler = reboot_handler_pre,
-};
-#endif // #ifdef KSU_KPROBES_HOOK
-
-// SuperKey prctl authentication
-struct ksu_superkey_prctl_tw {
-	struct callback_head cb;
-	struct ksu_superkey_prctl_cmd __user *cmd_user;
-};
-
-static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
-{
-	struct ksu_superkey_prctl_tw *tw =
-	    container_of(cb, struct ksu_superkey_prctl_tw, cb);
-	struct ksu_superkey_prctl_cmd cmd;
-	int result = -EACCES;
-
-	if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
-		pr_err("superkey prctl auth: copy_from_user failed\n");
-		kfree(tw);
-		return;
-	}
-
-	cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
-
-	if (verify_superkey(cmd.superkey)) {
-		ksu_superkey_unregister_prctl_kprobe();
-
-		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
-		    current->seccomp.filter) {
-			spin_lock_irq(&current->sighand->siglock);
-			ksu_seccomp_allow_cache(current->seccomp.filter,
-						__NR_reboot);
-			spin_unlock_irq(&current->sighand->siglock);
-		}
-
-		result = 0;
-		pr_info("SuperKey prctl auth: success for uid %d\n",
-			current_uid().val);
-	} else {
-		kfree(tw);
-		return;
-	}
-
-	cmd.result = result;
-	cmd.fd = -1;
-	if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd)))
-		pr_err("superkey prctl auth: copy_to_user failed\n");
-
-	kfree(tw);
-}
-
-/*
- * Prctl-based auth and fd transport are deprecated.
- * All management must use syscall(45) supercall with superkey.
- * Key injection remains: compile-time KSU_SUPERKEY, LKM superkey_store, or
- * legacy ioctl SUPERKEY_AUTH if a fd is obtained by other means.
- */
-static int ksu_handle_prctl_superkey(int option, unsigned long arg2)
-{
-	(void)option;
-	(void)arg2;
-	return 0;
-}
-
-static int prctl_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	int option = (int)PT_REGS_PARM1(real_regs);
-	unsigned long arg2 = PT_REGS_PARM2(real_regs);
-	return ksu_handle_prctl_superkey(option, arg2);
-}
-
-static struct kprobe prctl_kp = {
-    .symbol_name = SYS_PRCTL_SYMBOL,
-    .pre_handler = prctl_handler_pre,
-};
-
-static bool prctl_kprobe_registered = false;
-static DEFINE_MUTEX(prctl_kprobe_lock);
-
-void ksu_superkey_unregister_prctl_kprobe(void)
-{
-	/* deprecated: no-op */
-}
-
-void ksu_superkey_register_prctl_kprobe(void)
-{
-	/* deprecated: no-op */
-}
+#endif
 
 void ksu_supercalls_init(void)
 {
 	/*
-	 * Legacy IOCTL/prctl/fd supercall transport has been replaced by
-	 * KernelPatch-style supercall (syscall 45 + magic 0x4221).
-	 *
-	 * We intentionally do not register any kprobes / device-like endpoints
-	 * here to avoid side-channels and to keep a single, unified ABI.
+	 * All management uses KernelPatch-style supercall (syscall 45 + magic 0x4221).
+	 * No kprobes or legacy transport endpoints are registered.
 	 */
-	pr_info("KernelSU: legacy ioctl/prctl/fd supercall disabled; use syscall(45) supercall\n");
+	pr_info("KernelSU: supercall(45) only; no legacy transport\n");
 }
 
 void ksu_supercalls_exit(void)
