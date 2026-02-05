@@ -85,6 +85,10 @@ bool ksu_supercall_should_handle(struct pt_regs *regs, long syscall_nr)
 	return is_supported_cmd(cmd);
 }
 
+/* Auth request: regs[0] is user pointer to PLAINTEXT key (never hash).
+ * We read plaintext, then verify_superkey() hashes it and compares with
+ * ksu_superkey_hash (injected at install time by ksud).
+ */
 static int ksu_supercall_resolve_auth(const struct pt_regs *regs, int *out_is_key_auth)
 {
 	unsigned long key_ptr = (unsigned long)regs->regs[0];

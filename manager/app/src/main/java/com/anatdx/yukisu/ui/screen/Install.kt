@@ -437,50 +437,57 @@ fun InstallScreen(
                     }
                 }
 
-                // 高级功能入口
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.install_advanced_tools),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                val isLkmInstall = installMethod is InstallMethod.DirectInstall ||
+                    installMethod is InstallMethod.DirectInstallToInactiveSlot ||
+                    installMethod is InstallMethod.SelectFile
 
-                // 分区管理入口
-                ElevatedCard(
-                    onClick = { navigator.navigate(PartitionManagerScreenDestination) },
-                    colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                    elevation = getCardElevation(),
-                    modifier = Modifier.fillMaxWidth()
+                // 高级功能入口（选择 LKM 安装时隐藏）
+                AnimatedVisibility(
+                    visible = !isLkmInstall,
+                    enter = fadeIn() + expandVertically(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
-                    ListItem(
-                        headlineContent = {
-                            Text(stringResource(R.string.partition_manager))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.partition_manager_desc))
-                        },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.Storage,
-                                contentDescription = null
-                            )
-                        },
-                        trailingContent = {
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.install_advanced_tools),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        ElevatedCard(
+                            onClick = { navigator.navigate(PartitionManagerScreenDestination) },
+                            colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
+                            elevation = getCardElevation(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Text(stringResource(R.string.partition_manager))
+                                },
+                                supportingContent = {
+                                    Text(stringResource(R.string.partition_manager_desc))
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        Icons.Default.Storage,
+                                        contentDescription = null
+                                    )
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        Icons.Default.ChevronRight,
+                                        contentDescription = null
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
 
                 // SuperKey 卡片（必需）：紧挨修补按钮，仅在 LKM 安装模式显示
-                val isLkmInstall = installMethod is InstallMethod.DirectInstall ||
-                    installMethod is InstallMethod.DirectInstallToInactiveSlot ||
-                    installMethod is InstallMethod.SelectFile
                 AnimatedVisibility(
                     visible = isLkmInstall,
                     enter = fadeIn() + expandVertically(),

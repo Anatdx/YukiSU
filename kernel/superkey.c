@@ -46,6 +46,8 @@ void superkey_init(void)
 	pr_info("superkey: no superkey configured\n");
 }
 
+/* Caller passes plaintext key from userspace; we hash and compare with ksu_superkey_hash
+ * (which was set at init from LKM-injected hash, never plaintext). */
 int superkey_authenticate(const char __user *user_key)
 {
 	char key[SUPERKEY_MAX_LEN + 1] = {0};

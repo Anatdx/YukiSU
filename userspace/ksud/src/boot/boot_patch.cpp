@@ -36,12 +36,11 @@ static uint64_t hash_superkey(const std::string& key) {
     return hash;
 }
 
-// Inject superkey hash and flags into LKM file (signature bypass option removed)
+// Install-time: inject only the HASH of the key into LKM (never store plaintext).
+// Auth-time: Manager sends plaintext to kernel; kernel hashes and compares (see supercalls.c).
 static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey) {
-    // Trim so LKM hash matches Manager input (Manager trims before authenticate_superkey)
     std::string key_trimmed = trim(superkey);
     uint64_t hash = hash_superkey(key_trimmed);
-    uint64_t flags = 0;
     printf("- SuperKey hash: 0x%016llx\n", (unsigned long long)hash);
 
     std::fstream file(lkm_path, std::ios::in | std::ios::out | std::ios::binary);
@@ -58,33 +57,52 @@ static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::strin
     std::vector<uint8_t> content(size);
     file.read(reinterpret_cast<char*>(content.data()), size);
 
-    // Search for SUPERKEY_MAGIC in the binary
+    // Search for SUPERKEY_MAGIC (8 bytes). Prefer location where +8 is zero (unpatched).
     uint8_t magic_bytes[8];
     memcpy(magic_bytes, &SUPERKEY_MAGIC, sizeof(magic_bytes));
+    const uint8_t zero8[8] = {0};
 
-    bool found = false;
-    for (size_t i = 0; i + 24 <= size; i++) {
-        if (memcmp(&content[i], magic_bytes, 8) == 0) {
-            // Found magic, patch the hash at offset +8
-            memcpy(&content[i + 8], &hash, sizeof(hash));
-            // Patch the flags at offset +16
-            memcpy(&content[i + 16], &flags, sizeof(flags));
-            found = true;
-            printf("- Injected SuperKey data at offset 0x%zx\n", i);
+    size_t patch_offset = SIZE_MAX;
+    for (size_t i = 0; i + 16 <= size; i++) {
+        if (memcmp(&content[i], magic_bytes, 8) != 0)
+            continue;
+        // Prefer superkey_store (magic followed by zero hash)
+        if (memcmp(&content[i + 8], zero8, 8) == 0) {
+            patch_offset = i;
             break;
+        }
+        // Else remember first magic occurrence in case no magic+zero exists (weird layout)
+        if (patch_offset == SIZE_MAX)
+            patch_offset = i;
+    }
+    if (patch_offset == SIZE_MAX) {
+        for (size_t i = 0; i + 8 <= size; i++) {
+            if (memcmp(&content[i], magic_bytes, 8) == 0) {
+                patch_offset = i;
+                break;
+            }
         }
     }
 
-    if (!found) {
-        printf("- Warning: SUPERKEY_MAGIC not found in LKM, SuperKey may not work\n");
-        printf("- Make sure the kernel module is compiled with SuperKey support\n");
+    bool found = (patch_offset != SIZE_MAX);
+    if (found) {
+        bool was_nonzero = (memcmp(&content[patch_offset + 8], zero8, 8) != 0);
+        memcpy(&content[patch_offset + 8], &hash, sizeof(hash));
+        printf("- Injected SuperKey at offset 0x%zx (hash 0x%016llx)\n",
+               patch_offset, (unsigned long long)hash);
+        printf("- Reboot required for SuperKey to take effect\n");
+        if (was_nonzero) {
+            printf("- Note: hash slot was non-zero before patch; if auth still fails, run: adb shell dmesg | grep -i superkey\n");
+        }
     } else {
-        // Write back the patched content
-        file.seekp(0, std::ios::beg);
-        file.write(reinterpret_cast<char*>(content.data()), size);
-        file.sync();
+        LOGE("SUPERKEY_MAGIC not found in LKM");
+        printf("- Build the LKM from YukiSU kernel source (with superkey.o)\n");
+        return false;
     }
 
+    file.seekp(0, std::ios::beg);
+    file.write(reinterpret_cast<char*>(content.data()), size);
+    file.sync();
     return true;
 }
 
@@ -533,10 +551,13 @@ int boot_patch(const std::vector<std::string>& args) {
         }
     }
 
-    // Inject SuperKey if specified
+    // Inject SuperKey if specified (required for LKM install)
     if (!parsed.superkey.empty()) {
         printf("- Injecting SuperKey into LKM\n");
-        inject_superkey_to_lkm(kmod_file, parsed.superkey);
+        if (!inject_superkey_to_lkm(kmod_file, parsed.superkey)) {
+            cleanup();
+            return 1;
+        }
     }
 
     // Inject LKM priority setting

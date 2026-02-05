@@ -111,6 +111,8 @@ void get_hook_type(char *buff) {
   }
 }
 
+/* Pass PLAINTEXT key to kernel (pointer); kernel hashes and compares with stored hash.
+ * Install time injects only hash into LKM (ksud boot_patch); never send hash here. */
 bool authenticate_superkey(const char *superkey) {
   if (!superkey) {
     LogDebug("authenticate_superkey: superkey is null");
@@ -122,11 +124,14 @@ bool authenticate_superkey(const char *superkey) {
     LogDebug("authenticate_superkey: supercall AUTH success");
     return true;
   }
-  /* Diagnose: kernel has hash (status=1) but key wrong, or kernel has no hash (status=0). */
   int configured = is_superkey_configured() ? 1 : 0;
   __android_log_print(ANDROID_LOG_WARN, "KernelSU",
                       "authenticate_superkey failed: ret=%ld kernel_has_superkey=%d (1=key_mismatch 0=LKM_not_set)",
                       ret, configured);
+  if (configured == 0) {
+    __android_log_print(ANDROID_LOG_WARN, "KernelSU",
+                        "LKM_not_set: ensure (1) installed with SuperKey and rebooted (2) device booted from the flashed slot. Check: adb shell dmesg | grep -i superkey");
+  }
   return false;
 }
 
