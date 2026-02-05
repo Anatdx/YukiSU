@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/prctl.h>
 #include <sys/syscall.h>
 
 #include "ksu.h"
@@ -16,8 +17,16 @@
 #define KSU_SC_YUKISU_SUPERKEY_AUTH 0x2002
 #define KSU_SC_YUKISU_SUPERKEY_STATUS 0x2003
 
+/* prctl path: SECCOMP-safe when syscall 45 is blocked. Kernel expects args[5]. */
+#define KSU_PRCTL_SUPERCALL 0x59555343U
+
 static long ksu_supercall(long arg0, uint16_t cmd, long a2, long a3, long a4) {
   long ver_cmd = (long)((KSU_SUPERCALL_MAGIC << 16) | (cmd & 0xFFFF));
+  long args[5] = { arg0, ver_cmd, a2, a3, a4 };
+  long ret = prctl((int)KSU_PRCTL_SUPERCALL, (unsigned long)args, 0, 0, 0);
+  if (ret != -1)
+    return ret;
+  /* Fallback to syscall 45 if prctl not supported or blocked */
   return syscall(KSU_SUPERCALL_NR, arg0, ver_cmd, a2, a3, a4);
 }
 

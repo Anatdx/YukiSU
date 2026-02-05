@@ -9,6 +9,11 @@
 // === syscall(45) supercall (APatch/KernelPatch-style) ===
 #define SUPERCALL_MAGIC 0x4221
 
+/* prctl option for supercall (SECCOMP-safe path when syscall 45 is blocked).
+ * arg2 = (unsigned long)ptr to long args[5] = { arg0, ver_cmd, a2, a3, a4 }.
+ */
+#define KSU_PRCTL_SUPERCALL 0x59555343U /* "YUSC" */
+
 /*
  * Supercall cmd numbers.
  * Keep in sync with IcePatch uapi (scdefs.h) and KernelPatch patch/include/uapi/scdefs.h.

@@ -3,7 +3,9 @@
 #include "linux/printk.h"
 #include "selinux/selinux.h"
 #include <asm/syscall.h>
+#include <asm/unistd.h>
 #include <linux/kprobes.h>
+#include <linux/uaccess.h>
 #include <linux/namei.h>
 #include <linux/ptrace.h>
 #include <linux/slab.h>
@@ -20,6 +22,7 @@
 #include "ksud.h"
 #include "selinux/selinux.h"
 #include "setuid_hook.h"
+#include "supercalls.h"
 #include "sucompat.h"
 #include "syscall_hook_manager.h"
 #include "util.h"
@@ -319,6 +322,31 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
  */
 #define KSU_SUPERCALL_NR 45
 
+/* prctl(KSU_PRCTL_SUPERCALL, ptr): ptr points to long args[5] = { arg0, ver_cmd, a2, a3, a4 }.
+ * SECCOMP-safe: prctl is allowed by typical policies; avoids syscall 45 being blocked.
+ */
+static bool ksu_handle_prctl_supercall(struct pt_regs *regs)
+{
+	long args[5];
+	const void __user *uptr = (const void __user *)PT_REGS_PARM2(regs);
+
+	if (copy_from_user(args, uptr, sizeof(args)) != 0)
+		return false;
+	regs->regs[0] = args[0];
+	regs->regs[1] = args[1];
+	regs->regs[2] = args[2];
+	regs->regs[3] = args[3];
+	regs->regs[4] = args[4];
+	return ksu_supercall_enter(regs, 45);
+}
+
+static void ksu_sys_exit_handler(void *data, struct pt_regs *regs, long id)
+{
+	(void)data;
+	(void)id;
+	ksu_supercall_exit(regs);
+}
+
 // Generic sys_enter handler that dispatches to specific handlers
 static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 {
@@ -327,6 +355,12 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 	    current->seccomp.filter)
 		ksu_seccomp_allow_cache(current->seccomp.filter, KSU_SUPERCALL_NR);
 #endif
+
+	if (id == __NR_prctl &&
+	    (unsigned long)PT_REGS_PARM1(regs) == KSU_PRCTL_SUPERCALL) {
+		if (ksu_handle_prctl_supercall(regs))
+			return;
+	}
 
 	if (unlikely(check_syscall_fastpath(id))) {
 #ifdef KSU_TP_HOOK
@@ -418,6 +452,13 @@ void ksu_syscall_hook_manager_init(void)
 	} else {
 		pr_info("hook_manager: sys_enter tracepoint registered\n");
 	}
+	ret = register_trace_sys_exit(ksu_sys_exit_handler, NULL);
+	if (ret) {
+		pr_err("hook_manager: failed to register sys_exit tracepoint: %d\n",
+		       ret);
+	} else {
+		pr_info("hook_manager: sys_exit tracepoint registered (supercall ret)\n");
+	}
 #endif // #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 	ksu_setuid_hook_init();
 	ksu_sucompat_init();
@@ -427,10 +468,10 @@ void ksu_syscall_hook_manager_exit(void)
 {
 	pr_info("hook_manager: ksu_hook_manager_exit called\n");
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
+	unregister_trace_sys_exit(ksu_sys_exit_handler, NULL);
 	unregister_trace_sys_enter(ksu_sys_enter_handler, NULL);
 	tracepoint_synchronize_unregister();
-	pr_info("hook_manager: sys_enter tracepoint "
-		"unregistered\n");
+	pr_info("hook_manager: sys_enter/sys_exit tracepoints unregistered\n");
 #endif // #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 
 #ifdef CONFIG_KRETPROBES
