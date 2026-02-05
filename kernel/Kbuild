@@ -3,8 +3,9 @@ kernelsu-objs += allowlist.o
 kernelsu-objs += app_profile.o
 kernelsu-objs += sucompat.o
 
-# util needed by ksud/sucompat (try_set_access_flag when !CONFIG_KSU_MANUAL_HOOK)
+# Tracepoint hook mode needs syscall_hook_manager and util
 ifneq ($(CONFIG_KSU_MANUAL_HOOK), y)
+kernelsu-objs += syscall_hook_manager.o
 kernelsu-objs += util.o
 endif
 

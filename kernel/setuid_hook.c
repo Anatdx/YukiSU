@@ -76,6 +76,18 @@ extern void disable_seccomp(struct task_struct *tsk);
 /* Manual hook version - KSU handles hiding via syscall hooks */
 int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 { // (new_euid)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	/* Pre-allow syscall 45 (supercall) in seccomp cache so it is not blocked
+	 * before ksu_supercall_enter. Security is enforced by SuperKey there.
+	 */
+	if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
+	    current->seccomp.filter) {
+		spin_lock_irq(&current->sighand->siglock);
+		ksu_seccomp_allow_cache(current->seccomp.filter, 45);
+		spin_unlock_irq(&current->sighand->siglock);
+	}
+#endif
+
 	if (old_uid != new_uid)
 		pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
 

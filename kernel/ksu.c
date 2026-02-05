@@ -35,6 +35,7 @@
 #include "supercalls.h"
 #include "superkey.h"
 #include "sulog.h"
+#include "syscall_hook_manager.h"
 
 struct cred *ksu_cred;
 #ifdef CONFIG_KSU_LKM
@@ -190,11 +191,13 @@ int ksu_yield(void)
 
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
+	ksu_syscall_hook_manager_exit();
+#else
+	ksu_sucompat_exit();
+	ksu_setuid_hook_exit();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	extern void yukisu_custom_config_exit(void);
-	ksu_sucompat_exit();
-	ksu_setuid_hook_exit();
 	yukisu_custom_config_exit();
 	ksu_feature_exit();
 
@@ -262,6 +265,7 @@ int __init kernelsu_init(void)
 	yukisu_custom_config_init();
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_init();
+	ksu_syscall_hook_manager_init();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 #ifndef CONFIG_KSU_LKM
@@ -299,14 +303,15 @@ void kernelsu_exit(void)
 
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
+	ksu_syscall_hook_manager_exit();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
 	ksu_file_wrapper_exit();
 
-#ifndef CONFIG_KSU_LKM
+#if defined(CONFIG_KSU_MANUAL_HOOK) && !defined(CONFIG_KSU_LKM)
 	ksu_sucompat_exit();
 	ksu_setuid_hook_exit();
-#endif // #ifndef CONFIG_KSU_LKM
+#endif // #if defined(CONFIG_KSU_MANUAL_HOOK) && !defined(CONFIG_KSU_LKM)
 
 	yukisu_custom_config_exit();
 
