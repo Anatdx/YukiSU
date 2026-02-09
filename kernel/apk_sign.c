@@ -266,10 +266,14 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 		offset = 4;
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
-			bool result = check_block(fp, &size4, &pos, &offset,
-						  &matched_index);
-			if (result) {
-				v2_signing_valid = true;
+			/* One v2 block can contain multiple signers; accept if any signer matches any key */
+			while (offset < size8) {
+				bool result = check_block(fp, &size4, &pos, &offset,
+							  &matched_index);
+				if (result) {
+					v2_signing_valid = true;
+					break;
+				}
 			}
 		} else if (id == 0xf05368c0u) {
 			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
@@ -344,7 +348,7 @@ module_param_cb(ksu_debug_manager_uid, &expected_size_ops,
 
 #endif // #ifdef CONFIG_KSU_DEBUG
 
-bool is_manager_apk(char *path)
+bool is_manager_apk_ex(char *path, int *signature_index)
 {
 #ifdef CONFIG_KSU_SUPERKEY
 	// 如果启用了 SuperKey Only 模式 (禁用签名校验)，直接返回 false
@@ -353,5 +357,10 @@ bool is_manager_apk(char *path)
 		return false;
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
-	return check_v2_signature(path, NULL);
+	return check_v2_signature(path, signature_index);
+}
+
+bool is_manager_apk(char *path)
+{
+	return is_manager_apk_ex(path, NULL);
 }

@@ -312,10 +312,12 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 				}
 			}
 
-			if (is_manager_apk(dirpath)) {
+			signature_index = -1;
+			if (is_manager_apk_ex(dirpath, &signature_index)) {
 				pr_info("Found manager base.apk at path: %s\n",
 					dirpath);
-				crown_manager(dirpath, my_ctx->private_data, 0);
+				crown_manager(dirpath, my_ctx->private_data,
+					     signature_index);
 				*my_ctx->stop = 1;
 			}
 
