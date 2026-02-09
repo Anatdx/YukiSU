@@ -186,7 +186,7 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 		disable_seccomp(current);
 		spin_unlock_irq(&current->sighand->siglock);
 
-		if (ksu_get_manager_uid() == new_uid) {
+		if (ksu_is_uid_manager(new_uid)) {
 			pr_info("install fd for ksu manager(uid=%d)\n",
 				new_uid);
 			ksu_install_fd();

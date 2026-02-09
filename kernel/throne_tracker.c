@@ -18,8 +18,35 @@
 
 uid_t ksu_manager_uid = KSU_INVALID_UID;
 uid_t ksu_manager_appid = KSU_INVALID_UID;
+uid_t ksu_manager_appids[KSU_MAX_MANAGER_KEYS] = {KSU_INVALID_UID,
+						  KSU_INVALID_UID};
 
-static uid_t locked_manager_appid = KSU_INVALID_UID;
+static uid_t locked_manager_appids[KSU_MAX_MANAGER_KEYS] = {KSU_INVALID_UID,
+							    KSU_INVALID_UID};
+
+static void update_primary_manager(void)
+{
+	int i;
+	ksu_manager_appid = KSU_INVALID_UID;
+	ksu_manager_uid = KSU_INVALID_UID;
+	for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++) {
+		if (ksu_manager_appids[i] != KSU_INVALID_UID) {
+			ksu_manager_appid = ksu_manager_appids[i];
+			/* full uid: assume user 0 if not in process context */
+			ksu_manager_uid = ksu_manager_appids[i];
+			break;
+		}
+	}
+}
+
+void ksu_set_manager_appid_for_index(uid_t appid, int signature_index)
+{
+	if (signature_index < 0 || signature_index >= KSU_MAX_MANAGER_KEYS)
+		return;
+	ksu_manager_appids[signature_index] = appid;
+	locked_manager_appids[signature_index] = appid;
+	update_primary_manager();
+}
 
 #define KSU_UID_LIST_PATH "/data/misc/user_uid/uid_list"
 #define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list"
@@ -184,20 +211,12 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 
 	list_for_each_entry (np, uid_data, list) {
 		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
-			if (locked_manager_appid != KSU_INVALID_UID &&
-			    locked_manager_appid != np->appid) {
-				pr_info(
-				    "Unlocking previous manager appid: %d\n",
-				    locked_manager_appid);
-				ksu_invalidate_manager_uid();
-				locked_manager_appid = KSU_INVALID_UID;
-			}
+			pr_info("Crowning manager: %s (appid=%d) "
+				"signature_index=%d\n",
+				pkg, np->appid, signature_index);
 
-			pr_info("Crowning manager: %s (appid=%d)\n", pkg,
-				np->appid);
-
-			ksu_set_manager_appid(np->appid);
-			locked_manager_appid = np->appid;
+			ksu_set_manager_appid_for_index(np->appid,
+							signature_index);
 			break;
 		}
 	}
@@ -318,7 +337,8 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 					dirpath);
 				crown_manager(dirpath, my_ctx->private_data,
 					      signature_index);
-				*my_ctx->stop = 1;
+				/* Do not stop: continue scanning so all manager
+				 * APKs (e.g. Rei + YukiSU) get crowned */
 			}
 
 			apk_data = kzalloc(sizeof(*apk_data), GFP_ATOMIC);
@@ -460,7 +480,6 @@ void track_throne(bool prune_only)
 	loff_t line_start = 0;
 	char buf[KSU_MAX_PACKAGE_NAME];
 	static bool manager_exist = false;
-	u32 current_manager_appid = ksu_get_manager_uid() % 100000;
 	bool need_search = false;
 
 	// init uid list head
@@ -527,25 +546,38 @@ void track_throne(bool prune_only)
 	if (prune_only)
 		goto prune;
 
-	// check if current manager appid still exists
-	list_for_each_entry (np, &uid_list, list) {
-		if (np->appid == current_manager_appid) {
-			manager_exist = true;
-			break;
+	/* For each manager slot, clear it if that appid is no longer in
+	 * packages.list */
+	{
+		int i;
+		for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++) {
+			uid_t aid = ksu_manager_appids[i];
+			bool slot_still_exists = false;
+
+			if (aid == KSU_INVALID_UID)
+				continue;
+			list_for_each_entry (np, &uid_list, list) {
+				if (np->appid == aid) {
+					slot_still_exists = true;
+					break;
+				}
+			}
+			if (!slot_still_exists) {
+				pr_info("Manager slot %d (appid=%d) removed, "
+					"clearing\n",
+					i, aid);
+				ksu_manager_appids[i] = KSU_INVALID_UID;
+				locked_manager_appids[i] = KSU_INVALID_UID;
+			}
 		}
-	}
-
-	if (!manager_exist && locked_manager_appid != KSU_INVALID_UID) {
-		pr_info("Manager APK removed, unlock previous appid: %d\n",
-			locked_manager_appid);
-		ksu_invalidate_manager_appid();
-		locked_manager_appid = KSU_INVALID_UID;
-
+		update_primary_manager();
+		manager_exist = (ksu_manager_appid != KSU_INVALID_UID);
+		if (!manager_exist) {
 #ifdef CONFIG_KSU_SUPERKEY
-		// Re-register prctl kprobe when package list changes
-		extern void ksu_superkey_register_prctl_kprobe(void);
-		ksu_superkey_register_prctl_kprobe();
+			extern void ksu_superkey_register_prctl_kprobe(void);
+			ksu_superkey_register_prctl_kprobe();
 #endif // #ifdef CONFIG_KSU_SUPERKEY
+		}
 	}
 
 	need_search = !manager_exist;

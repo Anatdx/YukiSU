@@ -293,8 +293,8 @@ bool __ksu_is_allow_uid(uid_t uid)
 	}
 
 	if (likely(ksu_is_manager_uid_valid()) &&
-	    unlikely(ksu_get_manager_uid() == uid)) {
-		// manager is always allowed!
+	    unlikely(ksu_is_uid_manager(uid))) {
+		// manager is always allowed (any signature slot)
 		return true;
 	}
 
@@ -329,8 +329,8 @@ bool ksu_uid_should_umount(uid_t uid)
 	bool found = false;
 
 	if (likely(ksu_is_manager_uid_valid()) &&
-	    unlikely(ksu_get_manager_uid() == uid)) {
-		// we should not umount on manager!
+	    unlikely(ksu_is_uid_manager(uid))) {
+		// we should not umount on manager (any signature slot)
 		return false;
 	}
 	found = ksu_get_app_profile(&profile);
