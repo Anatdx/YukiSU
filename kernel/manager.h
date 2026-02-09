@@ -47,19 +47,8 @@ static inline bool ksu_is_manager_appid_valid(void)
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
-static inline uid_t ksu_get_manager_appid(void)
-{
-#ifdef CONFIG_KSU_SUPERKEY
-	uid_t superkey_uid = superkey_get_manager_uid();
-	if (superkey_uid != (uid_t)-1)
-		return superkey_uid % PER_USER_RANGE;
-#endif // #ifdef CONFIG_KSU_SUPERKEY
-	/* If caller is a manager, return its appid; else primary */
-	if (is_manager())
-		return current_uid().val % PER_USER_RANGE;
-	return ksu_manager_appid;
-}
-
+/* Must be defined before ksu_get_manager_appid/ksu_get_manager_uid (they call
+ * it) */
 static inline bool is_manager(void)
 {
 #ifdef CONFIG_KSU_SUPERKEY
@@ -77,6 +66,19 @@ static inline bool is_manager(void)
 		}
 	}
 	return false;
+}
+
+static inline uid_t ksu_get_manager_appid(void)
+{
+#ifdef CONFIG_KSU_SUPERKEY
+	uid_t superkey_uid = superkey_get_manager_uid();
+	if (superkey_uid != (uid_t)-1)
+		return superkey_uid % PER_USER_RANGE;
+#endif // #ifdef CONFIG_KSU_SUPERKEY
+	/* If caller is a manager, return its appid; else primary */
+	if (is_manager())
+		return current_uid().val % PER_USER_RANGE;
+	return ksu_manager_appid;
 }
 
 static inline uid_t ksu_get_manager_uid(void)
