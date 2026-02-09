@@ -127,8 +127,8 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 			sign_key = apk_sign_keys[i];
 			if (*size4 != sign_key.size)
 				continue;
-			pr_info("sha256: %s, expected: %s, index: %d\n", hash_str,
-				sign_key.sha256, i);
+			pr_info("sha256: %s, expected: %s, index: %d\n",
+				hash_str, sign_key.sha256, i);
 			if (strcmp(sign_key.sha256, hash_str) == 0) {
 				signature_valid = true;
 				if (matched_index)
@@ -266,10 +266,11 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 		offset = 4;
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
-			/* One v2 block can contain multiple signers; accept if any signer matches any key */
+			/* One v2 block can contain multiple signers; accept if
+			 * any signer matches any key */
 			while (offset < size8) {
-				bool result = check_block(fp, &size4, &pos, &offset,
-							  &matched_index);
+				bool result = check_block(
+				    fp, &size4, &pos, &offset, &matched_index);
 				if (result) {
 					v2_signing_valid = true;
 					break;

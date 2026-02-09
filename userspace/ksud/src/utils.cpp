@@ -19,10 +19,10 @@
 #include <vector>
 #ifdef __ANDROID__
 #include <sys/system_properties.h>
-#endif // #ifdef __ANDROID__
+#endif  // #ifdef __ANDROID__
 #ifdef USE_LIBZIP
 #include <zip.h>
-#endif // #ifdef USE_LIBZIP
+#endif  // #ifdef USE_LIBZIP
 
 namespace ksud {
 
@@ -132,7 +132,7 @@ std::optional<std::string> getprop(const std::string& prop) {
     // This is a stub for testing purposes
     (void)prop;
     return std::nullopt;
-#endif // #ifdef __ANDROID__
+#endif  // #ifdef __ANDROID__
 }
 
 bool is_safe_mode() {
@@ -588,7 +588,7 @@ uint64_t get_zip_uncompressed_size(const std::string& zip_path) {
         return 0;
     }
     return static_cast<uint64_t>(ifs.tellg()) * 2;
-#endif // #ifdef USE_LIBZIP
+#endif  // #ifdef USE_LIBZIP
 }
 
 }  // namespace ksud

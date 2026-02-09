@@ -1,9 +1,9 @@
 /**
  * ksuinit - KernelSU Init
- * 
+ *
  * This is the first userspace program to run before the real init.
  * It loads the KernelSU LKM module and then transfers control to the real init.
- * 
+ *
  * Rewritten from Rust to C++ for YukiSU.
  */
 
@@ -19,10 +19,10 @@
 int main(int argc, char* argv[], char* envp[]) {
     // Initialize KernelSU (mount filesystems, load LKM, setup init)
     ksuinit::init();
-    
+
     // Transfer control to the real init
     execve("/init", argv, envp);
-    
+
     // If execve fails, we're in trouble
     return 1;
 }

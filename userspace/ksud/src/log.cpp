@@ -5,7 +5,7 @@
 #include <ctime>
 #ifdef __ANDROID__
 #include <sys/system_properties.h>
-#endif // #ifdef __ANDROID__
+#endif  // #ifdef __ANDROID__
 
 namespace ksud {
 

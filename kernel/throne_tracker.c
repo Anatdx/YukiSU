@@ -317,7 +317,7 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 				pr_info("Found manager base.apk at path: %s\n",
 					dirpath);
 				crown_manager(dirpath, my_ctx->private_data,
-					     signature_index);
+					      signature_index);
 				*my_ctx->stop = 1;
 			}
 

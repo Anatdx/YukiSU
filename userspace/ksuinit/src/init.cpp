@@ -1,6 +1,6 @@
 /**
  * ksuinit - Init module
- * 
+ *
  * Handles the initialization sequence:
  * - Mount filesystems
  * - Setup logging
@@ -21,11 +21,11 @@
 #include <vector>
 
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/syscall.h>
-#include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 namespace ksuinit {
@@ -46,9 +46,7 @@ public:
         }
     }
 
-    void add(const std::string& mountpoint) {
-        mountpoints_.push_back(mountpoint);
-    }
+    void add(const std::string& mountpoint) { mountpoints_.push_back(mountpoint); }
 
 private:
     std::vector<std::string> mountpoints_;
@@ -126,7 +124,7 @@ void unlimit_kmsg() {
 bool has_kernelsu_v2() {
     constexpr uint32_t KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
     constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
-    constexpr uint32_t KSU_IOCTL_GET_INFO = 0x80004b02; // _IOC(_IOC_READ, 'K', 2, 0)
+    constexpr uint32_t KSU_IOCTL_GET_INFO = 0x80004b02;  // _IOC(_IOC_READ, 'K', 2, 0)
 
     struct GetInfoCmd {
         uint32_t version;
@@ -156,7 +154,7 @@ bool has_kernelsu_v2() {
  */
 bool has_kernelsu_legacy() {
     constexpr int CMD_GET_VERSION = 2;
-    
+
     uint32_t version = 0;
     syscall(__NR_prctl, 0xDEADBEEF, CMD_GET_VERSION, &version, 0, 0);
 
@@ -164,7 +162,7 @@ bool has_kernelsu_legacy() {
     return version != 0;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 bool has_kernelsu() {
     return has_kernelsu_v2() || has_kernelsu_legacy();
@@ -222,4 +220,4 @@ bool init() {
     return true;
 }
 
-} // namespace ksuinit
+}  // namespace ksuinit
