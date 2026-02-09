@@ -550,6 +550,16 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 	const char __user *mnt_user =
 	    (const char __user *)(unsigned long)cmd.arg;
 
+	/*
+	 * Hardening: validate user pointer before copying.
+	 * This is adapted from upstream KernelSU's nuke_ext4_sysfs safety
+	 * fixes to avoid panics on bad userspace pointers.
+	 */
+	if (!access_ok(mnt_user, sizeof(mnt))) {
+		pr_err("nuke ext4: invalid userspace pointer\n");
+		return -EFAULT;
+	}
+
 	ret = strncpy_from_user(mnt, mnt_user, sizeof(mnt));
 	if (ret < 0) {
 		pr_err("nuke ext4 copy mnt failed: %ld\\n", ret);
@@ -647,8 +657,15 @@ static int add_try_umount(void __user *arg)
 	}
 
 	case KSU_UMOUNT_ADD: {
-		long len =
-		    strncpy_from_user(buf, (const char __user *)cmd.arg, 256);
+		const char __user *path_user =
+		    (const char __user *)(unsigned long)cmd.arg;
+		long len;
+
+		/* Hardening: validate userspace pointer before copy */
+		if (!access_ok(path_user, sizeof(buf)))
+			return -EFAULT;
+
+		len = strncpy_from_user(buf, path_user, sizeof(buf));
 		if (len <= 0)
 			return -EFAULT;
 
@@ -698,8 +715,15 @@ static int add_try_umount(void __user *arg)
 
 	// this is just strcmp'd wipe anyway
 	case KSU_UMOUNT_DEL: {
-		long len = strncpy_from_user(buf, (const char __user *)cmd.arg,
-					     sizeof(buf) - 1);
+		const char __user *path_user =
+		    (const char __user *)(unsigned long)cmd.arg;
+		long len;
+
+		/* Hardening: validate userspace pointer before copy */
+		if (!access_ok(path_user, sizeof(buf)))
+			return -EFAULT;
+
+		len = strncpy_from_user(buf, path_user, sizeof(buf) - 1);
 		if (len <= 0)
 			return -EFAULT;
 
