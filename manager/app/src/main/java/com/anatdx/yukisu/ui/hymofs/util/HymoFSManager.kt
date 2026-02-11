@@ -243,7 +243,8 @@ object HymoFSManager {
      */
     suspend fun getModules(): List<ModuleInfo> = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo modules").exec()
+            // meta-hymo: hymo module list -> JSON
+            val result = Shell.cmd("${getKsud()} hymo module list").exec()
             if (result.isSuccess) {
                 val json = JSONObject(result.out.joinToString("\n"))
                 val modulesArray = json.optJSONArray("modules") ?: return@withContext emptyList()
@@ -276,26 +277,30 @@ object HymoFSManager {
      */
     suspend fun getActiveRules(): List<ActiveRule> = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo list").exec()
+            // meta-hymo: hymo hymofs list -> JSON array of rules
+            val result = Shell.cmd("${getKsud()} hymo hymofs list").exec()
             if (result.isSuccess) {
+                val arr = JSONArray(result.out.joinToString("\n"))
                 val rules = mutableListOf<ActiveRule>()
-                result.out.forEach { line ->
-                    if (line.startsWith("add ")) {
-                        val parts = line.substring(4).split(" ")
-                        if (parts.size >= 3) {
-                            rules.add(ActiveRule("add", parts[0], parts[1], parts[2].toIntOrNull()))
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val typeUpper = obj.optString("type", "").uppercase()
+                    when (typeUpper) {
+                        "ADD", "MERGE" -> {
+                            val target = obj.optString("target", "")
+                            val source = obj.optString("source", "")
+                            rules.add(ActiveRule(typeUpper.lowercase(), source, target, null))
                         }
-                    } else if (line.startsWith("hide ")) {
-                        rules.add(ActiveRule("hide", line.substring(5)))
-                    } else if (line.startsWith("inject ")) {
-                        rules.add(ActiveRule("inject", line.substring(7)))
-                    } else if (line.startsWith("merge ")) {
-                        val parts = line.substring(6).split(" ")
-                        if (parts.size >= 2) {
-                            rules.add(ActiveRule("merge", parts[0], parts[1]))
+                        "HIDE" -> {
+                            val path = obj.optString("path", "")
+                            rules.add(ActiveRule("hide", path, null, null))
                         }
-                    } else if (line.startsWith("hide_xattr_sb ")) {
-                        rules.add(ActiveRule("hide_xattr_sb", line.substring(14)))
+                        else -> {
+                            val args = obj.optString("args", "")
+                            if (args.isNotEmpty()) {
+                                rules.add(ActiveRule(typeUpper.lowercase(), args, null, null))
+                            }
+                        }
                     }
                 }
                 rules
@@ -313,15 +318,17 @@ object HymoFSManager {
      */
     suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo storage").exec()
+            // meta-hymo: hymo api storage -> JSON
+            val result = Shell.cmd("${getKsud()} hymo api storage").exec()
             if (result.isSuccess) {
                 val json = JSONObject(result.out.joinToString("\n"))
+                val percentValue = json.optDouble("percent", 0.0)
                 StorageInfo(
                     size = json.optString("size", "-"),
                     used = json.optString("used", "-"),
                     avail = json.optString("avail", "-"),
-                    percent = json.optString("percent", "0%"),
-                    type = json.optString("type", "unknown")
+                    percent = "${percentValue.toInt()}%",
+                    type = json.optString("mode", "unknown")
                 )
             } else {
                 StorageInfo("-", "-", "-", "0%", "unknown")
@@ -381,42 +388,8 @@ object HymoFSManager {
      */
     suspend fun setModuleMode(moduleId: String, mode: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Read current modes file
-            val modesFile = "$HYMO_CONFIG_DIR/module_mode.conf"
-            val currentModes = mutableMapOf<String, String>()
-            
-            val readResult = Shell.cmd("cat '$modesFile' 2>/dev/null").exec()
-            if (readResult.isSuccess) {
-                readResult.out.forEach { line ->
-                    if (line.isNotBlank() && !line.startsWith("#") && line.contains("=")) {
-                        val parts = line.split("=", limit = 2)
-                        if (parts.size == 2) {
-                            currentModes[parts[0].trim()] = parts[1].trim()
-                        }
-                    }
-                }
-            }
-            
-            // Update mode
-            if (mode == "auto") {
-                currentModes.remove(moduleId)
-            } else {
-                currentModes[moduleId] = mode
-            }
-            
-            // Write back
-            val content = buildString {
-                appendLine("# Module Modes")
-                currentModes.forEach { (id, m) ->
-                    appendLine("$id=$m")
-                }
-            }
-            
-            val escapedContent = content.replace("'", "'\\''")
-            val result = Shell.cmd(
-                "mkdir -p '$HYMO_CONFIG_DIR'",
-                "printf '%s\\n' '$escapedContent' > '$modesFile'"
-            ).exec()
+            // meta-hymo: delegate to CLI: hymo module set-mode <id> <mode>
+            val result = Shell.cmd("${getKsud()} hymo module set-mode $moduleId $mode").exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set module mode", e)
