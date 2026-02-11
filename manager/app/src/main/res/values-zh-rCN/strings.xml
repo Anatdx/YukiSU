@@ -7,6 +7,7 @@
     <string name="home_click_to_install">点击安装</string>
     <string name="home_working">工作中</string>
     <string name="home_badge_superkey">SuperKey</string>
+    <string name="home_gki_builtin_unsupported">YukiSU 已不支持 built-in KernelSU！请使用 LKM 模式！</string>
     <string name="home_working_version">版本：%s</string>
     <string name="home_unsupported">不支持</string>
     <string name="home_unsupported_reason">内核上未检测到 KernelSU 驱动程序，内核错误？</string>

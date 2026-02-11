@@ -229,6 +229,36 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     }
                 }
 
+                // GKI 内置 KSU 不受支持：红色横幅警告
+                if (viewModel.isCoreDataLoaded &&
+                    viewModel.systemStatus.kernelVersion.isGKI() &&
+                    viewModel.systemStatus.ksuVersion != null
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.error,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onError,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = stringResource(R.string.home_gki_builtin_unsupported),
+                                color = MaterialTheme.colorScheme.onError,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+
                 // 状态卡片
                 if (viewModel.isCoreDataLoaded) {
                     val isNotManager = !viewModel.systemStatus.isManager

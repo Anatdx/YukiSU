@@ -4,6 +4,7 @@
     <string name="home_not_installed">未安裝</string>
     <string name="home_click_to_install">點擊安裝</string>
     <string name="home_working">工作中</string>
+    <string name="home_gki_builtin_unsupported">YukiSU 已唔支援 built-in KernelSU！請使用 LKM 模式！</string>
     <string name="home_working_version">版本：%s</string>
     <string name="home_unsupported">唔支援</string>
     <string name="home_unsupported_reason">核心上未檢測到 KernelSU 驅動程式，核心錯誤？</string>
