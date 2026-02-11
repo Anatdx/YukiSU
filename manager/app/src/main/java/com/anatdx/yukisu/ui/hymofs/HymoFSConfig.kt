@@ -883,8 +883,10 @@ private fun SettingsTab(
                         coroutineScope.launch {
                             val newConfig = HymoFSManager.syncPartitionsWithDaemon()
                             if (newConfig != null) {
-                                config = newConfig
-                                snackbarHostState.showSnackbar("Partitions synced from daemon")
+                                updateAndSave(newConfig)
+                                snackbarHostState.showSnackbar(
+                                    "Partitions synced from daemon"
+                                )
                             } else {
                                 snackbarHostState.showSnackbar("No new partitions found")
                             }
