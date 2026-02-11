@@ -745,5 +745,4 @@ void ksu_ksud_exit(void)
 	// unregister_kprobe(&vfs_read_kp);
 	unregister_kprobe(&input_event_kp);
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
-
 }

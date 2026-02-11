@@ -39,7 +39,7 @@ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
 }
 
 static const struct fsnotify_ops ksu_ops = {
-	.handle_inode_event = ksu_handle_inode_event,
+    .handle_inode_event = ksu_handle_inode_event,
 };
 
 static void __maybe_unused m_free(struct fsnotify_mark *m)
