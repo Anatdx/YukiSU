@@ -32,13 +32,13 @@ object HymoFSManager {
     }
     
     /**
-     * HymoFS status enum
+     * HymoFS status enum (codes only; UI text is i18n)
      */
-    enum class HymoFSStatus(val code: Int, val description: String) {
-        AVAILABLE(0, "Available"),
-        NOT_PRESENT(1, "Not Present"),
-        KERNEL_TOO_OLD(2, "Kernel Too Old"),
-        MODULE_TOO_OLD(3, "Module Too Old");
+    enum class HymoFSStatus(val code: Int) {
+        AVAILABLE(0),
+        NOT_PRESENT(1),
+        KERNEL_TOO_OLD(2),
+        MODULE_TOO_OLD(3);
         
         companion object {
             fun fromCode(code: Int): HymoFSStatus = entries.find { it.code == code } ?: NOT_PRESENT

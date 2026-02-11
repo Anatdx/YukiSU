@@ -311,6 +311,11 @@
     <string name="module_failed_count">%d 個模組安裝失敗</string>
     <string name="module_download_error">模組下載失敗</string>
     <string name="kernel_flashing">核心刷寫</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_not_present">未檢測到</string>
+    <string name="hymofs_status_kernel_too_old">核心版本過低，唔支援 HymoFS</string>
+    <string name="hymofs_status_module_too_old">模組版本過低，請更新內置 Hymo</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">全部</string>
     <string name="category_root_apps">Root</string>

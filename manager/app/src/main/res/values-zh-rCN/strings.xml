@@ -355,6 +355,11 @@
     <string name="module_failed_count">%d 个模块安装失败</string>
     <string name="module_download_error">模块下载失败</string>
     <string name="kernel_flashing">内核刷写</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_not_present">未检测到</string>
+    <string name="hymofs_status_kernel_too_old">内核版本过低，不支持 HymoFS</string>
+    <string name="hymofs_status_module_too_old">模块版本过低，请更新内置 Hymo</string>
     <string name="warning_of_meta_module_title">需要元模块</string>
     <string name="warning_of_meta_module_summary">这个模块需要挂载一些文件。需要安装元模块，使它正常工作</string>
     <!-- 分类相关 -->

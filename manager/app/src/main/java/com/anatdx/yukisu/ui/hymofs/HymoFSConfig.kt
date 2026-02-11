@@ -326,7 +326,14 @@ private fun StatusTab(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = hymofsStatus.description,
+                            text = stringResource(
+                                when (hymofsStatus) {
+                                    HymoFSStatus.AVAILABLE -> R.string.hymofs_status_available
+                                    HymoFSStatus.NOT_PRESENT -> R.string.hymofs_status_not_present
+                                    HymoFSStatus.KERNEL_TOO_OLD -> R.string.hymofs_status_kernel_too_old
+                                    HymoFSStatus.MODULE_TOO_OLD -> R.string.hymofs_status_module_too_old
+                                }
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -339,6 +339,11 @@
     <string name="module_failed_count">%d 個模組安裝失敗</string>
     <string name="module_download_error">模組下載失敗</string>
     <string name="kernel_flashing">內核刷寫</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_not_present">未偵測到</string>
+    <string name="hymofs_status_kernel_too_old">內核版本過低，不支援 HymoFS</string>
+    <string name="hymofs_status_module_too_old">模組版本過低，請更新內建 Hymo</string>
     <string name="warning_of_meta_module_title">需要元模組</string>
     <string name="warning_of_meta_module_summary">這個模組需要元模組處理掛載系統分割區。否則，它將無法運作</string>
     <!-- 分类相关 -->

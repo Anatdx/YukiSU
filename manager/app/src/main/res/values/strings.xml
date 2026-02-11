@@ -354,6 +354,11 @@
     <string name="module_failed_count">%d Failed to install a new module</string>
     <string name="module_download_error">Module download failed</string>
     <string name="kernel_flashing">Kernel Flashing</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">Available</string>
+    <string name="hymofs_status_not_present">Not present</string>
+    <string name="hymofs_status_kernel_too_old">Kernel too old</string>
+    <string name="hymofs_status_module_too_old">Module too old</string>
     <string name="warning_of_meta_module_title">Require Meta module</string>
     <string name="warning_of_meta_module_summary">This module want to mount /system, meta module will handle that. Otherwise, it might not work</string>
     <!-- 分类相关 -->
