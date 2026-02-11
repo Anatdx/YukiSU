@@ -4,10 +4,8 @@
 #include <linux/init.h>
 #include <linux/types.h>
 
-#ifdef CONFIG_KSU_LKM
 #include "apk_sign.h"
 #include <linux/thread_info.h>
-#endif // #ifdef CONFIG_KSU_LKM
 
 void ksu_setuid_hook_init(void);
 void ksu_setuid_hook_exit(void);

@@ -106,10 +106,8 @@ void apply_kernelsu_rules(void)
 	// Allow system server kill su process
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
-#ifdef CONFIG_KSU_LKM
 	// https://android-review.googlesource.com/c/platform/system/logging/+/3725346
 	ksu_dontaudit(db, "untrusted_app", KERNEL_SU_DOMAIN, "dir", "getattr");
-#endif // #ifdef CONFIG_KSU_LKM
 	mutex_unlock(&ksu_rules);
 }
 

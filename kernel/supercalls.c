@@ -21,10 +21,8 @@
 #include "feature.h"
 #include "file_wrapper.h"
 
-#ifndef CONFIG_KSU_LKM
 #include "kernel_compat.h"
 #include "objsec.h"
-#endif // #ifndef CONFIG_KSU_LKM
 
 #ifdef CONFIG_KSU_SUPERKEY
 #include "superkey.h"
@@ -37,19 +35,6 @@
 #include "selinux/selinux.h"
 #include "sulog.h"
 #include "supercalls.h"
-
-#ifndef CONFIG_KSU_LKM
-// kcompat for older kernel
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-#define getfd_secure anon_inode_create_getfd
-#elif defined(KSU_HAS_GETFD_SECURE)
-#define getfd_secure anon_inode_getfd_secure
-#else
-// technically not a secure inode, but, this is the only way so.
-#define getfd_secure(name, ops, data, flags, __unused)                         \
-	anon_inode_getfd(name, ops, data, flags)
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#endif // #ifndef CONFIG_KSU_LKM
 
 #ifdef CONFIG_KSU_MANUAL_SU
 #include "manual_su.h"
@@ -386,62 +371,13 @@ static int do_get_wrapper_fd(void __user *arg)
 	}
 
 	struct ksu_get_wrapper_fd_cmd cmd;
-#ifndef CONFIG_KSU_LKM
-	int ret;
-#endif // #ifndef CONFIG_KSU_LKM
+
 	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
 		pr_err("get_wrapper_fd: copy_from_user failed\n");
 		return -EFAULT;
 	}
 
-#ifdef CONFIG_KSU_LKM
 	return ksu_install_file_wrapper(cmd.fd);
-#else
-	struct file *f = fget(cmd.fd);
-	if (!f) {
-		return -EBADF;
-	}
-
-	struct ksu_file_wrapper *data = ksu_create_file_wrapper(f);
-	if (data == NULL) {
-		ret = -ENOMEM;
-		goto put_orig_file;
-	}
-
-	ret =
-	    getfd_secure("[ksu_fdwrapper]", &data->ops, data, f->f_flags, NULL);
-	if (ret < 0) {
-		pr_err("ksu_fdwrapper: getfd failed: %d\n", ret);
-		goto put_wrapper_data;
-	}
-	struct file *pf = fget(ret);
-
-	struct inode *wrapper_inode = file_inode(pf);
-	// copy original inode mode
-	wrapper_inode->i_mode = file_inode(f)->i_mode;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) ||                           \
-    defined(KSU_OPTIONAL_SELINUX_INODE)
-	struct inode_security_struct *sec = selinux_inode(wrapper_inode);
-#else
-	struct inode_security_struct *sec =
-	    (struct inode_security_struct *)wrapper_inode->i_security;
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-       // defined(KSU_OPTIONAL_SELINUX_INODE)
-
-	if (sec) {
-		sec->sid = ksu_file_sid;
-	}
-
-	fput(pf);
-	goto put_orig_file;
-put_wrapper_data:
-	ksu_delete_file_wrapper(data);
-put_orig_file:
-	fput(f);
-
-	return ret;
-#endif // #ifdef CONFIG_KSU_LKM
 }
 
 static int do_manage_mark(void __user *arg)
@@ -579,58 +515,6 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 struct list_head mount_list = LIST_HEAD_INIT(mount_list);
 DECLARE_RWSEM(mount_list_lock);
 
-#ifndef CONFIG_KSU_LKM
-// List current try_umount entries
-static int list_try_umount(void __user *arg)
-{
-	struct ksu_list_try_umount_cmd cmd;
-	struct mount_entry *entry;
-	char *buf;
-	size_t offset = 0;
-	size_t remaining;
-
-	if (copy_from_user(&cmd, arg, sizeof(cmd)))
-		return -EFAULT;
-
-	if (cmd.buf_size == 0 || cmd.arg == 0)
-		return -EINVAL;
-
-	buf = kzalloc(cmd.buf_size, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	remaining = cmd.buf_size;
-
-	down_read(&mount_list_lock);
-	list_for_each_entry (entry, &mount_list, list) {
-		size_t len = strlen(entry->umountable);
-		// Need space for path + newline + null
-		if (offset + len + 2 > remaining) {
-			// Buffer full, stop here
-			break;
-		}
-		memcpy(buf + offset, entry->umountable, len);
-		offset += len;
-		buf[offset++] = '\n';
-	}
-	up_read(&mount_list_lock);
-
-	// Null terminate
-	if (offset < cmd.buf_size)
-		buf[offset] = '\0';
-	else if (cmd.buf_size > 0)
-		buf[cmd.buf_size - 1] = '\0';
-
-	if (copy_to_user((void __user *)cmd.arg, buf, offset + 1)) {
-		kfree(buf);
-		return -EFAULT;
-	}
-
-	kfree(buf);
-	return (int)offset;
-}
-#endif // #ifndef CONFIG_KSU_LKM
-
 static int add_try_umount(void __user *arg)
 {
 	struct mount_entry *new_entry, *entry, *tmp;
@@ -755,7 +639,6 @@ static int add_try_umount(void __user *arg)
 	return 0;
 }
 
-#ifdef CONFIG_KSU_LKM
 static int list_try_umount(void __user *arg)
 {
 	struct ksu_list_try_umount_cmd cmd;
@@ -807,7 +690,6 @@ static int list_try_umount(void __user *arg)
 	kfree(output_buf);
 	return ret;
 }
-#endif // #ifdef CONFIG_KSU_LKM
 
 // 100. GET_FULL_VERSION - Get full version string
 static int do_get_full_version(void __user *arg)
@@ -1061,15 +943,11 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
 
 	if (copy_to_user(tw->outp, &fd, sizeof(fd))) {
 		pr_err("install ksu fd reply err\n");
-#ifdef CONFIG_KSU_LKM
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 		close_fd(fd);
 #else
 		ksys_close(fd);
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#else
-		do_close_fd(fd);
-#endif // #ifdef CONFIG_KSU_LKM
+#endif
 	}
 
 	kfree(tw);
@@ -1130,15 +1008,11 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 	if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd))) {
 		pr_err("superkey auth: copy_to_user failed\n");
 		if (fd >= 0) {
-#ifdef CONFIG_KSU_LKM
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 			close_fd(fd);
 #else
 			ksys_close(fd);
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#else
-			do_close_fd(fd);
-#endif // #ifdef CONFIG_KSU_LKM
+#endif
 		}
 	}
 
@@ -1290,16 +1164,13 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 	cmd.fd = fd;
 	if (copy_to_user(tw->cmd_user, &cmd, sizeof(cmd))) {
 		pr_err("superkey prctl auth: copy_to_user failed\n");
-		if (fd >= 0)
-#ifdef CONFIG_KSU_LKM
+		if (fd >= 0) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 			close_fd(fd);
 #else
 			ksys_close(fd);
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#else
-			do_close_fd(fd);
-#endif // #ifdef CONFIG_KSU_LKM
+#endif
+		}
 	}
 
 	kfree(tw);

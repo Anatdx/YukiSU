@@ -59,9 +59,7 @@ void superkey_init(void)
 	if (superkey_store.magic == SUPERKEY_MAGIC &&
 	    superkey_store.hash != 0) {
 		ksu_superkey_hash = superkey_store.hash;
-#ifdef CONFIG_KSU_LKM
 		ksu_signature_bypass = (superkey_store.flags & 1) != 0;
-#endif // #ifdef CONFIG_KSU_LKM
 		pr_info("superkey: loaded from LKM patch: 0x%llx, bypass: %d\n",
 			ksu_superkey_hash, ksu_signature_bypass ? 1 : 0);
 		return;

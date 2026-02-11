@@ -1,9 +1,7 @@
 /*
- * KernelSU Main Entry Point
+ * KernelSU Main Entry Point (LKM only)
  *
- * Unified codebase supporting both:
- * - GKI mode (built into kernel, CONFIG_KSU=y)
- * - LKM mode (loadable module, CONFIG_KSU=m, CONFIG_KSU_LKM=y)
+ * YukiSU supports only loadable kernel module (CONFIG_KSU=m).
  */
 
 #include <linux/export.h>
@@ -12,18 +10,10 @@
 #include <linux/module.h>
 #include <linux/version.h>
 
-#ifdef CONFIG_KSU_LKM
 #include <linux/workqueue.h>
 #include <linux/kallsyms.h>
 #include <linux/delay.h>
 #include "file_wrapper.h"
-#else
-#include <generated/compile.h>
-#include <generated/utsrelease.h>
-#include "setuid_hook.h"
-#include "sucompat.h"
-#include "manager.h"
-#endif // #ifdef CONFIG_KSU_LKM
 
 #ifndef CONFIG_KSU_MANUAL_HOOK
 #include "syscall_hook_manager.h"
@@ -43,7 +33,7 @@
 #include "sulog.h"
 
 struct cred *ksu_cred;
-#ifdef CONFIG_KSU_LKM
+
 /*
  * LKM Priority Configuration
  *
@@ -156,63 +146,6 @@ static void try_yield_gki(void)
 		"yield...\n");
 	schedule_delayed_work(&gki_yield_work, msecs_to_jiffies(500));
 }
-#else
-/*
- * GKI yield support - allows LKM to take over from built-in KSU
- * Only exported when building as GKI (not LKM)
- */
-bool ksu_is_active = true;
-EXPORT_SYMBOL(ksu_is_active);
-
-bool ksu_initialized = false;
-EXPORT_SYMBOL(ksu_initialized);
-
-/*
- * GKI yield function - called by LKM to take over
- * Only compiled in GKI mode
- */
-
-int ksu_yield(void)
-{
-	if (!ksu_is_active) {
-		pr_info("KernelSU GKI already yielded\n");
-		return 0;
-	}
-
-	if (!ksu_initialized) {
-		pr_warn(
-		    "KernelSU GKI not fully initialized, cannot yield yet\n");
-		ksu_is_active = false;
-		return -EAGAIN;
-	}
-
-	pr_info("KernelSU GKI yielding to LKM...\n");
-
-	// Mark as inactive first to stop processing new requests
-	ksu_is_active = false;
-
-	// Clean up in reverse order of init
-	ksu_allowlist_exit();
-	ksu_observer_exit();
-	ksu_throne_tracker_exit();
-
-#ifndef CONFIG_KSU_MANUAL_HOOK
-	ksu_ksud_exit();
-	ksu_syscall_hook_manager_exit();
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
-
-	extern void yukisu_custom_config_exit(void);
-	ksu_sucompat_exit();
-	ksu_setuid_hook_exit();
-	yukisu_custom_config_exit();
-	ksu_supercalls_exit();
-	ksu_feature_exit();
-
-	pr_info("KernelSU GKI yielded successfully, LKM can take over now\n");
-	return 0;
-}
-EXPORT_SYMBOL(ksu_yield);
-#endif // #ifdef CONFIG_KSU_LKM
 
 void yukisu_custom_config_init(void)
 {
@@ -227,12 +160,7 @@ void yukisu_custom_config_exit(void)
 
 int __init kernelsu_init(void)
 {
-#ifdef CONFIG_KSU_LKM
 	pr_info("KernelSU LKM initializing, version: %u\n", KSU_VERSION);
-#else
-	pr_info("Initialized on: %s (%s) with driver version: %u\n",
-		UTS_RELEASE, UTS_MACHINE, KSU_VERSION);
-#endif // #ifdef CONFIG_KSU_LKM
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert(
@@ -251,10 +179,8 @@ int __init kernelsu_init(void)
 	    "*************************************************************");
 #endif // #ifdef CONFIG_KSU_DEBUG
 
-#ifdef CONFIG_KSU_LKM
 	// Try to take over from GKI if it exists
 	try_yield_gki();
-#endif // #ifdef CONFIG_KSU_LKM
 
 	ksu_cred = prepare_creds();
 	if (!ksu_cred) {
@@ -273,11 +199,8 @@ int __init kernelsu_init(void)
 	ksu_syscall_hook_manager_init();
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
-#ifndef CONFIG_KSU_LKM
-	ksu_lsm_hook_init();
 	ksu_setuid_hook_init();
 	ksu_sucompat_init();
-#endif // #ifndef CONFIG_KSU_LKM
 
 	ksu_allowlist_init();
 
@@ -294,33 +217,22 @@ int __init kernelsu_init(void)
 #endif // #ifndef CONFIG_KSU_DEBUG
 #endif // #ifdef MODULE
 
-#ifdef CONFIG_KSU_LKM
 	pr_info("KernelSU LKM initialized\n");
-#else
-	/* GKI mode: mark as initialized for LKM detection */
-	ksu_initialized = true;
-	pr_info("KernelSU GKI fully initialized\n");
-#endif // #ifdef CONFIG_KSU_LKM
 	return 0;
 }
 
 extern void ksu_observer_exit(void);
-#ifndef CONFIG_KSU_LKM
 extern void ksu_supercalls_exit(void);
-#endif // #ifndef CONFIG_KSU_LKM
+
 void kernelsu_exit(void)
 {
-#ifdef CONFIG_KSU_LKM
 	cancel_delayed_work_sync(&gki_yield_work);
-#endif // #ifdef CONFIG_KSU_LKM
 
 	ksu_allowlist_exit();
 
 	ksu_throne_tracker_exit();
 
-#ifdef CONFIG_KSU_LKM
 	ksu_observer_exit();
-#endif // #ifdef CONFIG_KSU_LKM
 
 #ifndef CONFIG_KSU_MANUAL_HOOK
 	ksu_ksud_exit();
@@ -330,11 +242,8 @@ void kernelsu_exit(void)
 
 	ksu_file_wrapper_exit();
 
-#ifndef CONFIG_KSU_LKM
-	ksu_observer_exit();
 	ksu_sucompat_exit();
 	ksu_setuid_hook_exit();
-#endif // #ifndef CONFIG_KSU_LKM
 
 	yukisu_custom_config_exit();
 

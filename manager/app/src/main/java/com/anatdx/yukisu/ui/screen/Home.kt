@@ -468,11 +468,6 @@ private fun StatusCard(
                         else -> stringResource(id = R.string.home_working)
                     }
 
-                    val workingModeSurfaceText = when {
-                        systemStatus.lkmMode == true -> "LKM"
-                        else -> "Built-in"
-                    }
-
                     Icon(
                         Icons.Outlined.TaskAlt,
                         contentDescription = stringResource(R.string.home_working),
@@ -497,23 +492,7 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 工作模式标签
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                            ) {
-                                Text(
-                                    text = workingModeSurfaceText,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-
-                            Spacer(Modifier.width(6.dp))
-
-                            // SuperKey 模式标签
+                            // 鉴权方式标签：签名鉴权成功时显示 Signature，否则为 SuperKey 时显示 SuperKey
                             if (isSuperKeyMode) {
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
@@ -521,10 +500,24 @@ private fun StatusCard(
                                     modifier = Modifier
                                 ) {
                                     Text(
-                                        text = "SuperKey",
+                                        text = stringResource(R.string.home_badge_superkey),
                                         style = MaterialTheme.typography.labelMedium,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         color = MaterialTheme.colorScheme.onTertiary
+                                    )
+                                }
+                                Spacer(Modifier.width(6.dp))
+                            } else {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.home_badge_signature),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        color = MaterialTheme.colorScheme.onSecondary
                                     )
                                 }
                                 Spacer(Modifier.width(6.dp))

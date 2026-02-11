@@ -2,9 +2,6 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/version.h>
-#ifndef CONFIG_KSU_LKM
-#include "../kernel_compat.h" // Add check Huawei Device
-#endif // #ifndef CONFIG_KSU_LKM
 
 #include "../klog.h" // IWYU pragma: keep
 #include "sepolicy.h"

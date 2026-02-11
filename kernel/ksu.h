@@ -13,14 +13,6 @@
 #define KERNEL_SU_VERSION KSU_VERSION
 #define KERNEL_SU_OPTION 0xDEADBEEF
 
-#ifndef CONFIG_KSU_LKM
-// GKI yield support: when LKM takes over, GKI should yield
-extern bool ksu_is_active;
-extern bool ksu_initialized; // true when GKI is fully initialized
-int ksu_yield(void); // Called by LKM to make GKI yield
-void ksu_lsm_hook_init(void);
-#endif // #ifndef CONFIG_KSU_LKM
-
 #define EVENT_POST_FS_DATA 1
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3

@@ -22,12 +22,9 @@ kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o
 kernelsu-objs += sulog.o
 
-# GKI mode only: lsm_hooks, embed_ksud
-ifneq ($(CONFIG_KSU_LKM), y)
+# LKM only: kernel_compat provides file/read compat used by allowlist etc.
+# Built-in (lsm_hooks, embed_ksud) is no longer supported.
 kernelsu-objs += kernel_compat.o
-kernelsu-objs += lsm_hooks.o
-kernelsu-objs += embed_ksud.o
-endif
 
 ifeq ($(CONFIG_KSU_MANUAL_SU), y)
 ccflags-y += -DCONFIG_KSU_MANUAL_SU
@@ -37,14 +34,6 @@ endif
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
-
-# LKM mode support - automatically enabled when CONFIG_KSU=m
-ifeq ($(CONFIG_KSU), m)
-ccflags-y += -DCONFIG_KSU_LKM
-endif
-ifeq ($(CONFIG_KSU_LKM), y)
-ccflags-y += -DCONFIG_KSU_LKM
-endif
 
 # SuperKey Support - enabled by default unless explicitly disabled
 # To disable: make ... CONFIG_KSU_SUPERKEY=n

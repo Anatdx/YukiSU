@@ -171,12 +171,7 @@ static void sulog_process_queue(void)
 		return;
 
 	old_cred = override_creds(ksu_cred);
-#ifdef CONFIG_KSU_LKM
 	fp = filp_open(SULOG_PATH, O_WRONLY | O_CREAT | O_APPEND, 0640);
-#else
-	fp = ksu_filp_open_compat(SULOG_PATH, O_WRONLY | O_CREAT | O_APPEND,
-				  0640);
-#endif // #ifdef CONFIG_KSU_LKM
 	if (IS_ERR(fp)) {
 		pr_err("sulog: failed to open log file: %ld\n", PTR_ERR(fp));
 		goto revert_creds_out;
@@ -191,12 +186,7 @@ static void sulog_process_queue(void)
 	}
 
 	list_for_each_entry (entry, &local_queue, list)
-#ifdef CONFIG_KSU_LKM
 		kernel_write(fp, entry->content, strlen(entry->content), &pos);
-#else
-		ksu_kernel_write_compat(fp, entry->content,
-					strlen(entry->content), &pos);
-#endif // #ifdef CONFIG_KSU_LKM
 
 	vfs_fsync(fp, 0);
 	filp_close(fp, 0);

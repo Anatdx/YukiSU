@@ -31,12 +31,7 @@
 
 #include "allowlist.h"
 #include "arch.h"
-#ifdef CONFIG_KSU_LKM
 #include "sucompat.h"
-#else
-#include "kernel_compat.h"
-static bool is_boot_phase = true;
-#endif // #ifdef CONFIG_KSU_LKM
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "manager.h"
@@ -101,10 +96,6 @@ void on_post_fs_data(void)
 	// sanity check, this may influence the performance
 	stop_input_hook();
 
-#ifndef CONFIG_KSU_LKM
-	// End of boot state
-	is_boot_phase = false;
-#endif // #ifndef CONFIG_KSU_LKM
 	ksu_file_sid = ksu_get_ksu_file_sid();
 	pr_info("ksu_file sid: %d\n", ksu_file_sid);
 }
@@ -257,11 +248,7 @@ static bool check_argv(struct user_arg_ptr argv, int index,
 		return false;
 	}
 
-#ifdef CONFIG_KSU_LKM
 	ret = strncpy_from_user_nofault(buf, p, buf_len);
-#else
-	ret = ksu_strncpy_from_user_nofault(buf, p, buf_len);
-#endif // #ifdef CONFIG_KSU_LKM
 	if (ret <= 0) {
 		pr_err("check_argv: failed to copy pointer, err: %ld\n", ret);
 		return false;
@@ -295,10 +282,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 
 	/* This applies to versions Android 10+ */
 	static const char system_bin_init[] = "/system/bin/init";
-#ifndef CONFIG_KSU_LKM
-	/* This applies to versions between Android 6 ~ 9  */
-	static const char old_system_init[] = "/init";
-#endif // #ifndef CONFIG_KSU_LKM
 	static bool init_second_stage_executed = false;
 
 	if (!filename_ptr)
@@ -339,13 +322,8 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			const char __user *p = get_user_arg_ptr(*argv, 1);
 			if (p && !IS_ERR(p)) {
 				char first_arg[16];
-#ifdef CONFIG_KSU_LKM
 				strncpy_from_user_nofault(first_arg, p,
 							  sizeof(first_arg));
-#else
-				ksu_strncpy_from_user_nofault(
-				    first_arg, p, sizeof(first_arg));
-#endif // #ifdef CONFIG_KSU_LKM
 				pr_info("/system/bin/init first arg: %s\n",
 					first_arg);
 				if (!strcmp(first_arg, "second_stage")) {
@@ -361,121 +339,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 		}
 #endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 	}
-#ifndef CONFIG_KSU_LKM
-	else if (unlikely(!memcmp(filename->name, old_system_init,
-				  sizeof(old_system_init) - 1) &&
-			  argv)) {
-#ifdef CONFIG_KSU_MANUAL_HOOK
-		char buf[16];
-		if (!init_second_stage_executed &&
-		    check_argv(*argv, 1, "--second-stage", buf, sizeof(buf))) {
-			/* This applies to versions between Android 6 ~ 7 */
-			pr_info("/init second_stage executed\n");
-			handle_second_stage();
-			init_second_stage_executed = true;
-		} else if (count(*argv, MAX_ARG_STRINGS) == 1 &&
-			   !init_second_stage_executed && envp) {
-			/* This applies to versions between Android 8 ~ 9  */
-			int envc = count(*envp, MAX_ARG_STRINGS);
-			if (envc > 0) {
-				int n;
-				for (n = 1; n <= envc; n++) {
-					const char __user *p =
-					    get_user_arg_ptr(*envp, n);
-					if (!p || IS_ERR(p)) {
-						continue;
-					}
-					char env[256];
-					if (ksu_strncpy_from_user_nofault(
-						env, p, sizeof(env)) < 0)
-						continue;
-					char *env_name = env;
-					char *env_value = strchr(env, '=');
-					if (env_value == NULL)
-						continue;
-					*env_value = '\0';
-					env_value++;
-					if (!strcmp(env_name,
-						    "INIT_SECOND_STAGE") &&
-					    (!strcmp(env_value, "1") ||
-					     !strcmp(env_value, "true"))) {
-						pr_info("/init second_stage "
-							"executed\n");
-						handle_second_stage();
-						init_second_stage_executed =
-						    true;
-					}
-				}
-			}
-		}
-#else
-		// /init executed
-		int argc = count(*argv, MAX_ARG_STRINGS);
-		pr_info("/init argc: %d\n", argc);
-		if (argc > 1 && !init_second_stage_executed) {
-			/* This applies to versions between Android 6 ~ 7 */
-			const char __user *p = get_user_arg_ptr(*argv, 1);
-			if (p && !IS_ERR(p)) {
-				char first_arg[16];
-				ksu_strncpy_from_user_nofault(
-				    first_arg, p, sizeof(first_arg));
-				pr_info("/init first arg: %s\n", first_arg);
-				if (!strcmp(first_arg, "--second-stage")) {
-					pr_info(
-					    "/init second_stage executed\n");
-					apply_kernelsu_rules();
-					setup_ksu_cred();
-					init_second_stage_executed = true;
-				}
-			} else {
-				pr_err("/init parse args err!\n");
-			}
-		} else if (argc == 1 && !init_second_stage_executed && envp) {
-			/* This applies to versions between Android 8 ~ 9  */
-			int envc = count(*envp, MAX_ARG_STRINGS);
-			if (envc > 0) {
-				int n;
-				for (n = 1; n <= envc; n++) {
-					const char __user *p =
-					    get_user_arg_ptr(*envp, n);
-					if (!p || IS_ERR(p)) {
-						continue;
-					}
-					char env[256];
-					// Reading environment variable strings
-					// from user space
-					if (ksu_strncpy_from_user_nofault(
-						env, p, sizeof(env)) < 0)
-						continue;
-					// Parsing environment variable names
-					// and values
-					char *env_name = env;
-					char *env_value = strchr(env, '=');
-					if (env_value == NULL)
-						continue;
-					// Replace equal sign with string
-					// terminator
-					*env_value = '\0';
-					env_value++;
-					// Check if the environment variable
-					// name and value are matching
-					if (!strcmp(env_name,
-						    "INIT_SECOND_STAGE") &&
-					    (!strcmp(env_value, "1") ||
-					     !strcmp(env_value, "true"))) {
-						pr_info("/init second_stage "
-							"executed\n");
-						apply_kernelsu_rules();
-						setup_ksu_cred();
-						init_second_stage_executed =
-						    true;
-					}
-				}
-			}
-		}
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
-	}
-#endif // #ifndef CONFIG_KSU_LKM
 
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	if (unlikely(
@@ -551,13 +414,8 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 	return ret;
 }
 
-#ifdef CONFIG_KSU_LKM
 static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 			       size_t *count_ptr, loff_t **pos)
-#else
-int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-			size_t *count_ptr, loff_t **pos)
-#endif // #ifdef CONFIG_KSU_LKM
 {
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	if (!ksu_vfs_read_hook) {
@@ -651,13 +509,8 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 	return 0;
 }
 
-#ifdef CONFIG_KSU_LKM
 static int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
 			       size_t *count_ptr)
-#else
-int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-			size_t *count_ptr)
-#endif // #ifdef CONFIG_KSU_LKM
 {
 	struct file *file = fget(fd);
 	if (!file) {
@@ -690,12 +543,7 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
 		int val = *value;
 		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-#ifdef CONFIG_KSU_LKM
-		if (val)
-#else
-		if (val && is_boot_phase)
-#endif // #ifdef CONFIG_KSU_LKM
-		{
+		if (val) {
 			// key pressed, count it
 			volumedown_pressed_count += 1;
 			if (is_volumedown_enough(volumedown_pressed_count)) {
@@ -776,12 +624,8 @@ static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 	filename_in.name = path;
 
 	filename_p = &filename_in;
-#ifdef CONFIG_KSU_LKM
 	ksu_handle_execveat_ksud(&fd, &filename_p, &argv, NULL, NULL);
 	return ksu_handle_execveat_sucompat(&fd, &filename_p, NULL, NULL, NULL);
-#else
-	return ksu_handle_execveat_ksud(&fd, &filename_p, &argv, NULL, NULL);
-#endif // #ifdef CONFIG_KSU_LKM
 }
 
 static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -902,8 +746,4 @@ void ksu_ksud_exit(void)
 	unregister_kprobe(&input_event_kp);
 #endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 
-#ifndef CONFIG_KSU_LKM
-	is_boot_phase = false;
-	volumedown_pressed_count = 0;
-#endif // #ifndef CONFIG_KSU_LKM
 }

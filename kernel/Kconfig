@@ -2,11 +2,12 @@ menu "KernelSU"
 
 config KSU
 	  tristate "KernelSU function support"
-	  default y
+	  default m
 	  help
 		Enable kernel-level root privileges on Android System.
-		To compile as a module, choose M here: the
-		module will be called kernelsu.
+		YukiSU only supports loadable kernel module (LKM). Choose M.
+		Built-in (=y) is no longer supported.
+		The module will be called kernelsu.
 
 config KSU_DEBUG
 	  bool "KernelSU debug mode"
@@ -115,19 +116,6 @@ config KSU_KRETPROBES_SUCOMPAT
 	  
 	  WARNING: This is very experimental. Default to N.
 	  Requires CONFIG_KRETPROBES=y in kernel config.
-
-config KSU_LKM
-	bool "Build as Loadable Kernel Module (LKM)"
-	depends on KSU = m
-	default y if KSU = m
-	help
-	  Enable LKM-specific features:
-	  - GKI yield support (LKM can take over from built-in KSU)
-	  - Delayed manager search on module load
-	  - kallsyms-based symbol lookup for GKI coexistence
-	  
-	  This is automatically enabled when KSU is built as a module (=m).
-	  When building KSU into the kernel (=y), this should be disabled.
 
 config KSU_SUPERKEY
 	bool "Enable SuperKey authentication"

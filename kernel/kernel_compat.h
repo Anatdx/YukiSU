@@ -23,54 +23,11 @@ extern ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 static inline long ksu_copy_from_user_retry(void *to, const void __user *from,
 					    unsigned long count)
 {
-#ifdef CONFIG_KSU_LKM
-	// LKM mode: use simple nofault -> plain fallback
 	long ret = copy_from_user_nofault(to, from, count);
 	if (likely(!ret))
 		return ret;
 	return copy_from_user(to, from, count);
-#else
-	// Builtin mode: use existing ksu_strncpy_from_user_nofault
-	// which has more sophisticated error handling
-	return ksu_strncpy_from_user_nofault(to, from, count);
-#endif // #ifdef CONFIG_KSU_LKM
 }
-
-#ifndef CONFIG_KSU_LKM
-#include "linux/key.h"
-#include "ss/policydb.h"
-/*
- * Adapt to Huawei HISI kernel without affecting other kernels ,
- * Huawei Hisi Kernel EBITMAP Enable or Disable Flag ,
- * From ss/ebitmap.h
- */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)) &&                         \
-	(LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)) ||                     \
-    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) &&                        \
-	(LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0))
-#ifdef HISI_SELINUX_EBITMAP_RO
-#define CONFIG_IS_HW_HISI
-#endif // #ifdef HISI_SELINUX_EBITMAP_RO
-#endif // #if (LINUX_VERSION_CODE >= KERNEL_VERSI...
-       // (LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)) ||
-       // (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) &&
-       // (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0))
-
-// Checks for UH, KDP and RKP
-#ifdef SAMSUNG_UH_DRIVER_EXIST
-#if defined(CONFIG_UH) || defined(CONFIG_KDP) || defined(CONFIG_RKP)
-#error                                                                         \
-    "CONFIG_UH, CONFIG_KDP and CONFIG_RKP is enabled! Please disable or remove it before compile a kernel with KernelSU!"
-#endif // #if defined(CONFIG_UH) || defined(CONFI...
-#endif // #ifdef SAMSUNG_UH_DRIVER_EXIST
-       // defined(CONFIG_RKP)
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||                           \
-    defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-extern struct key *init_session_keyring;
-#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
-       // defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-#endif // #ifndef CONFIG_KSU_LKM
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 #define ksu_access_ok(addr, size) access_ok(addr, size)

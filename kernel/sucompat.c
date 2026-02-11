@@ -26,11 +26,7 @@
 #include "app_profile.h"
 #include "feature.h"
 
-#ifdef CONFIG_KSU_LKM
 #include <linux/compiler_types.h>
-#else
-#include "kernel_compat.h"
-#endif // #ifdef CONFIG_KSU_LKM
 
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"

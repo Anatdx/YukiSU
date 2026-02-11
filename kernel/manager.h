@@ -154,7 +154,5 @@ static inline void ksu_invalidate_manager_appid(void)
 
 /* Observer functions - always use real implementation from pkg_observer.c */
 int ksu_observer_init(void);
-#ifndef CONFIG_KSU_LKM
 void ksu_observer_exit(void);
-#endif // #ifndef CONFIG_KSU_LKM
 #endif // #ifndef __KSU_H_KSU_MANAGER

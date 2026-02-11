@@ -10,29 +10,6 @@
 #include <linux/uaccess.h>
 #include <linux/uidgid.h>
 #include <linux/version.h>
-#ifndef CONFIG_KSU_LKM
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/dcache.h>
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/init.h>
-#include <linux/init_task.h>
-#include <linux/kernel.h>
-#include <linux/kprobes.h>
-#include <linux/mm.h>
-#include <linux/mount.h>
-#include <linux/namei.h>
-#include <linux/nsproxy.h>
-#include <linux/path.h>
-#include <linux/stddef.h>
-#include "kernel_compat.h"
-#include "kernel_umount.h"
-#include "sulog.h"
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/signal.h>
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#endif // #ifndef CONFIG_KSU_LKM
 
 #include "allowlist.h"
 #include "feature.h"
@@ -104,11 +81,7 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
-#ifdef CONFIG_KSU_LKM
 				force_sig(SIGKILL);
-#else
-				__force_sig(SIGKILL);
-#endif // #ifdef CONFIG_KSU_LKM
 				return 0;
 			}
 		}
@@ -121,11 +94,7 @@ int ksu_handle_setuid(uid_t new_uid, uid_t old_uid, uid_t euid)
 					"to %d\n",
 					current->pid, current->comm, old_uid,
 					new_uid);
-#ifdef CONFIG_KSU_LKM
 				force_sig(SIGKILL);
-#else
-				__force_sig(SIGKILL);
-#endif // #ifdef CONFIG_KSU_LKM
 				return 0;
 			}
 		}

@@ -3,13 +3,8 @@
 #include "linux/cred.h"
 #include "linux/sched.h"
 #include "linux/version.h"
-#ifdef CONFIG_KSU_LKM
 #include "selinux.h"
 #include "objsec.h"
-#else
-#include "linux/security.h"
-#include "selinux_defs.h"
-#endif // #ifdef CONFIG_KSU_LKM
 
 /*
  * Cached SID values for frequently checked contexts.
@@ -96,18 +91,13 @@ void setup_ksu_cred(void)
 
 void setenforce(bool enforce)
 {
-#ifdef CONFIG_KSU_LKM
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 	selinux_state.enforcing = enforce;
 #endif // #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-#else
-	__setenforce(enforce);
-#endif // #ifdef CONFIG_KSU_LKM
 }
 
 bool getenforce(void)
 {
-#ifdef CONFIG_KSU_LKM
 #ifdef CONFIG_SECURITY_SELINUX_DISABLE
 	if (selinux_state.disabled) {
 		return false;
@@ -119,13 +109,6 @@ bool getenforce(void)
 #else
 	return true;
 #endif // #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-#else
-	if (is_selinux_disabled()) {
-		return false;
-	}
-
-	return __is_selinux_enforcing();
-#endif // #ifdef CONFIG_KSU_LKM
 }
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \

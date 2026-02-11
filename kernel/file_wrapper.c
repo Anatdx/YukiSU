@@ -7,13 +7,11 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 
-#ifdef CONFIG_KSU_LKM
 #include <linux/fdtable.h>
 #include <linux/gfp.h>
 #include <linux/mount.h>
 #include "objsec.h"
 #include "ksud.h"
-#endif // #ifdef CONFIG_KSU_LKM
 
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -25,7 +23,6 @@
 
 #include "file_wrapper.h"
 
-#ifdef CONFIG_KSU_LKM
 struct ksu_file_wrapper {
 	struct file *orig;
 	struct file_operations ops;
@@ -54,7 +51,6 @@ static int ksu_wrapper_open(struct inode *ino, struct file *fp)
 
 static const struct file_operations ksu_file_wrapper_inode_fops = {
     .owner = THIS_MODULE, .open = ksu_wrapper_open};
-#endif // #ifdef CONFIG_KSU_LKM
 
 static loff_t ksu_wrapper_llseek(struct file *fp, loff_t off, int flags)
 {
@@ -150,13 +146,7 @@ static int ksu_wrapper_iterate_shared(struct file *fp, struct dir_context *dc)
 }
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
-#ifdef CONFIG_KSU_LKM
 static __poll_t ksu_wrapper_poll(struct file *fp, struct poll_table_struct *pts)
-#else
-// typedef unsigned __bitwise __poll_t;
-static unsigned __bitwise ksu_wrapper_poll(struct file *fp,
-					   struct poll_table_struct *pts)
-#endif // #ifdef CONFIG_KSU_LKM
 {
 	struct ksu_file_wrapper *data = fp->private_data;
 	struct file *orig = data->orig;
@@ -432,22 +422,16 @@ static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2,
 }
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
-#ifdef CONFIG_KSU_LKM
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data);
-#endif // #ifdef CONFIG_KSU_LKM
 
 static int ksu_wrapper_release(struct inode *inode, struct file *filp)
 {
-#ifdef CONFIG_KSU_LKM
 	// https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/file_table.c;l=467-473;drc=3be0b283b562eabbc2b1f3bb534dc8903079bbaa
 	// f_op->release is called before fops_put(f_op), so we put it manually.
 	fops_put(filp->f_op);
 	// prevent it from being put again
 	filp->f_op = NULL;
 	ksu_release_file_wrapper(filp->private_data);
-#else
-	ksu_delete_file_wrapper(filp->private_data);
-#endif // #ifdef CONFIG_KSU_LKM
 	return 0;
 }
 
@@ -551,21 +535,12 @@ struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	return p;
 }
 
-#ifdef CONFIG_KSU_LKM
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data)
 {
 	fput((struct file *)data->orig);
 	kfree(data);
 }
-#else
-void ksu_delete_file_wrapper(struct ksu_file_wrapper *data)
-{
-	fput((struct file *)data->orig);
-	kfree(data);
-}
-#endif // #ifdef CONFIG_KSU_LKM
 
-#ifdef CONFIG_KSU_LKM
 static char *ksu_wrapper_d_dname(struct dentry *dentry, char *buffer,
 				 int buflen)
 {
@@ -734,9 +709,7 @@ done:
 
 	return ret;
 }
-#endif // #ifdef CONFIG_KSU_LKM
 
-// Common initialization function for both LKM and GKI modes
 void ksu_file_wrapper_init(void)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)
