@@ -498,7 +498,7 @@ private fun StatusCard(
                                 modifier = Modifier
                             ) {
                                 Text(
-                                    text = stringResource(R.string.home_badge_signature),
+                                    text = "Signature",
                                     style = MaterialTheme.typography.labelMedium,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     color = MaterialTheme.colorScheme.onSecondary
