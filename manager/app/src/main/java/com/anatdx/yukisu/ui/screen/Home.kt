@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -270,7 +271,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSuperKeyMode = isSuperKeyConfigured || superKeyAuthSuccess,
                         needsSuperKeyAuth = needsSuperKeyAuth,
                         onClickInstall = {
-                            navigator.navigate(InstallScreenDestination())
+                            navigator.navigate(InstallScreenDestination(preselectedKernelUri = null))
                         },
                         onSuperKeyAuth = {
                             superKeyDialog.show()
@@ -424,6 +425,16 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
+                // HymoFS 配置按钮
+                IconButton(onClick = {
+                    navigator.navigate(HymoFSConfigScreenDestination)
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Tune,
+                        contentDescription = stringResource(R.string.hymofs_title)
+                    )
+                }
+
                 // 重启按钮
                 var showDropdown by remember { mutableStateOf(false) }
                 KsuIsValid {
@@ -483,8 +494,9 @@ private fun StatusCard(
                 .fillMaxWidth()
                 .clickable {
                     when {
+                        // 点击未安装/未认证卡片时，跳转到安装界面（而不是直接弹出超级密钥对话框）
                         needsSuperKeyAuth -> onClickInstall()
-                        systemStatus.isRootAvailable -> onClickInstall()
+                        systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI() -> onClickInstall()
                     }
                 }
                 .padding(24.dp),
@@ -496,6 +508,11 @@ private fun StatusCard(
                     val workingModeText = when {
                         Natives.isSafeMode -> stringResource(id = R.string.safe_mode)
                         else -> stringResource(id = R.string.home_working)
+                    }
+
+                    val workingModeSurfaceText = when {
+                        systemStatus.lkmMode == true -> "LKM"
+                        else -> "Built-in"
                     }
 
                     Icon(
@@ -522,20 +539,23 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 鉴权方式标签：签名鉴权通过时显示 Signature；SuperKey 也验证通过时再显示 SuperKey（两者可同时显示）
+                            // 工作模式标签
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.secondary,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                             ) {
                                 Text(
-                                    text = "Signature",
+                                    text = workingModeSurfaceText,
                                     style = MaterialTheme.typography.labelMedium,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSecondary
+                                    color = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
+
                             Spacer(Modifier.width(6.dp))
+
+                            // SuperKey 模式标签
                             if (isSuperKeyMode) {
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
@@ -543,7 +563,7 @@ private fun StatusCard(
                                     modifier = Modifier
                                 ) {
                                     Text(
-                                        text = stringResource(R.string.home_badge_superkey),
+                                        text = "SuperKey",
                                         style = MaterialTheme.typography.labelMedium,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         color = MaterialTheme.colorScheme.onTertiary
@@ -626,6 +646,34 @@ private fun StatusCard(
                             imageVector = Icons.Default.Key,
                             contentDescription = stringResource(R.string.superkey_auth_title),
                             tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
+
+                systemStatus.kernelVersion.isGKI() -> {
+                    Icon(
+                        Icons.Outlined.Warning,
+                        contentDescription = stringResource(R.string.home_not_installed),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .padding(
+                                horizontal = 4.dp
+                            ),
+                    )
+
+                    Column(Modifier.padding(start = 20.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_not_installed),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.home_click_to_install),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }

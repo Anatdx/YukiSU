@@ -8,6 +8,7 @@
 #include "debug.hpp"
 #include "defs.hpp"
 #include "flash/flash_partition.hpp"
+#include "hymo/hymo_cli.hpp"
 #include "init_event.hpp"
 #include "log.hpp"
 #include "module/module.hpp"
@@ -139,6 +140,7 @@ static void print_usage() {
     printf("  umount         Manage umount paths\n");
     printf("  kernel         Kernel interface\n");
     printf("  debug          For developers\n");
+    printf("  hymo           HymoFS module manager\n");
     printf("  help           Show this help\n");
     printf("  version        Show version\n");
 }
@@ -479,6 +481,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         printf("  avb disable                Disable AVB/dm-verity\\n");
         printf("  kernel [--slot SLOT]       Show kernel version\\n");
         printf("  boot-info                  Show boot slot information\\n");
+        printf("  ak3 <ZIP>                  Flash AnyKernel3 zip\n");
         printf("\nOPTIONS:\n");
         printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
         printf("                             Default: current active slot\n");
@@ -673,6 +676,10 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         std::string info = ksud::flash::get_boot_slot_info();
         printf("%s\n", info.c_str());
         return 0;
+
+    } else if (filtered_args[0] == "ak3") {
+        printf("AnyKernel3 flash is no longer supported. Use 'ksud flash image' for partition flash.\n");
+        return 1;
     }
 
     printf("Unknown flash subcommand: %s\n", subcmd.c_str());
@@ -780,6 +787,8 @@ int cli_run(int argc, char* argv[]) {
         return cmd_kernel(args);
     } else if (cmd == "debug") {
         return cmd_debug(args);
+    } else if (cmd == "hymo") {
+        return hymo::cmd_hymo(args);
     } else if (cmd == "flash") {
         return cmd_flash_new(args);
     }
