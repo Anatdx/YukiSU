@@ -586,8 +586,6 @@ private fun SelectInstallMethod(
         }
     }
 
-    var lkmExpanded by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier.padding(horizontal = 16.dp)
     ) {
@@ -618,26 +616,18 @@ private fun SelectInstallMethod(
                                 stringResource(R.string.Lkm_install_methods),
                                 style = MaterialTheme.typography.titleMedium
                             )
-                        },
-                        modifier = Modifier.clickable {
-                            lkmExpanded = !lkmExpanded
                         }
                     )
                 }
 
-                AnimatedVisibility(
-                    visible = lkmExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = shrinkVertically() + fadeOut()
+                Column(
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = 16.dp
+                    )
                 ) {
-                    Column(
-                        modifier = Modifier.padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = 16.dp
-                        )
-                    ) {
-                        radioOptions.forEach { option ->
+                    radioOptions.forEach { option ->
                             val interactionSource = remember { MutableInteractionSource() }
                             Surface(
                                 color = if (option.javaClass == selectedOption?.javaClass)
