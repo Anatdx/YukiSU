@@ -135,6 +135,20 @@
     <!-- Module related -->
     <string name="module_install_confirm">确认安装模块 %1$s？</string>
     <string name="unknown_module">未知模块</string>
+    <!-- Module shortcut related -->
+    <string name="module_action_success">模块操作已完成</string>
+    <string name="module_shortcut_type_title">选择快捷方式类型</string>
+    <string name="module_shortcut_title">模块快捷方式</string>
+    <string name="module_shortcut_icon_pick">选择图标</string>
+    <string name="module_shortcut_name_label">快捷方式名称</string>
+    <string name="module_shortcut_delete">删除快捷方式</string>
+    <string name="module_shortcut_add">添加模块快捷方式</string>
+    <string name="module_shortcut_updated">快捷方式已更新</string>
+    <string name="module_shortcut_not_supported">当前桌面不支持固定快捷方式</string>
+    <string name="module_shortcut_created">已创建桌面快捷方式</string>
+    <string name="module_shortcut_permission_tip_xiaomi">请在 MIUI 设置中为本应用开启桌面快捷方式权限后重试</string>
+    <string name="module_shortcut_permission_tip_oppo">请在系统设置中为本应用开启桌面快捷方式权限后重试</string>
+    <string name="module_shortcut_permission_tip_default">请检查桌面/启动器权限，允许本应用创建桌面快捷方式后重试</string>
     <!-- Restore related -->
     <string name="restore_confirm_title">确认还原模块</string>
     <string name="restore_confirm_message">此操作将覆盖所有现有模块，是否继续？</string>

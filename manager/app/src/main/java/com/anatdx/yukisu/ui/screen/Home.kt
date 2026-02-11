@@ -271,7 +271,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSuperKeyMode = isSuperKeyConfigured || superKeyAuthSuccess,
                         needsSuperKeyAuth = needsSuperKeyAuth,
                         onClickInstall = {
-                            navigator.navigate(InstallScreenDestination(preselectedKernelUri = null))
+                            navigator.navigate(InstallScreenDestination())
                         },
                         onSuperKeyAuth = {
                             superKeyDialog.show()
