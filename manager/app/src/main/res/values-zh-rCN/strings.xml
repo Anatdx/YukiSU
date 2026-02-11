@@ -537,10 +537,6 @@
     <string name="hymofs_modules_count">模块数</string>
     <string name="hymofs_system_info">系统信息</string>
     <string name="hymofs_version">版本: %s</string>
-    <string name="hymofs_status_available">HymoFS 内核可用且正常运行</string>
-    <string name="hymofs_status_not_present">HymoFS 内核不存在</string>
-    <string name="hymofs_status_kernel_too_old">内核版本过低，不支持 HymoFS</string>
-    <string name="hymofs_status_module_too_old">模块版本过低，不兼容当前内核</string>
     <string name="hymofs_builtin_mount">内置挂载</string>
     <string name="hymofs_builtin_mount_desc">使用内置的 hymo 挂载而非外部元模块。如果您想使用其他元模块，请禁用此选项。</string>
     <string name="hymofs_verbose">详细日志</string>

@@ -534,10 +534,6 @@
     <string name="hymofs_modules_count">Modules</string>
     <string name="hymofs_system_info">System Info</string>
     <string name="hymofs_version">Version: %s</string>
-    <string name="hymofs_status_available">HymoFS kernel is available and working</string>
-    <string name="hymofs_status_not_present">HymoFS kernel is not present</string>
-    <string name="hymofs_status_kernel_too_old">Kernel version is too old for HymoFS</string>
-    <string name="hymofs_status_module_too_old">Module version is too old for current kernel</string>
     <string name="hymofs_builtin_mount">Built-in Mount</string>
     <string name="hymofs_builtin_mount_desc">Use built-in hymo mount instead of external metamodule. Disable this if you want to use another metamodule.</string>
     <string name="hymofs_verbose">Verbose Logging</string>
