@@ -778,12 +778,18 @@ private fun SettingsTab(
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
+                // Filesystem preference (mapped to fs_type in meta-hymo)
                 SettingSwitch(
                     title = stringResource(R.string.hymofs_force_ext4),
                     subtitle = stringResource(R.string.hymofs_force_ext4_desc),
-                    checked = config.forceExt4,
-                    onCheckedChange = {
-                        updateAndSave(config.copy(forceExt4 = it))
+                    checked = config.fsType == "ext4",
+                    onCheckedChange = { enabled ->
+                        val newFsType = when {
+                            enabled -> "ext4"
+                            config.fsType == "ext4" -> "auto"
+                            else -> config.fsType
+                        }
+                        updateAndSave(config.copy(fsType = newFsType))
                     }
                 )
                 
@@ -792,9 +798,14 @@ private fun SettingsTab(
                 SettingSwitch(
                     title = stringResource(R.string.hymofs_prefer_erofs),
                     subtitle = stringResource(R.string.hymofs_prefer_erofs_desc),
-                    checked = config.preferErofs,
-                    onCheckedChange = {
-                        updateAndSave(config.copy(preferErofs = it))
+                    checked = config.fsType == "erofs",
+                    onCheckedChange = { enabled ->
+                        val newFsType = when {
+                            enabled -> "erofs"
+                            config.fsType == "erofs" -> "auto"
+                            else -> config.fsType
+                        }
+                        updateAndSave(config.copy(fsType = newFsType))
                     }
                 )
                 
@@ -914,18 +925,6 @@ private fun SettingsTab(
                     onCheckedChange = {
                         onSetStealth(it)
                         updateAndSave(config.copy(enableStealth = it))
-                    }
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                SettingSwitch(
-                    title = stringResource(R.string.hymofs_avc_spoof),
-                    subtitle = stringResource(R.string.hymofs_avc_spoof_desc),
-                    checked = config.avcSpoof,
-                    enabled = hymofsAvailable,
-                    onCheckedChange = {
-                        updateAndSave(config.copy(avcSpoof = it))
                     }
                 )
                 

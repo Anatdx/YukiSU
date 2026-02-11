@@ -85,24 +85,26 @@ object HymoFSManager {
     )
     
     /**
-     * Config data class
+     * Config data class (aligned with meta-hymo Config)
      */
     data class HymoConfig(
         val moduledir: String = MODULE_DIR,
         val tempdir: String = "",
         val mountsource: String = "KSU",
+        val debug: Boolean = false,
         val verbose: Boolean = false,
-        val partitions: List<String> = emptyList(),
-        val forceExt4: Boolean = false,
-        val preferErofs: Boolean = false,
-        val enableNuke: Boolean = false,
+        val fsType: String = "auto",              // "auto", "ext4", "erofs", "tmpfs"
         val disableUmount: Boolean = false,
+        val enableNuke: Boolean = true,
         val ignoreProtocolMismatch: Boolean = false,
         val enableKernelDebug: Boolean = false,
         val enableStealth: Boolean = true,
-        val avcSpoof: Boolean = false,
-        val hymofsAvailable: Boolean = false,
-        val hymofsStatus: HymoFSStatus = HymoFSStatus.NOT_PRESENT
+        val hymofsEnabled: Boolean = true,
+        val mirrorPath: String = "",
+        val mountStage: String = "metamount",     // "post-fs-data", "metamount", "services"
+        val partitions: List<String> = emptyList(),
+        val unameRelease: String = "",
+        val unameVersion: String = ""
     )
     
     /**
@@ -159,7 +161,7 @@ object HymoFSManager {
     }
     
     /**
-     * Load configuration from ksud hymo config show (JSON)
+     * Load configuration from ksud hymo config show (JSON, meta-hymo format)
      */
     suspend fun loadConfig(): HymoConfig = withContext(Dispatchers.IO) {
         try {
@@ -170,20 +172,22 @@ object HymoFSManager {
                     moduledir = json.optString("moduledir", MODULE_DIR),
                     tempdir = json.optString("tempdir", ""),
                     mountsource = json.optString("mountsource", "KSU"),
+                    debug = json.optBoolean("debug", false),
                     verbose = json.optBoolean("verbose", false),
-                    partitions = json.optJSONArray("partitions")?.let { arr ->
-                        (0 until arr.length()).map { arr.getString(it) }
-                    } ?: emptyList(),
-                    forceExt4 = json.optBoolean("force_ext4", false),
-                    preferErofs = json.optBoolean("prefer_erofs", false),
-                    enableNuke = json.optBoolean("enable_nuke", false),
+                    fsType = json.optString("fs_type", "auto"),
                     disableUmount = json.optBoolean("disable_umount", false),
+                    enableNuke = json.optBoolean("enable_nuke", true),
                     ignoreProtocolMismatch = json.optBoolean("ignore_protocol_mismatch", false),
                     enableKernelDebug = json.optBoolean("enable_kernel_debug", false),
                     enableStealth = json.optBoolean("enable_stealth", true),
-                    avcSpoof = json.optBoolean("avc_spoof", false),
-                    hymofsAvailable = json.optBoolean("hymofs_available", false),
-                    hymofsStatus = HymoFSStatus.fromCode(json.optInt("hymofs_status", 1))
+                    hymofsEnabled = json.optBoolean("hymofs_enabled", true),
+                    mirrorPath = json.optString("mirror_path", ""),
+                    mountStage = json.optString("mount_stage", "metamount"),
+                    partitions = json.optJSONArray("partitions")?.let { arr ->
+                        (0 until arr.length()).map { arr.getString(it) }
+                    } ?: emptyList(),
+                    unameRelease = json.optString("uname_release", ""),
+                    unameVersion = json.optString("uname_version", "")
                 )
             } else {
                 HymoConfig()
@@ -195,7 +199,7 @@ object HymoFSManager {
     }
     
     /**
-     * Save configuration as JSON (config.json)
+     * Save configuration as JSON (config.json, meta-hymo format)
      */
     suspend fun saveConfig(config: HymoConfig): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -203,15 +207,21 @@ object HymoFSManager {
                 put("moduledir", config.moduledir)
                 if (config.tempdir.isNotEmpty()) put("tempdir", config.tempdir)
                 put("mountsource", config.mountsource)
+                put("debug", config.debug)
                 put("verbose", config.verbose)
-                put("force_ext4", config.forceExt4)
-                put("prefer_erofs", config.preferErofs)
+                put("fs_type", config.fsType)
                 put("disable_umount", config.disableUmount)
                 put("enable_nuke", config.enableNuke)
                 put("ignore_protocol_mismatch", config.ignoreProtocolMismatch)
                 put("enable_kernel_debug", config.enableKernelDebug)
                 put("enable_stealth", config.enableStealth)
-                put("avc_spoof", config.avcSpoof)
+                put("hymofs_enabled", config.hymofsEnabled)
+                if (config.mirrorPath.isNotEmpty()) {
+                    put("mirror_path", config.mirrorPath)
+                }
+                if (config.mountStage.isNotEmpty()) {
+                    put("mount_stage", config.mountStage)
+                }
                 if (config.partitions.isNotEmpty()) {
                     put("partitions", JSONArray(config.partitions))
                 }
