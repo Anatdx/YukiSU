@@ -69,13 +69,7 @@ object UltraActivityUtils {
 
             when {
                 kernelUris.isNotEmpty() && moduleUris.isEmpty() -> {
-                    if (kernelUris.size == 1 && rootAvailable()) {
-                        navigator.navigate(
-                            InstallScreenDestination(
-                                preselectedKernelUri = kernelUris.first().toString()
-                            )
-                        )
-                    }
+                    navigator.navigate(InstallScreenDestination())
                     setAutoExitAfterFlash(activity)
                 }
 

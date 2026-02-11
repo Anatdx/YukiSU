@@ -7,7 +7,6 @@
 #include "core/restorecon.hpp"
 #include "debug.hpp"
 #include "defs.hpp"
-#include "flash/flash_ak3.hpp"
 #include "flash/flash_partition.hpp"
 #include "init_event.hpp"
 #include "log.hpp"
@@ -480,7 +479,6 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         printf("  avb disable                Disable AVB/dm-verity\\n");
         printf("  kernel [--slot SLOT]       Show kernel version\\n");
         printf("  boot-info                  Show boot slot information\\n");
-        printf("  ak3 <ZIP>                  Flash AnyKernel3 zip\n");
         printf("\nOPTIONS:\n");
         printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
         printf("                             Default: current active slot\n");
@@ -675,10 +673,6 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         std::string info = ksud::flash::get_boot_slot_info();
         printf("%s\n", info.c_str());
         return 0;
-
-    } else if (filtered_args[0] == "ak3") {
-        // Delegate to existing AK3 flash - pass remaining args
-        return cmd_flash(args);
     }
 
     printf("Unknown flash subcommand: %s\n", subcmd.c_str());

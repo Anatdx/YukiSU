@@ -49,7 +49,6 @@ import com.maxkeppeler.sheets.list.models.ListSelection
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.KernelFlashScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PartitionManagerScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
@@ -65,7 +64,6 @@ import com.anatdx.yukisu.ui.theme.CardConfig.cardElevation
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
 import com.anatdx.yukisu.ui.util.*
-import ui.screen.kernelFlash.component.SlotSelectionDialog
 
 /**
  * @author ShirkNeko
@@ -76,43 +74,15 @@ import ui.screen.kernelFlash.component.SlotSelectionDialog
 @Destination<RootGraph>
 @Composable
 fun InstallScreen(
-    navigator: DestinationsNavigator,
-    preselectedKernelUri: String? = null
+    navigator: DestinationsNavigator
 ) {
     val context = LocalContext.current
     var installMethod by remember { mutableStateOf<InstallMethod?>(null) }
     var lkmSelection by remember { mutableStateOf<LkmSelection>(LkmSelection.KmiNone) }
     var showRebootDialog by remember { mutableStateOf(false) }
-    var showSlotSelectionDialog by remember { mutableStateOf(false) }
-    var tempKernelUri by remember { mutableStateOf<Uri?>(null) }
 
     val kernelVersion = getKernelVersion()
     val isGKI = kernelVersion.isGKI()
-    val isAbDevice = produceState(initialValue = false) {
-        value = isAbDevice()
-    }.value
-    val summary = stringResource(R.string.horizon_kernel_summary)
-
-    // 处理预选的内核文件
-    LaunchedEffect(preselectedKernelUri) {
-        preselectedKernelUri?.let { uriString ->
-            try {
-                val preselectedUri = uriString.toUri()
-                val horizonMethod = InstallMethod.HorizonKernel(
-                    uri = preselectedUri,
-                    summary = summary
-                )
-                installMethod = horizonMethod
-                tempKernelUri = preselectedUri
-
-                if (isAbDevice) {
-                    showSlotSelectionDialog = true
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 
     if (showRebootDialog) {
         RebootDialog(
@@ -142,55 +112,23 @@ fun InstallScreen(
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
-    // GKI priority - when enabled, GKI takes priority over LKM (LKM will not trigger yield)
-    var gkiPriority by remember { mutableStateOf(false) }
 
     val onInstall = {
         installMethod?.let { method ->
-            when (method) {
-                is InstallMethod.HorizonKernel -> {
-                    method.uri?.let { uri ->
-                        navigator.navigate(
-                            KernelFlashScreenDestination(
-                                kernelUri = uri,
-                                selectedSlot = method.slot
-                            )
-                        )
-                    }
-                }
-                else -> {
-                    val isOta = method is InstallMethod.DirectInstallToInactiveSlot
-                    val partitionSelection = partitionsState.getOrNull(partitionSelectionIndex)
-                    val flashIt = FlashIt.FlashBoot(
-                        boot = if (method is InstallMethod.SelectFile) method.uri else null,
-                        lkm = lkmSelection,
-                        ota = isOta,
-                        partition = partitionSelection,
-                        superKey = superKey.ifBlank { null },
-                        signatureBypass = signatureBypass,
-                        gkiPriority = gkiPriority
-                    )
-                    navigator.navigate(FlashScreenDestination(flashIt))
-                }
-            }
+            val isOta = method is InstallMethod.DirectInstallToInactiveSlot
+            val partitionSelection = partitionsState.getOrNull(partitionSelectionIndex)
+            val flashIt = FlashIt.FlashBoot(
+                boot = if (method is InstallMethod.SelectFile) method.uri else null,
+                lkm = lkmSelection,
+                ota = isOta,
+                partition = partitionSelection,
+                superKey = superKey.ifBlank { null },
+                signatureBypass = signatureBypass
+            )
+            navigator.navigate(FlashScreenDestination(flashIt))
         }
         Unit
     }
-
-    // 槽位选择
-    SlotSelectionDialog(
-        show = showSlotSelectionDialog && isAbDevice,
-        onDismiss = { showSlotSelectionDialog = false },
-        onSlotSelected = { slot ->
-            showSlotSelectionDialog = false
-            val horizonMethod = InstallMethod.HorizonKernel(
-                uri = tempKernelUri,
-                slot = slot,
-                summary = summary
-            )
-            installMethod = horizonMethod
-        }
-    )
 
     val currentKmi by produceState(initialValue = "") {
         value = getCurrentKmi()
@@ -204,7 +142,7 @@ fun InstallScreen(
     }
 
     val onClickNext = {
-        if (isGKI && lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank() && installMethod !is InstallMethod.HorizonKernel) {
+        if (isGKI && lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank()) {
             selectKmiDialog.show()
         } else {
             onInstall()
@@ -259,18 +197,7 @@ fun InstallScreen(
         ) {
             SelectInstallMethod(
                 isGKI = isGKI,
-                onSelected = { method ->
-                    if (method is InstallMethod.HorizonKernel && method.uri != null) {
-                        if (isAbDevice) {
-                            tempKernelUri = method.uri
-                            showSlotSelectionDialog = true
-                        } else {
-                            installMethod = method
-                        }
-                    } else {
-                        installMethod = method
-                    }
-                },
+                onSelected = { installMethod = it },
                 selectedMethod = installMethod
             )
 
@@ -375,28 +302,6 @@ fun InstallScreen(
                     }
                 }
 
-                (installMethod as? InstallMethod.HorizonKernel)?.let { method ->
-                    if (method.slot != null) {
-                        ElevatedCard(
-                            colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                            elevation = getCardElevation(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    id = R.string.selected_slot,
-                                    if (method.slot == "a") stringResource(id = R.string.slot_a)
-                                    else stringResource(id = R.string.slot_b)
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    }
-                }
-
                 // SuperKey 输入卡片 (仅在 LKM 安装模式下显示)
                 AnimatedVisibility(
                     visible = installMethod is InstallMethod.DirectInstall || 
@@ -472,49 +377,6 @@ fun InstallScreen(
                                     enabled = superKey.isNotBlank()
                                 )
                             }
-                        }
-                    }
-                }
-
-                // GKI priority switch card (独立显示，适用于所有 LKM 安装模式)
-                AnimatedVisibility(
-                    visible = installMethod is InstallMethod.DirectInstall || 
-                              installMethod is InstallMethod.DirectInstallToInactiveSlot ||
-                              installMethod is InstallMethod.SelectFile,
-                    enter = fadeIn() + expandVertically(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    ElevatedCard(
-                        colors = getCardColors(MaterialTheme.colorScheme.secondaryContainer),
-                        elevation = getCardElevation(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(id = R.string.gki_priority_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                                Text(
-                                    text = stringResource(id = R.string.gki_priority_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                            Switch(
-                                checked = gkiPriority,
-                                onCheckedChange = { gkiPriority = it }
-                            )
                         }
                     }
                 }
@@ -623,13 +485,6 @@ sealed class InstallMethod {
             get() = R.string.install_inactive_slot
     }
 
-    data class HorizonKernel(
-        val uri: Uri? = null,
-        val slot: String? = null,
-        @param:StringRes override val label: Int = R.string.horizon_kernel,
-        override val summary: String? = null
-    ) : InstallMethod()
-
     abstract val label: Int
     open val summary: String? = null
 }
@@ -647,7 +502,6 @@ private fun SelectInstallMethod(
     val defaultPartitionName = produceState(initialValue = "boot") {
         value = getDefaultPartition()
     }.value
-    val horizonKernelSummary = stringResource(R.string.horizon_kernel_summary)
     val selectFileTip = stringResource(
         id = R.string.select_file_tip, defaultPartitionName
     )
@@ -661,7 +515,6 @@ private fun SelectInstallMethod(
         if (isAbDevice) {
             radioOptions.add(InstallMethod.DirectInstallToInactiveSlot)
         }
-        radioOptions.add(InstallMethod.HorizonKernel(summary = horizonKernelSummary))
     }
 
     var selectedOption by remember { mutableStateOf<InstallMethod?>(null) }
@@ -681,12 +534,6 @@ private fun SelectInstallMethod(
                         uri,
                         summary = selectFileTip
                     )
-
-                    is InstallMethod.HorizonKernel -> InstallMethod.HorizonKernel(
-                        uri,
-                        summary = horizonKernelSummary
-                    )
-
                     else -> null
                 }
                 option?.let { opt ->
@@ -711,7 +558,7 @@ private fun SelectInstallMethod(
     val onClick = { option: InstallMethod ->
         currentSelectingMethod = option
         when (option) {
-            is InstallMethod.SelectFile, is InstallMethod.HorizonKernel -> {
+            is InstallMethod.SelectFile -> {
                 selectImageLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
                     type = "application/*"
                     putExtra(
@@ -733,7 +580,6 @@ private fun SelectInstallMethod(
     }
 
     var lkmExpanded by remember { mutableStateOf(false) }
-    var gkiExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.padding(horizontal = 16.dp)
@@ -784,113 +630,7 @@ private fun SelectInstallMethod(
                             bottom = 16.dp
                         )
                     ) {
-                        radioOptions.filter { it !is InstallMethod.HorizonKernel }.forEach { option ->
-                            val interactionSource = remember { MutableInteractionSource() }
-                            Surface(
-                                color = if (option.javaClass == selectedOption?.javaClass)
-                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = cardAlpha)
-                                else
-                                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = cardAlpha),
-                                shape = MaterialTheme.shapes.medium,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clip(MaterialTheme.shapes.medium)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .selectable(
-                                            selected = option.javaClass == selectedOption?.javaClass,
-                                            onClick = { onClick(option) },
-                                            role = Role.RadioButton,
-                                            indication = LocalIndication.current,
-                                            interactionSource = interactionSource
-                                        )
-                                        .padding(vertical = 8.dp, horizontal = 12.dp)
-                                ) {
-                                    RadioButton(
-                                        selected = option.javaClass == selectedOption?.javaClass,
-                                        onClick = null,
-                                        interactionSource = interactionSource,
-                                        colors = RadioButtonDefaults.colors(
-                                            selectedColor = MaterialTheme.colorScheme.primary,
-                                            unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    )
-                                    Column(
-                                        modifier = Modifier
-                                            .padding(start = 10.dp)
-                                            .weight(1f)
-                                    ) {
-                                        Text(
-                                            text = stringResource(id = option.label),
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        option.summary?.let {
-                                            Text(
-                                                text = it,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // anykernel3 刷写
-        if (rootAvailable) {
-            ElevatedCard(
-                colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                elevation = getCardElevation(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                MaterialTheme(
-                    colorScheme = MaterialTheme.colorScheme.copy(
-                        surface = if (CardConfig.isCustomBackgroundEnabled) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    ListItem(
-                        leadingContent = {
-                            Icon(
-                                Icons.Filled.FileUpload,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        headlineContent = {
-                            Text(
-                                stringResource(R.string.GKI_install_methods),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            gkiExpanded = !gkiExpanded
-                        }
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = gkiExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = 16.dp
-                        )
-                    ) {
-                        radioOptions.filterIsInstance<InstallMethod.HorizonKernel>().forEach { option ->
+                        radioOptions.forEach { option ->
                             val interactionSource = remember { MutableInteractionSource() }
                             Surface(
                                 color = if (option.javaClass == selectedOption?.javaClass)

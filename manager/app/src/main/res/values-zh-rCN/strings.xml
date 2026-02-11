@@ -216,8 +216,6 @@
     <string name="color_gray">高级灰</string>
     <string name="color_yellow">黄色</string>
     <string name="color_trans_pride">Trans Pride</string>
-    <string name="horizon_kernel">刷写 AnyKernel3 压缩包</string>
-    <string name="horizon_kernel_summary">刷入 Anykernel3 内核</string>
     <string name="root_required">需要 root 权限</string>
     <string name="reboot_complete_title">刷写完成</string>
     <string name="reboot_complete_msg">是否立即重启？</string>
@@ -284,7 +282,6 @@
     <string name="flash_failed_message">刷写失败</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 修补/安装</string>
-    <string name="GKI_install_methods">刷写 AnyKernel3</string>
     <string name="kernel_version_log">内核版本：%1$s</string>
     <string name="tool_version_log">使用修补工具：%1$s</string>
     <string name="configuration">配置</string>
@@ -489,8 +486,6 @@
     <string name="settings_clear_super_key_dialog">确定要清除已存储的超级密钥吗？</string>
     <string name="signature_bypass_title">仅超级密钥模式</string>
     <string name="signature_bypass_desc">禁用 APK 签名验证。管理器将仅通过超级密钥认证来识别。</string>
-    <string name="gki_priority_title">GKI 优先模式</string>
-    <string name="gki_priority_desc">启用后，GKI 优先于 LKM。LKM 将不会触发 GKI 让位，会自行退出。</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">分区管理器</string>

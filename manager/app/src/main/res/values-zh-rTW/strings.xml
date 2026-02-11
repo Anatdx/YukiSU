@@ -209,8 +209,6 @@
     <string name="color_pink">粉色</string>
     <string name="color_gray">高級灰</string>
     <string name="color_yellow">黃色</string>
-    <string name="horizon_kernel">刷寫 AnyKernel3 壓縮包</string>
-    <string name="horizon_kernel_summary">刷寫 AnyKernel3 內核</string>
     <string name="root_required">需要 Root 權限</string>
     <string name="reboot_complete_title">刷寫完成</string>
     <string name="reboot_complete_msg">是否立即重新啟動？</string>
@@ -277,7 +275,6 @@
     <string name="flash_failed_message">刷寫失敗</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 修補/安裝</string>
-    <string name="GKI_install_methods">刷寫 AnyKernel3</string>
     <string name="kernel_version_log">內核版本：%1$s</string>
     <string name="tool_version_log">使用修補工具：%1$s</string>
     <string name="configuration">配置</string>
@@ -482,6 +479,4 @@
     <string name="settings_donot_store_superkey_summary">啟用後，管理器不會儲存您的超級密鑰。每次重新啟動後都需要手動輸入密鑰進行認證。</string>
     <string name="signature_bypass_title">僅超級密鑰模式</string>
     <string name="signature_bypass_desc">停用 APK 簽名驗證。管理器將僅透過超級密鑰認證來識別。</string>
-    <string name="gki_priority_title">GKI 優先模式</string>
-    <string name="gki_priority_desc">啟用後，GKI 優先於 LKM。LKM 將不會觸發 GKI 讓位，兩者獨立運作。</string>
 </resources>

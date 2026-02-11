@@ -218,8 +218,6 @@
     <string name="color_gray">Gray</string>
     <string name="color_yellow">Yellow</string>
     <string name="color_trans_pride">Trans Pride</string>
-    <string name="horizon_kernel">Install Anykernel3</string>
-    <string name="horizon_kernel_summary">Flash AnyKernel3 kernel file</string>
     <string name="root_required">Requires root privileges</string>
     <string name="reboot_complete_title">Scrubbing complete</string>
     <string name="reboot_complete_msg">Whether to reboot immediately？</string>
@@ -286,7 +284,6 @@
     <string name="flash_failed_message">Flash failed</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repair/installation</string>
-    <string name="GKI_install_methods">Flashing AnyKernel3</string>
     <string name="kernel_version_log">Kernel version：%1$s</string>
     <string name="tool_version_log">Using the patching tool：%1$s</string>
     <string name="configuration">Configure</string>
@@ -475,8 +472,6 @@
     <string name="settings_clear_super_key_dialog">Do you really want to clear the stored SuperKey?</string>
     <string name="signature_bypass_title">SuperKey Only Mode</string>
     <string name="signature_bypass_desc">Disable APK signature verification. Manager will only be recognized through SuperKey authentication.</string>
-    <string name="gki_priority_title">GKI Priority Mode</string>
-    <string name="gki_priority_desc">When enabled, GKI takes priority over LKM. The LKM will not trigger GKI yield and both will run independently.</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>

@@ -70,7 +70,7 @@ enum class FlashingStatus {
 
 private var currentFlashingStatus = mutableStateOf(FlashingStatus.FLASHING)
 
-// 添加模块安装状态跟踪
+// ??????????
 data class ModuleInstallStatus(
     val totalModules: Int = 0,
     val currentModule: Int = 0,
@@ -117,7 +117,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         sharedPref.getBoolean("auto_exit_after_flash", false)
     }
 
-    // 是否通过从外部启动的模块安装
+    // ??????????????
     val isExternalInstall = remember {
         when (flashIt) {
             is FlashIt.FlashModule -> {
@@ -139,10 +139,10 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     val logContent = rememberSaveable { StringBuilder() }
     var showFloatAction by rememberSaveable { mutableStateOf(false) }
     var shouldWarningUserMetaModule by rememberSaveable { mutableStateOf(false) }
-    // 添加状态跟踪是否已经完成刷写
+    // ??????????????
     var hasFlashCompleted by rememberSaveable { mutableStateOf(false) }
     var hasExecuted by rememberSaveable { mutableStateOf(false) }
-    // 更新模块状态管理
+    // ????????
     var hasUpdateExecuted by rememberSaveable { mutableStateOf(false) }
     var hasUpdateCompleted by rememberSaveable { mutableStateOf(false) }
 
@@ -190,10 +190,10 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         )
     }
 
-    // 当前模块安装状态
+    // ????????
     val currentStatus = moduleInstallStatus.value
 
-    // 重置状态
+    // ????
     LaunchedEffect(flashIt) {
         when (flashIt) {
             is FlashIt.FlashModules -> {
@@ -220,7 +220,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         }
     }
 
-    // 处理更新模块安装
+    // ????????
     LaunchedEffect(flashIt) {
         if (flashIt !is FlashIt.FlashModuleUpdate) return@LaunchedEffect
         if (hasUpdateExecuted || hasUpdateCompleted || text.isNotEmpty()) {
@@ -250,7 +250,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     text += "\n\n\n"
                     showFloatAction = true
 
-                    // 如果是内部安装，显示重启按钮后不自动返回
+                    // ????????????????????
                     if (isExternalInstall) {
                         return@flashModuleUpdate
                     }
@@ -258,7 +258,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                 hasUpdateCompleted = true
 
                 if (!hasMetaModule() && code == 0) {
-                    // 如果没安装 MetaModule，且此模块需要挂载，并且当前模块安装成功，警告用户
+                    // ????? MetaModule?????????????????????????
                     scope.launch {
                         val mountOldDirectory = SuFile.open("/data/adb/modules/${getModuleIdFromUri(context,flashIt.uri)}/system")
                         val mountNewDirectory = SuFile.open("/data/adb/modules_update/${getModuleIdFromUri(context,flashIt.uri)}/system")
@@ -270,7 +270,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                 }
 
-                // 如果是外部安装或需要自动退出的模块更新且不需要重启，延迟后自动返回
+                // ?????????????????????????????????
                 if (isExternalInstall || shouldAutoExit) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
@@ -301,7 +301,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
         }
     }
 
-    // 安装但排除更新模块
+    // ?????????
     LaunchedEffect(flashIt) {
         if (flashIt is FlashIt.FlashModuleUpdate) return@LaunchedEffect
         if (hasExecuted || hasFlashCompleted || text.isNotEmpty()) {
@@ -349,7 +349,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
 
                 hasFlashCompleted = true
                 if (!hasMetaModule() && code == 0) {
-                    // 没有 MetaModule，且安装成功，检查此模块是否有自动挂载
+                    // ?? MetaModule???????????????????
                     scope.launch {
                         var mountOldDirectory : File
                         var mountNewDirectory : File
@@ -375,7 +375,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         shouldWarningUserMetaModule = true
 
                         if (!hasMetaModule() && (flashIt !is FlashIt.FlashModules || flashIt.currentIndex >= flashIt.uris.size - 1)) {
-                            // 如果没有 MetaModule，且当前不是多模块刷写或是最后一个需要自动刷写的模块，而且有模块需要挂载，警告用户
+                            // ???? MetaModule?????????????????????????????????????????
                             alertDialog.show()
                         }
                     }
@@ -390,7 +390,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         navigator.navigate(FlashScreenDestination(nextFlashIt))
                     }
                 } else if ((isExternalInstall || shouldAutoExit) && flashIt is FlashIt.FlashModules && flashIt.currentIndex >= flashIt.uris.size - 1) {
-                    // 如果是外部安装或需要自动退出且是最后一个模块，安装完成后自动返回
+                    // ????????????????????????????????
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
@@ -406,7 +406,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         (context as? ComponentActivity)?.finish()
                     }
                 } else if ((isExternalInstall || shouldAutoExit) && flashIt is FlashIt.FlashModule) {
-                    // 如果是外部安装或需要自动退出的单个模块，安装完成后自动返回
+                    // ?????????????????????????????
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
@@ -556,7 +556,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     }
 }
 
-// 显示模块安装进度条和状态
+// ????????????
 @Composable
 fun ModuleInstallProgressBar(
     currentIndex: Int,
@@ -589,7 +589,7 @@ fun ModuleInstallProgressBar(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // 模块名称和进度
+            // ???????
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -609,7 +609,7 @@ fun ModuleInstallProgressBar(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 进度条
+            // ???
             LinearProgressIndicator(
                 progress = { progress.value },
                 modifier = Modifier
@@ -621,7 +621,7 @@ fun ModuleInstallProgressBar(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 失败模块列表
+            // ??????
             AnimatedVisibility(
                 visible = failedModules.isNotEmpty(),
                 enter = fadeIn() + expandVertically(),
@@ -649,7 +649,7 @@ fun ModuleInstallProgressBar(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // 失败模块列表
+                    // ??????
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -661,7 +661,7 @@ fun ModuleInstallProgressBar(
                     ) {
                         failedModules.forEach { moduleName ->
                             Text(
-                                text = "• $moduleName",
+                                text = "? $moduleName",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -782,22 +782,21 @@ suspend fun getModuleIdFromUri(context: Context, uri: Uri): String? {
 @Parcelize
 sealed class FlashIt : Parcelable {
     data class FlashBoot(
-        val boot: Uri? = null, 
-        val lkm: LkmSelection, 
-        val ota: Boolean, 
+        val boot: Uri? = null,
+        val lkm: LkmSelection,
+        val ota: Boolean,
         val partition: String? = null,
         val superKey: String? = null,
-        val signatureBypass: Boolean = false,
-        val gkiPriority: Boolean = false
+        val signatureBypass: Boolean = false
     ) : FlashIt()
     data class FlashModule(val uri: Uri) : FlashIt()
     data class FlashModules(val uris: List<Uri>, val currentIndex: Int = 0) : FlashIt()
-    data class FlashModuleUpdate(val uri: Uri) : FlashIt() // 模块更新
+    data class FlashModuleUpdate(val uri: Uri) : FlashIt() // ????
     data object FlashRestore : FlashIt()
     data object FlashUninstall : FlashIt()
 }
 
-// 模块更新刷写
+// ??????
 fun flashModuleUpdate(
     uri: Uri,
     onFinish: (Boolean, Int) -> Unit,
@@ -821,7 +820,6 @@ fun flashIt(
             flashIt.partition,
             flashIt.superKey,
             flashIt.signatureBypass,
-            flashIt.gkiPriority,
             onFinish,
             onStdout,
             onStderr

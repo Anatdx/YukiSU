@@ -184,8 +184,6 @@
     <string name="color_pink">粉色</string>
     <string name="color_gray">高級灰</string>
     <string name="color_yellow">黃色</string>
-    <string name="horizon_kernel">刷寫 AnyKernel3 刷寫包</string>
-    <string name="horizon_kernel_summary">刷入 Anykernel3 核心</string>
     <string name="root_required">需要 root 權限</string>
     <string name="reboot_complete_title">刷寫完成</string>
     <string name="reboot_complete_msg">是否立即重新啟動？</string>
@@ -249,7 +247,6 @@
     <string name="flash_failed_message">刷寫失敗</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM修補/安裝</string>
-    <string name="GKI_install_methods">刷寫 AnyKernel3</string>
     <string name="kernel_version_log">核心版本：%1$s</string>
     <string name="tool_version_log">使用修補工具：%1$s</string>
     <string name="configuration">配置</string>
