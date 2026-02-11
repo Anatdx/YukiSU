@@ -229,10 +229,11 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     }
                 }
 
-                // GKI 内置 KSU 不受支持：红色横幅警告
+                // GKI 内置 KSU 不受支持：红色横幅警告（仅 built-in，LKM 不显示）
                 if (viewModel.isCoreDataLoaded &&
                     viewModel.systemStatus.kernelVersion.isGKI() &&
-                    viewModel.systemStatus.ksuVersion != null
+                    viewModel.systemStatus.ksuVersion != null &&
+                    !Natives.isLkmMode
                 ) {
                     Surface(
                         color = MaterialTheme.colorScheme.error,
