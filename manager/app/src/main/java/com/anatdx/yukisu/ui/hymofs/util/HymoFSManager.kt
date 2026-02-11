@@ -396,6 +396,40 @@ object HymoFSManager {
             false
         }
     }
+
+    /**
+     * Ask hymod to scan partitions and update config.json, then return fresh config.
+     */
+    suspend fun syncPartitionsWithDaemon(): HymoConfig? = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo config sync-partitions").exec()
+            if (!result.isSuccess) {
+                Log.w(TAG, "sync-partitions failed: ${result.err.joinToString(";")}")
+                return@withContext null
+            }
+            // Reload config after daemon updated it
+            loadConfig()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sync partitions via daemon", e)
+            null
+        }
+    }
+
+    /**
+     * Create modules.img via hymod (config create-image).
+     */
+    suspend fun createModulesImage(baseDir: String = "/data/adb"): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo config create-image $baseDir").exec()
+            if (!result.isSuccess) {
+                Log.w(TAG, "create-image failed: ${result.err.joinToString(";")}")
+            }
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create modules image", e)
+            false
+        }
+    }
     
     /**
      * Set kernel debug mode

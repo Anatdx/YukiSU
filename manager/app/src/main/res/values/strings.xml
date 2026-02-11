@@ -593,6 +593,15 @@
     <string name="hymofs_info_active_mounts">Active Mounts:</string>
     <string name="hymofs_info_more_mounts">... and %d more</string>
     <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
+    <string name="hymofs_enable_title">Enable HymoFS</string>
+    <string name="hymofs_enable_desc">Control whether HymoFS is enabled on boot (takes effect after daemon restart)</string>
+    <string name="hymofs_mirror_path">Mirror path</string>
+    <string name="hymofs_mirror_path_desc">Optional custom mirror path for HymoFS (leave empty for default)</string>
+    <string name="hymofs_mount_stage">Mount stage</string>
+    <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
+    <string name="hymofs_mount_stage_meta">metamount</string>
+    <string name="hymofs_mount_stage_services">services</string>
+    <string name="hymofs_create_image">Create modules.img in /data/adb</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>

@@ -881,11 +881,10 @@ private fun SettingsTab(
                     },
                     onScanPartitions = {
                         coroutineScope.launch {
-                            val scanned = HymoFSManager.scanPartitionCandidates(config.moduledir)
-                            if (scanned.isNotEmpty()) {
-                                val merged = (config.partitions + scanned).distinct()
-                                updateAndSave(config.copy(partitions = merged))
-                                snackbarHostState.showSnackbar("Found ${scanned.size} partitions")
+                            val newConfig = HymoFSManager.syncPartitionsWithDaemon()
+                            if (newConfig != null) {
+                                config = newConfig
+                                snackbarHostState.showSnackbar("Partitions synced from daemon")
                             } else {
                                 snackbarHostState.showSnackbar("No new partitions found")
                             }
@@ -910,6 +909,18 @@ private fun SettingsTab(
                 )
                 
                 val hymofsAvailable = hymofsStatus == HymoFSStatus.AVAILABLE
+                
+                // Global HymoFS enable (config flag, applied on daemon start)
+                SettingSwitch(
+                    title = stringResource(R.string.hymofs_enable_title),
+                    subtitle = stringResource(R.string.hymofs_enable_desc),
+                    checked = config.hymofsEnabled,
+                    onCheckedChange = {
+                        updateAndSave(config.copy(hymofsEnabled = it))
+                    }
+                )
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 SettingSwitch(
                     title = stringResource(R.string.hymofs_kernel_debug),
@@ -957,10 +968,51 @@ private fun SettingsTab(
                         updateAndSave(config.copy(ignoreProtocolMismatch = it))
                     }
                 )
-                
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Mirror path and mount stage settings (meta-hymo)
+                var mirrorPath by remember { mutableStateOf(config.mirrorPath) }
+                SettingTextField(
+                    title = stringResource(R.string.hymofs_mirror_path),
+                    subtitle = stringResource(R.string.hymofs_mirror_path_desc),
+                    value = mirrorPath,
+                    onValueChange = { mirrorPath = it },
+                    onConfirm = {
+                        updateAndSave(config.copy(mirrorPath = mirrorPath))
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Simple mount stage selector via text buttons
+                Text(
+                    text = stringResource(R.string.hymofs_mount_stage),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "post-fs-data" to R.string.hymofs_mount_stage_post_fs,
+                        "metamount" to R.string.hymofs_mount_stage_meta,
+                        "services" to R.string.hymofs_mount_stage_services
+                    ).forEach { (value, labelRes) ->
+                        val selected = config.mountStage == value
+                        FilledTonalButton(
+                            onClick = { updateAndSave(config.copy(mountStage = value)) },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(labelRes))
+                        }
+                    }
+                }
+
                 if (hymofsAvailable) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     OutlinedButton(
                         onClick = onFixMounts,
                         modifier = Modifier.fillMaxWidth()
@@ -968,6 +1020,24 @@ private fun SettingsTab(
                         Icon(Icons.Filled.Build, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.hymofs_fix_mounts))
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val ok = HymoFSManager.createModulesImage()
+                                snackbarHostState.showSnackbar(
+                                    if (ok) "modules.img created" else "Failed to create modules.img"
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.Save, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.hymofs_create_image))
                     }
                 }
             }
