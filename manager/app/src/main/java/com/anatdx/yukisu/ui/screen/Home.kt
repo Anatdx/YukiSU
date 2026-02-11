@@ -492,7 +492,20 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 鉴权方式标签：签名鉴权成功时显示 Signature，否则为 SuperKey 时显示 SuperKey
+                            // 鉴权方式标签：签名鉴权通过时显示 Signature；SuperKey 也验证通过时再显示 SuperKey（两者可同时显示）
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.home_badge_signature),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onSecondary
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
                             if (isSuperKeyMode) {
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
@@ -504,20 +517,6 @@ private fun StatusCard(
                                         style = MaterialTheme.typography.labelMedium,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         color = MaterialTheme.colorScheme.onTertiary
-                                    )
-                                }
-                                Spacer(Modifier.width(6.dp))
-                            } else {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.home_badge_signature),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        color = MaterialTheme.colorScheme.onSecondary
                                     )
                                 }
                                 Spacer(Modifier.width(6.dp))
