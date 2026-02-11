@@ -35,7 +35,7 @@ val androidCmakeVersion by extra("3.22.0+")
 val androidSourceCompatibility = JavaVersion.VERSION_17
 val androidTargetCompatibility = JavaVersion.VERSION_17
 val managerVersionCode by extra(10000 - 3135 + getGitCommitCount())
-val managerVersionName by extra(getManagerVersionName())
+val managerVersionName by extra(computeManagerVersionName())
 
 fun getGitCommitCount(): Int {
     return providers.exec {
@@ -44,7 +44,7 @@ fun getGitCommitCount(): Int {
 }
 
 /** Manager version in same format as kernel: v1.3.0-8char_hash (8-char hash, not 9). */
-fun getManagerVersionName(): String {
+fun computeManagerVersionName(): String {
     val hash = providers.exec {
         commandLine("git", "rev-parse", "--short=8", "HEAD")
     }.standardOutput.asText.get().trim()
