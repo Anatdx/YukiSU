@@ -138,22 +138,19 @@ object HymoFSManager {
     
     /**
      * Get HymoFS status (check if kernel supports it)
+     *
+     * Uses `ksud hymo config show` JSON output, which includes:
+     *   "hymofs_status": int (0=Available, 1=NotPresent, 2=KernelTooOld, 3=ModuleTooOld)
      */
     suspend fun getStatus(): HymoFSStatus = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo status").exec()
-            if (result.isSuccess) {
-                val output = result.out.joinToString("\n")
-                when {
-                    output.contains("Available") -> HymoFSStatus.AVAILABLE
-                    output.contains("Not Present") || output.contains("NotPresent") -> HymoFSStatus.NOT_PRESENT
-                    output.contains("Kernel Too Old") || output.contains("KernelTooOld") -> HymoFSStatus.KERNEL_TOO_OLD
-                    output.contains("Module Too Old") || output.contains("ModuleTooOld") -> HymoFSStatus.MODULE_TOO_OLD
-                    else -> HymoFSStatus.NOT_PRESENT
-                }
-            } else {
-                HymoFSStatus.NOT_PRESENT
+            val result = Shell.cmd("${getKsud()} hymo config show").exec()
+            if (!result.isSuccess) {
+                return@withContext HymoFSStatus.NOT_PRESENT
             }
+            val json = JSONObject(result.out.joinToString("\n"))
+            val code = json.optInt("hymofs_status", HymoFSStatus.NOT_PRESENT.code)
+            HymoFSStatus.fromCode(code)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get status", e)
             HymoFSStatus.NOT_PRESENT
