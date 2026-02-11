@@ -687,7 +687,6 @@ private fun SelectInstallMethod(
             }
         }
     }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
