@@ -135,7 +135,7 @@ jobs:
 
       - name: Build with Gradle
         if: ${{ steps.determine.outputs.SKIP != 'true' }}
-        run: ./gradlew assembleRelease --build-cache --no-daemon
+        run: ./gradlew assembleRelease assembleDebug --build-cache --no-daemon
 
       - name: Import GPG key
         if: ${{ github.event_name != 'pull_request' }}
@@ -169,6 +169,7 @@ jobs:
           path: |
             manager/app/build/outputs/apk/release/*.apk
             manager/app/build/outputs/apk/release/*.apk.sig
+            manager/app/build/outputs/apk/debug/*.apk
 
       - name: Upload mappings
         uses: actions/upload-artifact@v4
@@ -191,7 +192,7 @@ jobs:
         run: |
           if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
             export VERSION=$(git rev-list --count HEAD)
-            APK=$(find ./app/build/outputs/apk/release -name "*.apk")
+            APKS=$(find ./app/build/outputs/apk/release ./app/build/outputs/apk/debug -name "*.apk")
             pip3 install telethon
-            python3 $GITHUB_WORKSPACE/scripts/ksubot.py $APK
+            python3 $GITHUB_WORKSPACE/scripts/ksubot.py $APKS
           fi
