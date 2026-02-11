@@ -21,6 +21,7 @@
 #include "core/user_rules.hpp"
 #include "core/webui.hpp"
 #include "defs.hpp"
+#include "hymo_cli.hpp"
 #include "mount/hymofs.hpp"
 #include "utils.hpp"
 
@@ -223,7 +224,7 @@ static Config load_config(const CliOptions& opts) {
     }
 }
 
-int run_hymo_main(int argc, char* argv[]) {
+int hymo::run_hymo_main(int argc, char* argv[]) {
     try {
         CliOptions cli = parse_args(argc, argv);
 
