@@ -973,17 +973,97 @@ private fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // Mirror path and mount stage settings (meta-hymo)
+                // Mirror path / mount base presets (like meta-hymo webui)
                 var mirrorPath by remember { mutableStateOf(config.mirrorPath) }
-                SettingTextField(
-                    title = stringResource(R.string.hymofs_mirror_path),
-                    subtitle = stringResource(R.string.hymofs_mirror_path_desc),
-                    value = mirrorPath,
-                    onValueChange = { mirrorPath = it },
-                    onConfirm = {
-                        updateAndSave(config.copy(mirrorPath = mirrorPath))
-                    }
+                val effectiveMirrorPath = if (mirrorPath.isEmpty()) "/dev/hymo_mirror" else mirrorPath
+
+                Text(
+                    text = stringResource(R.string.hymofs_mirror_path),
+                    style = MaterialTheme.typography.bodyLarge
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Presets: /data/adb/hymo/img_mnt, /debug_ramdisk, /dev/hymo_mirror, plus Custom
+                val presetImgMnt = "/data/adb/hymo/img_mnt"
+                val presetDebugRamdisk = "/debug_ramdisk"
+                val presetDevMirror = "/dev/hymo_mirror"
+
+                val selectedPreset = when (effectiveMirrorPath) {
+                    presetImgMnt -> "img_mnt"
+                    presetDebugRamdisk -> "debug_ramdisk"
+                    presetDevMirror -> "dev_mirror"
+                    else -> "custom"
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "img_mnt" to R.string.hymofs_mirror_preset_img_mnt,
+                        "debug_ramdisk" to R.string.hymofs_mirror_preset_debug_ramdisk,
+                        "dev_mirror" to R.string.hymofs_mirror_preset_dev_mirror,
+                        "custom" to R.string.hymofs_mirror_preset_custom
+                    ).forEach { (key, labelRes) ->
+                        val selected = selectedPreset == key
+                        FilledTonalButton(
+                            onClick = {
+                                when (key) {
+                                    "img_mnt" -> {
+                                        mirrorPath = presetImgMnt
+                                        updateAndSave(config.copy(mirrorPath = presetImgMnt))
+                                    }
+                                    "debug_ramdisk" -> {
+                                        mirrorPath = presetDebugRamdisk
+                                        updateAndSave(config.copy(mirrorPath = presetDebugRamdisk))
+                                    }
+                                    "dev_mirror" -> {
+                                        mirrorPath = presetDevMirror
+                                        updateAndSave(config.copy(mirrorPath = presetDevMirror))
+                                    }
+                                    "custom" -> {
+                                        // Switch to custom mode; actual value edited below
+                                        if (selectedPreset != "custom" && mirrorPath in listOf(
+                                                presetImgMnt,
+                                                presetDebugRamdisk,
+                                                presetDevMirror
+                                            )
+                                        ) {
+                                            mirrorPath = ""
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !(key != "custom" && !hymofsAvailable)
+                        ) {
+                            Text(stringResource(labelRes))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Static description of presets (like meta-hymo webui)
+                Text(
+                    text = stringResource(R.string.hymofs_mirror_path_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (selectedPreset == "custom") {
+                    SettingTextField(
+                        title = "",
+                        subtitle = "",
+                        value = mirrorPath,
+                        onValueChange = { mirrorPath = it },
+                        onConfirm = {
+                            updateAndSave(config.copy(mirrorPath = mirrorPath))
+                        }
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 

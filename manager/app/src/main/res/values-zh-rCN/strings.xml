@@ -598,8 +598,12 @@
     <string name="hymofs_mismatch_default">检测到协议不匹配。请更新内核或模块。</string>
     <string name="hymofs_enable_title">启用 HymoFS</string>
     <string name="hymofs_enable_desc">控制开机时是否启用 HymoFS（重启守护进程后生效）</string>
-    <string name="hymofs_mirror_path">镜像路径</string>
-    <string name="hymofs_mirror_path_desc">可选的自定义 HymoFS 镜像路径（留空使用默认值）</string>
+    <string name="hymofs_mirror_path">挂载基点 / 镜像路径</string>
+    <string name="hymofs_mirror_path_desc">选择一个预设挂载基点，或手动填写自定义镜像路径。大多数设备推荐使用 /data/adb/hymo/img_mnt。</string>
+    <string name="hymofs_mirror_preset_img_mnt">img_mnt</string>
+    <string name="hymofs_mirror_preset_debug_ramdisk">debug_ramdisk</string>
+    <string name="hymofs_mirror_preset_dev_mirror">hymo_mirror</string>
+    <string name="hymofs_mirror_preset_custom">自定义</string>
     <string name="hymofs_mount_stage">挂载阶段</string>
     <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
     <string name="hymofs_mount_stage_meta">metamount</string>
