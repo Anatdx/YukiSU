@@ -538,10 +538,6 @@
     <string name="hymofs_builtin_mount_desc">Use built-in hymo mount instead of external metamodule. Disable this if you want to use another metamodule.</string>
     <string name="hymofs_verbose">Verbose Logging</string>
     <string name="hymofs_verbose_desc">Enable detailed daemon logs</string>
-    <string name="hymofs_force_ext4">Force EXT4</string>
-    <string name="hymofs_force_ext4_desc">Always use EXT4 image instead of tmpfs</string>
-    <string name="hymofs_prefer_erofs">Prefer EROFS</string>
-    <string name="hymofs_prefer_erofs_desc">Use EROFS (read-only, compressed) if available</string>
     <string name="hymofs_disable_umount">Disable Umount</string>
     <string name="hymofs_disable_umount_desc">Don\'t unmount on process isolation</string>
     <string name="hymofs_kernel_debug">Kernel Debug</string>
@@ -595,6 +591,11 @@
     <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
     <string name="hymofs_enable_title">Enable HymoFS</string>
     <string name="hymofs_enable_desc">Control whether HymoFS is enabled on boot (takes effect after daemon restart)</string>
+    <string name="hymofs_fs_type_title">Storage filesystem</string>
+    <string name="hymofs_fs_type_auto">Auto (let hymo choose)</string>
+    <string name="hymofs_fs_type_ext4">EXT4 image</string>
+    <string name="hymofs_fs_type_erofs">EROFS image</string>
+    <string name="hymofs_fs_type_tmpfs">Tmpfs (RAM)</string>
     <string name="hymofs_mirror_path">Mount base / mirror path</string>
     <string name="hymofs_mirror_path_desc">Choose a preset mount base or enter a custom mirror path. Most devices work well with /data/adb/hymo/img_mnt.</string>
     <string name="hymofs_mirror_preset_img_mnt">img_mnt</string>

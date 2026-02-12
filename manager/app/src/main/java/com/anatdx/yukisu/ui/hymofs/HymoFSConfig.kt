@@ -785,36 +785,42 @@ private fun SettingsTab(
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                // Filesystem preference (mapped to fs_type in meta-hymo)
-                SettingSwitch(
-                    title = stringResource(R.string.hymofs_force_ext4),
-                    subtitle = stringResource(R.string.hymofs_force_ext4_desc),
-                    checked = config.fsType == "ext4",
-                    onCheckedChange = { enabled ->
-                        val newFsType = when {
-                            enabled -> "ext4"
-                            config.fsType == "ext4" -> "auto"
-                            else -> config.fsType
-                        }
-                        updateAndSave(config.copy(fsType = newFsType))
-                    }
+                // Filesystem preference (fs_type) – auto / ext4 / erofs / tmpfs, like webui
+                Text(
+                    text = stringResource(R.string.hymofs_fs_type_title),
+                    style = MaterialTheme.typography.bodyLarge
                 )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                SettingSwitch(
-                    title = stringResource(R.string.hymofs_prefer_erofs),
-                    subtitle = stringResource(R.string.hymofs_prefer_erofs_desc),
-                    checked = config.fsType == "erofs",
-                    onCheckedChange = { enabled ->
-                        val newFsType = when {
-                            enabled -> "erofs"
-                            config.fsType == "erofs" -> "auto"
-                            else -> config.fsType
+                Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "auto" to R.string.hymofs_fs_type_auto,
+                        "ext4" to R.string.hymofs_fs_type_ext4,
+                        "erofs" to R.string.hymofs_fs_type_erofs,
+                        "tmpfs" to R.string.hymofs_fs_type_tmpfs
+                    ).forEach { (value, labelRes) ->
+                        val selected = config.fsType == value
+                        FilledTonalButton(
+                            onClick = { updateAndSave(config.copy(fsType = value)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = if (selected) {
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        ) {
+                            Text(stringResource(labelRes))
                         }
-                        updateAndSave(config.copy(fsType = newFsType))
                     }
-                )
+                }
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
@@ -1023,10 +1029,14 @@ private fun SettingsTab(
                             enabled = !(key != "custom" && !hymofsAvailable),
                             colors = if (selected) {
                                 ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
                                 )
                             } else {
-                                ButtonDefaults.filledTonalButtonColors()
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         ) {
                             Text(stringResource(labelRes))
@@ -1091,10 +1101,14 @@ private fun SettingsTab(
                             modifier = Modifier.fillMaxWidth(),
                             colors = if (selected) {
                                 ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
                                 )
                             } else {
-                                ButtonDefaults.filledTonalButtonColors()
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         ) {
                             Text(stringResource(labelRes))
