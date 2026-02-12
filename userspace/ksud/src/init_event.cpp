@@ -16,6 +16,7 @@
 // HymoFS integration
 #include "hymo/conf/config.hpp"
 #include "hymo/hymo_cli.hpp"
+#include "hymo/defs.hpp"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -44,6 +45,10 @@ static void try_hymofs_automount(const char* stage_name) {
         if (config.mount_stage != stage_name) {
             return;
         }
+
+        // Reset Hymo daemon log so each boot-stage mount has fresh logs,
+        // similar to the original wrapper behavior.
+        ::unlink(hymo::DAEMON_LOG_FILE);
 
         const char* argv0 = "hymod";
         const char* argv1 = "mount";
@@ -82,6 +87,9 @@ static void try_hymofs_metamount_mount() {
         if (config.mount_stage != "metamount") {
             return;
         }
+
+        // Reset Hymo daemon log before metamount-run as well, to avoid stale logs.
+        ::unlink(hymo::DAEMON_LOG_FILE);
 
         const char* argv0 = "hymod";
         const char* argv1 = "mount";

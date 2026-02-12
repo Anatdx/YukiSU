@@ -879,6 +879,8 @@ private fun InfoCard(
     isHideMetaModuleImplement: Boolean,
     lkmMode: Boolean?
 ) {
+    var showKsudDialog by remember { mutableStateOf(false) }
+
     ElevatedCard(
         colors = getCardColors(MaterialTheme.colorScheme.surfaceContainer),
         elevation = getCardElevation(),
@@ -954,6 +956,17 @@ private fun InfoCard(
                 icon = Icons.Default.SettingsSuggest,
             )
 
+            // ksud daemon info / manual update
+            TextButton(
+                onClick = { showKsudDialog = true },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.home_ksud_daemon_info),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             if (!isSimpleMode) {
                 InfoCardItem(
                     stringResource(R.string.home_hook_type),
@@ -983,8 +996,96 @@ private fun InfoCard(
                     icon = Icons.Default.Extension,
                 )
             }
+
+            if (showKsudDialog) {
+                KsudVersionDialog(onDismiss = { showKsudDialog = false })
+            }
         }
     }
+}
+
+@Composable
+private fun KsudVersionDialog(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var apkVersion by remember { mutableStateOf<String?>(null) }
+    var installedVersion by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var syncing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+        apkVersion = apk
+        installedVersion = installed
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!syncing) onDismiss() },
+        title = { Text(stringResource(id = R.string.home_ksud_daemon_title)) },
+        text = {
+            if (loading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.home_ksud_daemon_apk_version,
+                            apkVersion ?: context.getString(R.string.home_ksud_daemon_unknown)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(
+                            id = R.string.home_ksud_daemon_installed_version,
+                            installedVersion
+                                ?: context.getString(R.string.home_ksud_daemon_unknown)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (!syncing) onDismiss() }
+            ) {
+                Text(stringResource(id = R.string.close))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !loading && !syncing,
+                onClick = {
+                    if (loading || syncing) return@TextButton
+                    syncing = true
+                    scope.launch {
+                        KsuCli.updateKsudDaemonForUi()
+                        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+                        apkVersion = apk
+                        installedVersion = installed
+                        syncing = false
+                    }
+                }
+            ) {
+                Text(
+                    text = if (syncing)
+                        stringResource(id = R.string.home_ksud_daemon_syncing)
+                    else
+                        stringResource(id = R.string.home_ksud_daemon_sync)
+                )
+            }
+        }
+    )
 }
 
 fun getManagerVersion(context: Context): Pair<String, Long> {

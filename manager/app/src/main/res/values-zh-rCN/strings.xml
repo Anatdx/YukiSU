@@ -701,4 +701,13 @@
     <!-- Advanced Tools -->
     <string name="install_advanced_tools">高级工具</string>
     <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
+
+    <!-- ksud daemon version / update -->
+    <string name="home_ksud_daemon_info">ksud 守护进程信息 / 手动更新</string>
+    <string name="home_ksud_daemon_title">ksud 守护进程</string>
+    <string name="home_ksud_daemon_apk_version">管理器内置 ksud：%1$s</string>
+    <string name="home_ksud_daemon_installed_version">已安装 ksud（/data/adb/ksud）：%1$s</string>
+    <string name="home_ksud_daemon_unknown">未知</string>
+    <string name="home_ksud_daemon_sync">同步 ksud 守护进程</string>
+    <string name="home_ksud_daemon_syncing">正在同步…</string>
 </resources>

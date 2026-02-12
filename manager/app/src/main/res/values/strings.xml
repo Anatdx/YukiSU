@@ -698,4 +698,13 @@
     <!-- Advanced Tools -->
     <string name="install_advanced_tools">Advanced Tools</string>
     <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
+
+    <!-- ksud daemon version / update -->
+    <string name="home_ksud_daemon_info">ksud daemon info / manual update</string>
+    <string name="home_ksud_daemon_title">ksud daemon</string>
+    <string name="home_ksud_daemon_apk_version">Manager-bundled ksud: %1$s</string>
+    <string name="home_ksud_daemon_installed_version">Installed ksud (/data/adb/ksud): %1$s</string>
+    <string name="home_ksud_daemon_unknown">Unknown</string>
+    <string name="home_ksud_daemon_sync">Sync ksud daemon</string>
+    <string name="home_ksud_daemon_syncing">Syncing…</string>
 </resources>
