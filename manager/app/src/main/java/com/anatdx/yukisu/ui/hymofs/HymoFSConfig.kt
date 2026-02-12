@@ -1737,8 +1737,7 @@ private fun RulesTab(
         }
 
         SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            hostState = snackbarHostState
         )
     }
 }
