@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(ksud VERSION 1.0.0 LANGUAGES CXX)
+project(ksud VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -94,6 +94,18 @@ else()
     message(WARNING "MagiskbootAlone submodule not found at ${MAGISKBOOT_ALONE_DIR}; run: git submodule update --init")
 endif()
 
+# bootctlAlone / resetpropAlone (submodules): compile into ksud for multi-call (bootctl/resetprop via argv0)
+set(BOOTCTL_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/bootctlAlone)
+set(RESETPROP_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/resetpropAlone)
+if(EXISTS ${BOOTCTL_ALONE_DIR}/src/main.cpp)
+    set(BOOTCTL_ALONE_AVAILABLE 1)
+    message(STATUS "bootctlAlone: building bootctl into ksud (multi-call)")
+endif()
+if(EXISTS ${RESETPROP_ALONE_DIR}/src/main.cpp)
+    set(RESETPROP_ALONE_AVAILABLE 1)
+    message(STATUS "resetpropAlone: building resetprop into ksud (multi-call)")
+endif()
+
 # 源文件
 set(SOURCES
     src/main.cpp
@@ -145,6 +157,12 @@ set(SOURCES
 if(MAGISKBOOT_ALONE_AVAILABLE)
     list(APPEND SOURCES ${MAGISKBOOT_SOURCES})
 endif()
+if(BOOTCTL_ALONE_AVAILABLE)
+    list(APPEND SOURCES ${BOOTCTL_ALONE_DIR}/src/main.cpp)
+endif()
+if(RESETPROP_ALONE_AVAILABLE)
+    list(APPEND SOURCES ${RESETPROP_ALONE_DIR}/src/main.cpp)
+endif()
 
 # 头文件目录 (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
 include_directories(${CMAKE_SOURCE_DIR}/src)
@@ -157,6 +175,12 @@ add_executable(ksud ${SOURCES})
 
 if(MAGISKBOOT_ALONE_AVAILABLE)
     target_compile_definitions(ksud PRIVATE MAGISKBOOT_ALONE_AVAILABLE=1)
+endif()
+if(BOOTCTL_ALONE_AVAILABLE)
+    target_compile_definitions(ksud PRIVATE BOOTCTL_ALONE_AVAILABLE=1)
+endif()
+if(RESETPROP_ALONE_AVAILABLE)
+    target_compile_definitions(ksud PRIVATE RESETPROP_ALONE_AVAILABLE=1)
 endif()
 
 # 链接库 - Android bionic libc 已内置 pthread，不需要单独链接

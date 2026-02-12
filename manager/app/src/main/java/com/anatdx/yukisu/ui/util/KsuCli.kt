@@ -198,9 +198,11 @@ object KsuCli {
             // Copy new daemon binary (multi-call: ksud + magiskboot via argv0)
             "cp -f ${ksudSo.absolutePath} /data/adb/ksud",
             "chmod 0755 /data/adb/ksud",
-            // Symlinks in ksu/bin: ksud and magiskboot both point to the same binary
+            // Symlinks in ksu/bin: ksud, magiskboot, bootctl, resetprop all point to the same binary (multi-call)
             "ln -sf /data/adb/ksud /data/adb/ksu/bin/ksud",
             "ln -sf /data/adb/ksud /data/adb/ksu/bin/magiskboot",
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/bootctl",
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
             "restorecon /data/adb/ksud || true",
             "restorecon -R /data/adb/ksu || true"

@@ -14,13 +14,13 @@ This directory contains **git submodules** and is also used by CMake **FetchCont
 ### bootctlAlone
 
 - **Path**: `third_party/bootctlAlone`
-- **Purpose**: `bootctl` binary (AOSP boot control); built in CI and copied to `assets/` for embedding into ksud.
+- **Purpose**: Compiled **into ksud** as multi-call (like magiskboot). `ksu/bin/bootctl` → symlink to ksud; argv0 dispatch to `bootctl_main()`.
 - **Init/update**: `git submodule update --init userspace/ksud/third_party/bootctlAlone`
 
 ### resetpropAlone
 
 - **Path**: `third_party/resetpropAlone`
-- **Purpose**: `resetprop` binary (getprop/setprop); built in CI and copied to `assets/` for embedding into ksud.
+- **Purpose**: Compiled **into ksud** as multi-call. `ksu/bin/resetprop` → symlink to ksud; argv0 dispatch to `resetprop_main()`.
 - **Init/update**: `git submodule update --init userspace/ksud/third_party/resetpropAlone`
 
 ## FetchContent (auto-downloaded)
