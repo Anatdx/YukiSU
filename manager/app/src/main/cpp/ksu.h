@@ -264,6 +264,9 @@ bool is_superkey_configured(void);
 // Check if already authenticated via SuperKey
 bool is_superkey_authenticated(void);
 
+// Check whether manager signature is considered OK (from kernel's view)
+bool is_signature_ok(void);
+
 // Check if KSU driver is present (without authentication)
 bool ksu_driver_present(void);
 
