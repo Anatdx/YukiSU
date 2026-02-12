@@ -22,24 +22,28 @@ static const char* basename(const char* path) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc >= 1 && argv[0]) {
-        const char* base = basename(argv[0]);
+    // Dispatch by argv[0] basename (e.g. when invoked as /data/adb/ksu/bin/magiskboot -> magiskboot)
+    const char* base = (argc >= 1 && argv[0]) ? basename(argv[0]) : nullptr;
+    // When invoked as libksud.so (Manager loads .so path), argv[0] is the .so path; app passes tool name as argv[1]
+    const char* first_arg = (argc >= 2 && argv[1]) ? argv[1] : nullptr;
+
+#define DISPATCH(name, main_fn) \
+    if (base && std::strcmp(base, (name)) == 0) return main_fn(argc, argv); \
+    if (first_arg && std::strcmp(first_arg, (name)) == 0) return main_fn(argc - 1, argv + 1)
+
 #if defined(MAGISKBOOT_ALONE_AVAILABLE) && MAGISKBOOT_ALONE_AVAILABLE
-        if (std::strcmp(base, "magiskboot") == 0)
-            return magiskboot_main(argc, argv);
+    DISPATCH("magiskboot", magiskboot_main);
 #endif
 #if defined(BOOTCTL_ALONE_AVAILABLE) && BOOTCTL_ALONE_AVAILABLE
-        if (std::strcmp(base, "bootctl") == 0)
-            return bootctl_main(argc, argv);
+    DISPATCH("bootctl", bootctl_main);
 #endif
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-        if (std::strcmp(base, "resetprop") == 0)
-            return resetprop_main(argc, argv);
+    DISPATCH("resetprop", resetprop_main);
 #endif
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
-        if (std::strcmp(base, "busybox") == 0)
-            return busybox_main(argc, argv);
+    DISPATCH("busybox", busybox_main);
 #endif
-    }
+#undef DISPATCH
+
     return ksud::cli_run(argc, argv);
 }
