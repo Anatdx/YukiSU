@@ -382,4 +382,17 @@
     <string name="hymofs_toast_builtin_enabled">內置掛載已啟用，重啟後生效</string>
     <string name="hymofs_toast_builtin_disabled">內置掛載已停用，重啟後生效</string>
     <string name="hymofs_toast_builtin_failed">更新內置掛載設定失敗</string>
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">自定義隱藏規則</string>
+    <string name="hymofs_user_hide_empty">暫時未有自定義隱藏規則。新增要喺所有模組中隱藏嘅絕對路徑。</string>
+    <string name="hymofs_user_hide_placeholder">/要隱藏嘅絕對路徑</string>
+    <string name="hymofs_user_hide_add">新增</string>
+    <string name="hymofs_user_hide_add_failed">新增隱藏規則失敗</string>
+    <string name="hymofs_user_hide_remove_failed">刪除隱藏規則失敗</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">核心版本偽裝</string>
+    <string name="hymofs_uname_release">uname -r 覆寫值</string>
+    <string name="hymofs_uname_release_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本號</string>
+    <string name="hymofs_uname_version">uname -v 覆寫值</string>
+    <string name="hymofs_uname_version_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本字串</string>
 </resources>

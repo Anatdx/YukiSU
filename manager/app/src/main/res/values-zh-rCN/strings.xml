@@ -614,6 +614,12 @@
     <string name="hymofs_mount_stage_meta">metamount</string>
     <string name="hymofs_mount_stage_services">services</string>
     <string name="hymofs_create_image">在 /data/adb 创建 modules.img</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">内核版本伪装</string>
+    <string name="hymofs_uname_release">uname -r 覆盖值</string>
+    <string name="hymofs_uname_release_desc">可选。设置后，HymoFS 会将此值伪装为内核版本号</string>
+    <string name="hymofs_uname_version">uname -v 覆盖值</string>
+    <string name="hymofs_uname_version_desc">可选。设置后，HymoFS 会将此值伪装为内核版本字符串</string>
     <!-- HymoFS 内部提示 -->
     <string name="hymofs_toast_load_error">加载数据出错：%s</string>
     <string name="hymofs_toast_mode_updated">模式已更新，重启后生效</string>
@@ -635,6 +641,13 @@
     <string name="hymofs_mode_overlay">OverlayFS</string>
     <string name="hymofs_mode_magic">Magic Mount</string>
     <string name="hymofs_mode_none">不挂载</string>
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">自定义隐藏规则</string>
+    <string name="hymofs_user_hide_empty">当前没有自定义隐藏规则。添加要从所有模块中隐藏的绝对路径。</string>
+    <string name="hymofs_user_hide_placeholder">/要隐藏的绝对路径</string>
+    <string name="hymofs_user_hide_add">添加</string>
+    <string name="hymofs_user_hide_add_failed">添加隐藏规则失败</string>
+    <string name="hymofs_user_hide_remove_failed">删除隐藏规则失败</string>
     
     <!-- Partition Manager -->
     <string name="partition_manager">分区管理器</string>

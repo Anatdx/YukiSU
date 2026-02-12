@@ -610,6 +610,12 @@
     <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
     <string name="hymofs_enable_title">Enable HymoFS</string>
     <string name="hymofs_enable_desc">Control whether HymoFS is enabled on boot (takes effect after daemon restart)</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">Kernel version spoofing</string>
+    <string name="hymofs_uname_release">uname -r override</string>
+    <string name="hymofs_uname_release_desc">Optional. When set, HymoFS will spoof this as kernel release</string>
+    <string name="hymofs_uname_version">uname -v override</string>
+    <string name="hymofs_uname_version_desc">Optional. When set, HymoFS will spoof this as kernel version string</string>
     <string name="hymofs_fs_type_title">Storage filesystem</string>
     <string name="hymofs_fs_type_auto">Auto (let hymo choose)</string>
     <string name="hymofs_fs_type_ext4">EXT4 image</string>
@@ -632,6 +638,14 @@
     <string name="hymofs_mount_stage_meta">metamount</string>
     <string name="hymofs_mount_stage_services">services</string>
     <string name="hymofs_create_image">Create modules.img in /data/adb</string>
+
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">Custom hide rules</string>
+    <string name="hymofs_user_hide_empty">No custom hide rules. Add absolute paths to hide them from all modules.</string>
+    <string name="hymofs_user_hide_placeholder">/absolute/path/to/hide</string>
+    <string name="hymofs_user_hide_add">Add</string>
+    <string name="hymofs_user_hide_add_failed">Failed to add hide rule</string>
+    <string name="hymofs_user_hide_remove_failed">Failed to remove hide rule</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>

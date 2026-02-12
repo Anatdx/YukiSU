@@ -336,6 +336,50 @@ object HymoFSManager {
             emptyList()
         }
     }
+
+    /**
+     * List user-defined hide rules (from user_hide_rules.json via hymo hide list).
+     */
+    suspend fun listUserHideRules(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide list").exec()
+            if (result.isSuccess) {
+                val json = JSONArray(result.out.joinToString("\n"))
+                (0 until json.length()).map { idx -> json.getString(idx) }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to list user hide rules", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Add a user hide rule (absolute path) and apply to kernel when possible.
+     */
+    suspend fun addUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide add '$path'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add user hide rule", e)
+            false
+        }
+    }
+
+    /**
+     * Remove a user hide rule by path.
+     */
+    suspend fun removeUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hide remove '$path'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove user hide rule", e)
+            false
+        }
+    }
     
     /**
      * Get storage usage
