@@ -126,18 +126,25 @@ object HymoFSManager {
         try {
             // meta-hymo: hymo hymofs version -> JSON
             val result = Shell.cmd("${getKsud()} hymo hymofs version").exec()
-            if (result.isSuccess) {
-                val json = JSONObject(result.out.joinToString("\n"))
-                val protocolVersion = json.optInt("protocol_version", -1)
-                val kernelVersion = json.optInt("kernel_version", -1)
-                val hymofsAvailable = json.optBoolean("hymofs_available", false)
-                val mismatch = json.optBoolean("protocol_mismatch", false)
-                
-                if (!hymofsAvailable) {
-                    return@withContext "Unavailable"
-                }
-                
-                return@withContext buildString {
+            if (!result.isSuccess) {
+                return@withContext "Unknown"
+            }
+
+            val json = JSONObject(result.out.joinToString("\n"))
+            val protocolVersion = json.optInt("protocol_version", -1)
+            val kernelVersion = json.optInt("kernel_version", -1)
+            val hymofsAvailable = json.optBoolean("hymofs_available", false)
+            val mismatch = json.optBoolean("protocol_mismatch", false)
+
+            if (!hymofsAvailable) {
+                return@withContext "Unavailable"
+            }
+
+            // 协议版本和内核版本一致时只显示一个数字，不一致时同时显示并标注 mismatch
+            return@withContext if (protocolVersion == kernelVersion && protocolVersion >= 0) {
+                protocolVersion.toString()
+            } else {
+                buildString {
                     append("proto ")
                     append(protocolVersion)
                     append(", kernel ")
@@ -146,8 +153,6 @@ object HymoFSManager {
                         append(" (mismatch)")
                     }
                 }
-            } else {
-                "Unknown"
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get version", e)
