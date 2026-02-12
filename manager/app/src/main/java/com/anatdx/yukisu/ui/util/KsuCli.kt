@@ -137,7 +137,27 @@ object KsuCli {
             null
         }
     }
-    
+
+    /**
+     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
+     * e.g. "1.3.0-1-g56b0efb0" -> "v1.3.0-56b0efb0"
+     */
+    fun formatKsudVersionForDisplay(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val s = raw.trim().removePrefix("v")
+        // Match x.x.x optionally followed by -anything; capture semver and trailing alphanumeric for 8-char
+        val semverMatch = Regex("""^(\d+\.\d+\.\d+)""").find(s) ?: return "v$s"
+        val semver = semverMatch.value
+        val rest = s.drop(semver.length).trimStart('-')
+        val hashPart = Regex("""[a-fA-F0-9]+""").findAll(rest).map { it.value }.joinToString("").takeLast(8)
+        val suffix = when {
+            hashPart.length >= 8 -> hashPart.take(8)
+            rest.isNotEmpty() -> rest.filter { it.isLetterOrDigit() }.take(8)
+            else -> ""
+        }
+        return if (suffix.isNotEmpty()) "v$semver-$suffix" else "v$semver"
+    }
+
     /**
      * Get installed ksud version from /data/adb/ksud.
      */
@@ -145,7 +165,6 @@ object KsuCli {
         return try {
             val result = ShellUtils.fastCmd(SHELL, "/data/adb/ksud version 2>/dev/null")
             if (result.isBlank()) return null
-            // Parse version from output
             val match = Regex("""version\s+([^\s]+)""").find(result)
             match?.groupValues?.get(1)
         } catch (e: Exception) {
@@ -155,10 +174,13 @@ object KsuCli {
     }
 
     /**
-     * Public helper for UI: get ksud versions (APK-bundled and installed daemon).
+     * Public helper for UI: get ksud versions (APK-bundled and installed daemon),
+     * formatted as vx.x.x-xxxxxxxx. Returns (formattedApk, formattedInstalled).
      */
     suspend fun getKsudVersionsForUi(): Pair<String?, String?> = withContext(Dispatchers.IO) {
-        getApkKsudVersion() to getInstalledKsudVersion()
+        val apk = getApkKsudVersion()
+        val installed = getInstalledKsudVersion()
+        formatKsudVersionForDisplay(apk) to formatKsudVersionForDisplay(installed)
     }
 
     /**
