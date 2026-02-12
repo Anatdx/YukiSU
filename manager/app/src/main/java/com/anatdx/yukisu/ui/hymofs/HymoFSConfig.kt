@@ -977,6 +977,7 @@ private fun SettingsTab(
     onBuiltinMountChanged: (Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var userHideRules by remember { mutableStateOf<List<String>>(emptyList()) }
     var newHideRule by remember { mutableStateOf("") }
 
