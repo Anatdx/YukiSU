@@ -847,15 +847,15 @@ private fun ModuleCard(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
+                    // 输入一行路径，下一行是「规则 + 按钮」
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
                             value = newRulePath,
                             onValueChange = { newRulePath = it },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             placeholder = {
                                 Text(
                                     text = stringResource(id = R.string.hymofs_module_rules_placeholder)
@@ -864,66 +864,85 @@ private fun ModuleCard(
                             singleLine = true
                         )
 
-                        var ruleModeExpanded by remember { mutableStateOf(false) }
-
-                        ExposedDropdownMenuBox(
-                            expanded = ruleModeExpanded,
-                            onExpandedChange = { ruleModeExpanded = !ruleModeExpanded }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = modeLabel(newRuleMode),
-                                onValueChange = {},
-                                readOnly = true,
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleModeExpanded)
-                                },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .widthIn(min = 96.dp),
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium
-                            )
+                            var ruleModeExpanded by remember { mutableStateOf(false) }
 
-                            ExposedDropdownMenu(
+                            ExposedDropdownMenuBox(
                                 expanded = ruleModeExpanded,
-                                onDismissRequest = { ruleModeExpanded = false }
+                                onExpandedChange = { ruleModeExpanded = !ruleModeExpanded },
+                                modifier = Modifier.weight(1f)
                             ) {
-                                modes.forEach { m ->
-                                    DropdownMenuItem(
-                                        text = { Text(modeLabel(m)) },
-                                        onClick = {
-                                            newRuleMode = m
-                                            ruleModeExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                                OutlinedTextField(
+                                    value = modeLabel(newRuleMode),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = ruleModeExpanded
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyMedium
+                                )
 
-                        Button(
-                            onClick = {
-                                val path = newRulePath.trim()
-                                if (path.isEmpty()) return@Button
-                                coroutineScope.launch {
-                                    val ok =
-                                        HymoFSManager.addModuleRule(module.id, path, newRuleMode)
-                                    if (ok) {
-                                        localRules = localRules +
-                                            HymoFSManager.ModuleRule(path, newRuleMode)
-                                        newRulePath = ""
-                                    } else {
-                                        Toast
-                                            .makeText(
-                                                context,
-                                                context.getString(R.string.hymofs_module_rules_add_failed),
-                                                Toast.LENGTH_SHORT
-                                            )
-                                            .show()
+                                ExposedDropdownMenu(
+                                    expanded = ruleModeExpanded,
+                                    onDismissRequest = { ruleModeExpanded = false }
+                                ) {
+                                    modes.forEach { m ->
+                                        DropdownMenuItem(
+                                            text = { Text(modeLabel(m)) },
+                                            onClick = {
+                                                newRuleMode = m
+                                                ruleModeExpanded = false
+                                            }
+                                        )
                                     }
                                 }
                             }
-                        ) {
-                            Text(text = stringResource(id = R.string.hymofs_module_rules_add))
+
+                            Button(
+                                onClick = {
+                                    val path = newRulePath.trim()
+                                    if (path.isEmpty()) return@Button
+                                    coroutineScope.launch {
+                                        val ok =
+                                            HymoFSManager.addModuleRule(
+                                                module.id,
+                                                path,
+                                                newRuleMode
+                                            )
+                                        if (ok) {
+                                            localRules =
+                                                localRules +
+                                                    HymoFSManager.ModuleRule(
+                                                        path,
+                                                        newRuleMode
+                                                    )
+                                            newRulePath = ""
+                                        } else {
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    context.getString(
+                                                        R.string.hymofs_module_rules_add_failed
+                                                    ),
+                                                    Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(text = stringResource(id = R.string.hymofs_module_rules_add))
+                            }
                         }
                     }
                 }
@@ -958,6 +977,12 @@ private fun SettingsTab(
     onBuiltinMountChanged: (Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    var userHideRules by remember { mutableStateOf<List<String>>(emptyList()) }
+    var newHideRule by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        userHideRules = HymoFSManager.listUserHideRules()
+    }
     
     // Helper to update config and save immediately
     fun updateAndSave(newConfig: HymoFSManager.HymoConfig) {
@@ -1063,6 +1088,98 @@ private fun SettingsTab(
                         updateAndSave(config.copy(disableUmount = it))
                     }
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Global user-defined hide rules (moved from Rules tab)
+                Text(
+                    text = stringResource(R.string.hymofs_user_hide_title),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (userHideRules.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.hymofs_user_hide_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        userHideRules.forEach { path ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(onClick = {
+                                    coroutineScope.launch {
+                                        val ok = HymoFSManager.removeUserHideRule(path)
+                                        if (ok) {
+                                            userHideRules =
+                                                HymoFSManager.listUserHideRules()
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_user_hide_remove_failed)
+                                            )
+                                        }
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newHideRule,
+                        onValueChange = { newHideRule = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(stringResource(R.string.hymofs_user_hide_placeholder))
+                        },
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            val path = newHideRule.trim()
+                            if (path.isEmpty()) return@Button
+                            coroutineScope.launch {
+                                val ok = HymoFSManager.addUserHideRule(path)
+                                if (ok) {
+                                    userHideRules = HymoFSManager.listUserHideRules()
+                                    newHideRule = ""
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.hymofs_user_hide_add_failed)
+                                    )
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.hymofs_user_hide_add))
+                    }
+                }
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
@@ -1533,15 +1650,6 @@ private fun RulesTab(
     onClearAll: () -> Unit
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
-    var userHideRules by remember { mutableStateOf<List<String>>(emptyList()) }
-    var newHideRule by remember { mutableStateOf("") }
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        userHideRules = HymoFSManager.listUserHideRules()
-    }
 
     if (showClearDialog) {
         AlertDialog(
@@ -1588,98 +1696,6 @@ private fun RulesTab(
                 }
             }
             return
-        }
-
-        // User-defined hide rules
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = getCardElevation()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = stringResource(R.string.hymofs_user_hide_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                if (userHideRules.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.hymofs_user_hide_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    userHideRules.forEach { path ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = path,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    if (HymoFSManager.removeUserHideRule(path)) {
-                                        userHideRules = HymoFSManager.listUserHideRules()
-                                    } else {
-                                        snackbarHostState.showSnackbar(
-                                            context.getString(R.string.hymofs_user_hide_remove_failed)
-                                        )
-                                    }
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = null
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newHideRule,
-                        onValueChange = { newHideRule = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(stringResource(R.string.hymofs_user_hide_placeholder)) },
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = {
-                            val path = newHideRule.trim()
-                            if (path.isEmpty()) return@Button
-                            coroutineScope.launch {
-                                if (HymoFSManager.addUserHideRule(path)) {
-                                    userHideRules = HymoFSManager.listUserHideRules()
-                                    newHideRule = ""
-                                } else {
-                                    snackbarHostState.showSnackbar(
-                                        context.getString(R.string.hymofs_user_hide_add_failed)
-                                    )
-                                }
-                            }
-                        }
-                    ) {
-                        Text(stringResource(R.string.hymofs_user_hide_add))
-                    }
-                }
-            }
         }
 
         // Action buttons
@@ -1741,10 +1757,6 @@ private fun RulesTab(
                 }
             }
         }
-
-        SnackbarHost(
-            hostState = snackbarHostState
-        )
     }
 }
 
