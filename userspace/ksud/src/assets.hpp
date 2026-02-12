@@ -7,19 +7,17 @@
 
 namespace ksud {
 
-// List all embedded asset names
+// No embedded assets; list is always empty.
 const std::vector<std::string>& list_assets();
 
-// Get asset data by name
 bool get_asset(const std::string& name, const uint8_t*& data, size_t& size);
 
-// Copy asset to file
 bool copy_asset_to_file(const std::string& name, const std::string& dest_path);
 
-// List supported KMI versions (extracted from embedded LKM names)
+// No embedded LKMs; list is always empty. LKM/ksuinit must be provided via BINARY_DIR or paths.
 std::vector<std::string> list_supported_kmi();
 
-// Ensure binary assets are extracted
+// Ensure BINARY_DIR exists and symlinks (ksud, busybox) are created. Returns 0 on success.
 int ensure_binaries(bool ignore_if_exist);
 
 }  // namespace ksud

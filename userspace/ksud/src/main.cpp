@@ -10,6 +10,9 @@ extern "C" int bootctl_main(int argc, char** argv);
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
 #endif
+#if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
+extern "C" int busybox_main(int argc, char** argv);
+#endif
 
 static const char* basename(const char* path) {
     const char* base = path;
@@ -32,6 +35,10 @@ int main(int argc, char* argv[]) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
         if (std::strcmp(base, "resetprop") == 0)
             return resetprop_main(argc, argv);
+#endif
+#if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
+        if (std::strcmp(base, "busybox") == 0)
+            return busybox_main(argc, argv);
 #endif
     }
     return ksud::cli_run(argc, argv);

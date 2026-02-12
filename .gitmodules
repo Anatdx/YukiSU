@@ -7,3 +7,6 @@
 [submodule "MagiskToolsAlone/resetpropAlone"]
 	path = MagiskToolsAlone/resetpropAlone
 	url = https://github.com/Anatdx/resetpropAlone.git
+[submodule "MagiskToolsAlone/ndk-busybox"]
+	path = MagiskToolsAlone/ndk-busybox
+	url = https://github.com/Anatdx/ndk-busybox.git

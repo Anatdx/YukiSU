@@ -38,13 +38,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
-# Generate embedded assets
-set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
 set(GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
-set(ASSETS_CPP ${GENERATED_DIR}/assets_data.cpp)
 set(VERSION_CPP ${CMAKE_SOURCE_DIR}/src/defs.cpp)
-
-# Create generated directory
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
 # Generate version file at configure time
@@ -57,25 +52,6 @@ execute_process(
 if(NOT VERSION_RESULT EQUAL 0)
     message(WARNING "Failed to generate version file, using defaults")
 endif()
-
-# Generate version file at configure time
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_version.py ${VERSION_CPP}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE VERSION_RESULT)
-if(NOT VERSION_RESULT EQUAL 0)
-    message(WARNING "Failed to generate version file, using defaults")
-endif()
-
-# Run embed_assets.py to generate assets_data.cpp
-add_custom_command(
-    OUTPUT ${ASSETS_CPP}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/embed_assets.py 
-            ${ASSETS_DIR} ${ASSETS_CPP}
-    DEPENDS ${CMAKE_SOURCE_DIR}/scripts/embed_assets.py
-    COMMENT "Generating embedded assets..."
-)
 
 # MagiskToolsAlone/* (submodules at repo root): compile into ksud for multi-call (magiskboot / bootctl / resetprop via argv0)
 set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/../../MagiskToolsAlone)
@@ -104,6 +80,15 @@ endif()
 if(EXISTS ${RESETPROP_ALONE_DIR}/src/main.cpp)
     set(RESETPROP_ALONE_AVAILABLE 1)
     message(STATUS "resetpropAlone: building resetprop into ksud (multi-call)")
+endif()
+
+# ndk-busybox: build as static lib and link into ksud for multi-call (argv0 "busybox")
+set(NDK_BUSYBOX_DIR ${MAGISKTOOLS_ALONE_DIR}/ndk-busybox)
+if(EXISTS ${NDK_BUSYBOX_DIR}/CMakeLists.txt)
+  set(BUSYBOX_EMBEDDED 1 CACHE BOOL "Build busybox as static lib for embedding")
+  add_subdirectory(${NDK_BUSYBOX_DIR} ${CMAKE_BINARY_DIR}/ndk-busybox)
+  set(NDK_BUSYBOX_AVAILABLE 1)
+  message(STATUS "ndk-busybox: building busybox into ksud (multi-call)")
 endif()
 
 # 源文件
@@ -152,7 +137,6 @@ set(SOURCES
     src/hymo/mount/overlay.cpp
     src/hymo/mount/mount_utils.cpp
     src/hymo/mount/partition_utils.cpp
-    ${ASSETS_CPP}
 )
 if(MAGISKBOOT_ALONE_AVAILABLE)
     list(APPEND SOURCES ${MAGISKBOOT_SOURCES})
@@ -181,6 +165,15 @@ if(BOOTCTL_ALONE_AVAILABLE)
 endif()
 if(RESETPROP_ALONE_AVAILABLE)
     target_compile_definitions(ksud PRIVATE RESETPROP_ALONE_AVAILABLE=1)
+endif()
+if(NDK_BUSYBOX_AVAILABLE)
+    target_compile_definitions(ksud PRIVATE NDK_BUSYBOX_AVAILABLE=1)
+    target_link_libraries(ksud PRIVATE busybox)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+      target_link_libraries(ksud PRIVATE selinux)
+    endif()
+    # busybox expects these wraps (from Android.mk)
+    target_link_options(ksud PRIVATE -Wl,--wrap=realpath -Wl,--wrap=rename -Wl,--wrap=renameat)
 endif()
 
 # 链接库 - Android bionic libc 已内置 pthread，不需要单独链接
