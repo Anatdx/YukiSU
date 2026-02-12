@@ -11,6 +11,18 @@ This directory contains **git submodules** and is also used by CMake **FetchCont
 - **Usage**: `ksu/bin/ksud` is the main binary; `ksu/bin/magiskboot` should be a **symlink to ksud**. When invoked as `magiskboot`, ksud dispatches by `argv[0]` to `magiskboot_main()`.
 - **Init/update**: `git submodule update --init userspace/ksud/third_party/MagiskbootAlone`
 
+### bootctlAlone
+
+- **Path**: `third_party/bootctlAlone`
+- **Purpose**: `bootctl` binary (AOSP boot control); built in CI and copied to `assets/` for embedding into ksud.
+- **Init/update**: `git submodule update --init userspace/ksud/third_party/bootctlAlone`
+
+### resetpropAlone
+
+- **Path**: `third_party/resetpropAlone`
+- **Purpose**: `resetprop` binary (getprop/setprop); built in CI and copied to `assets/` for embedding into ksud.
+- **Init/update**: `git submodule update --init userspace/ksud/third_party/resetpropAlone`
+
 ## FetchContent (auto-downloaded)
 
 ### PicoSHA2

@@ -46,33 +46,6 @@ jobs:
           cp ksuinit/ksuinit ./userspace/ksud/assets/
         fi
 
-    - name: Prepare binary tools (busybox, resetprop, bootctl)
-      run: |
-        mkdir -p ./userspace/ksud/assets
-        # Copy binary tools from Rust ksud bin directory (same arch)
-        case "${{ inputs.target }}" in
-          aarch64-linux-android|aarch64)
-            BIN_DIR=./userspace/ksud/bin/aarch64
-            ;;
-          x86_64-linux-android|x86_64)
-            BIN_DIR=./userspace/ksud/bin/x86_64
-            ;;
-          armv7-linux-androideabi|armv7)
-            BIN_DIR=./userspace/ksud/bin/arm
-            ;;
-        esac
-        
-        if [ -d "$BIN_DIR" ]; then
-          cp "$BIN_DIR/busybox" ./userspace/ksud/assets/ || true
-          cp "$BIN_DIR/resetprop" ./userspace/ksud/assets/ || true
-          cp "$BIN_DIR/bootctl" ./userspace/ksud/assets/ || true
-          ls -la ./userspace/ksud/assets/
-        fi
-
-    - name: Setup NDK
-      run: |
-        echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
-
     - name: Determine target settings
       id: target
       run: |
@@ -97,6 +70,51 @@ jobs:
             exit 1
             ;;
         esac
+
+    - name: Build bootctl and resetprop from submodules
+      run: |
+        mkdir -p ./userspace/ksud/assets
+        TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+        export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
+        export AR=$TOOLCHAIN/bin/llvm-ar
+        export STRIP=$TOOLCHAIN/bin/llvm-strip
+        ROOT=$PWD
+
+        for name in bootctlAlone resetpropAlone; do
+          dir=$ROOT/userspace/ksud/third_party/$name
+          if [ -f "$dir/CMakeLists.txt" ]; then
+            echo "Building $name..."
+            build_dir=$dir/build
+            mkdir -p "$build_dir"
+            ( cd "$build_dir" && \
+              cmake ../ \
+                -G Ninja \
+                -DCMAKE_SYSTEM_NAME=Android \
+                -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
+                -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
+                -DCMAKE_C_COMPILER=$CC \
+                -DCMAKE_BUILD_TYPE=Release && \
+              ninja )
+            exe=$(echo $name | sed 's/Alone//')
+            $STRIP "$build_dir/$exe" 2>/dev/null || true
+            cp -f "$build_dir/$exe" "$ROOT/userspace/ksud/assets/"
+          fi
+        done
+        ls -la ./userspace/ksud/assets/ || true
+
+    - name: Prepare binary tools (busybox only; bootctl/resetprop from submodules above)
+      run: |
+        mkdir -p ./userspace/ksud/assets
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64) BIN_DIR=./userspace/ksud/bin/aarch64 ;;
+          x86_64-linux-android|x86_64)  BIN_DIR=./userspace/ksud/bin/x86_64 ;;
+          armv7-linux-androideabi|armv7) BIN_DIR=./userspace/ksud/bin/arm ;;
+          *) BIN_DIR= ;;
+        esac
+        if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
+          cp "$BIN_DIR/busybox" ./userspace/ksud/assets/ || true
+        fi
+        ls -la ./userspace/ksud/assets/ || true
 
     - name: Build ksud
       run: |
