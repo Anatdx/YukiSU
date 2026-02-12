@@ -61,7 +61,7 @@
     <string name="profile_umount_modules">卸載模組</string>
     <string name="failed_to_update_app_profile">為 %s 更新 App Profile 失敗</string>
     <string name="require_kernel_version" formatted="false">當前 KernelSU 版本 %s 過低，管理器無法正常工作，請將核心 KernelSU 版本升級至 %s 或以上！</string>
-    <string name="settings_umount_modules_default">默認卸載模組（新 App 預設關閉）</string>
+    <string name="settings_umount_modules_default">默認卸載模組</string>
     <string name="settings_umount_modules_default_summary">App Profile 入面「卸載模組」嘅全局默認值。如果開啟，會為冇設定 Profile 嘅應用移除所有模組對系統嘅修改。預設係關閉，新/未知 App 唔會排除模組修改。</string>
     <string name="profile_umount_modules_summary">啟用該選項後將允許 KernelSU 為本應用還原被模組修改過嘅文件。</string>
     <string name="profile_selinux_domain">域</string>
@@ -359,4 +359,10 @@
     <string name="add_app_path">應用</string>
     <string name="search_apps">搜尋應用程式</string>
     <string name="home_zygisk_implement">Zygisk 實現</string>
+    <string name="hymofs_module_mode">模式：</string>
+    <string name="hymofs_mode_auto">自動</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">不掛載</string>
 </resources>

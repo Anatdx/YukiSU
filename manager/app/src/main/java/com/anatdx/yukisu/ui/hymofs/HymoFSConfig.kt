@@ -673,7 +673,7 @@ private fun ModuleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
             
             // Mode selector
@@ -683,7 +683,7 @@ private fun ModuleCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Mode:",
+                    text = stringResource(id = R.string.hymofs_module_mode),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 
@@ -693,7 +693,7 @@ private fun ModuleCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     OutlinedTextField(
-                        value = module.mode,
+                            value = modeLabel(module.mode),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -708,7 +708,7 @@ private fun ModuleCard(
                     ) {
                         modes.forEach { mode ->
                             DropdownMenuItem(
-                                text = { Text(mode) },
+                                text = { Text(modeLabel(mode)) },
                                 onClick = {
                                     expanded = false
                                     if (mode != module.mode) {
@@ -721,6 +721,18 @@ private fun ModuleCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun modeLabel(mode: String): String {
+    return when (mode) {
+        "auto" -> stringResource(id = R.string.hymofs_mode_auto)
+        "hymofs" -> stringResource(id = R.string.hymofs_mode_hymofs)
+        "overlay" -> stringResource(id = R.string.hymofs_mode_overlay)
+        "magic" -> stringResource(id = R.string.hymofs_mode_magic)
+        "none" -> stringResource(id = R.string.hymofs_mode_none)
+        else -> mode
     }
 }
 

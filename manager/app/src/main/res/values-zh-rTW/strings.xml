@@ -63,7 +63,7 @@
     <string name="profile_umount_modules">卸載模組</string>
     <string name="failed_to_update_app_profile">為 %s 更新應用程式設定檔失敗</string>
     <string name="require_kernel_version" formatted="false">目前 KernelSU 版本 %s 過低，管理器無法正常運作，請將內核 KernelSU 版本升級至 %s 或以上！</string>
-    <string name="settings_umount_modules_default">預設卸載模組（新 App 預設關閉）</string>
+    <string name="settings_umount_modules_default">預設卸載模組</string>
     <string name="settings_umount_modules_default_summary">應用程式設定檔中「卸載模組」的全域預設值。若啟用，會為未設定 Profile 的 App 移除所有模組對系統的修改。預設為關閉，新/未知 App 不會排除模組修改。</string>
     <string name="profile_umount_modules_summary">啟用此選項後，將允許 KernelSU 為此應用程式還原被模組修改的檔案。</string>
     <string name="profile_selinux_domain">域</string>
@@ -392,6 +392,12 @@
     <string name="home_zygisk_implement">Zygisk 實現</string>
     <string name="home_meta_module_implement">元模組實現</string>
     <string name="home_hook_type">鉤子類型</string>
+    <string name="hymofs_module_mode">模式：</string>
+    <string name="hymofs_mode_auto">自動</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">不掛載</string>
     <!-- KPM patching related strings -->
     <string name="kpm_patch_options">KPM 修補</string>
     <string name="kpm_patch_description">用於新增附加的 KPM 功能</string>

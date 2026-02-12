@@ -596,6 +596,12 @@
     <string name="hymofs_fs_type_ext4">EXT4 image</string>
     <string name="hymofs_fs_type_erofs">EROFS image</string>
     <string name="hymofs_fs_type_tmpfs">Tmpfs (RAM)</string>
+    <string name="hymofs_module_mode">Mode:</string>
+    <string name="hymofs_mode_auto">Auto</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">None</string>
     <string name="hymofs_mirror_path">Mount base / mirror path</string>
     <string name="hymofs_mirror_path_desc">Choose a preset mount base or enter a custom mirror path. Most devices work well with /data/adb/hymo/img_mnt.</string>
     <string name="hymofs_mirror_preset_img_mnt">img_mnt</string>
