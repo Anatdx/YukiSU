@@ -880,6 +880,14 @@ private fun InfoCard(
     lkmMode: Boolean?
 ) {
     var showKsudDialog by remember { mutableStateOf(false) }
+    var ksudApkVersion by remember { mutableStateOf<String?>(null) }
+    var ksudInstalledVersion by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+        ksudApkVersion = apk
+        ksudInstalledVersion = installed
+    }
 
     ElevatedCard(
         colors = getCardColors(MaterialTheme.colorScheme.surfaceContainer),
@@ -895,12 +903,21 @@ private fun InfoCard(
                 label: String,
                 content: String,
                 icon: ImageVector? = null,
+                contentColor: Color = Color.Unspecified,
+                onClick: (() -> Unit)? = null,
             ) {
                 Row(
                     verticalAlignment = Alignment.Top,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
+                        .let { base ->
+                            if (onClick != null) {
+                                base.clickable { onClick() }
+                            } else {
+                                base
+                            }
+                        }
                 ) {
                     if (icon != null) {
                         Icon(
@@ -924,6 +941,11 @@ private fun InfoCard(
                         Text(
                             text = content,
                             style = MaterialTheme.typography.bodyMedium,
+                            color = if (contentColor == Color.Unspecified) {
+                                LocalContentColor.current
+                            } else {
+                                contentColor
+                            },
                             softWrap = true
                         )
                     }
@@ -955,17 +977,26 @@ private fun InfoCard(
                 "${systemInfo.managerVersion.first} (${systemInfo.managerVersion.second.toInt()})",
                 icon = Icons.Default.SettingsSuggest,
             )
+            // ksud daemon info row: same style as other InfoCard items, clickable, highlight on mismatch
+            val ksudUnknown = stringResource(id = R.string.home_ksud_daemon_unknown)
+            val apkVer = ksudApkVersion
+            val installedVer = ksudInstalledVersion
+            val hasMismatch = apkVer != null && installedVer != null && apkVer != installedVer
 
-            // ksud daemon info / manual update
-            TextButton(
-                onClick = { showKsudDialog = true },
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Text(
-                    text = stringResource(id = R.string.home_ksud_daemon_info),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            val ksudContent = when {
+                apkVer == null && installedVer == null -> ksudUnknown
+                installedVer == null -> "APK: ${apkVer ?: ksudUnknown}"
+                apkVer == null -> installedVer
+                else -> "${installedVer} / APK: $apkVer"
             }
+
+            InfoCardItem(
+                label = stringResource(id = R.string.home_ksud_daemon_title),
+                content = ksudContent,
+                icon = Icons.Default.SettingsSuggest,
+                contentColor = if (hasMismatch) MaterialTheme.colorScheme.error else Color.Unspecified,
+                onClick = { showKsudDialog = true }
+            )
 
             if (!isSimpleMode) {
                 InfoCardItem(

@@ -605,9 +605,9 @@
     <string name="hymofs_fs_type_tmpfs">Tmpfs 分区（内存）</string>
     <string name="hymofs_mirror_path">挂载基点 / 镜像路径</string>
     <string name="hymofs_mirror_path_desc">选择一个预设挂载基点，或手动填写自定义镜像路径。大多数设备推荐使用 /data/adb/hymo/img_mnt。</string>
-    <string name="hymofs_mirror_preset_img_mnt">img_mnt</string>
-    <string name="hymofs_mirror_preset_debug_ramdisk">debug_ramdisk</string>
-    <string name="hymofs_mirror_preset_dev_mirror">hymo_mirror</string>
+    <string name="hymofs_mirror_preset_img_mnt">/data/adb/hymo/img_mnt</string>
+    <string name="hymofs_mirror_preset_debug_ramdisk">/debug_ramdisk</string>
+    <string name="hymofs_mirror_preset_dev_mirror">/dev/hymo_mirror</string>
     <string name="hymofs_mirror_preset_custom">自定义</string>
     <string name="hymofs_mount_stage">挂载阶段</string>
     <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
