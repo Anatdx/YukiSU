@@ -54,7 +54,7 @@ jobs:
       with:
         gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
         passphrase: ${{ secrets.GPG_PASSPHRASE }}
-        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
+        fingerprint: "EBDB0D663D7AB2F6"
         trust_level: 5
 
     - name: Sign ksuinit with GPG
