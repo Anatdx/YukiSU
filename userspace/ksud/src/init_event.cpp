@@ -27,6 +27,7 @@ namespace ksud {
 
 // Built-in HymoFS: try to perform an automount at a given init stage,
 // based purely on hymo's JSON config (mount_stage + hymofs_enabled).
+// This handles mount_stage = "post-fs-data" / "services".
 static void try_hymofs_automount(const char* stage_name) {
     using hymo::Config;
 
@@ -39,7 +40,7 @@ static void try_hymofs_automount(const char* stage_name) {
             return;
         }
 
-        // Respect configured mount_stage
+        // Respect configured mount_stage strictly for regular stages
         if (config.mount_stage != stage_name) {
             return;
         }
@@ -59,6 +60,44 @@ static void try_hymofs_automount(const char* stage_name) {
         LOGW("HymoFS automount(%s) threw exception: %s", stage_name, e.what());
     } catch (...) {
         LOGW("HymoFS automount(%s) threw unknown exception", stage_name);
+    }
+}
+
+// Built-in HymoFS: special handling for legacy "metamount" stage.
+// Historically, "metamount" runs in the blocking window between post-fs-data
+// finishing and services about to start. We now emulate this inside ksud:
+// just before executing metamodule mount scripts, if hymofs_enabled=true and
+// mount_stage="metamount", run hymod mount once.
+static void try_hymofs_metamount_mount() {
+    using hymo::Config;
+
+    try {
+        Config config = Config::load_default();
+
+        if (!config.hymofs_enabled) {
+            LOGI("HymoFS metamount: hymofs_enabled=false, skip");
+            return;
+        }
+
+        if (config.mount_stage != "metamount") {
+            return;
+        }
+
+        const char* argv0 = "hymod";
+        const char* argv1 = "mount";
+        char* argv[] = {const_cast<char*>(argv0), const_cast<char*>(argv1)};
+
+        LOGI("HymoFS metamount: invoking hymod mount");
+        int ret = hymo::run_hymo_main(2, argv);
+        if (ret != 0) {
+            LOGW("HymoFS metamount mount failed, ret=%d", ret);
+        } else {
+            LOGI("HymoFS metamount mount succeeded");
+        }
+    } catch (const std::exception& e) {
+        LOGW("HymoFS metamount mount threw exception: %s", e.what());
+    } catch (...) {
+        LOGW("HymoFS metamount mount threw unknown exception");
     }
 }
 
@@ -215,6 +254,11 @@ int on_post_data_fs() {
 
     // Load system.prop from modules
     load_system_prop();
+
+    // If built-in HymoFS is enabled and mount_stage == "metamount",
+    // perform the mount here in the blocking window between post-fs-data
+    // finishing and services about to start.
+    try_hymofs_metamount_mount();
 
     // Execute metamodule mount script
     metamodule_exec_mount_script();
