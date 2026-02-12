@@ -787,6 +787,17 @@ private fun SettingsTab(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 SettingSwitch(
+                    title = stringResource(R.string.hymofs_debug),
+                    subtitle = stringResource(R.string.hymofs_debug_desc),
+                    checked = config.debug,
+                    onCheckedChange = {
+                        updateAndSave(config.copy(debug = it))
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                SettingSwitch(
                     title = stringResource(R.string.hymofs_verbose),
                     subtitle = stringResource(R.string.hymofs_verbose_desc),
                     checked = config.verbose,

@@ -536,7 +536,9 @@
     <string name="hymofs_version">Version: %s</string>
     <string name="hymofs_builtin_mount">Built-in Mount</string>
     <string name="hymofs_builtin_mount_desc">Use built-in hymo mount instead of external metamodule. Disable this if you want to use another metamodule.</string>
-    <string name="hymofs_verbose">Verbose Logging</string>
+    <string name="hymofs_debug">Debug logging</string>
+    <string name="hymofs_debug_desc">Log extra debugging information from hymo</string>
+    <string name="hymofs_verbose">Verbose logging</string>
     <string name="hymofs_verbose_desc">Enable detailed daemon logs</string>
     <string name="hymofs_disable_umount">Disable Umount</string>
     <string name="hymofs_disable_umount_desc">Don\'t unmount on process isolation</string>
