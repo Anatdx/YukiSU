@@ -157,6 +157,7 @@ struct ksu_superkey_auth_cmd {
 struct ksu_superkey_status_cmd {
 	__u8 enabled;
 	__u8 authenticated;
+	__u8 signature_ok;
 	__u32 manager_uid;
 };
 #endif // #ifdef CONFIG_KSU_SUPERKEY

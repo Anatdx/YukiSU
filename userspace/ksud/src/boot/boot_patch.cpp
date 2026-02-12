@@ -28,8 +28,8 @@ constexpr uint64_t SUPERKEY_MAGIC = 0x5355504552;  // "SUPER" in hex
 // 1: signature + superkey (default)    - register prctl kprobe, require both
 // 2: superkey-only (signature bypass)  - register prctl kprobe, bypass signature
 constexpr uint64_t SUPERKEY_VERIFICATION_SIGNATURE_ONLY = 0;
-constexpr uint64_t SUPERKEY_VERIFICATION_SIGN_AND_KEY   = 1;
-constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY       = 2;
+constexpr uint64_t SUPERKEY_VERIFICATION_SIGN_AND_KEY = 1;
+constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 
 // LKM Priority magic marker (must match kernel's LKM_PRIORITY_MAGIC)
 // "LKMPRIO" in hex (little-endian)
@@ -46,8 +46,7 @@ static uint64_t hash_superkey(const std::string& key) {
 
 // Inject superkey hash and verification mode into LKM file.
 // The verification mode is always injected, even when superkey is empty.
-static bool inject_superkey_to_lkm(const std::string& lkm_path,
-                                   const std::string& superkey,
+static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey,
                                    bool signature_bypass) {
     uint64_t hash = hash_superkey(superkey);
 
@@ -57,16 +56,13 @@ static bool inject_superkey_to_lkm(const std::string& lkm_path,
         flags = SUPERKEY_VERIFICATION_SIGNATURE_ONLY;
     } else {
         // SuperKey is set; choose between "sign+key" and "key only".
-        flags = signature_bypass ? SUPERKEY_VERIFICATION_KEY_ONLY
-                                 : SUPERKEY_VERIFICATION_SIGN_AND_KEY;
+        flags =
+            signature_bypass ? SUPERKEY_VERIFICATION_KEY_ONLY : SUPERKEY_VERIFICATION_SIGN_AND_KEY;
     }
 
     printf("- SuperKey hash: 0x%016llx\n", (unsigned long long)hash);
-    printf("- Verification mode: %llu (%s)\n",
-           (unsigned long long)flags,
-           superkey.empty()
-               ? "signature-only"
-               : (signature_bypass ? "key-only" : "sign+key"));
+    printf("- Verification mode: %llu (%s)\n", (unsigned long long)flags,
+           superkey.empty() ? "signature-only" : (signature_bypass ? "key-only" : "sign+key"));
 
     std::fstream file(lkm_path, std::ios::in | std::ios::out | std::ios::binary);
     if (!file) {

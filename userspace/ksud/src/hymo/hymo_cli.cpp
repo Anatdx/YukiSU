@@ -15,7 +15,8 @@ void print_hymo_help() {
 }
 
 int cmd_hymo(const std::vector<std::string>& args) {
-    // Build argv for run_hymo_main: argv[0] = program name, then optional -c -m etc., then command + args
+    // Build argv for run_hymo_main: argv[0] = program name, then optional -c -m etc., then command
+    // + args
     std::vector<std::string> argv_str;
     argv_str.push_back("ksud_hymo");
 

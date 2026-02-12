@@ -445,3 +445,16 @@ bool is_superkey_authenticated(void) {
   LogDebug("is_superkey_authenticated: ioctl failed");
   return false;
 }
+
+// Check whether manager signature is considered OK (from kernel's view)
+bool is_signature_ok(void) {
+  struct ksu_superkey_status_cmd cmd = {};
+  if (ksuctl(KSU_IOCTL_SUPERKEY_STATUS, &cmd) == 0) {
+    LogDebug("is_signature_ok: ioctl success, signature_ok=%d",
+             cmd.signature_ok);
+    return cmd.signature_ok != 0;
+  }
+
+  LogDebug("is_signature_ok: ioctl failed");
+  return false;
+}

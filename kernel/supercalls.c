@@ -813,6 +813,12 @@ static int do_superkey_status(void __user *arg)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.enabled = superkey_is_set();
 	cmd.authenticated = superkey_is_manager();
+	/*
+	 * signature_ok: whether manager APK's signature verification
+	 * has passed. In SuperKey-only mode (signature bypass), this
+	 * will remain 0.
+	 */
+	cmd.signature_ok = is_manager_apk(NULL) ? 1 : 0;
 	cmd.manager_uid = superkey_get_manager_uid();
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {

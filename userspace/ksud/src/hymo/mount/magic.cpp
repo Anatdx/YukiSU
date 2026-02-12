@@ -22,7 +22,7 @@
 
 #ifndef TMPFS_MAGIC
 #define TMPFS_MAGIC 0x01021994
-#endif // #ifndef TMPFS_MAGIC
+#endif  // #ifndef TMPFS_MAGIC
 
 namespace hymo {
 

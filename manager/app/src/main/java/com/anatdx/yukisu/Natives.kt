@@ -150,6 +150,12 @@ object Natives {
      */
     external fun isSuperKeyAuthenticated(): Boolean
     
+    /**
+     * Check if manager signature is considered OK by kernel.
+     * This reflects whether signature-based verification is in effect.
+     */
+    external fun isSignatureOk(): Boolean
+    
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 

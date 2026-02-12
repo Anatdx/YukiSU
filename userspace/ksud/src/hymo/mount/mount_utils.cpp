@@ -15,15 +15,15 @@
 
 #ifndef AT_RECURSIVE
 #define AT_RECURSIVE 0x8000
-#endif // #ifndef AT_RECURSIVE
+#endif  // #ifndef AT_RECURSIVE
 
 #ifndef OPEN_TREE_CLONE
 #define OPEN_TREE_CLONE 1
-#endif // #ifndef OPEN_TREE_CLONE
+#endif  // #ifndef OPEN_TREE_CLONE
 
 #ifndef MOVE_MOUNT_F_EMPTY_PATH
 #define MOVE_MOUNT_F_EMPTY_PATH 0x00000004
-#endif // #ifndef MOVE_MOUNT_F_EMPTY_PATH
+#endif  // #ifndef MOVE_MOUNT_F_EMPTY_PATH
 
 namespace hymo {
 
@@ -71,7 +71,7 @@ bool clone_attr(const fs::path& source, const fs::path& target) {
                      strerror(errno));
         }
     }
-#endif // #ifdef __ANDROID__
+#endif  // #ifdef __ANDROID__
 
     // Copy extended attributes (except security.selinux which we already copied)
     char* list = nullptr;
@@ -126,7 +126,7 @@ static bool try_modern_bind_mount(const fs::path& source, const fs::path& target
     return ret == 0;
 #else
     return false;
-#endif // #ifdef __NR_open_tree
+#endif  // #ifdef __NR_open_tree
 }
 
 bool mount_bind_modern(const fs::path& source, const fs::path& target, bool recursive) {

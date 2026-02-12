@@ -143,6 +143,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 
                 // 检查内核是否配置了 SuperKey
                 val isSuperKeyConfigured = remember { Natives.isSuperKeyConfigured() }
+                // 检查内核是否认为签名有效
+                val isSignatureOk = remember { Natives.isSignatureOk() }
                 
                 // 保存 SuperKey 的 SharedPreferences
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
@@ -268,6 +270,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     
                     StatusCard(
                         systemStatus = viewModel.systemStatus,
+                        // SuperKey 模式用于表示「主要依赖 SuperKey」，
+                        // 显示规则交给 StatusCard 内部根据 isSuperKeyMode + isSignatureOk 决定徽章组合。
                         isSuperKeyMode = isSuperKeyConfigured || superKeyAuthSuccess,
                         needsSuperKeyAuth = needsSuperKeyAuth,
                         onClickInstall = {
@@ -275,7 +279,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         },
                         onSuperKeyAuth = {
                             superKeyDialog.show()
-                        }
+                        },
+                        isSignatureOk = isSignatureOk
                     )
 
                     // 警告信息
@@ -476,6 +481,7 @@ private fun StatusCard(
     systemStatus: HomeViewModel.SystemStatus,
     isSuperKeyMode: Boolean = false,
     needsSuperKeyAuth: Boolean = false,
+    isSignatureOk: Boolean = false,
     onClickInstall: () -> Unit = {},
     onSuperKeyAuth: () -> Unit = {}
 ) {
@@ -534,33 +540,71 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 认证模式标签：SuperKey / Signature（不再显示 LKM/Built-in 标签）
-                            val authLabel = if (isSuperKeyMode) {
-                                stringResource(id = R.string.home_auth_superkey_tag)
-                            } else {
-                                stringResource(id = R.string.home_auth_signature_tag)
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isSuperKeyMode) {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.secondary
-                                },
-                                modifier = Modifier
-                            ) {
-                                Text(
-                                    text = authLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = if (isSuperKeyMode) {
-                                        MaterialTheme.colorScheme.onTertiary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondary
+                            // 认证模式标签：根据签名/SuperKey 状态组合显示
+                            when {
+                                // 签名 OK 且 SuperKey 已通过：两个徽章
+                                isSignatureOk && isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_signature_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onSecondary
+                                        )
                                     }
-                                )
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_superkey_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onTertiary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                // 只有签名：仅 Signature 徽章
+                                isSignatureOk && !isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_signature_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onSecondary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                // 签名未启用 / 失败，但 SuperKey 模式：仅 SuperKey 徽章
+                                !isSignatureOk && isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_superkey_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onTertiary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                // 其它情况（例如都没有）：不显示认证徽章
                             }
-                            Spacer(Modifier.width(6.dp))
 
                             // 架构标签
                             if (Os.uname().machine != "aarch64") {

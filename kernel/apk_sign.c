@@ -363,5 +363,24 @@ bool is_manager_apk_ex(char *path, int *signature_index)
 
 bool is_manager_apk(char *path)
 {
+	/*
+	 * If path is NULL, we just want to know whether signature
+	 * verification is generally enabled/ok for the manager.
+	 * In SuperKey-only mode (signature bypass), we always return
+	 * false here so userspace can treat this as "no signature".
+	 */
+	if (!path) {
+#ifdef CONFIG_KSU_SUPERKEY
+		if (superkey_is_set() && superkey_is_signature_bypassed())
+			return false;
+#endif
+		/*
+		 * When not in bypass mode, returning true here indicates
+		 * that signature-based verification is in effect and
+		 * considered "ok" from kernel's perspective.
+		 */
+		return true;
+	}
+
 	return is_manager_apk_ex(path, NULL);
 }

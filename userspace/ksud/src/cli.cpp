@@ -678,7 +678,8 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         return 0;
 
     } else if (filtered_args[0] == "ak3") {
-        printf("AnyKernel3 flash is no longer supported. Use 'ksud flash image' for partition flash.\n");
+        printf("AnyKernel3 flash is no longer supported. Use 'ksud flash image' for partition "
+               "flash.\n");
         return 1;
     }
 

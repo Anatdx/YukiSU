@@ -24,7 +24,7 @@ namespace hymo {
 #define __NR_fsmount 432
 #define __NR_move_mount 429
 #define __NR_open_tree 428
-#endif // #ifndef __NR_fsopen
+#endif  // #ifndef __NR_fsopen
 
 #define FSOPEN_CLOEXEC 0x00000001
 #define FSCONFIG_SET_STRING 1
@@ -35,7 +35,7 @@ namespace hymo {
 #define AT_RECURSIVE 0x8000
 #ifndef OPEN_TREE_CLOEXEC
 #define OPEN_TREE_CLOEXEC 0x1
-#endif // #ifndef OPEN_TREE_CLOEXEC
+#endif  // #ifndef OPEN_TREE_CLOEXEC
 
 static int fsopen(const char* fsname, unsigned int flags) {
     return syscall(__NR_fsopen, fsname, flags);
