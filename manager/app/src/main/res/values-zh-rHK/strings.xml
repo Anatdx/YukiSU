@@ -61,8 +61,8 @@
     <string name="profile_umount_modules">卸載模組</string>
     <string name="failed_to_update_app_profile">為 %s 更新 App Profile 失敗</string>
     <string name="require_kernel_version" formatted="false">當前 KernelSU 版本 %s 過低，管理器無法正常工作，請將核心 KernelSU 版本升級至 %s 或以上！</string>
-    <string name="settings_umount_modules_default">默認卸載模組</string>
-    <string name="settings_umount_modules_default_summary">App Profile 中\"卸載模組\"嘅全局默認值，如果啟用，將會為冇設定 Profile 嘅應用移除所有模組針對系統嘅修改。</string>
+    <string name="settings_umount_modules_default">默認卸載模組（新 App 預設關閉）</string>
+    <string name="settings_umount_modules_default_summary">App Profile 入面「卸載模組」嘅全局默認值。如果開啟，會為冇設定 Profile 嘅應用移除所有模組對系統嘅修改。預設係關閉，新/未知 App 唔會排除模組修改。</string>
     <string name="profile_umount_modules_summary">啟用該選項後將允許 KernelSU 為本應用還原被模組修改過嘅文件。</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">規則</string>

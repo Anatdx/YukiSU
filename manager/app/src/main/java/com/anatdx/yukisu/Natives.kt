@@ -199,7 +199,9 @@ object Natives {
         val namespace: Int = Namespace.INHERITED.ordinal,
 
         val nonRootUseDefault: Boolean = true,
-        val umountModules: Boolean = true,
+        // Default to NOT unmounting modules for non-root apps.
+        // Apps without an explicit profile will keep module modifications applied.
+        val umountModules: Boolean = false,
         var rules: String = "", // this field is save in ksud!!
     ) : Parcelable {
         enum class Namespace {
