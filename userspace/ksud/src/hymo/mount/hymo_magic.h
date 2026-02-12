@@ -9,7 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
-#endif // #ifdef __KERNEL__
+#endif  // #ifdef __KERNEL__
 
 #define HYMO_MAGIC1 0x48594D4F  // "HYMO"
 #define HYMO_MAGIC2 0x524F4F54  // "ROOT"
@@ -32,7 +32,7 @@
 /* Marks an inode for kstat spoofing */
 #define AS_FLAGS_HYMO_SPOOF_KSTAT 42
 #define BIT_HYMO_SPOOF_KSTAT BIT(42)
-#endif // #ifdef __KERNEL__
+#endif  // #ifdef __KERNEL__
 
 // Only one syscall command: Get anonymous FD
 #define HYMO_CMD_GET_FD 0x48021

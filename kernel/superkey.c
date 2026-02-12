@@ -79,8 +79,9 @@ void superkey_init(void)
 			/* SuperKey is configured (modes 1 or 2). */
 			ksu_superkey_hash = superkey_store.hash;
 			ksu_signature_bypass =
-				(ksu_superkey_verification_mode == 2);
-			pr_info("superkey: loaded from LKM patch: hash=0x%llx, mode=%llu, bypass=%d\n",
+			    (ksu_superkey_verification_mode == 2);
+			pr_info("superkey: loaded from LKM patch: hash=0x%llx, "
+				"mode=%llu, bypass=%d\n",
 				ksu_superkey_hash,
 				ksu_superkey_verification_mode,
 				ksu_signature_bypass ? 1 : 0);
@@ -92,7 +93,8 @@ void superkey_init(void)
 		 * runtime superkey hash. Leave ksu_superkey_hash=0 so
 		 * superkey_is_set() stays false.
 		 */
-		pr_info("superkey: configured for signature-only mode (no SuperKey hash)\n");
+		pr_info("superkey: configured for signature-only mode (no "
+			"SuperKey hash)\n");
 		return;
 	}
 

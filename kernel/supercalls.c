@@ -1320,7 +1320,8 @@ void ksu_supercalls_init(void)
 			prctl_kprobe_registered = true;
 		}
 	} else {
-		pr_info("SuperKey: no SuperKey configured, prctl kprobe not registered (signature-only mode)\n");
+		pr_info("SuperKey: no SuperKey configured, prctl kprobe not "
+			"registered (signature-only mode)\n");
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
