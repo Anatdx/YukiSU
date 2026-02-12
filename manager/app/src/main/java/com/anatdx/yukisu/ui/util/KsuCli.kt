@@ -113,15 +113,25 @@ object KsuCli {
     private fun getApkKsudVersion(): String? {
         return try {
             val ksudPath = getKsuDaemonPath()
-            // Run ksud from APK to get its version
+            // Run ksud from APK to get its version.
+            // Some builds may only print banner lines; we fall back to the first non-empty line.
             val process = ProcessBuilder(ksudPath, "version")
                 .redirectErrorStream(true)
                 .start()
             val output = process.inputStream.bufferedReader().readText().trim()
             process.waitFor()
-            // Parse version from output like "ksud version 1.2.3-abc (code: 12345)"
-            val match = Regex("""version\s+([^\s]+)""").find(output)
-            match?.groupValues?.get(1)
+
+            if (output.isBlank()) {
+                null
+            } else {
+                val lines = output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                // Try to parse "version xxx" pattern from any line
+                val regex = Regex("""version\s+([^\s]+)""", RegexOption.IGNORE_CASE)
+                val parsed = lines.firstNotNullOfOrNull { line ->
+                    regex.find(line)?.groupValues?.getOrNull(1)
+                }
+                parsed ?: lines.first()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to get APK ksud version", e)
             null
