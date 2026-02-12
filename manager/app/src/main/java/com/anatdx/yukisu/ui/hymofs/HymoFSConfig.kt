@@ -2,6 +2,7 @@ package com.anatdx.yukisu.ui.hymofs
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,15 +31,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ramcosta.composedestinations.annotation.Destination
-import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
 import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager.HymoFSStatus
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
-import kotlinx.coroutines.launch
+import com.ramcosta.composedestinations.annotation.Destination
+import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.launch
 
 /**
@@ -822,13 +822,16 @@ private fun ModuleCard(
                                                 rule.path
                                             )
                                             if (ok) {
-                                                localRules = localRules.filterNot { it.path == rule.path }
+                                                localRules =
+                                                    localRules.filterNot { it.path == rule.path }
                                             } else {
-                                                // 轻量吐司即可，沿用 HymoFS toast 体系的文案风格
-                                                ScaffoldSnackbarHost.show(
-                                                    context,
-                                                    context.getString(R.string.hymofs_module_rules_remove_failed)
-                                                )
+                                                Toast
+                                                    .makeText(
+                                                        context,
+                                                        context.getString(R.string.hymofs_module_rules_remove_failed),
+                                                        Toast.LENGTH_SHORT
+                                                    )
+                                                    .show()
                                             }
                                         }
                                     }) {
@@ -905,14 +908,17 @@ private fun ModuleCard(
                                     val ok =
                                         HymoFSManager.addModuleRule(module.id, path, newRuleMode)
                                     if (ok) {
-                                        localRules =
-                                            localRules + HymoFSManager.ModuleRule(path, newRuleMode)
+                                        localRules = localRules +
+                                            HymoFSManager.ModuleRule(path, newRuleMode)
                                         newRulePath = ""
                                     } else {
-                                        ScaffoldSnackbarHost.show(
-                                            context,
-                                            context.getString(R.string.hymofs_module_rules_add_failed)
-                                        )
+                                        Toast
+                                            .makeText(
+                                                context,
+                                                context.getString(R.string.hymofs_module_rules_add_failed),
+                                                Toast.LENGTH_SHORT
+                                            )
+                                            .show()
                                     }
                                 }
                             }
