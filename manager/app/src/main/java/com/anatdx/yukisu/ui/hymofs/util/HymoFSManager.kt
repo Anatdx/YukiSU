@@ -124,9 +124,28 @@ object HymoFSManager {
      */
     suspend fun getVersion(): String = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo version").exec()
+            // meta-hymo: hymo hymofs version -> JSON
+            val result = Shell.cmd("${getKsud()} hymo hymofs version").exec()
             if (result.isSuccess) {
-                result.out.joinToString("\n").trim()
+                val json = JSONObject(result.out.joinToString("\n"))
+                val protocolVersion = json.optInt("protocol_version", -1)
+                val kernelVersion = json.optInt("kernel_version", -1)
+                val hymofsAvailable = json.optBoolean("hymofs_available", false)
+                val mismatch = json.optBoolean("protocol_mismatch", false)
+                
+                if (!hymofsAvailable) {
+                    return@withContext "Unavailable"
+                }
+                
+                return@withContext buildString {
+                    append("proto ")
+                    append(protocolVersion)
+                    append(", kernel ")
+                    append(kernelVersion)
+                    if (mismatch) {
+                        append(" (mismatch)")
+                    }
+                }
             } else {
                 "Unknown"
             }
