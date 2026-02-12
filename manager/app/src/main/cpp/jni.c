@@ -422,3 +422,6 @@ NativeBridgeNP(isSuperKeyConfigured, jboolean) {
 NativeBridgeNP(isSuperKeyAuthenticated, jboolean) {
   return is_superkey_authenticated();
 }
+
+// Check if manager signature is considered OK
+NativeBridgeNP(isSignatureOk, jboolean) { return is_signature_ok(); }
