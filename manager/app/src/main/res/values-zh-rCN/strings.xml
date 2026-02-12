@@ -648,6 +648,13 @@
     <string name="hymofs_user_hide_add">添加</string>
     <string name="hymofs_user_hide_add_failed">添加隐藏规则失败</string>
     <string name="hymofs_user_hide_remove_failed">删除隐藏规则失败</string>
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">此模块的自定义规则</string>
+    <string name="hymofs_module_rules_empty">当前没有针对该模块的自定义规则。可以为特定路径单独指定挂载模式。</string>
+    <string name="hymofs_module_rules_placeholder">/system 或 /vendor 下的路径</string>
+    <string name="hymofs_module_rules_add">添加</string>
+    <string name="hymofs_module_rules_add_failed">添加模块规则失败</string>
+    <string name="hymofs_module_rules_remove_failed">删除模块规则失败</string>
     
     <!-- Partition Manager -->
     <string name="partition_manager">分区管理器</string>

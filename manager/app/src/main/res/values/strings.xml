@@ -647,6 +647,14 @@
     <string name="hymofs_user_hide_add_failed">Failed to add hide rule</string>
     <string name="hymofs_user_hide_remove_failed">Failed to remove hide rule</string>
 
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">Custom rules for this module</string>
+    <string name="hymofs_module_rules_empty">No custom rules. Add paths to override how this module mounts specific locations.</string>
+    <string name="hymofs_module_rules_placeholder">/path/inside/system/or/vendor</string>
+    <string name="hymofs_module_rules_add">Add</string>
+    <string name="hymofs_module_rules_add_failed">Failed to add module rule</string>
+    <string name="hymofs_module_rules_remove_failed">Failed to remove module rule</string>
+
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>
     <string name="partition_list">Partition List</string>

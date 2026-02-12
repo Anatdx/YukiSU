@@ -529,6 +529,13 @@
     <string name="hymofs_user_hide_add">新增</string>
     <string name="hymofs_user_hide_add_failed">新增隱藏規則失敗</string>
     <string name="hymofs_user_hide_remove_failed">刪除隱藏規則失敗</string>
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">此模組的自訂規則</string>
+    <string name="hymofs_module_rules_empty">目前沒有針對該模組的自訂規則。可以為特定路徑單獨指定掛載模式。</string>
+    <string name="hymofs_module_rules_placeholder">/system 或 /vendor 下的路徑</string>
+    <string name="hymofs_module_rules_add">新增</string>
+    <string name="hymofs_module_rules_add_failed">新增模組規則失敗</string>
+    <string name="hymofs_module_rules_remove_failed">刪除模組規則失敗</string>
     <!-- HymoFS uname spoofing -->
     <string name="hymofs_uname_title">內核版本偽裝</string>
     <string name="hymofs_uname_release">uname -r 覆寫值</string>

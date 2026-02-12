@@ -48,6 +48,11 @@ object HymoFSManager {
     /**
      * Module info data class
      */
+    data class ModuleRule(
+        val path: String,
+        val mode: String
+    )
+
     data class ModuleInfo(
         val id: String,
         val name: String,
@@ -57,7 +62,8 @@ object HymoFSManager {
         val mode: String,    // auto, hymofs, overlay, magic, none
         val strategy: String, // resolved strategy: hymofs, overlay, magic
         val path: String,
-        val enabled: Boolean = true
+        val enabled: Boolean = true,
+        val rules: List<ModuleRule> = emptyList()
     )
     
     /**
@@ -275,6 +281,18 @@ object HymoFSManager {
                 
                 (0 until modulesArray.length()).map { i ->
                     val m = modulesArray.getJSONObject(i)
+                    val rulesArray = m.optJSONArray("rules")
+                    val rules = if (rulesArray != null) {
+                        (0 until rulesArray.length()).map { idx ->
+                            val r = rulesArray.getJSONObject(idx)
+                            ModuleRule(
+                                path = r.optString("path", ""),
+                                mode = r.optString("mode", "auto")
+                            )
+                        }.filter { it.path.isNotEmpty() }
+                    } else {
+                        emptyList()
+                    }
                     ModuleInfo(
                         id = m.getString("id"),
                         name = m.optString("name", m.getString("id")),
@@ -284,7 +302,8 @@ object HymoFSManager {
                         mode = m.optString("mode", "auto"),
                         strategy = m.optString("strategy", "overlay"),
                         path = m.optString("path", ""),
-                        enabled = !m.optBoolean("disabled", false)
+                        enabled = !m.optBoolean("disabled", false),
+                        rules = rules
                     )
                 }
             } else {
@@ -464,6 +483,44 @@ object HymoFSManager {
             false
         }
     }
+
+    /**
+     * Add a per-module custom rule: <path> -> <mode>
+     *
+     * Delegates to: hymo module add-rule <mod_id> <path> <mode>
+     */
+    suspend fun addModuleRule(moduleId: String, path: String, mode: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val safePath = path.trim()
+                if (safePath.isEmpty()) return@withContext false
+                val result =
+                    Shell.cmd("${getKsud()} hymo module add-rule $moduleId '$safePath' $mode").exec()
+                result.isSuccess
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add module rule for $moduleId", e)
+                false
+            }
+        }
+
+    /**
+     * Remove a per-module custom rule by path.
+     *
+     * Delegates to: hymo module remove-rule <mod_id> <path>
+     */
+    suspend fun removeModuleRule(moduleId: String, path: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val safePath = path.trim()
+                if (safePath.isEmpty()) return@withContext false
+                val result =
+                    Shell.cmd("${getKsud()} hymo module remove-rule $moduleId '$safePath'").exec()
+                result.isSuccess
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to remove module rule for $moduleId", e)
+                false
+            }
+        }
 
     /**
      * Ask hymod to scan partitions and update config.json, then return fresh config.

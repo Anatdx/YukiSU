@@ -646,6 +646,12 @@ private fun ModuleCard(
     onModeChanged: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var rulesExpanded by remember { mutableStateOf(false) }
+    var localRules by remember { mutableStateOf(module.rules) }
+    var newRulePath by remember { mutableStateOf("") }
+    var newRuleMode by remember { mutableStateOf("auto") }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -749,6 +755,169 @@ private fun ModuleCard(
                                     }
                                 }
                             )
+                        }
+                    }
+                }
+            }
+
+            // Custom per-module rules (like hymo module UI)
+            if (localRules.isNotEmpty() || true) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { rulesExpanded = !rulesExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.hymofs_module_rules_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Icon(
+                        imageVector = if (rulesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+
+                if (rulesExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (localRules.isEmpty()) {
+                        Text(
+                            text = stringResource(id = R.string.hymofs_module_rules_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            localRules.forEach { rule ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = rule.path,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Text(
+                                            text = modeLabel(rule.mode),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        coroutineScope.launch {
+                                            val ok = HymoFSManager.removeModuleRule(
+                                                module.id,
+                                                rule.path
+                                            )
+                                            if (ok) {
+                                                localRules = localRules.filterNot { it.path == rule.path }
+                                            } else {
+                                                // 轻量吐司即可，沿用 HymoFS toast 体系的文案风格
+                                                ScaffoldSnackbarHost.show(
+                                                    context,
+                                                    context.getString(R.string.hymofs_module_rules_remove_failed)
+                                                )
+                                            }
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newRulePath,
+                            onValueChange = { newRulePath = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(id = R.string.hymofs_module_rules_placeholder)
+                                )
+                            },
+                            singleLine = true
+                        )
+
+                        var ruleModeExpanded by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = ruleModeExpanded,
+                            onExpandedChange = { ruleModeExpanded = !ruleModeExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = modeLabel(newRuleMode),
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleModeExpanded)
+                                },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .widthIn(min = 96.dp),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = ruleModeExpanded,
+                                onDismissRequest = { ruleModeExpanded = false }
+                            ) {
+                                modes.forEach { m ->
+                                    DropdownMenuItem(
+                                        text = { Text(modeLabel(m)) },
+                                        onClick = {
+                                            newRuleMode = m
+                                            ruleModeExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                val path = newRulePath.trim()
+                                if (path.isEmpty()) return@Button
+                                coroutineScope.launch {
+                                    val ok =
+                                        HymoFSManager.addModuleRule(module.id, path, newRuleMode)
+                                    if (ok) {
+                                        localRules =
+                                            localRules + HymoFSManager.ModuleRule(path, newRuleMode)
+                                        newRulePath = ""
+                                    } else {
+                                        ScaffoldSnackbarHost.show(
+                                            context,
+                                            context.getString(R.string.hymofs_module_rules_add_failed)
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Text(text = stringResource(id = R.string.hymofs_module_rules_add))
                         }
                     }
                 }
