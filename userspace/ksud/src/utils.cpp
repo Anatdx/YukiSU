@@ -430,6 +430,63 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
+ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
+                                   const std::vector<std::string>& sub_args,
+                                   const std::string& workdir) {
+    std::vector<std::string> args;
+    args.reserve(1 + sub_args.size());
+    args.push_back("magiskboot");
+    for (const auto& a : sub_args)
+        args.push_back(a);
+    // Use execv with exact path so argv[0] is "magiskboot" (multi-call binary dispatches on argv[0])
+    ExecResult result{-1, "", ""};
+    if (args.empty())
+        return result;
+    int stdout_pipe[2], stderr_pipe[2];
+    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)
+        return result;
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[0]);
+        close(stderr_pipe[1]);
+        return result;
+    }
+    if (pid == 0) {
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+        dup2(stderr_pipe[1], STDERR_FILENO);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        if (!workdir.empty() && chdir(workdir.c_str()) != 0) {
+            _exit(127);
+        }
+        std::vector<char*> c_args;
+        for (const auto& arg : args)
+            c_args.push_back(const_cast<char*>(arg.c_str()));
+        c_args.push_back(nullptr);
+        execv(magiskboot_path.c_str(), c_args.data());
+        _exit(127);
+    }
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    char buf[1024];
+    ssize_t n;
+    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0)
+        result.stdout_str.append(buf, n);
+    close(stdout_pipe[0]);
+    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0)
+        result.stderr_str.append(buf, n);
+    close(stderr_pipe[0]);
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status))
+        result.exit_code = WEXITSTATUS(status);
+    return result;
+}
+
 int exec_command_async(const std::vector<std::string>& args) {
     if (args.empty())
         return -1;

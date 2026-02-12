@@ -667,7 +667,7 @@ std::string get_kernel_version(const std::string& slot_suffix) {
 
     // Unpack boot image in the workdir
     std::string kernel_path = workdir + "/kernel";
-    auto unpack_result = exec_command({magiskboot, "unpack", device}, workdir);
+    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", device}, workdir);
 
     std::string result;
     if (unpack_result.exit_code == 0) {

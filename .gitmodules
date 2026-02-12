@@ -1,0 +1,3 @@
+[submodule "userspace/ksud/third_party/MagiskbootAlone"]
+	path = userspace/ksud/third_party/MagiskbootAlone
+	url = https://github.com/Anatdx/MagiskbootAlone.git

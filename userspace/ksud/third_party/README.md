@@ -1,8 +1,17 @@
 # Third-party Libraries
 
-This directory is managed by CMake FetchContent. Dependencies are automatically downloaded during the build process.
+This directory contains **git submodules** and is also used by CMake **FetchContent** for some dependencies.
 
-## Dependencies
+## Submodules
+
+### MagiskbootAlone
+
+- **Path**: `third_party/MagiskbootAlone`
+- **Purpose**: Boot image unpack/repack/split-dtb; compiled **into ksud** as a multi-call binary.
+- **Usage**: `ksu/bin/ksud` is the main binary; `ksu/bin/magiskboot` should be a **symlink to ksud**. When invoked as `magiskboot`, ksud dispatches by `argv[0]` to `magiskboot_main()`.
+- **Init/update**: `git submodule update --init userspace/ksud/third_party/MagiskbootAlone`
+
+## FetchContent (auto-downloaded)
 
 ### PicoSHA2
 

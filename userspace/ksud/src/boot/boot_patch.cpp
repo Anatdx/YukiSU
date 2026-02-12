@@ -162,7 +162,7 @@ static bool inject_lkm_priority_to_lkm(const std::string& lkm_path, bool enabled
 // Execute magiskboot cpio command (runs in workdir for relative path resolution)
 static bool do_cpio_cmd(const std::string& magiskboot, const std::string& workdir,
                         const std::string& cpio_path, const std::string& cmd) {
-    auto result = exec_command({magiskboot, "cpio", cpio_path, cmd}, workdir);
+    auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, cmd}, workdir);
     if (result.exit_code != 0) {
         LOGE("magiskboot cpio %s failed", cmd.c_str());
         return false;
@@ -173,7 +173,7 @@ static bool do_cpio_cmd(const std::string& magiskboot, const std::string& workdi
 // Check if boot image is patched by Magisk
 static bool is_magisk_patched(const std::string& magiskboot, const std::string& workdir,
                               const std::string& cpio_path) {
-    auto result = exec_command({magiskboot, "cpio", cpio_path, "test"}, workdir);
+    auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "test"}, workdir);
     // 0: stock, 1: magisk
     return result.exit_code == 1;
 }
@@ -181,7 +181,7 @@ static bool is_magisk_patched(const std::string& magiskboot, const std::string& 
 // Check if boot image is patched by KernelSU
 static bool is_kernelsu_patched(const std::string& magiskboot, const std::string& workdir,
                                 const std::string& cpio_path) {
-    auto result = exec_command({magiskboot, "cpio", cpio_path, "exists kernelsu.ko"}, workdir);
+    auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "exists kernelsu.ko"}, workdir);
     return result.exit_code == 0;
 }
 
@@ -616,7 +616,7 @@ int boot_patch(const std::vector<std::string>& args) {
     }
     printf("- Boot image size: %ld bytes\n", (long)boot_stat.st_size);
 
-    auto unpack_result = exec_command({magiskboot, "unpack", bootimage}, workdir);
+    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", bootimage}, workdir);
     printf("- unpack exit code: %d\n", unpack_result.exit_code);
     if (!unpack_result.stdout_str.empty()) {
         printf("- stdout: %s\n", unpack_result.stdout_str.c_str());
@@ -648,7 +648,7 @@ int boot_patch(const std::vector<std::string>& args) {
         printf("- No ramdisk found, creating default\n");
         ramdisk = workdir + "/ramdisk.cpio";
         // Create empty ramdisk
-        exec_command({magiskboot, "cpio", ramdisk, "mkdir 0755 ."}, workdir);
+        exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "mkdir 0755 ."}, workdir);
     }
 
     // Check for Magisk
@@ -663,7 +663,7 @@ int boot_patch(const std::vector<std::string>& args) {
 
     if (!already_patched) {
         // Backup init if it exists
-        auto init_exists = exec_command({magiskboot, "cpio", ramdisk, "exists init"}, workdir);
+        auto init_exists = exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists init"}, workdir);
         if (init_exists.exit_code == 0) {
             do_cpio_cmd(magiskboot, workdir, ramdisk, "mv init init.real");
         }
@@ -682,7 +682,7 @@ int boot_patch(const std::vector<std::string>& args) {
 
     // Repack boot image (must run in workdir where unpack output files are)
     printf("- Repacking boot image\n");
-    auto repack_result = exec_command({magiskboot, "repack", bootimage}, workdir);
+    auto repack_result = exec_command_magiskboot(magiskboot, {"repack", bootimage}, workdir);
     if (repack_result.exit_code != 0) {
         LOGE("magiskboot repack failed");
         cleanup();
@@ -819,7 +819,7 @@ int boot_restore(const std::vector<std::string>& args) {
 
     // Unpack boot image (must run in workdir so output files go there)
     printf("- Unpacking boot image\n");
-    auto unpack_result = exec_command({magiskboot, "unpack", bootimage}, workdir);
+    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", bootimage}, workdir);
     if (unpack_result.exit_code != 0) {
         LOGE("magiskboot unpack failed");
         if (!unpack_result.stderr_str.empty()) {
@@ -859,12 +859,12 @@ int boot_restore(const std::vector<std::string>& args) {
     bool from_backup = false;
 
     // Try to find backup
-    auto backup_exists = exec_command(
-        {magiskboot, "cpio", ramdisk, "exists " + std::string(BACKUP_FILENAME)}, workdir);
+    auto backup_exists = exec_command_magiskboot(
+        magiskboot, {"cpio", ramdisk, "exists " + std::string(BACKUP_FILENAME)}, workdir);
     if (backup_exists.exit_code == 0) {
         // Extract backup sha1
         std::string backup_file = workdir + "/" + BACKUP_FILENAME;
-        exec_command({magiskboot, "cpio", ramdisk,
+        exec_command_magiskboot(magiskboot, {"cpio", ramdisk,
                       "extract " + std::string(BACKUP_FILENAME) + " " + backup_file},
                      workdir);
 
@@ -892,14 +892,14 @@ int boot_restore(const std::vector<std::string>& args) {
 
         // Restore init if init.real exists
         auto init_real_exists =
-            exec_command({magiskboot, "cpio", ramdisk, "exists init.real"}, workdir);
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists init.real"}, workdir);
         if (init_real_exists.exit_code == 0) {
             do_cpio_cmd(magiskboot, workdir, ramdisk, "mv init.real init");
         }
 
         // Repack (must run in workdir where unpack output files are)
         printf("- Repacking boot image\n");
-        auto repack_result = exec_command({magiskboot, "repack", bootimage}, workdir);
+        auto repack_result = exec_command_magiskboot(magiskboot, {"repack", bootimage}, workdir);
         if (repack_result.exit_code != 0) {
             LOGE("magiskboot repack failed");
             cleanup();

@@ -77,6 +77,23 @@ add_custom_command(
     COMMENT "Generating embedded assets..."
 )
 
+# MagiskbootAlone (submodule): compile magiskboot into ksud for multi-call binary (ksud / magiskboot via argv0)
+set(MAGISKBOOT_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/MagiskbootAlone)
+set(MAGISKBOOT_SOURCES
+    ${MAGISKBOOT_ALONE_DIR}/src/base_host.cpp
+    ${MAGISKBOOT_ALONE_DIR}/src/bootimg.cpp
+    ${MAGISKBOOT_ALONE_DIR}/src/boot_crypto.cpp
+    ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp
+)
+if(EXISTS ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp)
+    set_source_files_properties(${MAGISKBOOT_SOURCES} PROPERTIES CXX_STANDARD 20)
+    include_directories(${MAGISKBOOT_ALONE_DIR}/src)
+    set(MAGISKBOOT_ALONE_AVAILABLE 1)
+    message(STATUS "MagiskbootAlone: building magiskboot into ksud (multi-call)")
+else()
+    message(WARNING "MagiskbootAlone submodule not found at ${MAGISKBOOT_ALONE_DIR}; run: git submodule update --init")
+endif()
+
 # 源文件
 set(SOURCES
     src/main.cpp
@@ -125,6 +142,9 @@ set(SOURCES
     src/hymo/mount/partition_utils.cpp
     ${ASSETS_CPP}
 )
+if(MAGISKBOOT_ALONE_AVAILABLE)
+    list(APPEND SOURCES ${MAGISKBOOT_SOURCES})
+endif()
 
 # 头文件目录 (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
 include_directories(${CMAKE_SOURCE_DIR}/src)
@@ -134,6 +154,10 @@ include_directories(${miniz_SOURCE_DIR})
 include_directories(${GENERATED_DIR})
 
 add_executable(ksud ${SOURCES})
+
+if(MAGISKBOOT_ALONE_AVAILABLE)
+    target_compile_definitions(ksud PRIVATE MAGISKBOOT_ALONE_AVAILABLE=1)
+endif()
 
 # 链接库 - Android bionic libc 已内置 pthread，不需要单独链接
 if(NOT ANDROID)
