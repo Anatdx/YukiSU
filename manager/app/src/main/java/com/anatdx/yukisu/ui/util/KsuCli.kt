@@ -228,7 +228,20 @@ fun install() {
 }
 
 fun hasMetaModule(): Boolean {
-    return getMetaModuleImplement() != "None"
+    // Treat both external metamodule and built-in HymoFS as valid metamodule implementations.
+    // External metamodule: /data/adb/metamodule/module.prop present and readable.
+    // Built-in HymoFS: /data/adb/hymo/config.json or /data/adb/hymo directory exists.
+    return try {
+        val hymoDir = SuFile.open("/data/adb/hymo")
+        val hymoConfig = SuFile.open("/data/adb/hymo/config.json")
+        if ((hymoDir.exists() && hymoDir.isDirectory) || hymoConfig.isFile) {
+            true
+        } else {
+            getMetaModuleImplement() != "None"
+        }
+    } catch (_: Throwable) {
+        getMetaModuleImplement() != "None"
+    }
 }
 
 fun listModules(): String {
