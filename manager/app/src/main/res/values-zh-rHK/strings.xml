@@ -359,10 +359,27 @@
     <string name="add_app_path">應用</string>
     <string name="search_apps">搜尋應用程式</string>
     <string name="home_zygisk_implement">Zygisk 實現</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
     <string name="hymofs_module_mode">模式：</string>
     <string name="hymofs_mode_auto">自動</string>
     <string name="hymofs_mode_hymofs">HymoFS</string>
     <string name="hymofs_mode_overlay">OverlayFS</string>
     <string name="hymofs_mode_magic">Magic Mount</string>
     <string name="hymofs_mode_none">不掛載</string>
+    <!-- HymoFS 內部提示 -->
+    <string name="hymofs_toast_load_error">載入資料時發生錯誤：%s</string>
+    <string name="hymofs_toast_mode_updated">模式已更新，重啟後生效</string>
+    <string name="hymofs_toast_mode_failed">更新模式失敗</string>
+    <string name="hymofs_toast_settings_saved">設定已儲存</string>
+    <string name="hymofs_toast_settings_failed">儲存設定失敗</string>
+    <string name="hymofs_toast_kernel_debug_enabled">內核偵錯已啟用</string>
+    <string name="hymofs_toast_kernel_debug_disabled">內核偵錯已停用</string>
+    <string name="hymofs_toast_stealth_enabled">隱身模式已啟用</string>
+    <string name="hymofs_toast_stealth_disabled">隱身模式已停用</string>
+    <string name="hymofs_toast_mounts_fixed">掛載 ID 已重新排序</string>
+    <string name="hymofs_toast_mounts_failed">修復掛載 ID 失敗</string>
+    <string name="hymofs_toast_builtin_enabled">內置掛載已啟用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_disabled">內置掛載已停用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_failed">更新內置掛載設定失敗</string>
 </resources>

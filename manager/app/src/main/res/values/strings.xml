@@ -111,6 +111,23 @@
     <string name="close">Close</string>
     <string name="enable_web_debugging">Enable WebView debugging</string>
     <string name="enable_web_debugging_summary">Can be used to debug WebUI. Please enable only when needed</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
+    <!-- HymoFS toasts -->
+    <string name="hymofs_toast_load_error">Error loading data: %s</string>
+    <string name="hymofs_toast_mode_updated">Mode updated. Reboot to apply.</string>
+    <string name="hymofs_toast_mode_failed">Failed to update mode</string>
+    <string name="hymofs_toast_settings_saved">Settings saved</string>
+    <string name="hymofs_toast_settings_failed">Failed to save settings</string>
+    <string name="hymofs_toast_kernel_debug_enabled">Kernel debug enabled</string>
+    <string name="hymofs_toast_kernel_debug_disabled">Kernel debug disabled</string>
+    <string name="hymofs_toast_stealth_enabled">Stealth mode enabled</string>
+    <string name="hymofs_toast_stealth_disabled">Stealth mode disabled</string>
+    <string name="hymofs_toast_mounts_fixed">Mount IDs reordered</string>
+    <string name="hymofs_toast_mounts_failed">Failed to fix mounts</string>
+    <string name="hymofs_toast_builtin_enabled">Built-in mount enabled. Reboot to apply.</string>
+    <string name="hymofs_toast_builtin_disabled">Built-in mount disabled. Reboot to apply.</string>
+    <string name="hymofs_toast_builtin_failed">Failed to update built-in mount setting</string>
     <string name="direct_install">Direct install (Recommended)</string>
     <string name="select_file">Select a image that needs to be patched</string>
     <string name="install_inactive_slot">Install to inactive slot (After OTA)</string>

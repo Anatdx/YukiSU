@@ -98,7 +98,12 @@ fun HymoFSConfigScreen(
                     activeRules = HymoFSManager.getActiveRules()
                 }
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Error loading data: ${e.message}")
+                snackbarHostState.showSnackbar(
+                    stringResource(
+                        R.string.hymofs_toast_load_error,
+                        e.message ?: "unknown"
+                    )
+                )
             }
             isLoading = false
         }
@@ -175,10 +180,14 @@ fun HymoFSConfigScreen(
                         onModeChanged = { moduleId, mode ->
                             coroutineScope.launch {
                                 if (HymoFSManager.setModuleMode(moduleId, mode)) {
-                                    snackbarHostState.showSnackbar("Mode updated. Reboot to apply.")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_mode_updated)
+                                    )
                                     loadData()
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to update mode")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_mode_failed)
+                                    )
                                 }
                             }
                         }
@@ -191,32 +200,50 @@ fun HymoFSConfigScreen(
                             coroutineScope.launch {
                                 if (HymoFSManager.saveConfig(newConfig)) {
                                     config = newConfig
-                                    snackbarHostState.showSnackbar("Settings saved")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_settings_saved)
+                                    )
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to save settings")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_settings_failed)
+                                    )
                                 }
                             }
                         },
                         onSetDebug = { enable ->
                             coroutineScope.launch {
                                 if (HymoFSManager.setKernelDebug(enable)) {
-                                    snackbarHostState.showSnackbar("Kernel debug ${if (enable) "enabled" else "disabled"}")
+                                    val msgRes = if (enable) {
+                                        R.string.hymofs_toast_kernel_debug_enabled
+                                    } else {
+                                        R.string.hymofs_toast_kernel_debug_disabled
+                                    }
+                                    snackbarHostState.showSnackbar(stringResource(msgRes))
                                 }
                             }
                         },
                         onSetStealth = { enable ->
                             coroutineScope.launch {
                                 if (HymoFSManager.setStealth(enable)) {
-                                    snackbarHostState.showSnackbar("Stealth mode ${if (enable) "enabled" else "disabled"}")
+                                    val msgRes = if (enable) {
+                                        R.string.hymofs_toast_stealth_enabled
+                                    } else {
+                                        R.string.hymofs_toast_stealth_disabled
+                                    }
+                                    snackbarHostState.showSnackbar(stringResource(msgRes))
                                 }
                             }
                         },
                         onFixMounts = {
                             coroutineScope.launch {
                                 if (HymoFSManager.fixMounts()) {
-                                    snackbarHostState.showSnackbar("Mount IDs reordered")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_mounts_fixed)
+                                    )
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to fix mounts")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_mounts_failed)
+                                    )
                                 }
                             }
                         },
@@ -225,9 +252,16 @@ fun HymoFSConfigScreen(
                             coroutineScope.launch {
                                 if (HymoFSManager.setBuiltinMountEnabled(enable)) {
                                     builtinMountEnabled = enable
-                                    snackbarHostState.showSnackbar("Built-in mount ${if (enable) "enabled" else "disabled"}. Reboot to apply.")
+                                    val msgRes = if (enable) {
+                                        R.string.hymofs_toast_builtin_enabled
+                                    } else {
+                                        R.string.hymofs_toast_builtin_disabled
+                                    }
+                                    snackbarHostState.showSnackbar(stringResource(msgRes))
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to update built-in mount setting")
+                                    snackbarHostState.showSnackbar(
+                                        stringResource(R.string.hymofs_toast_builtin_failed)
+                                    )
                                 }
                             }
                         }

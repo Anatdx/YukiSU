@@ -525,6 +525,8 @@
     <string name="signature_bypass_desc">禁用 APK 签名验证。管理器将仅通过超级密钥认证来识别。</string>
     <string name="gki_priority_title">GKI 优先模式</string>
     <string name="gki_priority_desc">启用后，GKI 优先于 LKM。LKM 将不会触发 GKI 让位，会自行退出。</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
 
     <!-- HymoFS Configuration -->
     <string name="hymofs_title">HymoFS 配置</string>
@@ -612,6 +614,21 @@
     <string name="hymofs_mount_stage_meta">metamount</string>
     <string name="hymofs_mount_stage_services">services</string>
     <string name="hymofs_create_image">在 /data/adb 创建 modules.img</string>
+    <!-- HymoFS 内部提示 -->
+    <string name="hymofs_toast_load_error">加载数据出错：%s</string>
+    <string name="hymofs_toast_mode_updated">模式已更新，重启后生效</string>
+    <string name="hymofs_toast_mode_failed">更新模式失败</string>
+    <string name="hymofs_toast_settings_saved">设置已保存</string>
+    <string name="hymofs_toast_settings_failed">保存设置失败</string>
+    <string name="hymofs_toast_kernel_debug_enabled">内核调试已启用</string>
+    <string name="hymofs_toast_kernel_debug_disabled">内核调试已禁用</string>
+    <string name="hymofs_toast_stealth_enabled">隐身模式已启用</string>
+    <string name="hymofs_toast_stealth_disabled">隐身模式已禁用</string>
+    <string name="hymofs_toast_mounts_fixed">挂载 ID 已重新排序</string>
+    <string name="hymofs_toast_mounts_failed">修复挂载 ID 失败</string>
+    <string name="hymofs_toast_builtin_enabled">内置挂载已启用，重启后生效</string>
+    <string name="hymofs_toast_builtin_disabled">内置挂载已禁用，重启后生效</string>
+    <string name="hymofs_toast_builtin_failed">更新内置挂载设置失败</string>
     <string name="hymofs_module_mode">模式：</string>
     <string name="hymofs_mode_auto">自动</string>
     <string name="hymofs_mode_hymofs">HymoFS</string>

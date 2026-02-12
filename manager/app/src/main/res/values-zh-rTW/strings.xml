@@ -505,4 +505,21 @@
     <string name="settings_donot_store_superkey_summary">啟用後，管理器不會儲存您的超級密鑰。每次重新啟動後都需要手動輸入密鑰進行認證。</string>
     <string name="signature_bypass_title">僅超級密鑰模式</string>
     <string name="signature_bypass_desc">停用 APK 簽名驗證。管理器將僅透過超級密鑰認證來識別。</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
+    <!-- HymoFS 內部提示 -->
+    <string name="hymofs_toast_load_error">載入資料時發生錯誤：%s</string>
+    <string name="hymofs_toast_mode_updated">模式已更新，重啟後生效</string>
+    <string name="hymofs_toast_mode_failed">更新模式失敗</string>
+    <string name="hymofs_toast_settings_saved">設定已儲存</string>
+    <string name="hymofs_toast_settings_failed">儲存設定失敗</string>
+    <string name="hymofs_toast_kernel_debug_enabled">內核偵錯已啟用</string>
+    <string name="hymofs_toast_kernel_debug_disabled">內核偵錯已停用</string>
+    <string name="hymofs_toast_stealth_enabled">隱身模式已啟用</string>
+    <string name="hymofs_toast_stealth_disabled">隱身模式已停用</string>
+    <string name="hymofs_toast_mounts_fixed">掛載 ID 已重新排序</string>
+    <string name="hymofs_toast_mounts_failed">修復掛載 ID 失敗</string>
+    <string name="hymofs_toast_builtin_enabled">內置掛載已啟用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_disabled">內置掛載已停用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_failed">更新內置掛載設定失敗</string>
 </resources>

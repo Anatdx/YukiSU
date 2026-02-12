@@ -510,11 +510,6 @@ private fun StatusCard(
                         else -> stringResource(id = R.string.home_working)
                     }
 
-                    val workingModeSurfaceText = when {
-                        systemStatus.lkmMode == true -> "LKM"
-                        else -> "Built-in"
-                    }
-
                     Icon(
                         Icons.Outlined.TaskAlt,
                         contentDescription = stringResource(R.string.home_working),
@@ -539,38 +534,33 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 工作模式标签
+                            // 认证模式标签：SuperKey / Signature（不再显示 LKM/Built-in 标签）
+                            val authLabel = if (isSuperKeyMode) {
+                                stringResource(id = R.string.home_auth_superkey_tag)
+                            } else {
+                                stringResource(id = R.string.home_auth_signature_tag)
+                            }
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = if (isSuperKeyMode) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.secondary
+                                },
                                 modifier = Modifier
                             ) {
                                 Text(
-                                    text = workingModeSurfaceText,
+                                    text = authLabel,
                                     style = MaterialTheme.typography.labelMedium,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = if (isSuperKeyMode) {
+                                        MaterialTheme.colorScheme.onTertiary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondary
+                                    }
                                 )
                             }
-
                             Spacer(Modifier.width(6.dp))
-
-                            // SuperKey 模式标签
-                            if (isSuperKeyMode) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier
-                                ) {
-                                    Text(
-                                        text = "SuperKey",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        color = MaterialTheme.colorScheme.onTertiary
-                                    )
-                                }
-                                Spacer(Modifier.width(6.dp))
-                            }
 
                             // 架构标签
                             if (Os.uname().machine != "aarch64") {
