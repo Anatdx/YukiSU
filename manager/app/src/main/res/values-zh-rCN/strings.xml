@@ -6,7 +6,6 @@
     <string name="home_not_installed_or_auth">未安装或未认证</string>
     <string name="home_click_to_install">点击安装</string>
     <string name="home_working">工作中</string>
-    <string name="home_badge_superkey">SuperKey</string>
     <string name="home_gki_builtin_unsupported">YukiSU 已不支持 built-in KernelSU！请使用 LKM 模式！</string>
     <string name="home_working_version">版本：%s</string>
     <string name="home_unsupported">不支持</string>
@@ -81,7 +80,6 @@
     <string name="restart_app">重新启动</string>
     <string name="failed_to_update_sepolicy">为：%s 更新 SELinux 规则失败</string>
     <string name="module_changelog">更新日志</string>
-    <string name="module_action_success">模块动作执行成功。</string>
     <string name="settings_profile_template">App Profile 模版</string>
     <string name="settings_profile_template_summary">管理本地和在线的 App Profile 模版</string>
     <string name="app_profile_template_create">创建模版</string>
@@ -137,6 +135,20 @@
     <!-- Module related -->
     <string name="module_install_confirm">确认安装模块 %1$s？</string>
     <string name="unknown_module">未知模块</string>
+    <!-- Module shortcut related -->
+    <string name="module_action_success">模块操作已完成</string>
+    <string name="module_shortcut_type_title">选择快捷方式类型</string>
+    <string name="module_shortcut_title">模块快捷方式</string>
+    <string name="module_shortcut_icon_pick">选择图标</string>
+    <string name="module_shortcut_name_label">快捷方式名称</string>
+    <string name="module_shortcut_delete">删除快捷方式</string>
+    <string name="module_shortcut_add">添加模块快捷方式</string>
+    <string name="module_shortcut_updated">快捷方式已更新</string>
+    <string name="module_shortcut_not_supported">当前桌面不支持固定快捷方式</string>
+    <string name="module_shortcut_created">已创建桌面快捷方式</string>
+    <string name="module_shortcut_permission_tip_xiaomi">请在 MIUI 设置中为本应用开启桌面快捷方式权限后重试</string>
+    <string name="module_shortcut_permission_tip_oppo">请在系统设置中为本应用开启桌面快捷方式权限后重试</string>
+    <string name="module_shortcut_permission_tip_default">请检查桌面/启动器权限，允许本应用创建桌面快捷方式后重试</string>
     <!-- Restore related -->
     <string name="restore_confirm_title">确认还原模块</string>
     <string name="restore_confirm_message">此操作将覆盖所有现有模块，是否继续？</string>
@@ -216,6 +228,8 @@
     <string name="color_gray">高级灰</string>
     <string name="color_yellow">黄色</string>
     <string name="color_trans_pride">Trans Pride</string>
+    <string name="horizon_kernel">刷写 AnyKernel3 压缩包</string>
+    <string name="horizon_kernel_summary">刷入 Anykernel3 内核</string>
     <string name="root_required">需要 root 权限</string>
     <string name="reboot_complete_title">刷写完成</string>
     <string name="reboot_complete_msg">是否立即重启？</string>
@@ -282,6 +296,7 @@
     <string name="flash_failed_message">刷写失败</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 修补/安装</string>
+    <string name="GKI_install_methods">刷写 AnyKernel3</string>
     <string name="kernel_version_log">内核版本：%1$s</string>
     <string name="tool_version_log">使用修补工具：%1$s</string>
     <string name="configuration">配置</string>
@@ -340,6 +355,11 @@
     <string name="module_failed_count">%d 个模块安装失败</string>
     <string name="module_download_error">模块下载失败</string>
     <string name="kernel_flashing">内核刷写</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_not_present">未检测到</string>
+    <string name="hymofs_status_kernel_too_old">内核版本过低，不支持 HymoFS</string>
+    <string name="hymofs_status_module_too_old">模块版本过低，请更新内置 Hymo</string>
     <string name="warning_of_meta_module_title">需要元模块</string>
     <string name="warning_of_meta_module_summary">这个模块需要挂载一些文件。需要安装元模块，使它正常工作</string>
     <!-- 分类相关 -->
@@ -401,6 +421,23 @@
     <string name="kpm_undo_patch_enabled">KPM 撤销修补已启用</string>
     <string name="kpm_patch_mode">KPM 修补模式</string>
     <string name="kpm_undo_patch_mode">KPM 撤销修补模式</string>
+    <!-- KPM workflow related -->
+    <string name="kpm_preparing_tools">准备 KPM 修补工具</string>
+    <string name="kpm_applying_patch">正在应用 KPM 修补</string>
+    <string name="kpm_undoing_patch">正在撤销 KPM 修补</string>
+    <string name="kpm_found_image_file">找到 Image 文件: %s</string>
+    <string name="kpm_patch_success">KPM 修补成功</string>
+    <string name="kpm_undo_patch_success">KPM 撤销修补成功</string>
+    <string name="kpm_file_repacked">文件重新打包完成</string>
+    <!-- KPM error messages -->
+    <string name="kpm_extract_zip_failed">解压压缩包失败</string>
+    <string name="kpm_image_file_not_found">未找到 Image 文件</string>
+    <string name="kpm_patch_failed">KPM 修补失败</string>
+    <string name="kpm_undo_patch_failed">KPM 撤销修补失败</string>
+    <string name="kpm_patch_operation_failed">KPM 修补操作失败: %s</string>
+    <!-- KPM option radio group strings -->
+    <string name="kpm_follow_kernel_file">跟随内核</string>
+    <string name="kpm_follow_kernel_description">原样使用内核，不进行任何 KPM 修改</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">确认安装</string>
     <string name="confirm_multiple_installation">确认安装（%d 个文件）</string>
@@ -486,7 +523,139 @@
     <string name="settings_clear_super_key_dialog">确定要清除已存储的超级密钥吗？</string>
     <string name="signature_bypass_title">仅超级密钥模式</string>
     <string name="signature_bypass_desc">禁用 APK 签名验证。管理器将仅通过超级密钥认证来识别。</string>
+    <string name="gki_priority_title">GKI 优先模式</string>
+    <string name="gki_priority_desc">启用后，GKI 优先于 LKM。LKM 将不会触发 GKI 让位，会自行退出。</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
 
+    <!-- HymoFS Configuration -->
+    <string name="hymofs_title">HymoFS 配置</string>
+    <string name="hymofs_tab_status">状态</string>
+    <string name="hymofs_tab_modules">模块</string>
+    <string name="hymofs_tab_settings">设置</string>
+    <string name="hymofs_tab_rules">规则</string>
+    <string name="hymofs_tab_logs">日志</string>
+    <string name="hymofs_storage">存储</string>
+    <string name="hymofs_modules_count">模块数</string>
+    <string name="hymofs_system_info">系统信息</string>
+    <string name="hymofs_version">版本: %s</string>
+    <string name="hymofs_builtin_mount">内置挂载</string>
+    <string name="hymofs_builtin_mount_desc">使用内置的 hymo 挂载而非外部元模块。如果您想使用其他元模块，请禁用此选项。</string>
+    <string name="hymofs_debug">调试日志</string>
+    <string name="hymofs_debug_desc">输出额外的 Hymo 调试信息</string>
+    <string name="hymofs_verbose">详细日志</string>
+    <string name="hymofs_verbose_desc">启用详细的守护进程日志</string>
+    <string name="hymofs_disable_umount">禁用卸载</string>
+    <string name="hymofs_disable_umount_desc">进程隔离时不卸载文件系统</string>
+    <string name="hymofs_kernel_debug">内核调试</string>
+    <string name="hymofs_kernel_debug_desc">启用 HymoFS 内核调试日志</string>
+    <string name="hymofs_stealth">隐身模式</string>
+    <string name="hymofs_stealth_desc">隐藏挂载痕迹并重新排序挂载 ID</string>
+    <string name="hymofs_avc_spoof">AVC 日志欺骗</string>
+    <string name="hymofs_avc_spoof_desc">伪造 SELinux AVC 拒绝日志</string>
+    <string name="hymofs_enable_nuke">启用 Nuke</string>
+    <string name="hymofs_enable_nuke_desc">允许清除 ext4 sysfs 条目</string>
+    <string name="hymofs_ignore_protocol">忽略协议不匹配</string>
+    <string name="hymofs_ignore_protocol_desc">即使内核/用户空间版本不匹配也继续运行</string>
+    <string name="hymofs_moduledir">模块目录</string>
+    <string name="hymofs_moduledir_desc">模块的基础目录（默认：/data/adb/modules）</string>
+    <string name="hymofs_tempdir">临时挂载基点</string>
+    <string name="hymofs_tempdir_desc">临时挂载的基础路径（留空则自动选择）</string>
+    <string name="hymofs_mountsource">OverlayFS 挂载源名称</string>
+    <string name="hymofs_mountsource_desc">overlayfs 挂载源名称（默认：KSU）</string>
+    <string name="hymofs_logs_copy">复制</string>
+    <string name="hymofs_logs_copy_success">日志已复制到剪贴板</string>
+    <string name="hymofs_logs_filter_all">全部</string>
+    <string name="hymofs_logs_filter_info">信息</string>
+    <string name="hymofs_logs_filter_warn">警告</string>
+    <string name="hymofs_logs_filter_error">错误</string>
+    <string name="hymofs_partitions">活跃分区</string>
+    <string name="hymofs_partitions_desc">需要扫描模块修改的分区（逗号分隔）</string>
+    <string name="hymofs_partitions_scan">扫描分区</string>
+    <string name="hymofs_partitions_add">添加分区</string>
+    <string name="hymofs_partitions_placeholder">输入分区名称（例如：mi_ext, my_stock）</string>
+    <string name="hymofs_general">常规</string>
+    <string name="hymofs_advanced">高级</string>
+    <string name="hymofs_fix_mounts">修复挂载 ID</string>
+    <string name="hymofs_rules_clear_all">清空规则</string>
+    <string name="hymofs_rules_clear_confirm">确定要清除所有活动的 HymoFS 规则吗？此操作将立即生效。</string>
+    <string name="hymofs_rules_clear">清除</string>
+    <string name="hymofs_rules_cancel">取消</string>
+    <string name="hymofs_rules_not_available">HymoFS 内核不可用。规则页面需要 HymoFS 内核支持。</string>
+    <string name="hymofs_rules_refresh">刷新</string>
+    <string name="hymofs_rules_count">%d 条活动规则</string>
+    <string name="hymofs_rules_empty">没有活动规则</string>
+    <string name="hymofs_logs_daemon">守护进程日志</string>
+    <string name="hymofs_logs_kernel">内核日志</string>
+    <string name="hymofs_kernel_title">HymoFS 内核</string>
+    <string name="hymofs_version_label">版本：%s</string>
+    <string name="hymofs_stats_hymofs">HymoFS</string>
+    <string name="hymofs_info_kernel">内核</string>
+    <string name="hymofs_info_selinux">SELinux</string>
+    <string name="hymofs_info_mount_base">挂载基点</string>
+    <string name="hymofs_info_active_mounts">活动挂载：</string>
+    <string name="hymofs_info_more_mounts">……还有 %d 个</string>
+    <string name="hymofs_mismatch_default">检测到协议不匹配。请更新内核或模块。</string>
+    <string name="hymofs_enable_title">启用 HymoFS</string>
+    <string name="hymofs_enable_desc">控制开机时是否启用 HymoFS（重启守护进程后生效）</string>
+    <string name="hymofs_fs_type_title">存储文件系统</string>
+    <string name="hymofs_fs_type_auto">自动（由 hymo 自行选择）</string>
+    <string name="hymofs_fs_type_ext4">EXT4 镜像</string>
+    <string name="hymofs_fs_type_erofs">EROFS 镜像</string>
+    <string name="hymofs_fs_type_tmpfs">Tmpfs 分区（内存）</string>
+    <string name="hymofs_mirror_path">挂载基点 / 镜像路径</string>
+    <string name="hymofs_mirror_path_desc">选择一个预设挂载基点，或手动填写自定义镜像路径。大多数设备推荐使用 /data/adb/hymo/img_mnt。</string>
+    <string name="hymofs_mirror_preset_img_mnt">/data/adb/hymo/img_mnt</string>
+    <string name="hymofs_mirror_preset_debug_ramdisk">/debug_ramdisk</string>
+    <string name="hymofs_mirror_preset_dev_mirror">/dev/hymo_mirror</string>
+    <string name="hymofs_mirror_preset_custom">自定义</string>
+    <string name="hymofs_mount_stage">挂载阶段</string>
+    <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
+    <string name="hymofs_mount_stage_meta">metamount</string>
+    <string name="hymofs_mount_stage_services">services</string>
+    <string name="hymofs_create_image">在 /data/adb 创建 modules.img</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">内核版本伪装</string>
+    <string name="hymofs_uname_release">uname -r 覆盖值</string>
+    <string name="hymofs_uname_release_desc">可选。设置后，HymoFS 会将此值伪装为内核版本号</string>
+    <string name="hymofs_uname_version">uname -v 覆盖值</string>
+    <string name="hymofs_uname_version_desc">可选。设置后，HymoFS 会将此值伪装为内核版本字符串</string>
+    <!-- HymoFS 内部提示 -->
+    <string name="hymofs_toast_load_error">加载数据出错：%s</string>
+    <string name="hymofs_toast_mode_updated">模式已更新，重启后生效</string>
+    <string name="hymofs_toast_mode_failed">更新模式失败</string>
+    <string name="hymofs_toast_settings_saved">设置已保存</string>
+    <string name="hymofs_toast_settings_failed">保存设置失败</string>
+    <string name="hymofs_toast_kernel_debug_enabled">内核调试已启用</string>
+    <string name="hymofs_toast_kernel_debug_disabled">内核调试已禁用</string>
+    <string name="hymofs_toast_stealth_enabled">隐身模式已启用</string>
+    <string name="hymofs_toast_stealth_disabled">隐身模式已禁用</string>
+    <string name="hymofs_toast_mounts_fixed">挂载 ID 已重新排序</string>
+    <string name="hymofs_toast_mounts_failed">修复挂载 ID 失败</string>
+    <string name="hymofs_toast_builtin_enabled">内置挂载已启用，重启后生效</string>
+    <string name="hymofs_toast_builtin_disabled">内置挂载已禁用，重启后生效</string>
+    <string name="hymofs_toast_builtin_failed">更新内置挂载设置失败</string>
+    <string name="hymofs_module_mode">模式：</string>
+    <string name="hymofs_mode_auto">自动</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">不挂载</string>
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">自定义隐藏规则</string>
+    <string name="hymofs_user_hide_empty">当前没有自定义隐藏规则。添加要从所有模块中隐藏的绝对路径。</string>
+    <string name="hymofs_user_hide_placeholder">/要隐藏的绝对路径</string>
+    <string name="hymofs_user_hide_add">添加</string>
+    <string name="hymofs_user_hide_add_failed">添加隐藏规则失败</string>
+    <string name="hymofs_user_hide_remove_failed">删除隐藏规则失败</string>
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">此模块的自定义规则</string>
+    <string name="hymofs_module_rules_empty">当前没有针对该模块的自定义规则。可以为特定路径单独指定挂载模式。</string>
+    <string name="hymofs_module_rules_placeholder">/system 或 /vendor 下的路径</string>
+    <string name="hymofs_module_rules_add">添加</string>
+    <string name="hymofs_module_rules_add_failed">添加模块规则失败</string>
+    <string name="hymofs_module_rules_remove_failed">删除模块规则失败</string>
+    
     <!-- Partition Manager -->
     <string name="partition_manager">分区管理器</string>
     <string name="partition_list">分区列表</string>
@@ -553,17 +722,12 @@
     <string name="install_advanced_tools">高级工具</string>
     <string name="partition_manager_desc">备份/恢复分区、管理槽位</string>
 
-    <!-- Module Shortcut -->
-    <string name="module_shortcut_title">创建快捷方式</string>
-    <string name="module_shortcut_name_label">快捷方式名称</string>
-    <string name="module_shortcut_icon_pick">选择自定义图标</string>
-    <string name="module_shortcut_add">添加快捷方式</string>
-    <string name="module_shortcut_not_supported">启动器不支持桌面快捷方式。</string>
-    <string name="module_shortcut_created">已在桌面创建快捷方式。</string>
-    <string name="module_shortcut_updated">快捷方式已更新。</string>
-    <string name="module_shortcut_delete">删除快捷方式</string>
-    <string name="module_shortcut_type_title">选择类型</string>
-    <string name="module_shortcut_permission_tip_xiaomi">请在 Xiaomi 设置中为本应用启用"创建桌面快捷方式"权限。</string>
-    <string name="module_shortcut_permission_tip_oppo">请在 OPPO 设置中为本应用启用"桌面快捷方式"权限。</string>
-    <string name="module_shortcut_permission_tip_default">若创建快捷方式失败，请在系统设置中为本应用启用桌面快捷方式权限。</string>
+    <!-- ksud daemon version / update -->
+    <string name="home_ksud_daemon_info">ksud 守护进程信息 / 手动更新</string>
+    <string name="home_ksud_daemon_title">ksud 守护进程</string>
+    <string name="home_ksud_daemon_apk_version">管理器内置 ksud：%1$s</string>
+    <string name="home_ksud_daemon_installed_version">已安装 ksud（/data/adb/ksud）：%1$s</string>
+    <string name="home_ksud_daemon_unknown">未知</string>
+    <string name="home_ksud_daemon_sync">同步 ksud 守护进程</string>
+    <string name="home_ksud_daemon_syncing">正在同步…</string>
 </resources>

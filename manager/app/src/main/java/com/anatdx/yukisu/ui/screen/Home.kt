@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -142,6 +143,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 
                 // 检查内核是否配置了 SuperKey
                 val isSuperKeyConfigured = remember { Natives.isSuperKeyConfigured() }
+                // 检查内核是否认为签名有效
+                val isSignatureOk = remember { Natives.isSignatureOk() }
                 
                 // 保存 SuperKey 的 SharedPreferences
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
@@ -267,6 +270,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     
                     StatusCard(
                         systemStatus = viewModel.systemStatus,
+                        // SuperKey 模式用于表示「主要依赖 SuperKey」，
+                        // 显示规则交给 StatusCard 内部根据 isSuperKeyMode + isSignatureOk 决定徽章组合。
                         isSuperKeyMode = isSuperKeyConfigured || superKeyAuthSuccess,
                         needsSuperKeyAuth = needsSuperKeyAuth,
                         onClickInstall = {
@@ -274,7 +279,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         },
                         onSuperKeyAuth = {
                             superKeyDialog.show()
-                        }
+                        },
+                        isSignatureOk = isSignatureOk
                     )
 
                     // 警告信息
@@ -424,6 +430,16 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
+                // HymoFS 配置按钮
+                IconButton(onClick = {
+                    navigator.navigate(HymoFSConfigScreenDestination)
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Tune,
+                        contentDescription = stringResource(R.string.hymofs_title)
+                    )
+                }
+
                 // 重启按钮
                 var showDropdown by remember { mutableStateOf(false) }
                 KsuIsValid {
@@ -465,6 +481,7 @@ private fun StatusCard(
     systemStatus: HomeViewModel.SystemStatus,
     isSuperKeyMode: Boolean = false,
     needsSuperKeyAuth: Boolean = false,
+    isSignatureOk: Boolean = false,
     onClickInstall: () -> Unit = {},
     onSuperKeyAuth: () -> Unit = {}
 ) {
@@ -483,8 +500,9 @@ private fun StatusCard(
                 .fillMaxWidth()
                 .clickable {
                     when {
+                        // 点击未安装/未认证卡片时，跳转到安装界面（而不是直接弹出超级密钥对话框）
                         needsSuperKeyAuth -> onClickInstall()
-                        systemStatus.isRootAvailable -> onClickInstall()
+                        systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI() -> onClickInstall()
                     }
                 }
                 .padding(24.dp),
@@ -522,34 +540,70 @@ private fun StatusCard(
 
                             Spacer(Modifier.width(8.dp))
 
-                            // 鉴权方式标签：签名鉴权通过时显示 Signature；SuperKey 也验证通过时再显示 SuperKey（两者可同时显示）
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier
-                            ) {
-                                Text(
-                                    text = "Signature",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSecondary
-                                )
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            if (isSuperKeyMode) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.home_badge_superkey),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        color = MaterialTheme.colorScheme.onTertiary
-                                    )
+                            // 认证模式标签：根据签名/SuperKey 状态组合显示
+                            when {
+                                // 签名 OK 且 SuperKey 已通过：两个徽章
+                                isSignatureOk && isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_signature_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onSecondary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_superkey_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onTertiary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
                                 }
-                                Spacer(Modifier.width(6.dp))
+                                // 只有签名：仅 Signature 徽章
+                                isSignatureOk && !isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_signature_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onSecondary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                // 签名未启用 / 失败，但 SuperKey 模式：仅 SuperKey 徽章
+                                !isSignatureOk && isSuperKeyMode -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.home_auth_superkey_tag),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.onTertiary
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                // 其它情况（例如都没有）：不显示认证徽章
                             }
 
                             // 架构标签
@@ -626,6 +680,34 @@ private fun StatusCard(
                             imageVector = Icons.Default.Key,
                             contentDescription = stringResource(R.string.superkey_auth_title),
                             tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
+
+                systemStatus.kernelVersion.isGKI() -> {
+                    Icon(
+                        Icons.Outlined.Warning,
+                        contentDescription = stringResource(R.string.home_not_installed),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .padding(
+                                horizontal = 4.dp
+                            ),
+                    )
+
+                    Column(Modifier.padding(start = 20.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_not_installed),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.home_click_to_install),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
@@ -797,6 +879,16 @@ private fun InfoCard(
     isHideMetaModuleImplement: Boolean,
     lkmMode: Boolean?
 ) {
+    var showKsudDialog by remember { mutableStateOf(false) }
+    var ksudApkVersion by remember { mutableStateOf<String?>(null) }
+    var ksudInstalledVersion by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+        ksudApkVersion = apk
+        ksudInstalledVersion = installed
+    }
+
     ElevatedCard(
         colors = getCardColors(MaterialTheme.colorScheme.surfaceContainer),
         elevation = getCardElevation(),
@@ -811,12 +903,21 @@ private fun InfoCard(
                 label: String,
                 content: String,
                 icon: ImageVector? = null,
+                contentColor: Color = Color.Unspecified,
+                onClick: (() -> Unit)? = null,
             ) {
                 Row(
                     verticalAlignment = Alignment.Top,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
+                        .let { base ->
+                            if (onClick != null) {
+                                base.clickable { onClick() }
+                            } else {
+                                base
+                            }
+                        }
                 ) {
                     if (icon != null) {
                         Icon(
@@ -840,6 +941,11 @@ private fun InfoCard(
                         Text(
                             text = content,
                             style = MaterialTheme.typography.bodyMedium,
+                            color = if (contentColor == Color.Unspecified) {
+                                LocalContentColor.current
+                            } else {
+                                contentColor
+                            },
                             softWrap = true
                         )
                     }
@@ -871,6 +977,26 @@ private fun InfoCard(
                 "${systemInfo.managerVersion.first} (${systemInfo.managerVersion.second.toInt()})",
                 icon = Icons.Default.SettingsSuggest,
             )
+            // ksud daemon info row: same style as other InfoCard items, clickable, highlight on mismatch
+            val ksudUnknown = stringResource(id = R.string.home_ksud_daemon_unknown)
+            val apkVer = ksudApkVersion
+            val installedVer = ksudInstalledVersion
+            val hasMismatch = apkVer != null && installedVer != null && apkVer != installedVer
+
+            val ksudContent = when {
+                apkVer == null && installedVer == null -> ksudUnknown
+                installedVer == null -> "APK: ${apkVer ?: ksudUnknown}"
+                apkVer == null -> installedVer
+                else -> "${installedVer} / APK: $apkVer"
+            }
+
+            InfoCardItem(
+                label = stringResource(id = R.string.home_ksud_daemon_title),
+                content = ksudContent,
+                icon = Icons.Default.SettingsSuggest,
+                contentColor = if (hasMismatch) MaterialTheme.colorScheme.error else Color.Unspecified,
+                onClick = { showKsudDialog = true }
+            )
 
             if (!isSimpleMode) {
                 InfoCardItem(
@@ -901,8 +1027,96 @@ private fun InfoCard(
                     icon = Icons.Default.Extension,
                 )
             }
+
+            if (showKsudDialog) {
+                KsudVersionDialog(onDismiss = { showKsudDialog = false })
+            }
         }
     }
+}
+
+@Composable
+private fun KsudVersionDialog(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var apkVersion by remember { mutableStateOf<String?>(null) }
+    var installedVersion by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var syncing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+        apkVersion = apk
+        installedVersion = installed
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!syncing) onDismiss() },
+        title = { Text(stringResource(id = R.string.home_ksud_daemon_title)) },
+        text = {
+            if (loading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.home_ksud_daemon_apk_version,
+                            apkVersion ?: context.getString(R.string.home_ksud_daemon_unknown)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(
+                            id = R.string.home_ksud_daemon_installed_version,
+                            installedVersion
+                                ?: context.getString(R.string.home_ksud_daemon_unknown)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (!syncing) onDismiss() }
+            ) {
+                Text(stringResource(id = R.string.close))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !loading && !syncing,
+                onClick = {
+                    if (loading || syncing) return@TextButton
+                    syncing = true
+                    scope.launch {
+                        KsuCli.updateKsudDaemonForUi()
+                        val (apk, installed) = KsuCli.getKsudVersionsForUi()
+                        apkVersion = apk
+                        installedVersion = installed
+                        syncing = false
+                    }
+                }
+            ) {
+                Text(
+                    text = if (syncing)
+                        stringResource(id = R.string.home_ksud_daemon_syncing)
+                    else
+                        stringResource(id = R.string.home_ksud_daemon_sync)
+                )
+            }
+        }
+    )
 }
 
 fun getManagerVersion(context: Context): Pair<String, Long> {

@@ -129,12 +129,14 @@ jobs:
         file ksud
 
     - name: Import GPG key
-      uses: crazy-max/ghaction-import-gpg@v6
-      with:
-        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-        passphrase: ${{ secrets.GPG_PASSPHRASE }}
-        fingerprint: "348C368D028B3271B84EB798AD251FCA1EBBCEEE"
-        trust_level: 5
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      run: |
+        mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+        echo "$GPG_PRIVATE_KEY" > key.asc
+        gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
+        rm -f key.asc
 
     - name: Sign ksud with GPG
       run: |

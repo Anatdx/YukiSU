@@ -62,7 +62,7 @@
     <string name="failed_to_update_app_profile">為 %s 更新 App Profile 失敗</string>
     <string name="require_kernel_version" formatted="false">當前 KernelSU 版本 %s 過低，管理器無法正常工作，請將核心 KernelSU 版本升級至 %s 或以上！</string>
     <string name="settings_umount_modules_default">默認卸載模組</string>
-    <string name="settings_umount_modules_default_summary">App Profile 中\"卸載模組\"嘅全局默認值，如果啟用，將會為冇設定 Profile 嘅應用移除所有模組針對系統嘅修改。</string>
+    <string name="settings_umount_modules_default_summary">App Profile 入面「卸載模組」嘅全局默認值。如果開啟，會為冇設定 Profile 嘅應用移除所有模組對系統嘅修改。預設係關閉，新/未知 App 唔會排除模組修改。</string>
     <string name="profile_umount_modules_summary">啟用該選項後將允許 KernelSU 為本應用還原被模組修改過嘅文件。</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">規則</string>
@@ -125,6 +125,20 @@
     <!-- Module related -->
     <string name="module_install_confirm">確認安裝模組 %1$s？</string>
     <string name="unknown_module">未知模組</string>
+    <!-- Module shortcut related -->
+    <string name="module_action_success">模組操作已完成</string>
+    <string name="module_shortcut_type_title">選擇捷徑類型</string>
+    <string name="module_shortcut_title">模組捷徑</string>
+    <string name="module_shortcut_icon_pick">選擇圖標</string>
+    <string name="module_shortcut_name_label">捷徑名稱</string>
+    <string name="module_shortcut_delete">刪除捷徑</string>
+    <string name="module_shortcut_add">新增模組捷徑</string>
+    <string name="module_shortcut_updated">捷徑已更新</string>
+    <string name="module_shortcut_not_supported">當前桌面唔支援釘選捷徑</string>
+    <string name="module_shortcut_created">已建立桌面捷徑</string>
+    <string name="module_shortcut_permission_tip_xiaomi">請喺 MIUI 設定入面為本應用開啟桌面捷徑權限之後再試</string>
+    <string name="module_shortcut_permission_tip_oppo">請喺系統設定入面為本應用開啟桌面捷徑權限之後再試</string>
+    <string name="module_shortcut_permission_tip_default">請檢查桌面 / 啟動器權限，允許本應用建立桌面捷徑之後再試</string>
     <!-- Restore related -->
     <string name="restore_confirm_title">確認還原模組</string>
     <string name="restore_confirm_message">此操作將覆蓋所有現有模組，是否繼續？</string>
@@ -297,6 +311,11 @@
     <string name="module_failed_count">%d 個模組安裝失敗</string>
     <string name="module_download_error">模組下載失敗</string>
     <string name="kernel_flashing">核心刷寫</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_not_present">未檢測到</string>
+    <string name="hymofs_status_kernel_too_old">核心版本過低，唔支援 HymoFS</string>
+    <string name="hymofs_status_module_too_old">模組版本過低，請更新內置 Hymo</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">全部</string>
     <string name="category_root_apps">Root</string>
@@ -340,4 +359,47 @@
     <string name="add_app_path">應用</string>
     <string name="search_apps">搜尋應用程式</string>
     <string name="home_zygisk_implement">Zygisk 實現</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
+    <string name="hymofs_module_mode">模式：</string>
+    <string name="hymofs_mode_auto">自動</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">不掛載</string>
+    <!-- HymoFS 內部提示 -->
+    <string name="hymofs_toast_load_error">載入資料時發生錯誤：%s</string>
+    <string name="hymofs_toast_mode_updated">模式已更新，重啟後生效</string>
+    <string name="hymofs_toast_mode_failed">更新模式失敗</string>
+    <string name="hymofs_toast_settings_saved">設定已儲存</string>
+    <string name="hymofs_toast_settings_failed">儲存設定失敗</string>
+    <string name="hymofs_toast_kernel_debug_enabled">內核偵錯已啟用</string>
+    <string name="hymofs_toast_kernel_debug_disabled">內核偵錯已停用</string>
+    <string name="hymofs_toast_stealth_enabled">隱身模式已啟用</string>
+    <string name="hymofs_toast_stealth_disabled">隱身模式已停用</string>
+    <string name="hymofs_toast_mounts_fixed">掛載 ID 已重新排序</string>
+    <string name="hymofs_toast_mounts_failed">修復掛載 ID 失敗</string>
+    <string name="hymofs_toast_builtin_enabled">內置掛載已啟用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_disabled">內置掛載已停用，重啟後生效</string>
+    <string name="hymofs_toast_builtin_failed">更新內置掛載設定失敗</string>
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">自定義隱藏規則</string>
+    <string name="hymofs_user_hide_empty">暫時未有自定義隱藏規則。新增要喺所有模組中隱藏嘅絕對路徑。</string>
+    <string name="hymofs_user_hide_placeholder">/要隱藏嘅絕對路徑</string>
+    <string name="hymofs_user_hide_add">新增</string>
+    <string name="hymofs_user_hide_add_failed">新增隱藏規則失敗</string>
+    <string name="hymofs_user_hide_remove_failed">刪除隱藏規則失敗</string>
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">呢個模組嘅自定義規則</string>
+    <string name="hymofs_module_rules_empty">暫時未有針對呢個模組嘅自定義規則，可以為指定路徑單獨設定掛載模式。</string>
+    <string name="hymofs_module_rules_placeholder">/system 或 /vendor 下面嘅路徑</string>
+    <string name="hymofs_module_rules_add">新增</string>
+    <string name="hymofs_module_rules_add_failed">新增模組規則失敗</string>
+    <string name="hymofs_module_rules_remove_failed">刪除模組規則失敗</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">核心版本偽裝</string>
+    <string name="hymofs_uname_release">uname -r 覆寫值</string>
+    <string name="hymofs_uname_release_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本號</string>
+    <string name="hymofs_uname_version">uname -v 覆寫值</string>
+    <string name="hymofs_uname_version_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本字串</string>
 </resources>

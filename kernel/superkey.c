@@ -29,6 +29,15 @@ static volatile struct superkey_data
 u64 ksu_superkey_hash __read_mostly = 0;
 bool ksu_signature_bypass __read_mostly = false;
 
+/*
+ * SuperKey verification mode (injected from userspace LKM patch).
+ *
+ * 0: signature-only (no superkey configured)
+ * 1: signature + superkey (default)
+ * 2: superkey-only (signature bypass)
+ */
+static u64 ksu_superkey_verification_mode __read_mostly = 0;
+
 static uid_t authenticated_manager_uid = -1;
 static DEFINE_SPINLOCK(superkey_lock);
 static atomic_t superkey_fail_count = ATOMIC_INIT(0);
@@ -56,12 +65,36 @@ void superkey_init(void)
 		return;
 	}
 
-	if (superkey_store.magic == SUPERKEY_MAGIC &&
-	    superkey_store.hash != 0) {
-		ksu_superkey_hash = superkey_store.hash;
-		ksu_signature_bypass = (superkey_store.flags & 1) != 0;
-		pr_info("superkey: loaded from LKM patch: 0x%llx, bypass: %d\n",
-			ksu_superkey_hash, ksu_signature_bypass ? 1 : 0);
+	if (superkey_store.magic == SUPERKEY_MAGIC) {
+		/*
+		 * flags encoding (must match userspace):
+		 * 0: signature-only
+		 * 1: signature + superkey
+		 * 2: superkey-only (signature bypass)
+		 */
+		ksu_superkey_verification_mode = superkey_store.flags;
+
+		if (superkey_store.hash != 0 &&
+		    ksu_superkey_verification_mode != 0) {
+			/* SuperKey is configured (modes 1 or 2). */
+			ksu_superkey_hash = superkey_store.hash;
+			ksu_signature_bypass =
+			    (ksu_superkey_verification_mode == 2);
+			pr_info("superkey: loaded from LKM patch: hash=0x%llx, "
+				"mode=%llu, bypass=%d\n",
+				ksu_superkey_hash,
+				ksu_superkey_verification_mode,
+				ksu_signature_bypass ? 1 : 0);
+			return;
+		}
+
+		/*
+		 * Mode 0 or hash==0: treated as pure signature mode, no
+		 * runtime superkey hash. Leave ksu_superkey_hash=0 so
+		 * superkey_is_set() stays false.
+		 */
+		pr_info("superkey: configured for signature-only mode (no "
+			"SuperKey hash)\n");
 		return;
 	}
 

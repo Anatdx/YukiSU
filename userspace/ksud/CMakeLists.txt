@@ -58,6 +58,16 @@ if(NOT VERSION_RESULT EQUAL 0)
     message(WARNING "Failed to generate version file, using defaults")
 endif()
 
+# Generate version file at configure time
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_version.py ${VERSION_CPP}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESULT_VARIABLE VERSION_RESULT)
+if(NOT VERSION_RESULT EQUAL 0)
+    message(WARNING "Failed to generate version file, using defaults")
+endif()
+
 # Run embed_assets.py to generate assets_data.cpp
 add_custom_command(
     OUTPUT ${ASSETS_CPP}
@@ -94,11 +104,31 @@ set(SOURCES
     src/core/hide_bootloader.cpp
     # Flash kernel packages
     src/flash/flash_partition.cpp
+    # HymoFS module management (synced with meta-hymo hymod)
+    src/hymo/hymo_cli.cpp
+    src/hymo/hymo_main.cpp
+    src/hymo/utils.cpp
+    src/hymo/conf/config.cpp
+    src/hymo/core/executor.cpp
+    src/hymo/core/inventory.cpp
+    src/hymo/core/modules.cpp
+    src/hymo/core/planner.cpp
+    src/hymo/core/state.cpp
+    src/hymo/core/storage.cpp
+    src/hymo/core/sync.cpp
+    src/hymo/core/user_rules.cpp
+    src/hymo/core/webui.cpp
+    src/hymo/mount/hymofs.cpp
+    src/hymo/mount/magic.cpp
+    src/hymo/mount/overlay.cpp
+    src/hymo/mount/mount_utils.cpp
+    src/hymo/mount/partition_utils.cpp
     ${ASSETS_CPP}
 )
 
-# 头文件目录
+# 头文件目录 (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
 include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
 include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
 include_directories(${GENERATED_DIR})

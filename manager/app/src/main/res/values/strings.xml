@@ -7,7 +7,6 @@
     <string name="home_not_installed_or_auth">Not installed or not authenticated</string>
     <string name="home_click_to_install">Click to install</string>
     <string name="home_working">Working</string>
-    <string name="home_badge_superkey">SuperKey</string>
     <string name="home_gki_builtin_unsupported">YukiSU no longer supports built-in KernelSU! Please use LKM mode!</string>
     <string name="home_working_version">Version: %s</string>
     <string name="home_unsupported">Unsupported</string>
@@ -70,7 +69,7 @@
     <string name="failed_to_update_app_profile">Failed to update App Profile for %s</string>
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
-    <string name="settings_umount_modules_default_summary">The global default value for "Umount modules" in App Profile. If enabled, it will remove all module modifications to the system for apps that don\'t have a profile set</string>
+    <string name="settings_umount_modules_default_summary">Global default for "Umount modules" in App Profile. If enabled, it will remove all module modifications for apps without a profile. By default this is OFF, so new/unknown apps keep module changes.</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>
     <string name="profile_selinux_domain">Domain</string>
     <string name="profile_selinux_rules">Rules</string>
@@ -83,7 +82,6 @@
     <string name="restart_app">Restart</string>
     <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
     <string name="module_changelog">Changelog</string>
-    <string name="module_action_success">Module action executed successfully.</string>
     <string name="settings_profile_template">App Profile Template</string>
     <string name="settings_profile_template_summary">Manage local and online template of App Profile</string>
     <string name="app_profile_template_create">Create template</string>
@@ -113,6 +111,23 @@
     <string name="close">Close</string>
     <string name="enable_web_debugging">Enable WebView debugging</string>
     <string name="enable_web_debugging_summary">Can be used to debug WebUI. Please enable only when needed</string>
+    <string name="home_auth_superkey_tag">SuperKey</string>
+    <string name="home_auth_signature_tag">Signature</string>
+    <!-- HymoFS toasts -->
+    <string name="hymofs_toast_load_error">Error loading data: %s</string>
+    <string name="hymofs_toast_mode_updated">Mode updated. Reboot to apply.</string>
+    <string name="hymofs_toast_mode_failed">Failed to update mode</string>
+    <string name="hymofs_toast_settings_saved">Settings saved</string>
+    <string name="hymofs_toast_settings_failed">Failed to save settings</string>
+    <string name="hymofs_toast_kernel_debug_enabled">Kernel debug enabled</string>
+    <string name="hymofs_toast_kernel_debug_disabled">Kernel debug disabled</string>
+    <string name="hymofs_toast_stealth_enabled">Stealth mode enabled</string>
+    <string name="hymofs_toast_stealth_disabled">Stealth mode disabled</string>
+    <string name="hymofs_toast_mounts_fixed">Mount IDs reordered</string>
+    <string name="hymofs_toast_mounts_failed">Failed to fix mounts</string>
+    <string name="hymofs_toast_builtin_enabled">Built-in mount enabled. Reboot to apply.</string>
+    <string name="hymofs_toast_builtin_disabled">Built-in mount disabled. Reboot to apply.</string>
+    <string name="hymofs_toast_builtin_failed">Failed to update built-in mount setting</string>
     <string name="direct_install">Direct install (Recommended)</string>
     <string name="select_file">Select a image that needs to be patched</string>
     <string name="install_inactive_slot">Install to inactive slot (After OTA)</string>
@@ -139,6 +154,20 @@
     <!-- Module related -->
     <string name="module_install_confirm">Confirm install module %1$s？</string>
     <string name="unknown_module">Unknown module</string>
+    <!-- Module shortcut related -->
+    <string name="module_action_success">Module action finished</string>
+    <string name="module_shortcut_type_title">Select shortcut type</string>
+    <string name="module_shortcut_title">Module shortcut</string>
+    <string name="module_shortcut_icon_pick">Pick icon</string>
+    <string name="module_shortcut_name_label">Shortcut name</string>
+    <string name="module_shortcut_delete">Delete shortcut</string>
+    <string name="module_shortcut_add">Add module shortcut</string>
+    <string name="module_shortcut_updated">Shortcut updated</string>
+    <string name="module_shortcut_not_supported">Launcher does not support pinned shortcuts</string>
+    <string name="module_shortcut_created">Shortcut created</string>
+    <string name="module_shortcut_permission_tip_xiaomi">Please allow creating home screen shortcuts for this app in MIUI settings, then retry</string>
+    <string name="module_shortcut_permission_tip_oppo">Please allow creating home screen shortcuts for this app in system settings, then retry</string>
+    <string name="module_shortcut_permission_tip_default">Please check launcher permissions and allow creating home screen shortcuts, then retry</string>
     <!-- Restore related -->
     <string name="restore_confirm_title">Confirm Module Restoration</string>
     <string name="restore_confirm_message">This operation will overwrite all existing modules. Continue?</string>
@@ -218,6 +247,8 @@
     <string name="color_gray">Gray</string>
     <string name="color_yellow">Yellow</string>
     <string name="color_trans_pride">Trans Pride</string>
+    <string name="horizon_kernel">Install Anykernel3</string>
+    <string name="horizon_kernel_summary">Flash AnyKernel3 kernel file</string>
     <string name="root_required">Requires root privileges</string>
     <string name="reboot_complete_title">Scrubbing complete</string>
     <string name="reboot_complete_msg">Whether to reboot immediately？</string>
@@ -284,6 +315,7 @@
     <string name="flash_failed_message">Flash failed</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repair/installation</string>
+    <string name="GKI_install_methods">Flashing AnyKernel3</string>
     <string name="kernel_version_log">Kernel version：%1$s</string>
     <string name="tool_version_log">Using the patching tool：%1$s</string>
     <string name="configuration">Configure</string>
@@ -339,6 +371,11 @@
     <string name="module_failed_count">%d Failed to install a new module</string>
     <string name="module_download_error">Module download failed</string>
     <string name="kernel_flashing">Kernel Flashing</string>
+    <!-- HymoFS status text -->
+    <string name="hymofs_status_available">Available</string>
+    <string name="hymofs_status_not_present">Not present</string>
+    <string name="hymofs_status_kernel_too_old">Kernel too old</string>
+    <string name="hymofs_status_module_too_old">Module too old</string>
     <string name="warning_of_meta_module_title">Require Meta module</string>
     <string name="warning_of_meta_module_summary">This module want to mount /system, meta module will handle that. Otherwise, it might not work</string>
     <!-- 分类相关 -->
@@ -387,6 +424,34 @@
     <string name="home_zygisk_implement">Zygisk implement</string>
     <string name="home_meta_module_implement">Meta Module implement</string>
     <string name="home_hook_type">Hook type</string>
+    <!-- KPM patching related strings -->
+    <string name="kpm_patch_options">KPM Patch</string>
+    <string name="kpm_patch_description">For adding additional KPM features</string>
+    <string name="enable_kpm_patch">KPM Patch</string>
+    <string name="kpm_patch_switch_description">Apply KPM patch to kernel image before flashing</string>
+    <string name="enable_kpm_undo_patch">KPM Undo Patch</string>
+    <string name="kpm_undo_patch_switch_description">Undo previously applied KPM patch</string>
+    <string name="kpm_patch_enabled">KPM patch enabled</string>
+    <string name="kpm_undo_patch_enabled">KPM undo patch enabled</string>
+    <string name="kpm_patch_mode">KPM Patch Mode</string>
+    <string name="kpm_undo_patch_mode">KPM Undo Patch Mode</string>
+    <!-- KPM workflow related -->
+    <string name="kpm_preparing_tools">Preparing KPM tools</string>
+    <string name="kpm_applying_patch">Applying KPM patch</string>
+    <string name="kpm_undoing_patch">Undoing KPM patch</string>
+    <string name="kpm_found_image_file">Found Image file: %s</string>
+    <string name="kpm_patch_success">KPM patch applied successfully</string>
+    <string name="kpm_undo_patch_success">KPM patch undone successfully</string>
+    <string name="kpm_file_repacked">File repacked successfully</string>
+    <!-- KPM error messages -->
+    <string name="kpm_extract_zip_failed">Failed to extract zip file</string>
+    <string name="kpm_image_file_not_found">Image file not found</string>
+    <string name="kpm_patch_failed">KPM patch failed</string>
+    <string name="kpm_undo_patch_failed">KPM undo patch failed</string>
+    <string name="kpm_patch_operation_failed">KPM patch operation failed: %s</string>
+    <!-- KPM option radio group strings -->
+    <string name="kpm_follow_kernel_file">Follow Kernel</string>
+    <string name="kpm_follow_kernel_description">Use kernel as-is without any KPM modifications</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">Confirm Installation</string>
     <string name="confirm_multiple_installation">Confirm Installation (%d files)</string>
@@ -472,6 +537,123 @@
     <string name="settings_clear_super_key_dialog">Do you really want to clear the stored SuperKey?</string>
     <string name="signature_bypass_title">SuperKey Only Mode</string>
     <string name="signature_bypass_desc">Disable APK signature verification. Manager will only be recognized through SuperKey authentication.</string>
+    <string name="gki_priority_title">GKI Priority Mode</string>
+    <string name="gki_priority_desc">When enabled, GKI takes priority over LKM. The LKM will not trigger GKI yield and both will run independently.</string>
+
+    <!-- HymoFS Configuration -->
+    <string name="hymofs_title">HymoFS Configuration</string>
+    <string name="hymofs_tab_status">Status</string>
+    <string name="hymofs_tab_modules">Modules</string>
+    <string name="hymofs_tab_settings">Settings</string>
+    <string name="hymofs_tab_rules">Rules</string>
+    <string name="hymofs_tab_logs">Logs</string>
+    <string name="hymofs_storage">Storage</string>
+    <string name="hymofs_modules_count">Modules</string>
+    <string name="hymofs_system_info">System Info</string>
+    <string name="hymofs_version">Version: %s</string>
+    <string name="hymofs_builtin_mount">Built-in Mount</string>
+    <string name="hymofs_builtin_mount_desc">Use built-in hymo mount instead of external metamodule. Disable this if you want to use another metamodule.</string>
+    <string name="hymofs_debug">Debug logging</string>
+    <string name="hymofs_debug_desc">Log extra debugging information from hymo</string>
+    <string name="hymofs_verbose">Verbose logging</string>
+    <string name="hymofs_verbose_desc">Enable detailed daemon logs</string>
+    <string name="hymofs_disable_umount">Disable Umount</string>
+    <string name="hymofs_disable_umount_desc">Don\'t unmount on process isolation</string>
+    <string name="hymofs_kernel_debug">Kernel Debug</string>
+    <string name="hymofs_kernel_debug_desc">Enable HymoFS kernel debug logging</string>
+    <string name="hymofs_stealth">Stealth Mode</string>
+    <string name="hymofs_stealth_desc">Hide mount traces and reorder mount IDs</string>
+    <string name="hymofs_avc_spoof">AVC Log Spoofing</string>
+    <string name="hymofs_avc_spoof_desc">Spoof SELinux AVC deny logs</string>
+    <string name="hymofs_enable_nuke">Enable Nuke</string>
+    <string name="hymofs_enable_nuke_desc">Allow nuking ext4 sysfs entries</string>
+    <string name="hymofs_ignore_protocol">Ignore Protocol Mismatch</string>
+    <string name="hymofs_ignore_protocol_desc">Continue even if kernel/userspace versions don\'t match</string>
+    <string name="hymofs_moduledir">Module Directory</string>
+    <string name="hymofs_moduledir_desc">Base directory for modules (default: /data/adb/modules)</string>
+    <string name="hymofs_tempdir">Temporary Mount Point</string>
+    <string name="hymofs_tempdir_desc">Base path for temporary mounts (leave empty for auto)</string>
+    <string name="hymofs_mountsource">OverlayFS Mount Source</string>
+    <string name="hymofs_mountsource_desc">Name to use for overlayfs mount source (default: KSU)</string>
+    <string name="hymofs_logs_copy">Copy</string>
+    <string name="hymofs_logs_copy_success">Log copied to clipboard</string>
+    <string name="hymofs_logs_filter_all">All</string>
+    <string name="hymofs_logs_filter_info">Info</string>
+    <string name="hymofs_logs_filter_warn">Warn</string>
+    <string name="hymofs_logs_filter_error">Error</string>
+    <string name="hymofs_partitions">Active Partitions</string>
+    <string name="hymofs_partitions_desc">Partitions to scan for module modifications (comma-separated)</string>
+    <string name="hymofs_partitions_scan">Scan Partitions</string>
+    <string name="hymofs_partitions_add">Add Partition</string>
+    <string name="hymofs_partitions_placeholder">Enter partition names (e.g., mi_ext, my_stock)</string>
+    <string name="hymofs_general">General</string>
+    <string name="hymofs_advanced">Advanced</string>
+    <string name="hymofs_fix_mounts">Fix Mount IDs</string>
+    <string name="hymofs_rules_clear_all">Clear All Rules</string>
+    <string name="hymofs_rules_clear_confirm">Are you sure you want to clear all active HymoFS rules? This will take effect immediately.</string>
+    <string name="hymofs_rules_clear">Clear</string>
+    <string name="hymofs_rules_cancel">Cancel</string>
+    <string name="hymofs_rules_not_available">HymoFS kernel not available. Rules tab requires HymoFS kernel support.</string>
+    <string name="hymofs_rules_refresh">Refresh</string>
+    <string name="hymofs_rules_count">%d active rules</string>
+    <string name="hymofs_rules_empty">No active rules</string>
+    <string name="hymofs_logs_daemon">Daemon Log</string>
+    <string name="hymofs_logs_kernel">Kernel Log</string>
+    <string name="hymofs_kernel_title">HymoFS Kernel</string>
+    <string name="hymofs_version_label">Version: %s</string>
+    <string name="hymofs_stats_hymofs">HymoFS</string>
+    <string name="hymofs_info_kernel">Kernel</string>
+    <string name="hymofs_info_selinux">SELinux</string>
+    <string name="hymofs_info_mount_base">Mount Base</string>
+    <string name="hymofs_info_active_mounts">Active Mounts:</string>
+    <string name="hymofs_info_more_mounts">... and %d more</string>
+    <string name="hymofs_mismatch_default">Protocol mismatch detected. Please update kernel or module.</string>
+    <string name="hymofs_enable_title">Enable HymoFS</string>
+    <string name="hymofs_enable_desc">Control whether HymoFS is enabled on boot (takes effect after daemon restart)</string>
+    <!-- HymoFS uname spoofing -->
+    <string name="hymofs_uname_title">Kernel version spoofing</string>
+    <string name="hymofs_uname_release">uname -r override</string>
+    <string name="hymofs_uname_release_desc">Optional. When set, HymoFS will spoof this as kernel release</string>
+    <string name="hymofs_uname_version">uname -v override</string>
+    <string name="hymofs_uname_version_desc">Optional. When set, HymoFS will spoof this as kernel version string</string>
+    <string name="hymofs_fs_type_title">Storage filesystem</string>
+    <string name="hymofs_fs_type_auto">Auto (let hymo choose)</string>
+    <string name="hymofs_fs_type_ext4">EXT4 image</string>
+    <string name="hymofs_fs_type_erofs">EROFS image</string>
+    <string name="hymofs_fs_type_tmpfs">Tmpfs (RAM)</string>
+    <string name="hymofs_module_mode">Mode:</string>
+    <string name="hymofs_mode_auto">Auto</string>
+    <string name="hymofs_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mode_overlay">OverlayFS</string>
+    <string name="hymofs_mode_magic">Magic Mount</string>
+    <string name="hymofs_mode_none">None</string>
+    <string name="hymofs_mirror_path">Mount base / mirror path</string>
+    <string name="hymofs_mirror_path_desc">Choose a preset mount base or enter a custom mirror path. Most devices work well with /data/adb/hymo/img_mnt.</string>
+    <string name="hymofs_mirror_preset_img_mnt">img_mnt</string>
+    <string name="hymofs_mirror_preset_debug_ramdisk">debug_ramdisk</string>
+    <string name="hymofs_mirror_preset_dev_mirror">hymo_mirror</string>
+    <string name="hymofs_mirror_preset_custom">Custom</string>
+    <string name="hymofs_mount_stage">Mount stage</string>
+    <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
+    <string name="hymofs_mount_stage_meta">metamount</string>
+    <string name="hymofs_mount_stage_services">services</string>
+    <string name="hymofs_create_image">Create modules.img in /data/adb</string>
+
+    <!-- HymoFS user hide rules -->
+    <string name="hymofs_user_hide_title">Custom hide rules</string>
+    <string name="hymofs_user_hide_empty">No custom hide rules. Add absolute paths to hide them from all modules.</string>
+    <string name="hymofs_user_hide_placeholder">/absolute/path/to/hide</string>
+    <string name="hymofs_user_hide_add">Add</string>
+    <string name="hymofs_user_hide_add_failed">Failed to add hide rule</string>
+    <string name="hymofs_user_hide_remove_failed">Failed to remove hide rule</string>
+
+    <!-- HymoFS per-module rules -->
+    <string name="hymofs_module_rules_title">Custom rules for this module</string>
+    <string name="hymofs_module_rules_empty">No custom rules. Add paths to override how this module mounts specific locations.</string>
+    <string name="hymofs_module_rules_placeholder">/path/inside/system/or/vendor</string>
+    <string name="hymofs_module_rules_add">Add</string>
+    <string name="hymofs_module_rules_add_failed">Failed to add module rule</string>
+    <string name="hymofs_module_rules_remove_failed">Failed to remove module rule</string>
 
     <!-- Partition Manager -->
     <string name="partition_manager">Partition Manager</string>
@@ -539,17 +721,12 @@
     <string name="install_advanced_tools">Advanced Tools</string>
     <string name="partition_manager_desc">Backup/restore partitions, manage slots</string>
 
-    <!-- Module Shortcut -->
-    <string name="module_shortcut_title">Create shortcut</string>
-    <string name="module_shortcut_name_label">Shortcut name</string>
-    <string name="module_shortcut_icon_pick">Choose custom icon</string>
-    <string name="module_shortcut_add">Add shortcut</string>
-    <string name="module_shortcut_not_supported">Launcher does not support desktop shortcuts.</string>
-    <string name="module_shortcut_created">Shortcut created on desktop.</string>
-    <string name="module_shortcut_updated">Shortcut updated.</string>
-    <string name="module_shortcut_delete">Delete shortcut</string>
-    <string name="module_shortcut_type_title">Select type</string>
-    <string name="module_shortcut_permission_tip_xiaomi">Please enable \"Create desktop shortcuts\" permission for this app in Xiaomi settings.</string>
-    <string name="module_shortcut_permission_tip_oppo">Please enable \"Desktop shortcut\" permission for this app in OPPO settings.</string>
-    <string name="module_shortcut_permission_tip_default">If shortcut creation fails, please enable desktop shortcut permission for this app in system settings.</string>
+    <!-- ksud daemon version / update -->
+    <string name="home_ksud_daemon_info">ksud daemon info / manual update</string>
+    <string name="home_ksud_daemon_title">ksud daemon</string>
+    <string name="home_ksud_daemon_apk_version">Manager-bundled ksud: %1$s</string>
+    <string name="home_ksud_daemon_installed_version">Installed ksud (/data/adb/ksud): %1$s</string>
+    <string name="home_ksud_daemon_unknown">Unknown</string>
+    <string name="home_ksud_daemon_sync">Sync ksud daemon</string>
+    <string name="home_ksud_daemon_syncing">Syncing…</string>
 </resources>

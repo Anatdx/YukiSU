@@ -95,15 +95,15 @@ object KsuCli {
             
             // Install if: ksud not installed, or version mismatch
             if (installedKsudVersion == null || apkKsudVersion != installedKsudVersion) {
-                Log.i(TAG, "Installing ksud: apk=$apkKsudVersion, installed=$installedKsudVersion")
-                install()
+                Log.i(TAG, "Installing/updating ksud daemon only: apk=$apkKsudVersion, installed=$installedKsudVersion")
+                installOrUpdateKsudDaemon()
             } else {
                 Log.d(TAG, "ksud is up-to-date: $installedKsudVersion")
             }
         } catch (e: Exception) {
             Log.e(TAG, "checkAndInstallKsud failed, falling back to install", e)
-            // Fallback: always install on error
-            install()
+            // Fallback: always try to sync ksud daemon on error
+            installOrUpdateKsudDaemon()
         }
     }
     
@@ -113,15 +113,25 @@ object KsuCli {
     private fun getApkKsudVersion(): String? {
         return try {
             val ksudPath = getKsuDaemonPath()
-            // Run ksud from APK to get its version
+            // Run ksud from APK to get its version.
+            // Some builds may only print banner lines; we fall back to the first non-empty line.
             val process = ProcessBuilder(ksudPath, "version")
                 .redirectErrorStream(true)
                 .start()
             val output = process.inputStream.bufferedReader().readText().trim()
             process.waitFor()
-            // Parse version from output like "ksud version 1.2.3-abc (code: 12345)"
-            val match = Regex("""version\s+([^\s]+)""").find(output)
-            match?.groupValues?.get(1)
+
+            if (output.isBlank()) {
+                null
+            } else {
+                val lines = output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                // Try to parse "version xxx" pattern from any line
+                val regex = Regex("""version\s+([^\s]+)""", RegexOption.IGNORE_CASE)
+                val parsed = lines.firstNotNullOfOrNull { line ->
+                    regex.find(line)?.groupValues?.getOrNull(1)
+                }
+                parsed ?: lines.first()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to get APK ksud version", e)
             null
@@ -142,6 +152,62 @@ object KsuCli {
             Log.w(TAG, "Failed to get installed ksud version", e)
             null
         }
+    }
+
+    /**
+     * Public helper for UI: get ksud versions (APK-bundled and installed daemon).
+     */
+    suspend fun getKsudVersionsForUi(): Pair<String?, String?> = withContext(Dispatchers.IO) {
+        getApkKsudVersion() to getInstalledKsudVersion()
+    }
+
+    /**
+     * Public helper for UI: sync ksud daemon binary from APK into /data/adb/ksud.
+     */
+    suspend fun updateKsudDaemonForUi(): Boolean = withContext(Dispatchers.IO) {
+        installOrUpdateKsudDaemon()
+        true
+    }
+
+    /**
+     * Install or update the ksud daemon binary itself, without touching boot image.
+     *
+     * This mirrors APatch's "安装/升级系统补丁(apd)" flow:
+     * we copy the manager-bundled ksud ELF (`libksud.so`) into:
+     *   - `/data/adb/ksud` (daemon binary used by kernel/su wrapper)
+     *   - `/data/adb/ksu/bin/ksud` (symlink for convenience/tools)
+     */
+    private fun installOrUpdateKsudDaemon() {
+        val shell = getRootShell()
+        if (!shell.isRoot) {
+            Log.w(TAG, "installOrUpdateKsudDaemon: shell is not root, skip")
+            return
+        }
+
+        val nativeDir = ksuApp.applicationInfo.nativeLibraryDir
+        val ksudSo = File(nativeDir, "libksud.so")
+        if (!ksudSo.exists()) {
+            Log.e(TAG, "installOrUpdateKsudDaemon: libksud.so not found in $nativeDir")
+            return
+        }
+
+        val cmds = arrayOf(
+            // Ensure directories
+            "mkdir -p /data/adb/ksu/bin",
+            "mkdir -p /data/adb/ksu/log",
+            // Copy new daemon binary
+            "cp -f ${ksudSo.absolutePath} /data/adb/ksud",
+            "chmod 0755 /data/adb/ksud",
+            // Symlink into ksu/bin for tools / wrappers that expect it there
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/ksud",
+            // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
+            "restorecon /data/adb/ksud || true",
+            "restorecon -R /data/adb/ksu || true"
+        )
+
+        Log.i(TAG, "installOrUpdateKsudDaemon: syncing ${ksudSo.absolutePath} -> /data/adb/ksud")
+        val result = shell.newJob().add(*cmds).exec()
+        Log.i(TAG, "installOrUpdateKsudDaemon: result code=${result.code}, isSuccess=${result.isSuccess}")
     }
 }
 
@@ -228,7 +294,20 @@ fun install() {
 }
 
 fun hasMetaModule(): Boolean {
-    return getMetaModuleImplement() != "None"
+    // Treat both external metamodule and built-in HymoFS as valid metamodule implementations.
+    // External metamodule: /data/adb/metamodule/module.prop present and readable.
+    // Built-in HymoFS: /data/adb/hymo/config.json or /data/adb/hymo directory exists.
+    return try {
+        val hymoDir = SuFile.open("/data/adb/hymo")
+        val hymoConfig = SuFile.open("/data/adb/hymo/config.json")
+        if ((hymoDir.exists() && hymoDir.isDirectory) || hymoConfig.isFile) {
+            true
+        } else {
+            getMetaModuleImplement() != "None"
+        }
+    } catch (_: Throwable) {
+        getMetaModuleImplement() != "None"
+    }
 }
 
 fun listModules(): String {

@@ -813,6 +813,12 @@ static int do_superkey_status(void __user *arg)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.enabled = superkey_is_set();
 	cmd.authenticated = superkey_is_manager();
+	/*
+	 * signature_ok: whether manager APK's signature verification
+	 * has passed. In SuperKey-only mode (signature bypass), this
+	 * will remain 0.
+	 */
+	cmd.signature_ok = is_manager_apk(NULL) ? 1 : 0;
 	cmd.manager_uid = superkey_get_manager_uid();
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
@@ -1308,15 +1314,20 @@ void ksu_supercalls_init(void)
 	}
 #endif // #ifdef KSU_KPROBES_HOOK
 
-	// SuperKey prctl kprobe - always register regardless of HymoFS
+	// SuperKey prctl kprobe - only register when SuperKey is configured.
 #ifdef CONFIG_KSU_SUPERKEY
-	rc = register_kprobe(&prctl_kp);
-	if (rc) {
-		pr_err("prctl kprobe failed: %d\n", rc);
-		prctl_kprobe_registered = false;
+	if (superkey_is_set()) {
+		rc = register_kprobe(&prctl_kp);
+		if (rc) {
+			pr_err("prctl kprobe failed: %d\n", rc);
+			prctl_kprobe_registered = false;
+		} else {
+			pr_info("prctl kprobe registered for SuperKey auth\n");
+			prctl_kprobe_registered = true;
+		}
 	} else {
-		pr_info("prctl kprobe registered for SuperKey auth\n");
-		prctl_kprobe_registered = true;
+		pr_info("SuperKey: no SuperKey configured, prctl kprobe not "
+			"registered (signature-only mode)\n");
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }

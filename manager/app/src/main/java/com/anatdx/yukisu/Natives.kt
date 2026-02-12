@@ -150,6 +150,12 @@ object Natives {
      */
     external fun isSuperKeyAuthenticated(): Boolean
     
+    /**
+     * Check if manager signature is considered OK by kernel.
+     * This reflects whether signature-based verification is in effect.
+     */
+    external fun isSignatureOk(): Boolean
+    
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 
@@ -199,7 +205,9 @@ object Natives {
         val namespace: Int = Namespace.INHERITED.ordinal,
 
         val nonRootUseDefault: Boolean = true,
-        val umountModules: Boolean = true,
+        // Default to NOT unmounting modules for non-root apps.
+        // Apps without an explicit profile will keep module modifications applied.
+        val umountModules: Boolean = false,
         var rules: String = "", // this field is save in ksud!!
     ) : Parcelable {
         enum class Namespace {
