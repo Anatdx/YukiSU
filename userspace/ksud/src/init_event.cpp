@@ -13,6 +13,10 @@
 #include "umount.hpp"
 #include "utils.hpp"
 
+// HymoFS integration
+#include "hymo/conf/config.hpp"
+#include "hymo/hymo_cli.hpp"
+
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -20,6 +24,43 @@
 #include <cstring>
 
 namespace ksud {
+
+// Built-in HymoFS: try to perform an automount at a given init stage,
+// based purely on hymo's JSON config (mount_stage + hymofs_enabled).
+static void try_hymofs_automount(const char* stage_name) {
+    using hymo::Config;
+
+    try {
+        Config config = Config::load_default();
+
+        // Only proceed when HymoFS is enabled in config
+        if (!config.hymofs_enabled) {
+            LOGI("HymoFS automount(%s): hymofs_enabled=false, skip", stage_name);
+            return;
+        }
+
+        // Respect configured mount_stage
+        if (config.mount_stage != stage_name) {
+            return;
+        }
+
+        const char* argv0 = "hymod";
+        const char* argv1 = "mount";
+        char* argv[] = {const_cast<char*>(argv0), const_cast<char*>(argv1)};
+
+        LOGI("HymoFS automount(%s): invoking hymod mount", stage_name);
+        int ret = hymo::run_hymo_main(2, argv);
+        if (ret != 0) {
+            LOGW("HymoFS automount(%s) failed, ret=%d", stage_name, ret);
+        } else {
+            LOGI("HymoFS automount(%s) succeeded", stage_name);
+        }
+    } catch (const std::exception& e) {
+        LOGW("HymoFS automount(%s) threw exception: %s", stage_name, e.what());
+    } catch (...) {
+        LOGW("HymoFS automount(%s) threw unknown exception", stage_name);
+    }
+}
 
 // Catch boot logs (logcat/dmesg) to file
 static void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
@@ -184,6 +225,11 @@ int on_post_data_fs() {
     // Run post-mount stage
     run_stage("post-mount", true);
 
+    // Built-in HymoFS: optionally perform automount at post-fs-data.
+    // This replaces any legacy temp-file based stage signalling: we directly
+    // read hymo config.json and only mount when mount_stage == "post-fs-data".
+    try_hymofs_automount("post-fs-data");
+
     chdir("/");
 
     LOGI("post-fs-data completed");
@@ -198,6 +244,11 @@ void on_services() {
     hide_bootloader_status();
 
     run_stage("service", false);
+
+    // Built-in HymoFS: optionally perform automount at services stage
+    // when mount_stage == "services".
+    try_hymofs_automount("services");
+
     LOGI("services completed");
 }
 
