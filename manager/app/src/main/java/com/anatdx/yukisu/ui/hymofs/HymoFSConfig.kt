@@ -98,12 +98,11 @@ fun HymoFSConfigScreen(
                     activeRules = HymoFSManager.getActiveRules()
                 }
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar(
-                    stringResource(
-                        R.string.hymofs_toast_load_error,
-                        e.message ?: "unknown"
-                    )
+                val msg = context.getString(
+                    R.string.hymofs_toast_load_error,
+                    e.message ?: "unknown"
                 )
+                snackbarHostState.showSnackbar(msg)
             }
             isLoading = false
         }
@@ -181,12 +180,12 @@ fun HymoFSConfigScreen(
                             coroutineScope.launch {
                                 if (HymoFSManager.setModuleMode(moduleId, mode)) {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_mode_updated)
+                                        context.getString(R.string.hymofs_toast_mode_updated)
                                     )
                                     loadData()
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_mode_failed)
+                                        context.getString(R.string.hymofs_toast_mode_failed)
                                     )
                                 }
                             }
@@ -201,11 +200,11 @@ fun HymoFSConfigScreen(
                                 if (HymoFSManager.saveConfig(newConfig)) {
                                     config = newConfig
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_settings_saved)
+                                        context.getString(R.string.hymofs_toast_settings_saved)
                                     )
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_settings_failed)
+                                        context.getString(R.string.hymofs_toast_settings_failed)
                                     )
                                 }
                             }
@@ -218,7 +217,7 @@ fun HymoFSConfigScreen(
                                     } else {
                                         R.string.hymofs_toast_kernel_debug_disabled
                                     }
-                                    snackbarHostState.showSnackbar(stringResource(msgRes))
+                                    snackbarHostState.showSnackbar(context.getString(msgRes))
                                 }
                             }
                         },
@@ -230,7 +229,7 @@ fun HymoFSConfigScreen(
                                     } else {
                                         R.string.hymofs_toast_stealth_disabled
                                     }
-                                    snackbarHostState.showSnackbar(stringResource(msgRes))
+                                    snackbarHostState.showSnackbar(context.getString(msgRes))
                                 }
                             }
                         },
@@ -238,11 +237,11 @@ fun HymoFSConfigScreen(
                             coroutineScope.launch {
                                 if (HymoFSManager.fixMounts()) {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_mounts_fixed)
+                                        context.getString(R.string.hymofs_toast_mounts_fixed)
                                     )
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_mounts_failed)
+                                        context.getString(R.string.hymofs_toast_mounts_failed)
                                     )
                                 }
                             }
@@ -257,10 +256,10 @@ fun HymoFSConfigScreen(
                                     } else {
                                         R.string.hymofs_toast_builtin_disabled
                                     }
-                                    snackbarHostState.showSnackbar(stringResource(msgRes))
+                                    snackbarHostState.showSnackbar(context.getString(msgRes))
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        stringResource(R.string.hymofs_toast_builtin_failed)
+                                        context.getString(R.string.hymofs_toast_builtin_failed)
                                     )
                                 }
                             }
