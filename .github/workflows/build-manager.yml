@@ -146,7 +146,6 @@ jobs:
           mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
           echo "$GPG_PRIVATE_KEY" > key.asc
           gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
-          echo "EBDB0D663D7AB2F6:6:" | gpg --import-ownertrust
           rm -f key.asc
 
       - name: Sign APK with GPG
