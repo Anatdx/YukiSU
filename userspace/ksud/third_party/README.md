@@ -1,27 +1,27 @@
 # Third-party Libraries
 
-This directory contains **git submodules** and is also used by CMake **FetchContent** for some dependencies.
+ksud uses **git submodules** at the repo root under `MagiskToolsAlone/` and **FetchContent** for some dependencies (see CMakeLists.txt).
 
-## Submodules
+## Submodules (MagiskToolsAlone at repo root)
 
 ### MagiskbootAlone
 
-- **Path**: `third_party/MagiskbootAlone`
+- **Path**: `MagiskToolsAlone/MagiskbootAlone` (repo root)
 - **Purpose**: Boot image unpack/repack/split-dtb; compiled **into ksud** as a multi-call binary.
 - **Usage**: `ksu/bin/ksud` is the main binary; `ksu/bin/magiskboot` should be a **symlink to ksud**. When invoked as `magiskboot`, ksud dispatches by `argv[0]` to `magiskboot_main()`.
-- **Init/update**: `git submodule update --init userspace/ksud/third_party/MagiskbootAlone`
+- **Init/update**: `git submodule update --init MagiskToolsAlone/MagiskbootAlone`
 
 ### bootctlAlone
 
-- **Path**: `third_party/bootctlAlone`
+- **Path**: `MagiskToolsAlone/bootctlAlone` (repo root)
 - **Purpose**: Compiled **into ksud** as multi-call (like magiskboot). `ksu/bin/bootctl` → symlink to ksud; argv0 dispatch to `bootctl_main()`.
-- **Init/update**: `git submodule update --init userspace/ksud/third_party/bootctlAlone`
+- **Init/update**: `git submodule update --init MagiskToolsAlone/bootctlAlone`
 
 ### resetpropAlone
 
-- **Path**: `third_party/resetpropAlone`
+- **Path**: `MagiskToolsAlone/resetpropAlone` (repo root)
 - **Purpose**: Compiled **into ksud** as multi-call. `ksu/bin/resetprop` → symlink to ksud; argv0 dispatch to `resetprop_main()`.
-- **Init/update**: `git submodule update --init userspace/ksud/third_party/resetpropAlone`
+- **Init/update**: `git submodule update --init MagiskToolsAlone/resetpropAlone`
 
 ## FetchContent (auto-downloaded)
 
@@ -48,4 +48,3 @@ FetchContent_Declare(
 ```
 
 Dependabot will automatically detect and create PRs for version updates.
-

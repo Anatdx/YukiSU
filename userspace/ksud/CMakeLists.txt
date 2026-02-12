@@ -77,8 +77,9 @@ add_custom_command(
     COMMENT "Generating embedded assets..."
 )
 
-# MagiskbootAlone (submodule): compile magiskboot into ksud for multi-call binary (ksud / magiskboot via argv0)
-set(MAGISKBOOT_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/MagiskbootAlone)
+# MagiskToolsAlone/* (submodules at repo root): compile into ksud for multi-call (magiskboot / bootctl / resetprop via argv0)
+set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/../../MagiskToolsAlone)
+set(MAGISKBOOT_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/MagiskbootAlone)
 set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/base_host.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/bootimg.cpp
@@ -94,9 +95,8 @@ else()
     message(WARNING "MagiskbootAlone submodule not found at ${MAGISKBOOT_ALONE_DIR}; run: git submodule update --init")
 endif()
 
-# bootctlAlone / resetpropAlone (submodules): compile into ksud for multi-call (bootctl/resetprop via argv0)
-set(BOOTCTL_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/bootctlAlone)
-set(RESETPROP_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party/resetpropAlone)
+set(BOOTCTL_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/bootctlAlone)
+set(RESETPROP_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/resetpropAlone)
 if(EXISTS ${BOOTCTL_ALONE_DIR}/src/main.cpp)
     set(BOOTCTL_ALONE_AVAILABLE 1)
     message(STATUS "bootctlAlone: building bootctl into ksud (multi-call)")
