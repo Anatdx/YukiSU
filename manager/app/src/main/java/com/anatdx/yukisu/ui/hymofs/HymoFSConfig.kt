@@ -1020,7 +1020,14 @@ private fun SettingsTab(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !(key != "custom" && !hymofsAvailable)
+                            enabled = !(key != "custom" && !hymofsAvailable),
+                            colors = if (selected) {
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            } else {
+                                ButtonDefaults.filledTonalButtonColors()
+                            }
                         ) {
                             Text(stringResource(labelRes))
                         }
@@ -1082,6 +1089,13 @@ private fun SettingsTab(
                         FilledTonalButton(
                             onClick = { updateAndSave(config.copy(mountStage = value)) },
                             modifier = Modifier.fillMaxWidth(),
+                            colors = if (selected) {
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            } else {
+                                ButtonDefaults.filledTonalButtonColors()
+                            }
                         ) {
                             Text(stringResource(labelRes))
                         }
