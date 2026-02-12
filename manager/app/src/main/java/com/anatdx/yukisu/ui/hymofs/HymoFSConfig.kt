@@ -843,21 +843,6 @@ private fun SettingsTab(
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                // Temporary Mount Point Setting
-                var tempdir by remember { mutableStateOf(config.tempdir) }
-                SettingTextField(
-                    title = stringResource(R.string.hymofs_tempdir),
-                    subtitle = stringResource(R.string.hymofs_tempdir_desc),
-                    value = tempdir,
-                    onValueChange = { tempdir = it },
-                    onConfirm = {
-                        updateAndSave(config.copy(tempdir = tempdir))
-                    },
-                    placeholder = "Auto"
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
                 // OverlayFS Mount Source Setting
                 var mountsource by remember { mutableStateOf(config.mountsource) }
                 SettingTextField(
@@ -995,9 +980,9 @@ private fun SettingsTab(
                     else -> "custom"
                 }
 
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
                         "img_mnt" to R.string.hymofs_mirror_preset_img_mnt,
@@ -1034,7 +1019,7 @@ private fun SettingsTab(
                                     }
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             enabled = !(key != "custom" && !hymofsAvailable)
                         ) {
                             Text(stringResource(labelRes))
@@ -1042,16 +1027,12 @@ private fun SettingsTab(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
                 // Static description of presets (like meta-hymo webui)
                 Text(
                     text = stringResource(R.string.hymofs_mirror_path_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
 
                 if (selectedPreset == "custom") {
                     SettingTextField(
@@ -1067,15 +1048,30 @@ private fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // Simple mount stage selector via text buttons
+                // Temporary Mount Point Setting (moved down, below mirror presets/custom)
+                var tempdir by remember { mutableStateOf(config.tempdir) }
+                SettingTextField(
+                    title = stringResource(R.string.hymofs_tempdir),
+                    subtitle = stringResource(R.string.hymofs_tempdir_desc),
+                    value = tempdir,
+                    onValueChange = { tempdir = it },
+                    onConfirm = {
+                        updateAndSave(config.copy(tempdir = tempdir))
+                    },
+                    placeholder = "Auto"
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Simple mount stage selector via long buttons
                 Text(
                     text = stringResource(R.string.hymofs_mount_stage),
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
                         "post-fs-data" to R.string.hymofs_mount_stage_post_fs,
@@ -1085,7 +1081,7 @@ private fun SettingsTab(
                         val selected = config.mountStage == value
                         FilledTonalButton(
                             onClick = { updateAndSave(config.copy(mountStage = value)) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(labelRes))
                         }
