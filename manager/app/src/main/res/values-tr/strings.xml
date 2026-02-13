@@ -49,8 +49,8 @@
     <string name="home_learn_kernelsu">KernelSU\'yu öğrenin</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">KernelSU\'yu nasıl yükleyeceğinizi ve modülleri nasıl kullanacağınızı öğrenin</string>
-    <string name="home_support_title">Bizi destekleyin</string>
-    <string name="home_support_content">KernelSU, her zaman olduğu gibi ücretsiz ve açık kaynaklıdır. Ancak bir bağış yaparak bizi destekleyebilirsiniz.</string>
+    <string name="home_support_title">Geliştirmeyi destekle</string>
+    <string name="home_support_content">KernelSU ücretsiz ve açık kaynaklı kalacaktır; resmi KernelSU geliştiricilerine bağış yaparak desteklerinizi gösterebilirsiniz.</string>
     <string name="about_source_code"><![CDATA[Kaynak kodunu %1$s adresinde görüntüleyin<br/>%2$s kanalımıza katılın]]></string>
     <string name="profile_default">Varsayılan</string>
     <string name="profile_template">Şablon</string>
@@ -231,10 +231,10 @@
     <string name="home_kpm_version">KPM Sürümü</string>
     <string name="close_notice">Kapat</string>
     <string name="kernel_module_notice">Aşağıdaki çekirdek modül işlevleri KernelPatch tarafından geliştirilmiş ve YukiSU\'nın çekirdek modül işlevlerini içerecek şekilde değiştirilmiştir</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU bekliyor</string>
+    <string name="home_ContributionCard_kernelsu">YukiSU Vizyonu</string>
     <string name="kpm_control_success">Başarılı</string>
     <string name="kpm_control_failed">Başarısız</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU, gelecekte KSU\'nun nispeten bağımsız bir dalı olacak, ancak yine de resmi KernelSU ve MKSU gibi katkılarından dolayı teşekkür ederiz!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU son derece agresif ve bağımsız bir KSU dalıdır, ancak yine de resmi KernelSU, SukiSU, Magisk, APatch ve diğerlerine katkıları için teşekkür ederiz.</string>
     <string name="not_supported">Desteklenmiyor</string>
     <string name="supported">Destekleniyor</string>
     <string name="kernel_patched">Çekirdek yamalanmadı</string>

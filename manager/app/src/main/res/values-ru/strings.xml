@@ -48,8 +48,8 @@
     <string name="home_learn_kernelsu">Узнайте о KernelSU</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/ru_RU/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Узнайте, как установить KernelSU и использовать модули</string>
-    <string name="home_support_title">Поддержите нас</string>
-    <string name="home_support_content">KernelSU был и всегда будет бесплатным и открытым проектом. Однако Вы всегда можете поддержать нас, отправив небольшое пожертвование.</string>
+    <string name="home_support_title">Поддержать разработку</string>
+    <string name="home_support_content">KernelSU остаётся бесплатным и с открытым исходным кодом; пожертвуйте разработчикам официального KernelSU в знак поддержки.</string>
     <string name="about_source_code"><![CDATA[Просмотреть исходный код на %1$s<br/>Присоединяйтесь к нашему %2$s каналу]]></string>
     <string name="profile_default">По умолчанию</string>
     <string name="profile_template">Шаблон</string>
@@ -229,10 +229,10 @@
     <string name="home_kpm_version">Статус KPM</string>
     <string name="close_notice">Закрыть</string>
     <string name="kernel_module_notice">Следующие модульные функции ядра были разработаны KernelPatch и изменены для включения в него функций модуля ядра YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">Будущее YukiSU</string>
+    <string name="home_ContributionCard_kernelsu">Видение YukiSU</string>
     <string name="kpm_control_success">Успешно</string>
     <string name="kpm_control_failed">Провален</string>
-    <string name="home_click_to_ContributionCard_kernelsu">В будущем YukiSU будет относительно независимым ответвлением KSU, но мы по-прежнему ценим официальный KernelSU и MKSU и т.д. за их вклад!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU — крайне агрессивная и самостоятельная ветка KSU, но мы благодарим официальный KernelSU, SukiSU, Magisk, APatch и других за их вклад.</string>
     <string name="not_supported">Не поддерживается</string>
     <string name="supported">Поддерживается</string>
     <string name="kernel_patched">Ядро не изменено</string>

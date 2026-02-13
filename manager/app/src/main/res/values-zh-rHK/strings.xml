@@ -49,7 +49,7 @@
     <string name="home_learn_kernelsu_url">https://kernelsu.org/zh_CN/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">了解如何安裝 KernelSU 以及如何開發模組</string>
     <string name="home_support_title">支援開發</string>
-    <string name="home_support_content">KernelSU 將保持免費開源，向開發者捐贈以表示支援。</string>
+    <string name="home_support_content">KernelSU將保持免費開源，向官方KernelSU嘅開發者捐贈以表示支援</string>
     <string name="about_source_code"><![CDATA[喺 %1$s 查看源碼<br/>加入我哋嘅 %2$s 頻道]]></string>
     <string name="profile_default">默認</string>
     <string name="profile_template">模版</string>
@@ -219,7 +219,7 @@
     <string name="home_ContributionCard_kernelsu">YukiSU 展望</string>
     <string name="kpm_control_success">成功</string>
     <string name="kpm_control_failed">錯誤</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU 未來將會成為一個相對獨立嘅 KSU 分支，但仲係會感謝官方 KernelSU 同 MKSU 等做出嘅貢獻</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU 係一個極其激進且特立獨行嘅 KSU 分支，但仍然感謝官方 KernelSU 同 SukiSU、Magisk、APatch 等作出嘅貢獻</string>
     <string name="not_supported">唔支援</string>
     <string name="supported">支援</string>
     <string name="kernel_patched">核心未進行補丁</string>

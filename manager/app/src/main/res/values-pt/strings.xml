@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">Aprender KernelSU</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Aprenda a instalar o KernelSU e usar os módulos</string>
-    <string name="home_support_title">Apoie-nos</string>
-    <string name="home_support_content">O KernelSU é, e sempre será, gratuito e de código aberto. No entanto, você pode nos mostrar que se importa fazendo uma doação.</string>
+    <string name="home_support_title">Apoiar o desenvolvimento</string>
+    <string name="home_support_content">O KernelSU permanecerá gratuito e de código aberto; doe aos desenvolvedores oficiais do KernelSU para mostrar seu apoio.</string>
     <string name="about_source_code"><![CDATA[Veja o código fonte no %1$s<br/>Entre em nosso canal no %2$s]]></string>
     <string name="profile_default">Padrão</string>
     <string name="profile_template">Modelo</string>
@@ -210,10 +210,10 @@
     <string name="home_kpm_version">Versão do KPM</string>
     <string name="close_notice">Fechar</string>
     <string name="kernel_module_notice">As seguintes funções do módulo de kernel foram desenvolvidas pelo KernelPatch e modificadas para incluir as funções do módulo de kernel do YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU aguarda ansiosamente</string>
+    <string name="home_ContributionCard_kernelsu">Visão YukiSU</string>
     <string name="kpm_control_success">Sucesso</string>
     <string name="kpm_control_failed">Falhou</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU será uma ramificação relativamente independente da KSU no futuro, mas ainda apreciamos o KernelSU e o MKSU, etc. para suas contribuições!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU é um ramo KSU extremamente agressivo e independente, mas ainda agradecemos ao KernelSU oficial, SukiSU, Magisk, APatch e outros pelas suas contribuições.</string>
     <string name="not_supported">Sem suporte</string>
     <string name="supported">Apoie-nos</string>
     <string name="kernel_patched">Kernel não corrigido</string>

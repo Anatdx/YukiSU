@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">KernelSU verstehen</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Erfahre, wie KernelSU installiert wird und wie Module verwendet werden</string>
-    <string name="home_support_title">Unterstütze uns</string>
-    <string name="home_support_content">KernelSU ist und wird immer frei und quelloffen sein. Du kannst uns jedoch deine Unterstützung zeigen, indem du eine Spende tätigst.</string>
+    <string name="home_support_title">Entwicklung unterstützen</string>
+    <string name="home_support_content">KernelSU bleibt kostenlos und quelloffen; spenden Sie an die offiziellen KernelSU-Entwickler, um Ihre Unterstützung zu zeigen.</string>
     <string name="about_source_code"><![CDATA[Den Quellcode finden Sie unter %1$s<br/>Begleiten Sie uns %2$s-Kanal]]></string>
     <string name="profile_default">Standard</string>
     <string name="profile_template">Vorlage</string>
@@ -212,10 +212,10 @@
     <string name="home_kpm_version">KPM-Version</string>
     <string name="close_notice">Schließen</string>
     <string name="kernel_module_notice">Die folgenden Kernel-Modulfunktionen wurden von KernelPatch entwickelt und so modifiziert, dass die Funktionen des Kernel-Moduls von YukiSU enthalten sind</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU freut sich auf</string>
+    <string name="home_ContributionCard_kernelsu">YukiSU-Vision</string>
     <string name="kpm_control_success">Erfolgreich</string>
     <string name="kpm_control_failed">Fehlgeschlagen</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU wird in Zukunft ein relativ unabhängiger Zweig der KSU sein, aber wir schätzen immer noch die offiziellen KernelSU und MKSU usw. für ihre Beiträge!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU ist ein äußerst aggressiver und unabhängiger KSU-Zweig, aber wir danken dennoch dem offiziellen KernelSU, SukiSU, Magisk, APatch und anderen für ihre Beiträge.</string>
     <string name="not_supported">Nicht unterstützt</string>
     <string name="supported">Unterstützt:</string>
     <string name="kernel_patched">Kernel nicht gepatcht</string>

@@ -49,8 +49,8 @@
     <string name="home_learn_kernelsu">Tìm hiểu về KernelSU</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Tìm hiểu cách cài đặt KernelSU và sử dụng các module!</string>
-    <string name="home_support_title">Ủng hộ chúng tôi</string>
-    <string name="home_support_content">KernelSU sẽ luôn là miễn phí và mã nguồn mở. Tuy nhiên, bạn có thể cho chúng tôi thấy rằng bạn quan tâm bằng cách quyên góp!</string>
+    <string name="home_support_title">Hỗ trợ phát triển</string>
+    <string name="home_support_content">KernelSU sẽ luôn miễn phí và mã nguồn mở; quyên góp cho các nhà phát triển KernelSU chính thức để thể hiện sự ủng hộ.</string>
     <string name="about_source_code"><![CDATA[Xem mã nguồn tại %1$s<br/>Tham gia kênh %2$s của chúng tôi]]></string>
     <string name="profile_default">Mặc định</string>
     <string name="profile_template">Bản mẫu</string>
@@ -231,10 +231,10 @@
     <string name="home_kpm_version">Phiên bản KPM</string>
     <string name="close_notice">Đóng</string>
     <string name="kernel_module_notice">Các chức năng Kernel Module sau đây được KernelPatch phát triển và sửa đổi để tương thích với các chức năng Kernel Module của YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">Tương lai của YukiSU</string>
+    <string name="home_ContributionCard_kernelsu">Tầm nhìn YukiSU</string>
     <string name="kpm_control_success">Thành công</string>
     <string name="kpm_control_failed">Thất bại</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU sẽ là một nhánh tương đối độc lập của KSU trong tương lai, nhưng chúng tôi xin cảm ơn KernelSU và MKSU,... vì những đóng góp của họ!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU là một nhánh KSU cực kỳ mạnh mẽ và độc lập, nhưng chúng tôi vẫn cảm ơn KernelSU chính thức, SukiSU, Magisk, APatch và những dự án khác vì đóng góp của họ.</string>
     <string name="not_supported">Không được hỗ trợ</string>
     <string name="supported">Được hỗ trợ</string>
     <string name="kernel_patched">Kernel chưa được vá</string>
