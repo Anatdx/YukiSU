@@ -1,16 +1,3 @@
-[submodule "MagiskToolsAlone/MagiskbootAlone"]
-	path = MagiskToolsAlone/MagiskbootAlone
-	url = https://github.com/Anatdx/MagiskbootAlone.git
-[submodule "MagiskToolsAlone/bootctlAlone"]
-	path = MagiskToolsAlone/bootctlAlone
-	url = https://github.com/Anatdx/bootctlAlone.git
-[submodule "MagiskToolsAlone/resetpropAlone"]
-	path = MagiskToolsAlone/resetpropAlone
-	url = https://github.com/Anatdx/resetpropAlone.git
-[submodule "MagiskToolsAlone/ndk-busybox"]
-	path = MagiskToolsAlone/ndk-busybox
-	url = https://github.com/Anatdx/ndk-busybox.git
-# Legacy paths: same remotes so submodule update never fails with "No url found"
 [submodule "userspace/ksud/third_party/MagiskbootAlone"]
 	path = userspace/ksud/third_party/MagiskbootAlone
 	url = https://github.com/Anatdx/MagiskbootAlone.git
@@ -20,3 +7,6 @@
 [submodule "userspace/ksud/third_party/resetpropAlone"]
 	path = userspace/ksud/third_party/resetpropAlone
 	url = https://github.com/Anatdx/resetpropAlone.git
+[submodule "userspace/ksud/third_party/ndk-busybox"]
+	path = userspace/ksud/third_party/ndk-busybox
+	url = https://github.com/Anatdx/ndk-busybox.git

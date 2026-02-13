@@ -53,8 +53,8 @@ if(NOT VERSION_RESULT EQUAL 0)
     message(WARNING "Failed to generate version file, using defaults")
 endif()
 
-# MagiskToolsAlone/* (submodules at repo root): compile into ksud for multi-call (magiskboot / bootctl / resetprop via argv0)
-set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/../../MagiskToolsAlone)
+# third_party (MagiskbootAlone, bootctlAlone, resetpropAlone, ndk-busybox): compile into ksud for multi-call
+set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party)
 set(MAGISKBOOT_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/MagiskbootAlone)
 set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/base_host.cpp
