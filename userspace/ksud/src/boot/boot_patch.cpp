@@ -165,6 +165,12 @@ static bool do_cpio_cmd(const std::string& magiskboot, const std::string& workdi
     auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, cmd}, workdir);
     if (result.exit_code != 0) {
         LOGE("magiskboot cpio %s failed", cmd.c_str());
+        if (!result.stdout_str.empty()) {
+            LOGE("magiskboot cpio stdout: %s", result.stdout_str.c_str());
+        }
+        if (!result.stderr_str.empty()) {
+            LOGE("magiskboot cpio stderr: %s", result.stderr_str.c_str());
+        }
         return false;
     }
     return true;
@@ -181,10 +187,10 @@ static bool is_magisk_patched(const std::string& magiskboot, const std::string& 
     }
 
     // 双重确认：检查典型的 Magisk 迹象（init.magisk.rc 或 overlay.d 等）
-    auto has_magisk_init = exec_command_magiskboot(
-        magiskboot, {"cpio", cpio_path, "exists init.magisk.rc"}, workdir);
-    auto has_overlay = exec_command_magiskboot(
-        magiskboot, {"cpio", cpio_path, "exists overlay.d"}, workdir);
+    auto has_magisk_init =
+        exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "exists init.magisk.rc"}, workdir);
+    auto has_overlay =
+        exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "exists overlay.d"}, workdir);
 
     return has_magisk_init.exit_code == 0 || has_overlay.exit_code == 0;
 }
@@ -192,7 +198,8 @@ static bool is_magisk_patched(const std::string& magiskboot, const std::string& 
 // Check if boot image is patched by KernelSU
 static bool is_kernelsu_patched(const std::string& magiskboot, const std::string& workdir,
                                 const std::string& cpio_path) {
-    auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "exists kernelsu.ko"}, workdir);
+    auto result =
+        exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "exists kernelsu.ko"}, workdir);
     return result.exit_code == 0;
 }
 
@@ -263,8 +270,9 @@ static bool do_backup(const std::string& magiskboot, const std::string& workdir,
     write_file(sha1_file, sha1);
 
     // Add backup info to ramdisk
-    if (!do_cpio_cmd(magiskboot, workdir, cpio_path,
-                     "add 0755 " + std::string(BACKUP_FILENAME) + " " + sha1_file)) {
+    if (!do_cpio_cmd(
+            magiskboot, workdir, cpio_path,
+            "add 0644 " + std::string(BACKUP_FILENAME) + " " + std::string(BACKUP_FILENAME))) {
         return false;
     }
 
@@ -658,8 +666,12 @@ int boot_patch(const std::vector<std::string>& args) {
     if (ramdisk.empty()) {
         printf("- No ramdisk found, creating default\n");
         ramdisk = workdir + "/ramdisk.cpio";
-        // Create empty ramdisk
-        exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "mkdir 0755 ."}, workdir);
+        // Create empty ramdisk (use a valid entry name; "." is invalid for some magiskboot builds)
+        if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "mkdir 000 .backup")) {
+            LOGE("Failed to create default ramdisk");
+            cleanup();
+            return 1;
+        }
     }
 
     // Check for Magisk
@@ -674,15 +686,22 @@ int boot_patch(const std::vector<std::string>& args) {
 
     if (!already_patched) {
         // Backup init if it exists
-        auto init_exists = exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists init"}, workdir);
+        auto init_exists =
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists init"}, workdir);
         if (init_exists.exit_code == 0) {
             do_cpio_cmd(magiskboot, workdir, ramdisk, "mv init init.real");
         }
     }
 
     // Add init and kernelsu.ko (use workdir for relative paths in cpio add)
-    do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 init init");
-    do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 kernelsu.ko kernelsu.ko");
+    if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 init init")) {
+        cleanup();
+        return 1;
+    }
+    if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 kernelsu.ko kernelsu.ko")) {
+        cleanup();
+        return 1;
+    }
 
     // Backup if flashing and not already patched
     if (!already_patched && parsed.flash) {
@@ -875,9 +894,10 @@ int boot_restore(const std::vector<std::string>& args) {
     if (backup_exists.exit_code == 0) {
         // Extract backup sha1
         std::string backup_file = workdir + "/" + BACKUP_FILENAME;
-        exec_command_magiskboot(magiskboot, {"cpio", ramdisk,
-                      "extract " + std::string(BACKUP_FILENAME) + " " + backup_file},
-                     workdir);
+        exec_command_magiskboot(
+            magiskboot,
+            {"cpio", ramdisk, "extract " + std::string(BACKUP_FILENAME) + " " + backup_file},
+            workdir);
 
         auto sha_content = read_file(backup_file);
         if (sha_content) {

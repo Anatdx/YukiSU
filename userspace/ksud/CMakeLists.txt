@@ -84,6 +84,7 @@ set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/base_host.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/bootimg.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/boot_crypto.cpp
+    ${MAGISKBOOT_ALONE_DIR}/src/cpio.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp
 )
 if(EXISTS ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp)

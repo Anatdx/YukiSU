@@ -23,6 +23,21 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
             // Get canonical (absolute) path
             char resolved_path[PATH_MAX];
             if (realpath(specified_path.c_str(), resolved_path) != nullptr) {
+                // Prefer sibling libmagiskboot.so when caller passed libksud.so.
+                // libksud.so may embed a limited magiskboot entry that lacks cpio commands.
+                fs::path specified_lib = resolved_path;
+                fs::path lib_dir = specified_lib.parent_path();
+                fs::path sibling_magiskboot = lib_dir / "libmagiskboot.so";
+                if (fs::exists(sibling_magiskboot) &&
+                    access(sibling_magiskboot.c_str(), X_OK) == 0) {
+                    printf("- Using sibling magiskboot: %s\n", sibling_magiskboot.c_str());
+                    return sibling_magiskboot.string();
+                }
+                if (access(MAGISKBOOT_PATH, X_OK) == 0) {
+                    printf("- Using installed magiskboot: %s\n", MAGISKBOOT_PATH);
+                    return MAGISKBOOT_PATH;
+                }
+
                 // Check if directly executable from nativeLibraryDir
                 if (access(resolved_path, X_OK) == 0) {
                     printf("- Using magiskboot directly: %s\n", resolved_path);
