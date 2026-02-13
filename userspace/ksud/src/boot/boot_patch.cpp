@@ -711,8 +711,12 @@ int boot_patch(const std::vector<std::string>& args) {
     }
 
     // Repack boot image (must run in workdir where unpack output files are)
+    // Pass explicit output path for compatibility with older magiskboot variants
+    // that require: repack <in-boot.img> <out-boot.img>.
+    std::string new_boot = workdir + "/new-boot.img";
     printf("- Repacking boot image\n");
-    auto repack_result = exec_command_magiskboot(magiskboot, {"repack", bootimage}, workdir);
+    auto repack_result =
+        exec_command_magiskboot(magiskboot, {"repack", bootimage, new_boot}, workdir);
     if (repack_result.exit_code != 0) {
         LOGE("magiskboot repack failed");
         if (!repack_result.stdout_str.empty()) {
@@ -724,8 +728,6 @@ int boot_patch(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
-
-    std::string new_boot = workdir + "/new-boot.img";
 
     // Output patched image
     if (patch_file) {
