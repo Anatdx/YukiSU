@@ -42,6 +42,9 @@ int main(int argc, char* argv[]) {
 #endif
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
     DISPATCH("busybox", busybox_main);
+    // Symlink invocation: ls -> ksud => argv[0] is "ls"; let busybox run that applet
+    if (base && base[0] && std::strcmp(base, "ksud") != 0)
+        return busybox_main(argc, argv);
 #endif
 #undef DISPATCH
 
