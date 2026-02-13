@@ -715,6 +715,12 @@ int boot_patch(const std::vector<std::string>& args) {
     auto repack_result = exec_command_magiskboot(magiskboot, {"repack", bootimage}, workdir);
     if (repack_result.exit_code != 0) {
         LOGE("magiskboot repack failed");
+        if (!repack_result.stdout_str.empty()) {
+            LOGE("magiskboot repack stdout: %s", repack_result.stdout_str.c_str());
+        }
+        if (!repack_result.stderr_str.empty()) {
+            LOGE("magiskboot repack stderr: %s", repack_result.stderr_str.c_str());
+        }
         cleanup();
         return 1;
     }
