@@ -174,8 +174,19 @@ static bool do_cpio_cmd(const std::string& magiskboot, const std::string& workdi
 static bool is_magisk_patched(const std::string& magiskboot, const std::string& workdir,
                               const std::string& cpio_path) {
     auto result = exec_command_magiskboot(magiskboot, {"cpio", cpio_path, "test"}, workdir);
-    // 0: stock, 1: magisk
-    return result.exit_code == 1;
+    // According to magiskboot docs: 0 = stock, 1 = magisk, 2 = unsupported.
+    // 但这里额外做一层防御性检查，避免误报：
+    if (result.exit_code != 1) {
+        return false;
+    }
+
+    // 双重确认：检查典型的 Magisk 迹象（init.magisk.rc 或 overlay.d 等）
+    auto has_magisk_init = exec_command_magiskboot(
+        magiskboot, {"cpio", cpio_path, "exists init.magisk.rc"}, workdir);
+    auto has_overlay = exec_command_magiskboot(
+        magiskboot, {"cpio", cpio_path, "exists overlay.d"}, workdir);
+
+    return has_magisk_init.exit_code == 0 || has_overlay.exit_code == 0;
 }
 
 // Check if boot image is patched by KernelSU
