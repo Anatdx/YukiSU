@@ -64,7 +64,6 @@ string(CONCAT _LINKER_FLAGS
     " -Wl,--hash-style=gnu"       # GNU hash is more compact than sysv
     " -Wl,--build-id=none"        # Remove build-id note section
     " -Wl,-z,norelro"             # Remove RELRO segment (root tool doesn't need this security feature)
-    " -Wl,--compress-relocations" # Compress relocation table (supported by Android lld)
 )
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}${_LINKER_FLAGS}")
 
