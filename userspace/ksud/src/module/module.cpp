@@ -19,6 +19,10 @@
 #include <sstream>
 #include <vector>
 
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+extern "C" int resetprop_main(int argc, char** argv);
+#endif
+
 namespace ksud {
 
 struct ModuleInfo {
@@ -1217,7 +1221,6 @@ int load_system_prop() {
             pid_t pid = fork();
             if (pid == 0) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-                extern "C" int resetprop_main(int argc, char** argv);
                 const char* k = key.c_str();
                 const char* v = value.c_str();
                 const char* argv_c[] = {"resetprop", "-n", k, v, nullptr};
