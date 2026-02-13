@@ -734,6 +734,13 @@ int boot_patch(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
+    if (!fs::exists(new_boot)) {
+        LOGE("magiskboot repack reported success but output not found: %s", new_boot.c_str());
+        LOGE("Current magiskboot may be an incomplete build (unpack/repack stubs).");
+        LOGE("Please use a full magiskboot implementation from upstream Magisk.");
+        cleanup();
+        return 1;
+    }
 
     // Output patched image
     if (patch_file) {
