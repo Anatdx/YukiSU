@@ -641,7 +641,14 @@ int boot_patch(const std::vector<std::string>& args) {
     }
     printf("- Boot image size: %ld bytes\n", (long)boot_stat.st_size);
 
-    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", bootimage}, workdir);
+    // On Android, use --skip-decomp to avoid in-process LZ4_LEGACY decompress (SIGSEGV on some
+    // devices). We will decompress ramdisk via Magisk's magiskboot if it is LZ4_LEGACY.
+#ifdef __ANDROID__
+    std::vector<std::string> unpack_args = {"unpack", bootimage, "--skip-decomp"};
+#else
+    std::vector<std::string> unpack_args = {"unpack", bootimage};
+#endif  // #ifdef __ANDROID__
+    auto unpack_result = exec_command_magiskboot(magiskboot, unpack_args, workdir);
     printf("- unpack exit code: %d\n", unpack_result.exit_code);
     if (!unpack_result.stdout_str.empty()) {
         printf("- stdout: %s\n", unpack_result.stdout_str.c_str());
@@ -655,6 +662,46 @@ int boot_patch(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
+
+#ifdef __ANDROID__
+    // If ramdisk is LZ4_LEGACY (dumped raw), decompress with Magisk's magiskboot to avoid
+    // in-process LZ4 crash on device.
+    constexpr unsigned char LZ4_LEGACY_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
+    std::string ramdisk_cpio = workdir + "/ramdisk.cpio";
+    std::ifstream ramdisk_in(ramdisk_cpio, std::ios::binary);
+    unsigned char magic_buf[4];
+    if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf), 4) &&
+        ramdisk_in.gcount() == 4) {
+        ramdisk_in.close();
+        if (memcmp(magic_buf, LZ4_LEGACY_MAGIC, 4) == 0) {
+            const std::string magisk_magiskboot = "/data/adb/magisk/magiskboot";
+            if (access(magisk_magiskboot.c_str(), X_OK) != 0) {
+                LOGE("Ramdisk is LZ4_LEGACY; in-process decompress crashes on this device.");
+                LOGE("Install Magisk and ensure %s exists for boot-patch.",
+                     magisk_magiskboot.c_str());
+                cleanup();
+                return 1;
+            }
+            std::string ramdisk_dec = workdir + "/ramdisk.cpio.dec";
+            auto dec_result = exec_command_magiskboot(
+                magisk_magiskboot, {"decompress", "ramdisk.cpio", "ramdisk.cpio.dec"}, workdir);
+            if (dec_result.exit_code != 0) {
+                LOGE("Magisk magiskboot decompress failed: %d", dec_result.exit_code);
+                if (!dec_result.stderr_str.empty()) {
+                    LOGE("stderr: %s", dec_result.stderr_str.c_str());
+                }
+                cleanup();
+                return 1;
+            }
+            if (rename(ramdisk_dec.c_str(), ramdisk_cpio.c_str()) != 0) {
+                LOGE("Failed to replace ramdisk.cpio with decompressed file: %s", strerror(errno));
+                cleanup();
+                return 1;
+            }
+            printf("- Decompressed LZ4_LEGACY ramdisk via Magisk magiskboot\n");
+        }
+    }
+#endif  // #ifdef __ANDROID__
 
     // Find ramdisk
     std::string ramdisk;
@@ -872,7 +919,12 @@ int boot_restore(const std::vector<std::string>& args) {
 
     // Unpack boot image (must run in workdir so output files go there)
     printf("- Unpacking boot image\n");
-    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", bootimage}, workdir);
+#ifdef __ANDROID__
+    std::vector<std::string> unpack_args_restore = {"unpack", bootimage, "--skip-decomp"};
+#else
+    std::vector<std::string> unpack_args_restore = {"unpack", bootimage};
+#endif  // #ifdef __ANDROID__
+    auto unpack_result = exec_command_magiskboot(magiskboot, unpack_args_restore, workdir);
     if (unpack_result.exit_code != 0) {
         LOGE("magiskboot unpack failed");
         if (!unpack_result.stderr_str.empty()) {
@@ -881,6 +933,39 @@ int boot_restore(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
+
+#ifdef __ANDROID__
+    {
+        constexpr unsigned char LZ4_LEG_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
+        std::string rd_cpio = workdir + "/ramdisk.cpio";
+        std::ifstream rd_in(rd_cpio, std::ios::binary);
+        unsigned char mb[4];
+        if (rd_in && rd_in.read(reinterpret_cast<char*>(mb), 4) && rd_in.gcount() == 4 &&
+            memcmp(mb, LZ4_LEG_MAGIC, 4) == 0) {
+            rd_in.close();
+            const std::string magisk_mb = "/data/adb/magisk/magiskboot";
+            if (access(magisk_mb.c_str(), X_OK) != 0) {
+                LOGE("Ramdisk is LZ4_LEGACY; install Magisk for %s", magisk_mb.c_str());
+                cleanup();
+                return 1;
+            }
+            auto dr = exec_command_magiskboot(
+                magisk_mb, {"decompress", "ramdisk.cpio", "ramdisk.cpio.dec"}, workdir);
+            if (dr.exit_code != 0) {
+                LOGE("Magisk magiskboot decompress failed: %d", dr.exit_code);
+                cleanup();
+                return 1;
+            }
+            std::string rd_dec = workdir + "/ramdisk.cpio.dec";
+            if (rename(rd_dec.c_str(), rd_cpio.c_str()) != 0) {
+                LOGE("Failed to replace ramdisk.cpio: %s", strerror(errno));
+                cleanup();
+                return 1;
+            }
+            printf("- Decompressed LZ4_LEGACY ramdisk via Magisk magiskboot\n");
+        }
+    }
+#endif  // #ifdef __ANDROID__
 
     // Find ramdisk
     std::string ramdisk;
