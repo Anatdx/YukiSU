@@ -1,3 +1,39 @@
+#!/usr/bin/env bash
+
+# Pre-commit hook: run clang-format on all staged C/C++ sources.
+# Place this file under .githooks/ and set:
+#   git config core.hooksPath .githooks
+
+set -euo pipefail
+
+CLANG_FORMAT_BIN="${CLANG_FORMAT_BIN:-clang-format}"
+
+if ! command -v "${CLANG_FORMAT_BIN}" >/dev/null 2>&1; then
+  echo "[pre-commit] ${CLANG_FORMAT_BIN} not found, skipping C/C++ formatting." >&2
+  exit 0
+fi
+
+# Get staged C/C++ files (added / copied / modified)
+STAGED_FILES=$(
+  git diff --cached --name-only --diff-filter=ACM |
+    grep -E '\.(c|cc|cpp|cxx|h|hh|hpp)$' || true
+)
+
+if [ -z "${STAGED_FILES}" ]; then
+  exit 0
+fi
+
+echo "[pre-commit] Running ${CLANG_FORMAT_BIN} on C/C++ files..."
+
+for f in ${STAGED_FILES}; do
+  if [ -f "${f}" ]; then
+    "${CLANG_FORMAT_BIN}" -i "${f}"
+    git add "${f}"
+  fi
+done
+
+exit 0
+
 #!/bin/bash
 # Pre-commit hook for YukiSU
 # Automatically formats C/C++ code and adds #endif comments

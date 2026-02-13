@@ -433,15 +433,56 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
 ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
                                    const std::vector<std::string>& sub_args,
                                    const std::string& workdir) {
+    ExecResult result{-1, "", ""};
+    if (sub_args.empty())
+        return result;
+
+#if defined(MAGISKBOOT_ALONE_AVAILABLE) && MAGISKBOOT_ALONE_AVAILABLE
+    // Fast path: magiskboot is linked into ksud, call magiskboot_main directly.
+    // We only care about exit_code in current callers; stdout/stderr are optional.
+    std::vector<std::string> args;
+    args.reserve(1 + sub_args.size());
+    args.emplace_back("magiskboot");
+    for (const auto& a : sub_args) {
+        args.push_back(a);
+    }
+
+    std::vector<char*> c_args;
+    c_args.reserve(args.size() + 1);
+    for (auto& s : args) {
+        c_args.push_back(s.data());
+    }
+    c_args.push_back(nullptr);
+
+    // Preserve cwd: magiskboot expects to run in workdir.
+    char old_cwd[PATH_MAX] = {0};
+    if (!workdir.empty()) {
+        if (!getcwd(old_cwd, sizeof(old_cwd))) {
+            old_cwd[0] = '\0';
+        }
+        if (chdir(workdir.c_str()) != 0) {
+            result.exit_code = 127;
+            return result;
+        }
+    }
+
+    extern "C" int magiskboot_main(int argc, char** argv);
+    int rc = magiskboot_main(static_cast<int>(args.size()), c_args.data());
+
+    if (!workdir.empty() && old_cwd[0] != '\0') {
+        (void)chdir(old_cwd);
+    }
+
+    result.exit_code = rc;
+    return result;
+#else
+    // Fallback: execute external magiskboot binary via fork/exec.
     std::vector<std::string> args;
     args.reserve(1 + sub_args.size());
     args.push_back("magiskboot");
     for (const auto& a : sub_args)
         args.push_back(a);
-    // Use execv with exact path so argv[0] is "magiskboot" (multi-call binary dispatches on argv[0])
-    ExecResult result{-1, "", ""};
-    if (args.empty())
-        return result;
+
     int stdout_pipe[2], stderr_pipe[2];
     if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)
         return result;
@@ -485,6 +526,7 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     if (WIFEXITED(status))
         result.exit_code = WEXITSTATUS(status);
     return result;
+#endif
 }
 
 int exec_command_async(const std::vector<std::string>& args) {
