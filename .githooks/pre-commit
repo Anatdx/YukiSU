@@ -1,94 +1,56 @@
 #!/usr/bin/env bash
 
-# Pre-commit hook: run clang-format on all staged C/C++ sources.
-# Place this file under .githooks/ and set:
-#   git config core.hooksPath .githooks
+# Pre-commit hook for YukiSU
+# - 为所有已暂存的 C/C++ 源文件自动补全 #endif 注释
+# - 然后运行 clang-format
 
 set -euo pipefail
 
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 CLANG_FORMAT_BIN="${CLANG_FORMAT_BIN:-clang-format}"
+ENDIF_SCRIPT="$REPO_ROOT/.githooks/fix_endif_comments.py"
 
-if ! command -v "${CLANG_FORMAT_BIN}" >/dev/null 2>&1; then
-  echo "[pre-commit] ${CLANG_FORMAT_BIN} not found, skipping C/C++ formatting." >&2
-  exit 0
-fi
-
-# Get staged C/C++ files (added / copied / modified)
+# 找出已暂存的 C/C++ 文件（新增/复制/修改）
 STAGED_FILES=$(
   git diff --cached --name-only --diff-filter=ACM |
     grep -E '\.(c|cc|cpp|cxx|h|hh|hpp)$' || true
 )
 
 if [ -z "${STAGED_FILES}" ]; then
+  echo "[pre-commit] No staged C/C++ files, nothing to do."
   exit 0
 fi
 
-echo "[pre-commit] Running ${CLANG_FORMAT_BIN} on C/C++ files..."
+echo "[pre-commit] Processing staged C/C++ files..."
 
-for f in ${STAGED_FILES}; do
-  if [ -f "${f}" ]; then
-    "${CLANG_FORMAT_BIN}" -i "${f}"
-    git add "${f}"
+# 1) 先跑 fix_endif_comments.py，自动补全/修正 #endif 注释
+if [ -f "$ENDIF_SCRIPT" ]; then
+  echo "[pre-commit] Adding/updating #endif comments..."
+  for file in ${STAGED_FILES}; do
+    if [ -f "$REPO_ROOT/$file" ]; then
+      python3 "$ENDIF_SCRIPT" "$REPO_ROOT/$file"
+    fi
+  done
+fi
+
+# 2) 再跑 clang-format
+if command -v "${CLANG_FORMAT_BIN}" >/dev/null 2>&1; then
+  echo "[pre-commit] Running ${CLANG_FORMAT_BIN}..."
+  for file in ${STAGED_FILES}; do
+    if [ -f "$REPO_ROOT/$file" ]; then
+      "${CLANG_FORMAT_BIN}" -i "$REPO_ROOT/$file"
+    fi
+  done
+else
+  echo "[pre-commit] ${CLANG_FORMAT_BIN} not found, skipping formatting." >&2
+fi
+
+# 3) 把修改后的文件重新加入暂存区
+for file in ${STAGED_FILES}; do
+  if [ -f "$REPO_ROOT/$file" ]; then
+    git add "$REPO_ROOT/$file"
   fi
 done
 
-exit 0
-
-#!/bin/bash
-# Pre-commit hook for YukiSU
-# Automatically formats C/C++ code and adds #endif comments
-
-set -e
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-
-# Get list of staged C/C++/H files
-STAGED_C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h)$' | grep -v tools/ || true)
-STAGED_CPP_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp)$' || true)
-
-if [ -n "$STAGED_C_FILES" ] || [ -n "$STAGED_CPP_FILES" ]; then
-    echo "[pre-commit] Formatting staged C/C++ files..."
-    
-    # Format kernel C files
-    if [ -n "$STAGED_C_FILES" ]; then
-        for file in $STAGED_C_FILES; do
-            if [ -f "$REPO_ROOT/$file" ]; then
-                echo "  Formatting: $file"
-                clang-format -i "$REPO_ROOT/$file"
-            fi
-        done
-    fi
-    
-    # Format userspace C++ files
-    if [ -n "$STAGED_CPP_FILES" ]; then
-        for file in $STAGED_CPP_FILES; do
-            if [ -f "$REPO_ROOT/$file" ]; then
-                echo "  Formatting: $file"
-                clang-format -i "$REPO_ROOT/$file"
-            fi
-        done
-    fi
-    
-    # Add #endif comments using Python script
-    ENDIF_SCRIPT="$REPO_ROOT/.githooks/fix_endif_comments.py"
-    if [ -f "$ENDIF_SCRIPT" ]; then
-        echo "[pre-commit] Adding #endif comments..."
-        ALL_FILES="$STAGED_C_FILES $STAGED_CPP_FILES"
-        for file in $ALL_FILES; do
-            if [ -f "$REPO_ROOT/$file" ]; then
-                python3 "$ENDIF_SCRIPT" "$REPO_ROOT/$file"
-            fi
-        done
-    fi
-    
-    # Re-add formatted files to staging
-    for file in $STAGED_C_FILES $STAGED_CPP_FILES; do
-        if [ -f "$REPO_ROOT/$file" ]; then
-            git add "$REPO_ROOT/$file"
-        fi
-    done
-    
-    echo "[pre-commit] Done!"
-fi
-
+echo "[pre-commit] Done."
 exit 0
