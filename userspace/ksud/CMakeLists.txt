@@ -1,5 +1,17 @@
+# Prefer Ninja: cmake -G Ninja .. [options] && ninja
 cmake_minimum_required(VERSION 3.14)
+
+# Android 最低 API 28（getrandom/sethostname 等 bionic 符号需要），不再用默认 21
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  set(CMAKE_ANDROID_API 28 CACHE STRING "Android API level (min 28)" FORCE)
+endif()
+
 project(ksud VERSION 1.0.0 LANGUAGES C CXX)
+
+# Allow FetchContent deps (e.g. miniz) that use cmake_minimum_required < 3.5
+if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Min CMake version for subprojects")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -169,7 +181,9 @@ endif()
 if(NDK_BUSYBOX_AVAILABLE)
     target_compile_definitions(ksud PRIVATE NDK_BUSYBOX_AVAILABLE=1)
     target_link_libraries(ksud PRIVATE busybox)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    # libselinux not in NDK; link only when found (e.g. host or custom Android sysroot)
+    find_library(SELINUX_LIB selinux)
+    if(SELINUX_LIB)
       target_link_libraries(ksud PRIVATE selinux)
     endif()
     # busybox expects these wraps (from Android.mk)

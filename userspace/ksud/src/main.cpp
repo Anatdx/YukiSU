@@ -14,7 +14,7 @@ extern "C" int resetprop_main(int argc, char** argv);
 extern "C" int busybox_main(int argc, char** argv);
 #endif
 
-static const char* basename(const char* path) {
+static const char* path_basename(const char* path) {
     const char* base = path;
     for (; *path; ++path)
         if (*path == '/') base = path + 1;
@@ -23,7 +23,7 @@ static const char* basename(const char* path) {
 
 int main(int argc, char* argv[]) {
     // Dispatch by argv[0] basename (e.g. when invoked as /data/adb/ksu/bin/magiskboot -> magiskboot)
-    const char* base = (argc >= 1 && argv[0]) ? basename(argv[0]) : nullptr;
+    const char* base = (argc >= 1 && argv[0]) ? path_basename(argv[0]) : nullptr;
     // When invoked as libksud.so (Manager loads .so path), argv[0] is the .so path; app passes tool name as argv[1]
     const char* first_arg = (argc >= 2 && argv[1]) ? argv[1] : nullptr;
 
