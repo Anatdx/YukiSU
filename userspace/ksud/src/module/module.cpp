@@ -1213,15 +1213,20 @@ int load_system_prop() {
             std::string key = trim(line.substr(0, eq));
             std::string value = trim(line.substr(eq + 1));
 
-            // Execute embedded resetprop in a child process (no external binary needed)
+            // Execute resetprop in a child process
             pid_t pid = fork();
             if (pid == 0) {
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
                 extern "C" int resetprop_main(int argc, char** argv);
                 const char* k = key.c_str();
                 const char* v = value.c_str();
                 const char* argv_c[] = {"resetprop", "-n", k, v, nullptr};
                 int rc = resetprop_main(4, const_cast<char**>(argv_c));
                 _exit(rc);
+#else
+                execl(RESETPROP_PATH, "resetprop", "-n", key.c_str(), value.c_str(), nullptr);
+                _exit(127);
+#endif
             }
             if (pid > 0) {
                 int status;

@@ -430,6 +430,11 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
+// Fast path: when MagiskbootAlone is linked in, we can call magiskboot_main directly.
+#if defined(MAGISKBOOT_ALONE_AVAILABLE) && MAGISKBOOT_ALONE_AVAILABLE
+extern int magiskboot_main(int argc, char** argv);
+#endif
+
 ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
                                    const std::vector<std::string>& sub_args,
                                    const std::string& workdir) {
@@ -466,7 +471,6 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
         }
     }
 
-    extern "C" int magiskboot_main(int argc, char** argv);
     int rc = magiskboot_main(static_cast<int>(args.size()), c_args.data());
 
     if (!workdir.empty() && old_cwd[0] != '\0') {

@@ -77,8 +77,13 @@ static std::string get_prop(const char* name) {
     return std::string(buf);
 }
 
+// Embedded resetprop entry (from resetpropAlone) when available.
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+extern "C" int resetprop_main(int argc, char** argv);
+#endif
+
 /**
- * Set property value using embedded resetprop
+ * Set property value using resetprop
  * Uses -n to skip init trigger (like Shamiko)
  */
 static bool reset_prop(const char* name, const char* value) {
@@ -89,12 +94,14 @@ static bool reset_prop(const char* name, const char* value) {
     }
 
     if (pid == 0) {
-        // Child process: run resetprop_main directly, avoid spawning external binary.
-        extern "C" int resetprop_main(int argc, char** argv);
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
         const char* argv_c[] = {"resetprop", "-n", name, value, nullptr};
-        // const_cast is safe here because resetprop_main won't persist argv.
         int rc = resetprop_main(4, const_cast<char**>(argv_c));
         _exit(rc);
+#else
+        execl(RESETPROP_PATH, "resetprop", "-n", name, value, nullptr);
+        _exit(127);
+#endif
     }
 
     int status;
@@ -158,10 +165,14 @@ static void do_hide_bootloader() {
 
     pid_t wait_pid = fork();
     if (wait_pid == 0) {
-        extern "C" int resetprop_main(int argc, char** argv);
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
         const char* argv_c[] = {"resetprop", "-w", "sys.boot_completed", "0", nullptr};
         int rc = resetprop_main(4, const_cast<char**>(argv_c));
         _exit(rc);
+#else
+        execl(RESETPROP_PATH, "resetprop", "-w", "sys.boot_completed", "0", nullptr);
+        _exit(127);
+#endif
     }
     if (wait_pid > 0) {
         int status;
