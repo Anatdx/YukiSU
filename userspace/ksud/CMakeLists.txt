@@ -95,6 +95,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
+# LZ4 - official upstream library (lz4/lz4)
+FetchContent_Declare(
+    lz4
+    GIT_REPOSITORY https://github.com/lz4/lz4.git
+    GIT_TAG v1.10.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(lz4)
+
 # Generated sources / embedded assets
 set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
 set(GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
@@ -131,6 +140,10 @@ set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/boot_crypto.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/cpio.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp
+    ${lz4_SOURCE_DIR}/lib/lz4.c
+    ${lz4_SOURCE_DIR}/lib/lz4frame.c
+    ${lz4_SOURCE_DIR}/lib/lz4hc.c
+    ${lz4_SOURCE_DIR}/lib/xxhash.c
 )
 if(EXISTS ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp)
     set_source_files_properties(${MAGISKBOOT_SOURCES} PROPERTIES CXX_STANDARD 20)
@@ -224,6 +237,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
 include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
+include_directories(${lz4_SOURCE_DIR}/lib)
 include_directories(${GENERATED_DIR})
 
 add_executable(ksud ${SOURCES})
