@@ -41,7 +41,7 @@ jobs:
       if: ${{ inputs.pack_ksuinit }}
       run: |
         mkdir -p ./userspace/ksud/assets
-        # C++ 版本: ksuinit 直接在 artifact 根目录
+        # C++ build: ksuinit is in the artifact root directory
         if [ -f ksuinit/ksuinit ]; then
           cp ksuinit/ksuinit ./userspace/ksud/assets/
         fi
@@ -73,12 +73,21 @@ jobs:
 
     # busybox is built into ksud (ndk-busybox multi-call); no standalone busybox in assets
 
+    - name: Install UPX
+      run: |
+        UPX_VERSION="4.2.4"
+        wget -q "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        tar -xf "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        sudo mv "upx-${UPX_VERSION}-amd64_linux/upx" /usr/local/bin/
+        rm -rf "upx-${UPX_VERSION}-amd64_linux" "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        upx --version | head -1
+
     - name: Build ksud
       run: |
         cd userspace/ksud
         mkdir -p build && cd build
         
-        # 使用 Android NDK 工具链进行交叉编译
+        # Cross-compile using Android NDK toolchain
         TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
         export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
         export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
@@ -93,12 +102,10 @@ jobs:
           -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
           -DCMAKE_C_COMPILER=$CC \
           -DCMAKE_CXX_COMPILER=$CXX \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release \
+          -DKSUD_UPX=ON
         
         ninja
-        
-        # Strip the binary
-        $STRIP ksud
         
         # Show binary info
         ls -lh ksud

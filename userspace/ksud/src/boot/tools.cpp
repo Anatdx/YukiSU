@@ -149,8 +149,31 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
 
 // DD command wrapper
 bool exec_dd(const std::string& input, const std::string& output) {
-    auto result = exec_command({"dd", "if=" + input, "of=" + output});
-    return result.exit_code == 0;
+    auto result = exec_command({"dd", "if=" + input, "of=" + output, "bs=4M", "conv=fsync"});
+    if (result.exit_code == 0) {
+        return true;
+    }
+
+    // Fallback for older toybox/busybox dd variants that may not support conv=fsync.
+    auto fallback = exec_command({"dd", "if=" + input, "of=" + output});
+    if (fallback.exit_code == 0) {
+        return true;
+    }
+
+    LOGE("dd failed: if=%s of=%s", input.c_str(), output.c_str());
+    if (!result.stderr_str.empty()) {
+        LOGE("dd stderr(primary): %s", result.stderr_str.c_str());
+    }
+    if (!result.stdout_str.empty()) {
+        LOGE("dd stdout(primary): %s", result.stdout_str.c_str());
+    }
+    if (!fallback.stderr_str.empty()) {
+        LOGE("dd stderr(fallback): %s", fallback.stderr_str.c_str());
+    }
+    if (!fallback.stdout_str.empty()) {
+        LOGE("dd stdout(fallback): %s", fallback.stdout_str.c_str());
+    }
+    return false;
 }
 
 }  // namespace ksud

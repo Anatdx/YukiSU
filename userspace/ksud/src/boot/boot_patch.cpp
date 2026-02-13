@@ -213,8 +213,14 @@ static bool flash_boot(const std::string& bootdevice, const std::string& new_boo
     // Set device to read-write
     auto result = exec_command({"blockdev", "--setrw", bootdevice});
     if (result.exit_code != 0) {
-        LOGE("Failed to set boot device to rw");
-        return false;
+        // Some devices/partitions do not require or allow this ioctl; continue and let dd decide.
+        LOGW("blockdev --setrw failed, continue flashing: %s", bootdevice.c_str());
+        if (!result.stderr_str.empty()) {
+            LOGW("blockdev stderr: %s", result.stderr_str.c_str());
+        }
+        if (!result.stdout_str.empty()) {
+            LOGW("blockdev stdout: %s", result.stdout_str.c_str());
+        }
     }
 
     if (!exec_dd(new_boot, bootdevice)) {

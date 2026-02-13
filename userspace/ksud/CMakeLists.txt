@@ -1,7 +1,7 @@
 # Prefer Ninja: cmake -G Ninja .. [options] && ninja
 cmake_minimum_required(VERSION 3.14)
 
-# Android 最低 API 28（getrandom/sethostname 等 bionic 符号需要），不再用默认 21
+# Android minimum API 28 (getrandom/sethostname etc. require bionic symbols from API 28+)
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   set(CMAKE_ANDROID_API 28 CACHE STRING "Android API level (min 28)" FORCE)
 endif()
@@ -16,18 +16,64 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 使用 ccache 加速编译 (如果可用)
+# Use ccache to speed up builds (if available)
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
-# 极限体积优化
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden")
-# 使用 lld 链接器加速链接过程 (特别是 LTO)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -Wl,--gc-sections -Wl,--strip-all -flto")
-set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto")
+# ============================================================================
+# Super Aggressive Size Optimization
+# ============================================================================
+
+# --- Common compile flags (shared by C and C++) ---
+set(_COMMON_COMPILE_FLAGS
+    -ffunction-sections          # Place each function in its own section (enables --gc-sections dead code elimination)
+    -fdata-sections              # Place each data item in its own section
+    -fvisibility=hidden          # Hide all symbols by default, shrink export table
+    -fvisibility-inlines-hidden  # Hide inline function symbols
+    -fno-rtti                    # Disable RTTI (no dynamic_cast/typeid usage in codebase)
+    -fno-asynchronous-unwind-tables  # Remove async unwind tables (C++ exceptions still work)
+    -fmerge-all-constants        # Merge identical constants across translation units
+    -fno-ident                   # Don't embed compiler version string into .comment section
+    -fno-stack-protector         # Remove stack canary checks (unnecessary for root daemon)
+    -faddrsig                    # Emit address-significance table for more precise ICF
+    -fno-semantic-interposition  # Disable semantic interposition, allow more aggressive inlining
+    -fno-math-errno              # Math functions don't set errno
+)
+string(REPLACE ";" " " _COMMON_FLAGS_STR "${_COMMON_COMPILE_FLAGS}")
+
+set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_COMMON_FLAGS_STR}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_COMMON_FLAGS_STR}")
+
+# --- Release build optimization ---
+set(CMAKE_C_FLAGS_RELEASE   "-Oz -DNDEBUG -flto=full")
+set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto=full")
+
+# --- Aggressive linker optimization ---
+string(CONCAT _LINKER_FLAGS
+    " -fuse-ld=lld"               # Use lld linker
+    " -flto=full"                 # Full LTO: maximum cross-module optimization (smaller than thin LTO)
+    " -Wl,--gc-sections"          # Garbage-collect unused sections
+    " -Wl,--icf=all"              # Identical Code Folding: merge functions with identical bodies
+    " -Wl,--strip-all"            # Strip all symbols
+    " -Wl,--exclude-libs,ALL"     # Don't export symbols from static libraries
+    " -Wl,-O2"                    # Linker optimization level 2 (string table optimization etc.)
+    " -Wl,--lto-O3"              # LTO at O3 level (compile with Oz, but LTO pass uses O3 for aggressive inlining/elimination)
+    " -Wl,--hash-style=gnu"       # GNU hash is more compact than sysv
+    " -Wl,--build-id=none"        # Remove build-id note section
+    " -Wl,-z,norelro"             # Remove RELRO segment (root tool doesn't need this security feature)
+    " -Wl,--compress-relocations" # Compress relocation table (supported by Android lld)
+)
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}${_LINKER_FLAGS}")
+
+# --- Shrink miniz: disable unused features ---
+add_compile_definitions(
+    MINIZ_NO_STDIO               # No FILE* interface needed
+    MINIZ_NO_TIME                 # No timestamp support needed
+    MINIZ_NO_ARCHIVE_WRITING_APIS # Decompression only, disable write APIs
+)
 
 # Fetch third-party dependencies
 include(FetchContent)
@@ -116,7 +162,7 @@ if(EXISTS ${NDK_BUSYBOX_DIR}/CMakeLists.txt)
   message(STATUS "ndk-busybox: building busybox into ksud (multi-call)")
 endif()
 
-# 源文件
+# Source files
 set(SOURCES
     src/main.cpp
     src/cli.cpp
@@ -174,7 +220,7 @@ if(RESETPROP_ALONE_AVAILABLE)
     list(APPEND SOURCES ${RESETPROP_ALONE_DIR}/src/main.cpp)
 endif()
 
-# 头文件目录 (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
+# Include directories (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
 include_directories(${picosha2_SOURCE_DIR})
@@ -204,12 +250,54 @@ if(NDK_BUSYBOX_AVAILABLE)
     target_link_options(ksud PRIVATE -Wl,--wrap=realpath -Wl,--wrap=rename -Wl,--wrap=renameat)
 endif()
 
-# 链接库 - Android bionic libc 已内置 pthread，不需要单独链接
+# Link libraries - Android bionic libc has built-in pthread, no separate linking needed
 if(NOT ANDROID)
     target_link_libraries(ksud PRIVATE pthread)
 endif()
 
 target_link_libraries(ksud PRIVATE z miniz)
 
-# 安装
+# ============================================================================
+# Post-build Size Compression
+# ============================================================================
+
+# llvm-strip: more precise than --strip-all, removes .comment / .note misc sections
+find_program(LLVM_STRIP llvm-strip)
+if(LLVM_STRIP)
+    add_custom_command(TARGET ksud POST_BUILD
+        COMMAND ${LLVM_STRIP}
+            --strip-all                  # Remove all symbols
+            --remove-section=.comment    # Remove compiler version info
+            --remove-section=.note       # Remove note section
+            --remove-section=.note.android.ident
+            --remove-section=.note.gnu.build-id
+            $<TARGET_FILE:ksud>
+        COMMENT "llvm-strip: removing all debug info & note sections..."
+    )
+endif()
+
+# Optional: UPX binary compression (runtime self-extracting, typically 50-70% further reduction)
+# Pass -DKSUD_UPX=ON to enable; off by default as some environments don't support UPX
+option(KSUD_UPX "Use UPX to compress ksud binary" OFF)
+if(KSUD_UPX)
+    find_program(UPX_PROGRAM upx)
+    if(UPX_PROGRAM)
+        add_custom_command(TARGET ksud POST_BUILD
+            COMMAND ${UPX_PROGRAM} --best --lzma $<TARGET_FILE:ksud>
+            COMMENT "UPX: compressing ksud with LZMA (--best)..."
+        )
+        message(STATUS "UPX compression ENABLED (--best --lzma)")
+    else()
+        message(WARNING "KSUD_UPX=ON but upx not found in PATH; skipping UPX compression")
+    endif()
+endif()
+
+# Report final binary size
+add_custom_command(TARGET ksud POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "-- ksud final size:"
+    COMMAND ls -lh $<TARGET_FILE:ksud>
+    COMMENT "Reporting final binary size..."
+)
+
+# Install
 install(TARGETS ksud DESTINATION bin)
