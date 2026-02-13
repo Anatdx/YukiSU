@@ -50,7 +50,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
+# Generated sources / embedded assets
+set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
 set(GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
+set(ASSETS_CPP ${GENERATED_DIR}/assets_data.cpp)
 set(VERSION_CPP ${CMAKE_SOURCE_DIR}/src/defs.cpp)
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 
@@ -64,6 +67,15 @@ execute_process(
 if(NOT VERSION_RESULT EQUAL 0)
     message(WARNING "Failed to generate version file, using defaults")
 endif()
+
+# Run embed_assets.py to generate assets_data.cpp (embedded tools / ko / ksuinit)
+add_custom_command(
+    OUTPUT ${ASSETS_CPP}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/embed_assets.py
+            ${ASSETS_DIR} ${ASSETS_CPP}
+    DEPENDS ${CMAKE_SOURCE_DIR}/scripts/embed_assets.py
+    COMMENT "Generating embedded assets..."
+)
 
 # third_party (MagiskbootAlone, bootctlAlone, resetpropAlone, ndk-busybox): compile into ksud for multi-call
 set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party)
@@ -149,6 +161,7 @@ set(SOURCES
     src/hymo/mount/overlay.cpp
     src/hymo/mount/mount_utils.cpp
     src/hymo/mount/partition_utils.cpp
+    ${ASSETS_CPP}
 )
 if(MAGISKBOOT_ALONE_AVAILABLE)
     list(APPEND SOURCES ${MAGISKBOOT_SOURCES})

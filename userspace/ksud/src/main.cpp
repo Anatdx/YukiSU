@@ -42,9 +42,16 @@ int main(int argc, char* argv[]) {
 #endif
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
     DISPATCH("busybox", busybox_main);
-    // Symlink invocation: ls -> ksud => argv[0] is "ls"; let busybox run that applet
-    if (base && base[0] && std::strcmp(base, "ksud") != 0)
+    // If invoked via a symlink whose name matches a busybox applet (e.g. "ls"),
+    // and it's not one of ksud's own tools or a .so path, delegate to busybox.
+    if (base && base[0]
+        && std::strcmp(base, "ksud") != 0
+        && std::strcmp(base, "magiskboot") != 0
+        && std::strcmp(base, "bootctl") != 0
+        && std::strcmp(base, "resetprop") != 0
+        && std::strstr(base, ".so") == nullptr) {
         return busybox_main(argc, argv);
+    }
 #endif
 #undef DISPATCH
 
