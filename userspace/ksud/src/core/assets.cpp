@@ -46,14 +46,13 @@ int ensure_binaries(bool /*ignore_if_exist*/) {
         }
     }
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
+    // busybox is multi-call inside ksud; ensure BINARY_DIR/busybox -> DAEMON_PATH (replace old standalone binary if present)
     std::string busybox_link = std::string(BINARY_DIR) + "busybox";
-    if (stat(busybox_link.c_str(), &st) != 0) {
-        unlink(busybox_link.c_str());
-        if (symlink(DAEMON_PATH, busybox_link.c_str()) != 0) {
-            LOGW("Failed to create busybox symlink: %s", strerror(errno));
-        } else {
-            LOGI("Created busybox symlink: %s -> %s", busybox_link.c_str(), DAEMON_PATH);
-        }
+    unlink(busybox_link.c_str());
+    if (symlink(DAEMON_PATH, busybox_link.c_str()) != 0) {
+        LOGW("Failed to create busybox symlink: %s", strerror(errno));
+    } else {
+        LOGI("Created busybox symlink: %s -> %s", busybox_link.c_str(), DAEMON_PATH);
     }
 #endif
     return 0;

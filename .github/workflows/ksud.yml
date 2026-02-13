@@ -71,19 +71,7 @@ jobs:
             ;;
         esac
 
-    - name: Prepare binary tools (busybox only; bootctl/resetprop are built into ksud multi-call)
-      run: |
-        mkdir -p ./userspace/ksud/assets
-        case "${{ inputs.target }}" in
-          aarch64-linux-android|aarch64) BIN_DIR=./userspace/ksud/bin/aarch64 ;;
-          x86_64-linux-android|x86_64)  BIN_DIR=./userspace/ksud/bin/x86_64 ;;
-          armv7-linux-androideabi|armv7) BIN_DIR=./userspace/ksud/bin/arm ;;
-          *) BIN_DIR= ;;
-        esac
-        if [ -n "$BIN_DIR" ] && [ -d "$BIN_DIR" ]; then
-          cp "$BIN_DIR/busybox" ./userspace/ksud/assets/ || true
-        fi
-        ls -la ./userspace/ksud/assets/ || true
+    # busybox is built into ksud (ndk-busybox multi-call); no standalone busybox in assets
 
     - name: Build ksud
       run: |
