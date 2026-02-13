@@ -95,14 +95,21 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
-# LZ4 - official upstream library (lz4/lz4)
-FetchContent_Declare(
-    lz4
-    GIT_REPOSITORY https://github.com/lz4/lz4.git
-    GIT_TAG v1.10.0
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(lz4)
+# LZ4 - prefer Magisk vendored inside MagiskbootAlone submodule (same ABI as Magisk magiskboot)
+set(LZ4_IN_MAGISKBOOT_ALONE ${CMAKE_SOURCE_DIR}/third_party/MagiskbootAlone/external/lz4)
+if(EXISTS ${LZ4_IN_MAGISKBOOT_ALONE}/lz4.c)
+    set(LZ4_LIB_DIR ${LZ4_IN_MAGISKBOOT_ALONE})
+    message(STATUS "Using vendored LZ4 (MagiskbootAlone/external/lz4) for magiskboot: ${LZ4_LIB_DIR}")
+else()
+    FetchContent_Declare(
+        lz4
+        GIT_REPOSITORY https://github.com/lz4/lz4.git
+        GIT_TAG v1.10.0
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(lz4)
+    set(LZ4_LIB_DIR ${lz4_SOURCE_DIR}/lib)
+endif()
 
 # Generated sources / embedded assets
 set(ASSETS_DIR ${CMAKE_SOURCE_DIR}/assets)
@@ -140,14 +147,14 @@ set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/boot_crypto.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/cpio.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp
-    ${lz4_SOURCE_DIR}/lib/lz4.c
-    ${lz4_SOURCE_DIR}/lib/lz4frame.c
-    ${lz4_SOURCE_DIR}/lib/lz4hc.c
-    ${lz4_SOURCE_DIR}/lib/xxhash.c
+    ${LZ4_LIB_DIR}/lz4.c
+    ${LZ4_LIB_DIR}/lz4frame.c
+    ${LZ4_LIB_DIR}/lz4hc.c
+    ${LZ4_LIB_DIR}/xxhash.c
 )
 if(EXISTS ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp)
     set_source_files_properties(${MAGISKBOOT_SOURCES} PROPERTIES CXX_STANDARD 20)
-    include_directories(${MAGISKBOOT_ALONE_DIR}/src)
+    include_directories(${MAGISKBOOT_ALONE_DIR}/src ${LZ4_LIB_DIR})
     set(MAGISKBOOT_ALONE_AVAILABLE 1)
     message(STATUS "MagiskbootAlone: building magiskboot into ksud (multi-call)")
 else()
@@ -237,7 +244,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
 include_directories(${picosha2_SOURCE_DIR})
 include_directories(${miniz_SOURCE_DIR})
-include_directories(${lz4_SOURCE_DIR}/lib)
+include_directories(${LZ4_LIB_DIR})
 include_directories(${GENERATED_DIR})
 
 add_executable(ksud ${SOURCES})
