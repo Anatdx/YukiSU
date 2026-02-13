@@ -485,6 +485,19 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     waitpid(pid, &status, 0);
     if (WIFEXITED(status))
         result.exit_code = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status)) {
+        int sig = WTERMSIG(status);
+        result.exit_code = 128 + sig;
+        result.stderr_str.append("magiskboot terminated by signal ");
+        result.stderr_str.append(std::to_string(sig));
+        const char* sig_name = strsignal(sig);
+        if (sig_name && sig_name[0]) {
+            result.stderr_str.append(" (");
+            result.stderr_str.append(sig_name);
+            result.stderr_str.append(")");
+        }
+        result.stderr_str.push_back('\n');
+    }
     return result;
 }
 
