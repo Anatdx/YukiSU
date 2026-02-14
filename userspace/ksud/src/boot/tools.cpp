@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <array>
+#include <climits>
 #include <filesystem>
 #include <vector>
 
@@ -21,11 +23,11 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
         // The .so extension is just a workaround for Android APK extraction
         if (specified_path.find(".so") != std::string::npos) {
             // Get canonical (absolute) path
-            char resolved_path[PATH_MAX];
-            if (realpath(specified_path.c_str(), resolved_path) != nullptr) {
+            std::array<char, PATH_MAX> resolved_path{};
+            if (realpath(specified_path.c_str(), resolved_path.data()) != nullptr) {
                 // Prefer sibling libmagiskboot.so when caller passed libksud.so.
                 // libksud.so may embed a limited magiskboot entry that lacks cpio commands.
-                fs::path specified_lib = resolved_path;
+                fs::path specified_lib = resolved_path.data();
                 fs::path lib_dir = specified_lib.parent_path();
                 fs::path sibling_magiskboot = lib_dir / "libmagiskboot.so";
                 if (fs::exists(sibling_magiskboot) &&
@@ -39,9 +41,9 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
                 }
 
                 // Check if directly executable from nativeLibraryDir
-                if (access(resolved_path, X_OK) == 0) {
-                    printf("- Using magiskboot directly: %s\n", resolved_path);
-                    return resolved_path;
+                if (access(resolved_path.data(), X_OK) == 0) {
+                    printf("- Using magiskboot directly: %s\n", resolved_path.data());
+                    return resolved_path.data();
                 }
             }
 
@@ -64,10 +66,10 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
                     return "";
                 }
 
-                char buf[8192];
+                std::array<char, 8192> buf{};
                 ssize_t bytes_read;
-                while ((bytes_read = read(src_fd, buf, sizeof(buf))) > 0) {
-                    write(dst_fd, buf, bytes_read);
+                while ((bytes_read = read(src_fd, buf.data(), buf.size())) > 0) {
+                    (void)write(dst_fd, buf.data(), static_cast<size_t>(bytes_read));
                 }
 
                 fsync(dst_fd);
@@ -95,9 +97,11 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
     }
 
     // Check next to our own executable (e.g. libksud.so -> libmagiskboot.so)
-    char self_path[PATH_MAX];
-    if (readlink("/proc/self/exe", self_path, sizeof(self_path)) != -1) {
-        fs::path bin_path = self_path;
+    std::array<char, PATH_MAX> self_path{};
+    ssize_t self_len = readlink("/proc/self/exe", self_path.data(), self_path.size() - 1);
+    if (self_len > 0 && static_cast<size_t>(self_len) < self_path.size()) {
+        self_path[static_cast<size_t>(self_len)] = '\0';
+        fs::path bin_path = self_path.data();
         fs::path lib_dir = bin_path.parent_path();
 
         // Check for libmagiskboot.so (standard app layout)

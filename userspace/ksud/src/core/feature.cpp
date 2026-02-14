@@ -16,29 +16,39 @@
 
 namespace ksud {
 
-// Binary config constants
-static const std::string FEATURE_CONFIG_PATH = std::string(WORKING_DIR) + ".feature_config";
+// Binary config constants (function-local static to avoid cert-err58-cpp)
+static const std::string& get_feature_config_path() {
+    static const std::string path = std::string(WORKING_DIR) + ".feature_config";
+    return path;
+}
 static constexpr uint32_t FEATURE_MAGIC = 0x7f4b5355;
 static constexpr uint32_t FEATURE_VERSION = 1;
 
-// Feature name to ID mapping
-static const std::map<std::string, uint32_t> FEATURE_MAP = {
-    {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
-    {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
-    {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
-    {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
-};
+// Feature name to ID mapping (function-local static to avoid cert-err58-cpp)
+static const std::map<std::string, uint32_t>& get_feature_map() {
+    static const std::map<std::string, uint32_t> map = {
+        {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
+        {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
+        {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
+        {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
+    };
+    return map;
+}
 
-static const std::map<uint32_t, const char*> FEATURE_DESCRIPTIONS = {
-    {static_cast<uint32_t>(FeatureId::SuCompat),
-     "SU Compatibility Mode - allows authorized apps to gain root via traditional 'su' command"},
-    {static_cast<uint32_t>(FeatureId::KernelUmount),
-     "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
-    {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
-     "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
-    {static_cast<uint32_t>(FeatureId::SuLog),
-     "SU Log - enables logging of SU command usage to kernel log for auditing purposes"},
-};
+static const std::map<uint32_t, const char*>& get_feature_descriptions() {
+    static const std::map<uint32_t, const char*> desc = {
+        {static_cast<uint32_t>(FeatureId::SuCompat),
+         "SU Compatibility Mode - allows authorized apps to gain root via traditional 'su' "
+         "command"},
+        {static_cast<uint32_t>(FeatureId::KernelUmount),
+         "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
+        {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
+         "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
+        {static_cast<uint32_t>(FeatureId::SuLog),
+         "SU Log - enables logging of SU command usage to kernel log for auditing purposes"},
+    };
+    return desc;
+}
 
 // Returns {feature_id, valid}. Use pair because SuCompat ID is 0
 static std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
@@ -46,7 +56,7 @@ static std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
     try {
         uint32_t num = std::stoul(id);
         // Check if it's a known feature ID
-        for (const auto& [name, fid] : FEATURE_MAP) {
+        for (const auto& [name, fid] : get_feature_map()) {
             if (fid == num)
                 return {num, true};
         }
@@ -55,8 +65,8 @@ static std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
     }
 
     // Try name lookup
-    auto it = FEATURE_MAP.find(id);
-    if (it != FEATURE_MAP.end()) {
+    auto it = get_feature_map().find(id);
+    if (it != get_feature_map().end()) {
         return {it->second, true};
     }
 
@@ -64,7 +74,7 @@ static std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
 }
 
 static const char* feature_id_to_name(uint32_t id) {
-    for (const auto& [name, fid] : FEATURE_MAP) {
+    for (const auto& [name, fid] : get_feature_map()) {
         if (fid == id) {
             return name.c_str();
         }
@@ -73,8 +83,8 @@ static const char* feature_id_to_name(uint32_t id) {
 }
 
 static const char* feature_id_to_description(uint32_t id) {
-    auto it = FEATURE_DESCRIPTIONS.find(id);
-    if (it != FEATURE_DESCRIPTIONS.end()) {
+    auto it = get_feature_descriptions().find(id);
+    if (it != get_feature_descriptions().end()) {
         return it->second;
     }
     return "Unknown feature";
@@ -124,7 +134,7 @@ void feature_list() {
     printf("Available Features:\n");
     printf("================================================================================\n");
 
-    for (const auto& [name, id] : FEATURE_MAP) {
+    for (const auto& [name, id] : get_feature_map()) {
         auto [value, supported] = get_feature(id);
 
         const char* status;
@@ -208,7 +218,7 @@ int feature_save_config() {
     }
 
     ofs << "# KernelSU feature configuration\n";
-    for (const auto& [name, id] : FEATURE_MAP) {
+    for (const auto& [name, id] : get_feature_map()) {
         auto [value, supported] = get_feature(id);
         if (supported) {
             ofs << name << "=" << value << "\n";
@@ -222,7 +232,7 @@ int feature_save_config() {
 std::map<uint32_t, uint64_t> load_binary_config() {
     std::map<uint32_t, uint64_t> features;
 
-    std::ifstream ifs(FEATURE_CONFIG_PATH, std::ios::binary);
+    std::ifstream ifs(get_feature_config_path(), std::ios::binary);
     if (!ifs) {
         LOGI("Feature binary config not found, using defaults");
         return features;
@@ -266,7 +276,7 @@ std::map<uint32_t, uint64_t> load_binary_config() {
 int save_binary_config(const std::map<uint32_t, uint64_t>& features) {
     ensure_dir_exists(WORKING_DIR);
 
-    std::ofstream ofs(FEATURE_CONFIG_PATH, std::ios::binary | std::ios::trunc);
+    std::ofstream ofs(get_feature_config_path(), std::ios::binary | std::ios::trunc);
     if (!ofs) {
         LOGE("Failed to create feature binary config file");
         return -1;

@@ -1,32 +1,31 @@
 #include "log.hpp"
 #include <unistd.h>
+#include <array>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <memory>
 #ifdef __ANDROID__
 #include <sys/system_properties.h>
 #endif  // #ifdef __ANDROID__
 
 namespace ksud {
 
-static LogLevel g_log_level = LogLevel::INFO;
-static char g_log_tag[32] = "KernelSU";
+namespace {
 
-void log_init(const char* tag) {
-    strncpy(g_log_tag, tag, sizeof(g_log_tag) - 1);
-    g_log_tag[sizeof(g_log_tag) - 1] = '\0';
-}
+constexpr size_t kLogTagSize = 32U;
 
-void log_set_level(LogLevel level) {
-    g_log_level = level;
-}
+LogLevel g_log_level = LogLevel::INFO;
+std::array<char, kLogTagSize> g_log_tag = {"KernelSU"};
 
-static void log_write(LogLevel level, const char* fmt, va_list args) {
-    if (level < g_log_level)
+void log_write(LogLevel level, const char* fmt, va_list args) {
+    if (level < g_log_level) {
         return;
+    }
 
-    const char* level_str;
-    int android_level;
+    const char* level_str = "?";
+    int android_level = 4;
     switch (level) {
     case LogLevel::VERBOSE:
         level_str = "V";
@@ -49,60 +48,77 @@ static void log_write(LogLevel level, const char* fmt, va_list args) {
         android_level = 6;
         break;
     default:
-        level_str = "?";
-        android_level = 4;
         break;
     }
 
-    char msg[1024];
-    vsnprintf(msg, sizeof(msg), fmt, args);
-
-    // Try Android log first
-    FILE* log_file = fopen("/dev/log/main", "w");
-    if (log_file) {
-        // Android log format: priority, tag, message
-        fprintf(log_file, "%c/%s: %s\n", level_str[0], g_log_tag, msg);
-        fclose(log_file);
+    std::array<char, 1024> msg{};
+    const int vsn_ret = vsnprintf(msg.data(), msg.size(), fmt, args);
+    if (vsn_ret < 0 || static_cast<size_t>(vsn_ret) >= msg.size()) {
+        msg[0] = '\0';
     }
 
-    // Also write to stderr for debugging
-    time_t now = time(nullptr);
-    struct tm* tm_info = localtime(&now);
-    char time_buf[32];
-    strftime(time_buf, sizeof(time_buf), "%m-%d %H:%M:%S", tm_info);
+    std::unique_ptr<FILE, decltype(&fclose)> log_file(fopen("/dev/log/main", "w"), fclose);
+    if (log_file != nullptr) {
+        const int written =
+            fprintf(log_file.get(), "%c/%s: %s\n", level_str[0], g_log_tag.data(), msg.data());
+        (void)written;
+    }
 
-    fprintf(stderr, "%s %s/%s: %s\n", time_buf, level_str, g_log_tag, msg);
+    const time_t now = time(nullptr);
+    const struct tm* tm_info = localtime(&now);
+    std::array<char, 32> time_buf{};
+    const size_t time_len = strftime(time_buf.data(), time_buf.size(), "%m-%d %H:%M:%S", tm_info);
+    if (time_len == 0U) {
+        time_buf[0] = '\0';
+    }
+
+    const int err_written =
+        fprintf(stderr, "%s %s/%s: %s\n", time_buf.data(), level_str, g_log_tag.data(), msg.data());
+    (void)err_written;
 }
 
-void log_v(const char* fmt, ...) {
+}  // namespace
+
+void log_init(const char* tag) {
+    strncpy(g_log_tag.data(), tag, g_log_tag.size() - 1);
+    g_log_tag[g_log_tag.size() - 1] = '\0';
+}
+
+void log_set_level(LogLevel level) {
+    g_log_level = level;
+}
+
+// C-style variadic required for LOGx("fmt", ...) call sites; implementation delegates to
+// log_write(va_list). NOLINT: cert-dcl50-cpp
+void log_v(const char* fmt, ...) {  // NOLINT(cert-dcl50-cpp)
     va_list args;
     va_start(args, fmt);
     log_write(LogLevel::VERBOSE, fmt, args);
     va_end(args);
 }
 
-void log_d(const char* fmt, ...) {
+void log_d(const char* fmt, ...) {  // NOLINT(cert-dcl50-cpp)
     va_list args;
     va_start(args, fmt);
     log_write(LogLevel::DEBUG, fmt, args);
     va_end(args);
 }
 
-void log_i(const char* fmt, ...) {
+void log_i(const char* fmt, ...) {  // NOLINT(cert-dcl50-cpp)
     va_list args;
     va_start(args, fmt);
     log_write(LogLevel::INFO, fmt, args);
     va_end(args);
 }
 
-void log_w(const char* fmt, ...) {
+void log_w(const char* fmt, ...) {  // NOLINT(cert-dcl50-cpp)
     va_list args;
     va_start(args, fmt);
     log_write(LogLevel::WARN, fmt, args);
     va_end(args);
 }
 
-void log_e(const char* fmt, ...) {
+void log_e(const char* fmt, ...) {  // NOLINT(cert-dcl50-cpp)
     va_list args;
     va_start(args, fmt);
     log_write(LogLevel::ERROR, fmt, args);

@@ -46,13 +46,10 @@ static bool has_files(const fs::path& path) {
 
 static bool has_meaningful_content(const fs::path& base,
                                    const std::vector<std::string>& partitions) {
-    for (const auto& part : partitions) {
+    return std::any_of(partitions.begin(), partitions.end(), [&base](const std::string& part) {
         fs::path p = base / part;
-        if (fs::exists(p) && has_files(p)) {
-            return true;
-        }
-    }
-    return false;
+        return fs::exists(p) && has_files(p);
+    });
 }
 
 // Helper: Resolve symlinks in directory symlinks but preserve filename logic
@@ -457,7 +454,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                         add_rules.push_back({final_virtual_path, entry.path().string(), type});
                     } else if (entry.is_character_file()) {
                         // Check for whiteout (0:0)
-                        struct stat st;
+                        struct stat st{};
                         if (stat(entry.path().c_str(), &st) == 0) {
                             if (major(st.st_rdev) == 0 && minor(st.st_rdev) == 0) {
                                 hide_rules.push_back(

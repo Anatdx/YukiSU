@@ -7,6 +7,8 @@
 #include <sys/vfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
+#include <cinttypes>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -14,8 +16,6 @@
 #include "../utils.hpp"
 #include "json.hpp"
 #include "state.hpp"
-
-#include <cinttypes>
 
 namespace hymo {
 
@@ -76,7 +76,7 @@ bool create_image(const fs::path& base_dir) {
     // 1. Create file with dd
     // Use dd instead of truncate for better compatibility and to avoid sparse file issues
     // Try standard paths first
-    const char* dd_paths[] = {"/system/bin/dd", "/sbin/dd"};
+    const std::array<const char*, 2> dd_paths = {"/system/bin/dd", "/sbin/dd"};
     std::string dd_bin = "dd";
     for (const auto& p : dd_paths) {
         if (access(p, X_OK) == 0) {
@@ -93,7 +93,8 @@ bool create_image(const fs::path& base_dir) {
     }
 
     // 2. Disable F2FS compression (if supported)
-    const char* chattr_paths[] = {"/system/bin/chattr", "/system/xbin/chattr", "/sbin/chattr"};
+    const std::array<const char*, 3> chattr_paths = {"/system/bin/chattr", "/system/xbin/chattr",
+                                                     "/sbin/chattr"};
     std::string chattr_bin = "chattr";
     for (const auto& p : chattr_paths) {
         if (access(p, X_OK) == 0) {
@@ -105,7 +106,7 @@ bool create_image(const fs::path& base_dir) {
     std::system(chattr_cmd.c_str());
 
     // 3. Find mke2fs
-    const char* mke2fs_paths[] = {"/system/bin/mke2fs", "/sbin/mke2fs"};
+    const std::array<const char*, 2> mke2fs_paths = {"/system/bin/mke2fs", "/sbin/mke2fs"};
     std::string mke2fs_bin = "mke2fs";  // fallback to PATH
     for (const auto& p : mke2fs_paths) {
         if (access(p, X_OK) == 0) {
@@ -156,10 +157,10 @@ static bool create_erofs_image(const fs::path& modules_dir, const fs::path& imag
         return false;
     }
 
-    char buffer[256];
-    std::string output = "";
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        output += buffer;
+    std::array<char, 256> buffer{};
+    std::string output;
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
+        output += buffer.data();
     }
 
     int ret = pclose(pipe);
@@ -172,6 +173,7 @@ static bool create_erofs_image(const fs::path& modules_dir, const fs::path& imag
     return true;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target vs modules_dir are distinct
 static bool try_setup_erofs(const fs::path& target, const fs::path& modules_dir,
                             const fs::path& image_path) {
     LOG_DEBUG("Attempting EROFS...");
@@ -333,17 +335,17 @@ static std::string format_size(uint64_t bytes) {
     const uint64_t MB = KB * 1024;
     const uint64_t GB = MB * 1024;
 
-    char buf[64];
+    std::array<char, 64> buf{};
     if (bytes >= GB) {
-        snprintf(buf, sizeof(buf), "%.1fG", (double)bytes / GB);
+        (void)snprintf(buf.data(), buf.size(), "%.1fG", (double)bytes / GB);
     } else if (bytes >= MB) {
-        snprintf(buf, sizeof(buf), "%.0fM", (double)bytes / MB);
+        (void)snprintf(buf.data(), buf.size(), "%.0fM", (double)bytes / MB);
     } else if (bytes >= KB) {
-        snprintf(buf, sizeof(buf), "%.0fK", (double)bytes / KB);
+        (void)snprintf(buf.data(), buf.size(), "%.0fK", (double)bytes / KB);
     } else {
-        snprintf(buf, sizeof(buf), "%" PRIu64 "B", bytes);
+        (void)snprintf(buf.data(), buf.size(), "%" PRIu64 "B", bytes);
     }
-    return std::string(buf);
+    return {buf.data()};
 }
 
 static uint64_t calculate_dir_size(const fs::path& path) {
@@ -381,7 +383,7 @@ void print_storage_status() {
 
     std::string fs_type = state.storage_mode.empty() ? "unknown" : state.storage_mode;
 
-    struct statfs stats;
+    struct statfs stats{};
     if (statfs(path.c_str(), &stats) != 0) {
         root["error"] = json::Value("statvfs failed: " + std::string(strerror(errno)));
         std::cout << json::dump(root) << "\n";

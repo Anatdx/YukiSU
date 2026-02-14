@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include <array>
+#include <climits>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -46,6 +48,7 @@ static uint64_t hash_superkey(const std::string& key) {
 
 // Inject superkey hash and verification mode into LKM file.
 // The verification mode is always injected, even when superkey is empty.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) path then superkey
 static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey,
                                    bool signature_bypass) {
     uint64_t hash = hash_superkey(superkey);
@@ -79,12 +82,12 @@ static bool inject_superkey_to_lkm(const std::string& lkm_path, const std::strin
     file.read(reinterpret_cast<char*>(content.data()), size);
 
     // Search for SUPERKEY_MAGIC in the binary
-    uint8_t magic_bytes[8];
-    memcpy(magic_bytes, &SUPERKEY_MAGIC, sizeof(magic_bytes));
+    std::array<uint8_t, 8> magic_bytes{};
+    memcpy(magic_bytes.data(), &SUPERKEY_MAGIC, magic_bytes.size());
 
     bool found = false;
     for (size_t i = 0; i + 24 <= size; i++) {
-        if (memcmp(&content[i], magic_bytes, 8) == 0) {
+        if (memcmp(&content[i], magic_bytes.data(), magic_bytes.size()) == 0) {
             // Found magic, patch the hash at offset +8
             memcpy(&content[i + 8], &hash, sizeof(hash));
             // Patch the flags at offset +16
@@ -128,8 +131,8 @@ static bool inject_lkm_priority_to_lkm(const std::string& lkm_path, bool enabled
     file.read(reinterpret_cast<char*>(content.data()), size);
 
     // Search for LKM_PRIORITY_MAGIC in the binary
-    uint8_t magic_bytes[8];
-    memcpy(magic_bytes, &LKM_PRIORITY_MAGIC, sizeof(magic_bytes));
+    std::array<uint8_t, 8> magic_bytes{};
+    memcpy(magic_bytes.data(), &LKM_PRIORITY_MAGIC, magic_bytes.size());
 
     bool found = false;
     // Structure in kernel:
@@ -137,7 +140,7 @@ static bool inject_lkm_priority_to_lkm(const std::string& lkm_path, bool enabled
     // offset 8: enabled (u32)
     // offset 12: reserved (u32)
     for (size_t i = 0; i + 16 <= size; i++) {
-        if (memcmp(&content[i], magic_bytes, 8) == 0) {
+        if (memcmp(&content[i], magic_bytes.data(), magic_bytes.size()) == 0) {
             // Found magic, patch the enabled field at offset +8
             memcpy(&content[i + 8], &enabled_value, sizeof(enabled_value));
             found = true;
@@ -247,7 +250,9 @@ static std::string calculate_sha1(const std::string& file_path) {
 }
 
 // Backup stock boot image
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 static bool do_backup(const std::string& magiskboot, const std::string& workdir,
+                      // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                       const std::string& cpio_path, const std::string& image) {
     std::string sha1 = calculate_sha1(image);
     if (sha1.empty()) {
@@ -352,7 +357,7 @@ static BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args)
             result.signature_bypass = true;
         } else if (arg == "--lkm-priority") {
             if (i + 1 < args.size()) {
-                std::string val = args[++i];
+                const std::string& val = args[++i];
                 result.lkm_priority = (val == "true" || val == "1");
             } else {
                 result.lkm_priority = true;
@@ -416,23 +421,25 @@ int boot_patch(const std::vector<std::string>& args) {
 
     // Try current directory
     if (workdir.empty()) {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) && access(cwd, W_OK) == 0) {
-            std::string template_path = std::string(cwd) + "/KernelSU_XXXXXX";
+        std::array<char, PATH_MAX> cwd{};
+        if (getcwd(cwd.data(), cwd.size()) && access(cwd.data(), W_OK) == 0) {
+            std::string template_path = std::string(cwd.data()) + "/KernelSU_XXXXXX";
             std::vector<char> tmpdir_template(template_path.begin(), template_path.end());
             tmpdir_template.push_back('\0');
             tmpdir = mkdtemp(tmpdir_template.data());
             if (tmpdir) {
                 workdir = tmpdir;
-                printf("- Using current directory: %s\n", cwd);
+                printf("- Using current directory: %s\n", cwd.data());
             }
         }
     }
 
     // Fallback to /data/local/tmp
     if (workdir.empty()) {
-        char tmpdir_template[] = "/data/local/tmp/KernelSU_XXXXXX";
-        tmpdir = mkdtemp(tmpdir_template);
+        std::array<char, 32> tmpdir_buf{};
+        (void)strncpy(tmpdir_buf.data(), "/data/local/tmp/KernelSU_XXXXXX", tmpdir_buf.size() - 1);
+        tmpdir_buf[tmpdir_buf.size() - 1] = '\0';
+        tmpdir = mkdtemp(tmpdir_buf.data());
         if (tmpdir) {
             workdir = tmpdir;
         }
@@ -633,7 +640,7 @@ int boot_patch(const std::vector<std::string>& args) {
     printf("- workdir: %s\n", workdir.c_str());
 
     // Verify boot image exists and is readable
-    struct stat boot_stat;
+    struct stat boot_stat{};
     if (stat(bootimage.c_str(), &boot_stat) != 0) {
         LOGE("Boot image not accessible: %s (errno=%d)", bootimage.c_str(), errno);
         cleanup();
@@ -783,9 +790,9 @@ int boot_patch(const std::vector<std::string>& args) {
         if (name.empty()) {
             time_t now = time(nullptr);
             struct tm* tm_info = localtime(&now);
-            char time_str[32];
-            strftime(time_str, sizeof(time_str), "%Y%m%d_%H%M%S", tm_info);
-            name = std::string("kernelsu_patched_") + time_str + ".img";
+            std::array<char, 32> time_str{};
+            (void)strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info);
+            name = std::string("kernelsu_patched_") + time_str.data() + ".img";
         }
 
         std::string output_image = output_dir + "/" + name;
@@ -854,8 +861,10 @@ int boot_restore(const std::vector<std::string>& args) {
     auto parsed = parse_boot_restore_args(args);
 
     // Create temp working directory
-    char tmpdir_template[] = "/data/local/tmp/KernelSU_XXXXXX";
-    char* tmpdir = mkdtemp(tmpdir_template);
+    std::array<char, 32> tmpdir_buf{};
+    (void)strncpy(tmpdir_buf.data(), "/data/local/tmp/KernelSU_XXXXXX", tmpdir_buf.size() - 1);
+    tmpdir_buf[tmpdir_buf.size() - 1] = '\0';
+    char* tmpdir = mkdtemp(tmpdir_buf.data());
     if (!tmpdir) {
         LOGE("Failed to create temp directory");
         return 1;
@@ -1024,9 +1033,9 @@ int boot_restore(const std::vector<std::string>& args) {
         if (name.empty()) {
             time_t now = time(nullptr);
             struct tm* tm_info = localtime(&now);
-            char time_str[32];
-            strftime(time_str, sizeof(time_str), "%Y%m%d_%H%M%S", tm_info);
-            name = std::string("kernelsu_restore_") + time_str + ".img";
+            std::array<char, 32> time_str{};
+            (void)strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info);
+            name = std::string("kernelsu_restore_") + time_str.data() + ".img";
         }
 
         std::string output_image = "./" + name;
@@ -1065,7 +1074,7 @@ int boot_restore(const std::vector<std::string>& args) {
 
 std::string get_current_kmi() {
     // Use uname() syscall - works without root permission
-    struct utsname uts;
+    struct utsname uts{};
     if (uname(&uts) != 0) {
         LOGE("Failed to get uname");
         return "";
@@ -1170,7 +1179,7 @@ std::string choose_boot_partition(const std::string& kmi, bool ota,
 
     // Check if init_boot exists
     std::string init_boot = "/dev/block/by-name/init_boot" + slot;
-    struct stat st;
+    struct stat st{};
     bool init_boot_exist = (stat(init_boot.c_str(), &st) == 0);
 
     // Use init_boot if:
@@ -1195,7 +1204,7 @@ std::string get_default_partition_name(const std::string& kmi, bool is_replace_k
 
     // Check if init_boot exists
     std::string init_boot = "/dev/block/by-name/init_boot" + slot;
-    struct stat st;
+    struct stat st{};
     bool init_boot_exist = (stat(init_boot.c_str(), &st) == 0);
 
     // Use init_boot if:
@@ -1222,11 +1231,11 @@ int boot_info_available_partitions() {
     // Manager will add slot suffix based on user's choice
     std::string slot = get_slot_suffix(false);
 
-    const char* candidates[] = {"boot", "init_boot", "vendor_boot"};
+    const std::array<const char*, 3> candidates = {"boot", "init_boot", "vendor_boot"};
 
     for (const char* name : candidates) {
         std::string full_path = std::string("/dev/block/by-name/") + name + slot;
-        struct stat st;
+        struct stat st{};
         if (stat(full_path.c_str(), &st) == 0) {
             printf("%s\n", name);
         }

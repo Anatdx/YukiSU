@@ -8,7 +8,7 @@ namespace hymo {
 
 // Run full hymod CLI (same as meta-hymo main). Used by cmd_hymo.
 // argc/argv: program name should be first (e.g. argv[0] = "ksud_hymo").
-int run_hymo_main(int argc, char* argv[]);
+int run_hymo_main(int argc, char** argv);
 
 // Main hymo command handler for ksud integration. Dispatches to run_hymo_main.
 // args: e.g. ["mount"], ["config", "show"], ["hymofs", "list"], etc.

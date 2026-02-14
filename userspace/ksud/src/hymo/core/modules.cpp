@@ -1,5 +1,6 @@
 // core/modules.cpp - Module description updates implementation
 #include "modules.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -13,13 +14,10 @@ namespace hymo {
 
 static bool has_content(const fs::path& module_path,
                         const std::vector<std::string>& all_partitions) {
-    for (const auto& partition : all_partitions) {
-        fs::path part_path = module_path / partition;
-        if (has_files_recursive(part_path)) {
-            return true;
-        }
-    }
-    return false;
+    return std::any_of(all_partitions.begin(), all_partitions.end(),
+                       [&module_path](const std::string& partition) {
+                           return has_files_recursive(module_path / partition);
+                       });
 }
 
 void update_module_description(bool success, const std::string& storage_mode, bool nuke_active,

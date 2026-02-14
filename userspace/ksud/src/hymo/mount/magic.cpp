@@ -1,7 +1,6 @@
 // mount/magic.cpp - Magic mount implementation
 #include "magic.hpp"
 #include <fcntl.h>
-#include <limits.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
@@ -9,8 +8,12 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <algorithm>
+#include <array>
+#include <climits>
+#include <cstring>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -20,9 +23,9 @@
 #include "mount_utils.hpp"
 #include "partition_utils.hpp"
 
-#ifndef TMPFS_MAGIC
-#define TMPFS_MAGIC 0x01021994
-#endif  // #ifndef TMPFS_MAGIC
+namespace {
+constexpr unsigned long TMPFS_MAGIC = 0x01021994;
+}
 
 namespace hymo {
 
@@ -43,8 +46,8 @@ enum class NodeFileType { RegularFile, Directory, Symlink, Whiteout };
 
 struct Node {
     std::string name;
-    NodeFileType file_type;
-    std::unordered_map<std::string, Node> children;
+    NodeFileType file_type = NodeFileType::RegularFile;
+    std::unordered_map<std::string, std::unique_ptr<Node>> children;
     fs::path module_path;     // Path to module file
     std::string module_name;  // Module ID that owns this node
     bool replace = false;     // Directory marked for replacement (xattr/file)
@@ -53,8 +56,8 @@ struct Node {
 };
 
 static bool dir_is_replace(const fs::path& path) {
-    char buf[4];
-    ssize_t len = lgetxattr(path.c_str(), REPLACE_DIR_XATTR, buf, sizeof(buf));
+    std::array<char, 4> buf{};
+    ssize_t len = lgetxattr(path.c_str(), REPLACE_DIR_XATTR, buf.data(), buf.size());
     if (len > 0 && buf[0] == 'y') {
         return true;
     }
@@ -67,7 +70,7 @@ static bool dir_is_replace(const fs::path& path) {
 }
 
 static NodeFileType get_file_type(const fs::path& path) {
-    struct stat st;
+    struct stat st{};
     if (lstat(path.c_str(), &st) != 0) {
         return NodeFileType::RegularFile;
     }
@@ -83,6 +86,7 @@ static NodeFileType get_file_type(const fs::path& path) {
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
 static bool collect_module_files(Node& node, const fs::path& module_dir,
                                  const std::string& module_name = "") {
     if (!fs::exists(module_dir)) {
@@ -109,16 +113,16 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
 
             if (it != node.children.end()) {
                 // Node already exists from another module - merge
-                child = &it->second;
+                child = it->second.get();
             } else {
                 // Create new node
-                Node new_child;
-                new_child.name = name;
-                new_child.file_type = ft;
-                new_child.module_path = entry.path();
-                new_child.module_name = module_name;
-                node.children[name] = new_child;
-                child = &node.children[name];
+                auto new_child = std::make_unique<Node>();
+                new_child->name = name;
+                new_child->file_type = ft;
+                new_child->module_path = entry.path();
+                new_child->module_name = module_name;
+                child = new_child.get();
+                node.children[name] = std::move(new_child);
             }
 
             if (ft == NodeFileType::Directory) {
@@ -195,7 +199,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
 
     if (!has_file) {
         LOG_WARN("No files to magic mount from any module");
-        delete root;
+        delete root;  // NOLINT(cppcoreguidelines-owning-memory) legacy tree ownership
         return nullptr;
     }
 
@@ -212,7 +216,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
             (!require_symlink || fs::is_symlink(path_of_system))) {
             auto it = system.children.find(partition);
             if (it != system.children.end()) {
-                Node& node = it->second;
+                Node& node = *it->second;
                 if (node.file_type == NodeFileType::Symlink) {
                     if (fs::is_directory(node.module_path)) {
                         node.file_type = NodeFileType::Directory;
@@ -223,7 +227,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
                     node.module_path = path_of_root;
                 }
 
-                root->children[partition] = node;
+                root->children[partition] = std::make_unique<Node>(std::move(node));
                 system.children.erase(it);
             }
         }
@@ -246,30 +250,31 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
             auto it = system.children.find(partition);
             if (it != system.children.end()) {
                 LOG_DEBUG("attach extra partition '" + partition + "' to root");
-                Node& node = it->second;
+                Node& node = *it->second;
                 if (node.file_type == NodeFileType::Symlink && fs::is_directory(node.module_path)) {
                     node.file_type = NodeFileType::Directory;
                 }
                 if (node.module_path.empty()) {
                     node.module_path = path_of_root;
                 }
-                root->children[partition] = node;
+                root->children[partition] = std::make_unique<Node>(std::move(node));
                 system.children.erase(it);
             }
         }
     }
 
-    root->children["system"] = system;
+    root->children["system"] = std::make_unique<Node>(std::move(system));
     return root;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
 static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
                          const std::string& name) {
     fs::path src = src_path / name;
     fs::path dst = dst_path / name;
 
     try {
-        struct stat st;
+        struct stat st{};
         if (lstat(src.c_str(), &st) != 0) {
             LOG_WARN("lstat failed for: " + src.string());
             return false;
@@ -313,20 +318,21 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
             }
         } else if (S_ISLNK(st.st_mode)) {
             // Symlink: read target and create symlink
-            char target[PATH_MAX];
-            ssize_t len = readlink(src.c_str(), target, sizeof(target) - 1);
+            std::array<char, PATH_MAX> target_buf{};
+            ssize_t len = readlink(src.c_str(), target_buf.data(), target_buf.size() - 1);
             if (len < 0) {
                 LOG_ERROR("Failed to read symlink: " + src.string());
                 return false;
             }
-            target[len] = '\0';
+            target_buf[static_cast<size_t>(len)] = '\0';
 
-            if (symlink(target, dst.c_str()) != 0) {
+            if (symlink(target_buf.data(), dst.c_str()) != 0) {
                 LOG_ERROR("Failed to create symlink: " + dst.string());
                 return false;
             }
             clone_attr(src, dst);
-            LOG_VERBOSE("Mirror symlink: " + src.string() + " -> " + std::string(target));
+            LOG_VERBOSE("Mirror symlink: " + src.string() + " -> " +
+                        std::string(target_buf.data()));
         }
     } catch (const std::exception& e) {
         LOG_WARN("Failed to mirror " + src.string() + ": " + std::string(e.what()));
@@ -409,7 +415,9 @@ static bool create_whiteout(const fs::path& target_path, const fs::path& work_di
         }
 
         if (fs::exists(target_path)) {
-            clone_attr(target_path, work_dir_path);
+            clone_attr(
+                target_path,
+                work_dir_path);  // NOLINT(readability-suspicious-call-argument) order correct
         } else {
             copy_path_context(work_dir_path.parent_path(), work_dir_path);
         }
@@ -425,6 +433,7 @@ static bool create_whiteout(const fs::path& target_path, const fs::path& work_di
 static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
                            bool has_tmpfs, bool disable_umount);
 
+// NOLINTNEXTLINE(misc-no-recursion) intentional recursion for directory tree
 static bool mount_directory_children(const fs::path& path, const fs::path& work_dir_path,
                                      const Node& node, bool has_tmpfs, bool disable_umount) {
     bool ok = true;
@@ -434,8 +443,8 @@ static bool mount_directory_children(const fs::path& path, const fs::path& work_
                 std::string name = entry.path().filename().string();
                 auto it = node.children.find(name);
                 if (it != node.children.end()) {
-                    if (!it->second.skip) {
-                        if (!do_magic_mount(path, work_dir_path, it->second, has_tmpfs,
+                    if (!it->second->skip) {
+                        if (!do_magic_mount(path, work_dir_path, *it->second, has_tmpfs,
                                             disable_umount)) {
                             ok = false;
                         }
@@ -453,13 +462,13 @@ static bool mount_directory_children(const fs::path& path, const fs::path& work_
     }
 
     for (const auto& [name, child_node] : node.children) {
-        if (child_node.skip) {
+        if (child_node->skip) {
             continue;
         }
 
         fs::path real_path = path / name;
         if (!fs::exists(real_path) && !node.replace) {
-            if (!do_magic_mount(path, work_dir_path, child_node, has_tmpfs, disable_umount)) {
+            if (!do_magic_mount(path, work_dir_path, *child_node, has_tmpfs, disable_umount)) {
                 ok = false;
             }
         }
@@ -481,15 +490,15 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
         fs::path real_path = path / name;
 
         bool need = false;
-        if (child.file_type == NodeFileType::Symlink) {
+        if (child->file_type == NodeFileType::Symlink) {
             need = true;
-        } else if (child.file_type == NodeFileType::Whiteout) {
+        } else if (child->file_type == NodeFileType::Whiteout) {
             need = fs::exists(real_path);
         } else {
             try {
                 if (fs::exists(real_path)) {
                     NodeFileType real_ft = get_file_type(real_path);
-                    need = (real_ft != child.file_type || real_ft == NodeFileType::Symlink);
+                    need = (real_ft != child->file_type || real_ft == NodeFileType::Symlink);
                 } else {
                     need = true;
                 }
@@ -510,6 +519,7 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
     return false;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) path vs work_dir_path are distinct
 static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_path,
                               const Node& node) {
     try {
@@ -545,6 +555,7 @@ static bool finalize_tmpfs_overlay(const fs::path& path, const fs::path& work_di
     return true;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion) intentional recursion for directory tree
 static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
                            bool has_tmpfs, bool disable_umount) {
     fs::path target_path = path / current.name;
@@ -611,6 +622,7 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
 bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& module_paths,
                       const std::string& mount_source,
                       const std::vector<std::string>& extra_partitions, bool disable_umount) {
+    (void)mount_source;
     Node* root = collect_all_modules(module_paths, extra_partitions);
     if (!root) {
         LOG_INFO("No files to magic mount");
@@ -621,7 +633,7 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
 
     if (!mount_tmpfs(work_dir)) {
         LOG_ERROR("Failed to create workdir tmpfs at " + work_dir.string());
-        delete root;
+        delete root;  // NOLINT(cppcoreguidelines-owning-memory) legacy tree ownership
         return false;
     }
 
@@ -650,7 +662,7 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
         LOG_WARN("Failed to remove workdir: " + work_dir.string() + ": " + e.what());
     }
 
-    delete root;
+    delete root;  // NOLINT(cppcoreguidelines-owning-memory) legacy tree ownership
 
     save_mount_statistics();
 
@@ -685,7 +697,7 @@ MountStatistics get_mount_statistics() {
                 auto pos = content.find("\"" + key + "\":");
                 if (pos == std::string::npos)
                     return 0;
-                pos = content.find(":", pos) + 1;
+                pos = content.find(':', pos) + 1;
                 auto end = content.find_first_of(",}", pos);
                 return std::stoi(content.substr(pos, end - pos));
             };

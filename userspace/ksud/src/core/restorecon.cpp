@@ -1,5 +1,6 @@
 #include "restorecon.hpp"
 #include <sys/xattr.h>
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <vector>
@@ -22,13 +23,13 @@ bool lsetfilecon(const fs::path& path, const std::string& con) {
 }
 
 std::string lgetfilecon(const fs::path& path) {
-    char buf[256];
-    ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf, sizeof(buf) - 1);
+    std::array<char, 256> buf{};
+    ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf.data(), buf.size() - 1);
     if (len < 0) {
         return "";
     }
-    buf[len] = '\0';
-    return std::string(buf);
+    buf[static_cast<size_t>(len)] = '\0';
+    return {buf.data()};
 }
 
 bool setsyscon(const fs::path& path) {

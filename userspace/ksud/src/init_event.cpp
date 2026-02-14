@@ -15,13 +15,14 @@
 
 // HymoFS integration
 #include "hymo/conf/config.hpp"
-#include "hymo/hymo_cli.hpp"
 #include "hymo/defs.hpp"
+#include "hymo/hymo_cli.hpp"
 
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstring>
 
 namespace ksud {
@@ -50,12 +51,10 @@ static void try_hymofs_automount(const char* stage_name) {
         // similar to the original wrapper behavior.
         ::unlink(hymo::DAEMON_LOG_FILE);
 
-        const char* argv0 = "hymod";
-        const char* argv1 = "mount";
-        char* argv[] = {const_cast<char*>(argv0), const_cast<char*>(argv1)};
+        std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS automount(%s): invoking hymod mount", stage_name);
-        int ret = hymo::run_hymo_main(2, argv);
+        int ret = hymo::run_hymo_main(2, argv.data());
         if (ret != 0) {
             LOGW("HymoFS automount(%s) failed, ret=%d", stage_name, ret);
         } else {
@@ -91,12 +90,10 @@ static void try_hymofs_metamount_mount() {
         // Reset Hymo daemon log before metamount-run as well, to avoid stale logs.
         ::unlink(hymo::DAEMON_LOG_FILE);
 
-        const char* argv0 = "hymod";
-        const char* argv1 = "mount";
-        char* argv[] = {const_cast<char*>(argv0), const_cast<char*>(argv1)};
+        std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS metamount: invoking hymod mount");
-        int ret = hymo::run_hymo_main(2, argv);
+        int ret = hymo::run_hymo_main(2, argv.data());
         if (ret != 0) {
             LOGW("HymoFS metamount mount failed, ret=%d", ret);
         } else {
@@ -118,7 +115,7 @@ static void catch_bootlog(const char* logname, const std::vector<const char*>& c
 
     // Rotate old log
     if (access(bootlog.c_str(), F_OK) == 0) {
-        rename(bootlog.c_str(), oldbootlog.c_str());
+        (void)rename(bootlog.c_str(), oldbootlog.c_str());
     }
 
     // Fork and exec timeout command

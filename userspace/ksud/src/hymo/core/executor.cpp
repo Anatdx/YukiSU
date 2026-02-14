@@ -19,7 +19,7 @@ static fs::path extract_module_root(const fs::path& partition_path) {
     if (partition_path.has_parent_path()) {
         return partition_path.parent_path();
     }
-    return fs::path();
+    return {};
 }
 
 ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool hymofs_active) {

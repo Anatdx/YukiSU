@@ -1,0 +1,43 @@
+# clang-tidy configuration for YukiSU (ksud, magiskboot, manager JNI).
+# Always on in ksud CMake; any diagnostic fails the build (WarningsAsErrors: '*').
+---
+FormatStyle: none
+HeaderFilterRegex: '^(?!.*/third_party/)(?!.*/external/)(?!.*/miniz/)(?!.*miniz-src/)(?!.*/picosha2/).*'
+WarningsAsErrors: '*'
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-branch-clone,
+  -bugprone-narrowing-conversions,
+  cert-*,
+  -cert-env33-c,
+  concurrency-*,
+  -concurrency-mt-unsafe,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-type-const-cast,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-init-variables,
+  -cppcoreguidelines-narrowing-conversions,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  misc-*,
+  -misc-include-cleaner,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-use-emplace,
+  -modernize-use-auto,
+  -modernize-raw-string-literal,
+  performance-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-else-after-return,
+  -readability-identifier-length,
+  -readability-braces-around-statements,
+  -readability-implicit-bool-conversion,
+  -readability-function-cognitive-complexity,
+  portability-*

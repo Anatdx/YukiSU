@@ -8,51 +8,70 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <array>
+#include <cerrno>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace ksud {
-
-// Global driver fd
-static int g_driver_fd = -1;
-static bool g_driver_fd_init = false;
-
-// Cached info
-static GetInfoCmd g_info_cache = {0, 0};
-static bool g_info_cached = false;
 
 // Magic constants
 // NOTE: Avoid 0xDEAD/0xBEEF patterns - easily detected by root checkers
 constexpr uint32_t KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
 constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
-constexpr int KSU_PRCTL_GET_FD = static_cast<int>(0x59554B4Au);  // "YUKJ" in hex
+constexpr int KSU_PRCTL_GET_FD = static_cast<int>(0x59554B4AU);  // "YUKJ" in hex
+
+namespace {
 
 struct PrctlGetFdCmd {
     int32_t result;
     int32_t fd;
 };
 
-static int scan_driver_fd() {
+int g_driver_fd = -1;
+bool g_driver_fd_init = false;
+GetInfoCmd g_info_cache = {0, 0};
+bool g_info_cached = false;
+
+constexpr size_t kLinkPathSize = 64;
+constexpr size_t kReadlinkBufSize = 256;
+
+auto scan_driver_fd() -> int {
     DIR* dir = opendir("/proc/self/fd");
-    if (!dir)
+    if (dir == nullptr) {
         return -1;
+    }
 
     int found_fd = -1;
-    struct dirent* entry;
-    char link_path[64];
-    char target[256];
+    std::array<char, kLinkPathSize> link_path{};
+    std::array<char, kReadlinkBufSize> target{};
 
-    while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_name[0] == '.')
+    // readdir is not thread-safe; we use it only during single-threaded init.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    while (struct dirent* entry = readdir(dir)) {
+        if (entry->d_name[0] == '.') {
             continue;
+        }
 
-        int fd_num = atoi(entry->d_name);
-        snprintf(link_path, sizeof(link_path), "/proc/self/fd/%d", fd_num);
+        char* end = nullptr;
+        const long fd_num = strtol(entry->d_name, &end, 10);
+        if (end == entry->d_name || *end != '\0' || fd_num < 0) {
+            continue;
+        }
 
-        ssize_t len = readlink(link_path, target, sizeof(target) - 1);
-        if (len > 0) {
-            target[len] = '\0';
-            if (strstr(target, "[ksu_driver]") != nullptr) {
-                found_fd = fd_num;
+        const int snprintf_ret =
+            snprintf(link_path.data(), link_path.size(), "/proc/self/fd/%ld", fd_num);
+        if (snprintf_ret <= 0 || static_cast<size_t>(snprintf_ret) >= link_path.size()) {
+            continue;
+        }
+
+        const ssize_t len = readlink(link_path.data(), target.data(), target.size() - 1);
+        if (len > 0 && static_cast<size_t>(len) < target.size()) {
+            target[static_cast<size_t>(len)] = '\0';
+            if (strstr(target.data(), "[ksu_driver]") != nullptr) {
+                found_fd = static_cast<int>(fd_num);
                 break;
             }
         }
@@ -62,12 +81,12 @@ static int scan_driver_fd() {
     return found_fd;
 }
 
-static int init_driver_fd() {
+auto init_driver_fd() -> int {
     // Method 1: Check if we already have an inherited fd
-    int fd = scan_driver_fd();
-    if (fd >= 0) {
-        LOGD("Found inherited driver fd: %d", fd);
-        return fd;
+    const int driver_fd = scan_driver_fd();
+    if (driver_fd >= 0) {
+        LOGD("Found inherited driver fd: %d", driver_fd);
+        return driver_fd;
     }
 
     // Method 2: Try prctl to get fd (SECCOMP-safe)
@@ -79,18 +98,18 @@ static int init_driver_fd() {
     }
 
     // Method 3: Fallback to reboot syscall (may be blocked by SECCOMP)
-    fd = -1;
-    syscall(SYS_reboot, KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, &fd);
-    if (fd >= 0) {
-        LOGD("Got driver fd via reboot syscall: %d", fd);
-        return fd;
+    int fd_reboot = -1;
+    syscall(SYS_reboot, KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, &fd_reboot);
+    if (fd_reboot >= 0) {
+        LOGD("Got driver fd via reboot syscall: %d", fd_reboot);
+        return fd_reboot;
     }
 
     LOGE("Failed to get driver fd");
     return -1;
 }
 
-static int get_driver_fd() {
+auto get_driver_fd() -> int {
     if (!g_driver_fd_init) {
         g_driver_fd = init_driver_fd();
         g_driver_fd_init = true;
@@ -98,13 +117,15 @@ static int get_driver_fd() {
     return g_driver_fd;
 }
 
+}  // namespace
+
 int ksuctl(int request, void* arg) {
-    int fd = get_driver_fd();
+    const int fd = get_driver_fd();
     if (fd < 0) {
         return -1;
     }
 
-    int ret = ioctl(fd, request, arg);
+    const int ret = ioctl(fd, request, arg);
     if (ret < 0) {
         LOGE("ioctl failed: request=0x%x, errno=%d (%s)", request, errno, strerror(errno));
         return -1;
@@ -113,7 +134,9 @@ int ksuctl(int request, void* arg) {
     return ret;
 }
 
-static const GetInfoCmd& get_info() {
+namespace {
+
+const GetInfoCmd& get_info() {
     if (!g_info_cached) {
         GetInfoCmd cmd = {0, 0};
         ksuctl(KSU_IOCTL_GET_INFO, &cmd);
@@ -122,6 +145,13 @@ static const GetInfoCmd& get_info() {
     }
     return g_info_cache;
 }
+
+void report_event(uint32_t event) {
+    ReportEventCmd cmd = {event};
+    ksuctl(KSU_IOCTL_REPORT_EVENT, &cmd);
+}
+
+}  // namespace
 
 int32_t get_version() {
     return static_cast<int32_t>(get_info().version);
@@ -133,11 +163,6 @@ uint32_t get_flags() {
 
 int grant_root() {
     return ksuctl(KSU_IOCTL_GRANT_ROOT, nullptr);
-}
-
-static void report_event(uint32_t event) {
-    ReportEventCmd cmd = {event};
-    ksuctl(KSU_IOCTL_REPORT_EVENT, &cmd);
 }
 
 void report_post_fs_data() {
@@ -224,16 +249,17 @@ int umount_list_del(const std::string& path) {
 }
 
 std::optional<std::string> umount_list_list() {
-    constexpr size_t BUF_SIZE = 4096;
-    char buffer[BUF_SIZE] = {0};
+    constexpr size_t kBufSize = 4096;
+    std::array<char, kBufSize> buffer{};
 
-    ListTryUmountCmd cmd = {reinterpret_cast<uint64_t>(buffer), BUF_SIZE};
-    int ret = ksuctl(KSU_IOCTL_LIST_TRY_UMOUNT, &cmd);
+    ListTryUmountCmd cmd = {reinterpret_cast<uint64_t>(buffer.data()),
+                            static_cast<uint32_t>(buffer.size())};
+    const int ret = ksuctl(KSU_IOCTL_LIST_TRY_UMOUNT, &cmd);
     if (ret < 0) {
         return std::nullopt;
     }
 
-    return std::string(buffer);
+    return std::string(buffer.data());
 }
 
 }  // namespace ksud

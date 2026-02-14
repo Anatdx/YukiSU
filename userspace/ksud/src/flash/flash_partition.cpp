@@ -4,10 +4,13 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>  // for std::istringstream
 #include <string>
+#include <string_view>
 #include <vector>
 #include "../boot/tools.hpp"
 #include "../log.hpp"
@@ -18,8 +21,7 @@
 #define MINIZ_HEADER_FILE_ONLY
 #include "miniz.h"
 
-namespace ksud {
-namespace flash {
+namespace ksud::flash {
 
 namespace fs = std::filesystem;
 
@@ -30,7 +32,7 @@ static ExecResult exec_command_sync(const std::vector<std::string>& args) {
 
 // Helper: Convert bytes to hex string
 static std::string bytes_to_hex(const unsigned char* data, size_t len) {
-    static const char hex_chars[] = "0123456789abcdef";
+    static constexpr std::string_view hex_chars = "0123456789abcdef";
     std::string result;
     result.reserve(len * 2);
     for (size_t i = 0; i < len; ++i) {
@@ -42,7 +44,7 @@ static std::string bytes_to_hex(const unsigned char* data, size_t len) {
 
 // Helper: Get file size (handles both regular files and block devices)
 static uint64_t get_file_size(const std::string& path) {
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) != 0) {
         LOGE("Failed to stat %s: %s", path.c_str(), strerror(errno));
         return 0;
@@ -91,6 +93,7 @@ bool is_ab_device() {
     return !get_current_slot_suffix().empty();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) partition_name then slot_suffix
 std::string find_partition_block_device(const std::string& partition_name,
                                         const std::string& slot_suffix) {
     // 检查分区名是否以 _a 或 _b 结尾（slotful分区）
@@ -251,21 +254,13 @@ std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
 }
 
 bool is_dangerous_partition(const std::string& partition_name) {
-    for (const char* dangerous : DANGEROUS_PARTITIONS) {
-        if (partition_name == dangerous) {
-            return true;
-        }
-    }
-    return false;
+    return std::any_of(std::begin(DANGEROUS_PARTITIONS), std::end(DANGEROUS_PARTITIONS),
+                       [&partition_name](const char* p) { return partition_name == p; });
 }
 
 bool is_excluded_from_batch(const std::string& partition_name) {
-    for (const char* excluded : EXCLUDED_FROM_BATCH) {
-        if (partition_name == excluded) {
-            return true;
-        }
-    }
-    return false;
+    return std::any_of(std::begin(EXCLUDED_FROM_BATCH), std::end(EXCLUDED_FROM_BATCH),
+                       [&partition_name](const char* p) { return partition_name == p; });
 }
 
 std::vector<std::string> get_available_partitions(bool scan_all) {
@@ -339,20 +334,20 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
     }
 
     std::vector<unsigned char> hash_data;
-    char buffer[4096];
+    std::array<char, 4096> buffer{};
     std::string hash;
     bool success = true;
 
-    while (input.read(buffer, sizeof(buffer)) || input.gcount() > 0) {
+    while (input.read(buffer.data(), buffer.size()) || input.gcount() > 0) {
         size_t bytes_read = input.gcount();
 
         // Accumulate for hash
         if (verify_hash) {
-            hash_data.insert(hash_data.end(), buffer, buffer + bytes_read);
+            hash_data.insert(hash_data.end(), buffer.data(), buffer.data() + bytes_read);
         }
 
         // Write to partition
-        ssize_t bytes_written = write(fd, buffer, bytes_read);
+        ssize_t bytes_written = write(fd, buffer.data(), bytes_read);
         if (bytes_written != static_cast<ssize_t>(bytes_read)) {
             LOGE("Write failed: %s", strerror(errno));
             success = false;
@@ -445,6 +440,7 @@ std::string flash_logical_partition(const std::string& image_path,
     return hash;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) image_path vs partition_name are distinct
 bool flash_partition(const std::string& image_path, const std::string& partition_name,
                      const std::string& slot_suffix, bool verify_hash) {
     // Use provided slot, or auto-detect if empty
@@ -466,6 +462,7 @@ bool flash_partition(const std::string& image_path, const std::string& partition
     return !hash.empty();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) partition_name vs output_path are distinct
 bool backup_partition(const std::string& partition_name, const std::string& output_path,
                       const std::string& slot_suffix) {
     // Use provided slot, or auto-detect if empty
@@ -537,8 +534,8 @@ bool map_logical_partitions(const std::string& slot_suffix) {
     }
 
     // Get list of all potential logical partitions
-    const char* common_logical[] = {"system",     "vendor",      "product", "odm",
-                                    "system_ext", "vendor_dlkm", "odm_dlkm"};
+    const std::array<const char*, 7> common_logical = {
+        "system", "vendor", "product", "odm", "system_ext", "vendor_dlkm", "odm_dlkm"};
 
     for (const char* part_base : common_logical) {
         std::string part_name = std::string(part_base) + slot_suffix;
@@ -584,8 +581,8 @@ std::string get_avb_status() {
         return "";
     }
 
-    unsigned char flags[4];
-    if (lseek(fd, 123, SEEK_SET) != 123 || read(fd, flags, 4) != 4) {
+    std::array<unsigned char, 4> flags{};
+    if (lseek(fd, 123, SEEK_SET) != 123 || read(fd, flags.data(), flags.size()) != 4) {
         LOGE("Failed to read vbmeta flags");
         close(fd);
         return "";
@@ -616,9 +613,9 @@ bool patch_vbmeta_disable_verification() {
     }
 
     // Set flags at offset 123 to disable verification (value = 3)
-    unsigned char flags[4] = {0, 0, 0, 3};
+    std::array<unsigned char, 4> flags = {0, 0, 0, 3};
 
-    if (lseek(fd, 123, SEEK_SET) != 123 || write(fd, flags, 4) != 4) {
+    if (lseek(fd, 123, SEEK_SET) != 123 || write(fd, flags.data(), flags.size()) != 4) {
         LOGE("Failed to write vbmeta flags");
         close(fd);
         return false;
@@ -648,12 +645,13 @@ std::string get_kernel_version(const std::string& slot_suffix) {
          boot_partition_name.c_str());
 
     // Create a temporary directory for unpacking
-    char tmp_dir_template[] = "/data/local/tmp/ksu_unpack_XXXXXX";
-    if (mkdtemp(tmp_dir_template) == nullptr) {
+    std::array<char, 64> tmp_dir_template{};
+    (void)strcpy(tmp_dir_template.data(), "/data/local/tmp/ksu_unpack_XXXXXX");
+    if (mkdtemp(tmp_dir_template.data()) == nullptr) {
         LOGE("Failed to create temp directory: %s", strerror(errno));
         return "";
     }
-    std::string workdir = tmp_dir_template;
+    std::string workdir = tmp_dir_template.data();
 
     // Find magiskboot with workdir to ensure it's available there
     std::string magiskboot = find_magiskboot("", workdir);
@@ -693,15 +691,16 @@ std::string get_kernel_version(const std::string& slot_suffix) {
             std::ifstream kernel_file(kernel_path, std::ios::binary);
             if (kernel_file) {
                 const std::string search_str = "Linux version ";
-                char buffer[4096];
+                std::array<char, 4096> buffer{};
                 std::string content_buffer;
-                size_t max_bytes = 64 * 1024 * 1024;  // Limit to first 64MB
+                const size_t max_bytes =
+                    static_cast<size_t>(64) * 1024 * 1024;  // Limit to first 64MB
                 size_t total_read = 0;
 
-                while (total_read < max_bytes && kernel_file.read(buffer, sizeof(buffer))) {
+                while (total_read < max_bytes && kernel_file.read(buffer.data(), buffer.size())) {
                     size_t bytes_read = kernel_file.gcount();
                     total_read += bytes_read;
-                    content_buffer.append(buffer, bytes_read);
+                    content_buffer.append(buffer.data(), bytes_read);
 
                     size_t pos = content_buffer.find(search_str);
                     if (pos != std::string::npos) {
@@ -763,5 +762,4 @@ std::string get_boot_slot_info() {
     return json;
 }
 
-}  // namespace flash
-}  // namespace ksud
+}  // namespace ksud::flash

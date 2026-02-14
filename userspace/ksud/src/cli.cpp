@@ -32,7 +32,7 @@ void CliParser::add_option(const CliOption& opt) {
     options_.push_back(opt);
 }
 
-bool CliParser::parse(int argc, char* argv[]) {
+bool CliParser::parse(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -508,7 +508,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
             target_slot = args[++i];
             // Normalize slot format (_a, a -> _a)
             if (!target_slot.empty() && target_slot[0] != '_') {
-                target_slot = "_" + target_slot;
+                target_slot.insert(0, 1, '_');
             }
         } else if (args[i] == "--all") {
             scan_all = true;
@@ -688,7 +688,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
     return 1;
 }
 
-int cli_run(int argc, char* argv[]) {
+int cli_run(int argc, char** argv) {
     // Initialize logging
     log_init("KernelSU");
 

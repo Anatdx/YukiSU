@@ -20,6 +20,7 @@ int profile_get_sepolicy(const std::string& package) {
     return 1;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) package then policy
 int profile_set_sepolicy(const std::string& package, const std::string& policy) {
     ensure_dir_exists(PROFILE_SELINUX_DIR);
     std::string path = std::string(PROFILE_SELINUX_DIR) + package;
@@ -43,6 +44,7 @@ int profile_get_template(const std::string& id) {
     return 1;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) id then template content
 int profile_set_template(const std::string& id, const std::string& template_str) {
     ensure_dir_exists(PROFILE_TEMPLATE_DIR);
     std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;

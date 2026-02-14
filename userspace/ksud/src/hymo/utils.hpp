@@ -14,7 +14,7 @@ class Logger {
 public:
     static Logger& getInstance();
     void init(bool debug, bool verbose, const fs::path& log_path);
-    void log(const std::string& level, const std::string& message);
+    void log(const std::string& level, const std::string& message) const;
 
 private:
     Logger() = default;

@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include <vector>
 #include "../utils.hpp"
 #include "hymo_magic.h"
 
@@ -137,7 +138,7 @@ bool HymoFS::add_merge_rule(const std::string& src, const std::string& target) {
 }
 
 bool HymoFS::delete_rule(const std::string& src) {
-    struct hymo_syscall_arg arg = {.src = src.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = src.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Deleting rule src=" + src);
     bool ret = hymo_execute_cmd(HYMO_IOC_DEL_RULE, &arg) == 0;
@@ -148,7 +149,7 @@ bool HymoFS::delete_rule(const std::string& src) {
 }
 
 bool HymoFS::set_mirror_path(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Setting mirror path=" + path);
     bool ret = hymo_execute_cmd(HYMO_IOC_SET_MIRROR_PATH, &arg) == 0;
@@ -159,7 +160,7 @@ bool HymoFS::set_mirror_path(const std::string& path) {
 }
 
 bool HymoFS::hide_path(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Hiding path=" + path);
     bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_RULE, &arg) == 0;
@@ -169,6 +170,7 @@ bool HymoFS::hide_path(const std::string& path) {
     return ret;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target_base vs module_dir are distinct
 bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
     if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
         return false;
@@ -185,7 +187,7 @@ bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::pat
                 add_rule(target_path.string(), current_path.string());
             } else if (entry.is_character_file()) {
                 // Redirection for whiteout (0:0)
-                struct stat st;
+                struct stat st{};
                 if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
                     hide_path(target_path.string());
                 }
@@ -198,6 +200,8 @@ bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::pat
     return true;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target_base vs module_dir distinct by
+// meaning
 bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
     if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
         return false;
@@ -215,7 +219,7 @@ bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::
                 delete_rule(target_path.string());
             } else if (entry.is_character_file()) {
                 // Check for whiteout (0:0)
-                struct stat st;
+                struct stat st{};
                 if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
                     delete_rule(target_path.string());
                 }
@@ -229,14 +233,10 @@ bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::
 }
 
 std::string HymoFS::get_active_rules() {
-    size_t buf_size = 16 * 1024;  // 16KB buffer
-    char* raw_buf = (char*)malloc(buf_size);
-    if (!raw_buf) {
-        return "Error: Out of memory\n";
-    }
-    memset(raw_buf, 0, buf_size);
+    const size_t buf_size = static_cast<size_t>(16) * 1024;  // 16KB buffer
+    std::vector<char> raw_buf(buf_size, 0);
 
-    struct hymo_syscall_list_arg arg = {.buf = raw_buf, .size = buf_size};
+    struct hymo_syscall_list_arg arg = {.buf = raw_buf.data(), .size = buf_size};
 
     LOG_INFO("HymoFS: Listing active rules...");
     int ret = hymo_execute_cmd(HYMO_IOC_LIST_RULES, &arg);
@@ -245,14 +245,12 @@ std::string HymoFS::get_active_rules() {
         err += strerror(errno);
         err += "\n";
         LOG_ERROR("HymoFS: get_active_rules failed: " + std::string(strerror(errno)));
-        free(raw_buf);
         return err;
     }
 
-    std::string result(raw_buf);
+    std::string result(raw_buf.data());
     LOG_INFO("HymoFS: get_active_rules returned " + std::to_string(result.length()) + " bytes");
 
-    free(raw_buf);
     return result;
 }
 
@@ -290,8 +288,7 @@ bool HymoFS::set_enabled(bool enable) {
 
 bool HymoFS::set_uname(const std::string& release, const std::string& version) {
     // Always execute to allow clearing (sending empty strings)
-    struct hymo_spoof_uname uname_data;
-    memset(&uname_data, 0, sizeof(uname_data));
+    struct hymo_spoof_uname uname_data{};
 
     if (!release.empty()) {
         strncpy(uname_data.release, release.c_str(), HYMO_UNAME_LEN - 1);
@@ -325,7 +322,7 @@ bool HymoFS::fix_mounts() {
 }
 
 bool HymoFS::hide_overlay_xattrs(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Hiding overlay xattrs for path=" + path);
     bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_OVERLAY_XATTRS, &arg) == 0;

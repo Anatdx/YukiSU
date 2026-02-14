@@ -11,9 +11,11 @@
 #include <sys/sysmacros.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -21,7 +23,7 @@
 
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
-#endif
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 
 namespace ksud {
 
@@ -32,13 +34,13 @@ struct ModuleInfo {
     std::string version_code;
     std::string author;
     std::string description;
-    bool enabled;
-    bool update;
-    bool remove;
-    bool web;
-    bool action;
-    bool mount;
-    bool metamodule;
+    bool enabled{};
+    bool update{};
+    bool remove{};
+    bool web{};
+    bool action{};
+    bool mount{};
+    bool metamodule{};
     std::string actionIcon;
     std::string webuiIcon;
 };
@@ -72,9 +74,12 @@ static std::string escape_json(const std::string& s) {
             break;
         default:
             if (static_cast<unsigned char>(c) < 0x20) {
-                char buf[8];
-                snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                result += buf;
+                std::array<char, 8> buf{};
+                const int snp =
+                    snprintf(buf.data(), buf.size(), "\\u%04x", static_cast<unsigned char>(c));
+                if (snp > 0 && static_cast<size_t>(snp) < buf.size()) {
+                    result += buf.data();
+                }
             } else {
                 result += c;
             }
@@ -84,15 +89,15 @@ static std::string escape_json(const std::string& s) {
 }
 
 static bool file_exists(const std::string& path) {
-    struct stat st;
+    struct stat st{};
     return stat(path.c_str(), &st) == 0;
 }
 
 // Resolve module icon path with security checks
-static std::string resolve_module_icon_path(const std::string& icon_value,
-                                            const std::string& module_id,
-                                            const std::string& module_path,
-                                            const std::string& key_name) {
+static std::string resolve_module_icon_path(
+    const std::string& icon_value,  // NOLINT(bugprone-easily-swappable-parameters)
+    const std::string& module_id, const std::filesystem::path& module_path,
+    const std::string& key_name) {
     if (icon_value.empty()) {
         return "";
     }
@@ -112,7 +117,7 @@ static std::string resolve_module_icon_path(const std::string& icon_value,
     }
 
     // Construct full path and verify it exists
-    std::string full_path = module_path + "/" + icon_value;
+    std::string full_path = (module_path / icon_value).string();
     if (!file_exists(full_path)) {
         LOGW("Module %s: %s file does not exist: %s\n", module_id.c_str(), key_name.c_str(),
              full_path.c_str());
@@ -157,11 +162,7 @@ static bool validate_module_id(const std::string& id) {
     }
 
     // ID shouldn't start with . or have .. sequences
-    if (id[0] == '.' || id.find("..") != std::string::npos) {
-        return false;
-    }
-
-    return true;
+    return id[0] != '.' && id.find("..") == std::string::npos;
 }
 
 // Forward declaration
@@ -173,8 +174,9 @@ static bool extract_zip(const std::string& zip_path, const std::string& dest_dir
     return result.exit_code == 0;
 }
 
-// Set permissions recursively
-static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid, mode_t dir_mode,
+// Set permissions recursively (directory tree)
+static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid,
+                               mode_t dir_mode,  // NOLINT(misc-no-recursion)
                                mode_t file_mode,
                                const char* secontext = "u:object_r:system_file:s0") {
     DIR* dir = opendir(path.c_str());
@@ -187,7 +189,7 @@ static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid, mo
             continue;
 
         std::string fullpath = path + "/" + entry->d_name;
-        struct stat st;
+        struct stat st{};
         if (lstat(fullpath.c_str(), &st) != 0)
             continue;
 
@@ -213,7 +215,7 @@ static void handle_partition(const std::string& modpath, const std::string& part
         return;
 
     std::string native_part = "/" + partition;
-    struct stat st;
+    struct stat st{};
 
     // Only move if it's a native directory (not a symlink)
     if (stat(native_part.c_str(), &st) == 0 && S_ISDIR(st.st_mode) &&
@@ -250,13 +252,13 @@ static std::string get_metamodule_id() {
     std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
-    struct stat st;
+    struct stat st{};
     if (lstat(link_path.c_str(), &st) == 0 && S_ISLNK(st.st_mode)) {
-        char target[PATH_MAX];
-        ssize_t len = readlink(link_path.c_str(), target, sizeof(target) - 1);
-        if (len > 0) {
-            target[len] = '\0';
-            std::string target_path(target);
+        std::array<char, PATH_MAX> target{};
+        ssize_t len = readlink(link_path.c_str(), target.data(), target.size() - 1);
+        if (len > 0 && static_cast<size_t>(len) < target.size()) {
+            target[static_cast<size_t>(len)] = '\0';
+            std::string target_path(target.data());
             size_t pos = target_path.find_last_of('/');
             if (pos != std::string::npos) {
                 return target_path.substr(pos + 1);
@@ -300,7 +302,7 @@ static bool create_metamodule_symlink(const std::string& module_id) {
     std::string target_path = std::string(MODULE_DIR) + module_id;
 
     // Remove existing symlink/directory
-    struct stat st;
+    struct stat st{};
     if (lstat(link_path.c_str(), &st) == 0) {
         if (S_ISLNK(st.st_mode)) {
             unlink(link_path.c_str());
@@ -324,7 +326,7 @@ static void remove_metamodule_symlink() {
     std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
-    struct stat st;
+    struct stat st{};
     if (lstat(link_path.c_str(), &st) == 0 && S_ISLNK(st.st_mode)) {
         unlink(link_path.c_str());
         LOGI("Removed metamodule symlink");
@@ -466,12 +468,12 @@ static bool exec_install_script(const std::string& zip_path) {
     printf("- Extracting module files\n");
 
     // Get absolute path
-    char realpath_buf[PATH_MAX];
-    if (!realpath(zip_path.c_str(), realpath_buf)) {
+    std::array<char, PATH_MAX> realpath_buf{};
+    if (realpath(zip_path.c_str(), realpath_buf.data()) == nullptr) {
         printf("! Invalid zip path: %s\n", zip_path.c_str());
         return false;
     }
-    std::string zipfile = realpath_buf;
+    std::string zipfile = realpath_buf.data();
 
     // Create temp directory
     std::string tmpdir = "/dev/tmp";
@@ -593,8 +595,11 @@ static bool exec_install_script(const std::string& zip_path) {
         set_perm_recursive(modpath, 0, 0, 0755, 0644);
 
         // Special permissions for bin/xbin directories
-        std::string bin_dirs[] = {modpath + "/system/bin", modpath + "/system/xbin",
-                                  modpath + "/system/system_ext/bin"};
+        const std::array<std::string, 3> bin_dirs = {
+            modpath + "/system/bin",
+            modpath + "/system/xbin",
+            modpath + "/system/system_ext/bin",
+        };
         for (const auto& bindir : bin_dirs) {
             if (file_exists(bindir))
                 set_perm_recursive(bindir, 0, 2000, 0755, 0755);
@@ -652,7 +657,9 @@ static bool exec_install_script(const std::string& zip_path) {
 
 int module_install(const std::string& zip_path) {
     // Ensure stdout is unbuffered for real-time output
-    setvbuf(stdout, nullptr, _IONBF, 0);
+    if (setvbuf(stdout, nullptr, _IONBF, 0) != 0) {
+        (void)0;  // best-effort
+    }
 
     printf("\n");
     printf("__   __ _   _  _  __ ___  ____   _   _ \n");
@@ -661,7 +668,10 @@ int module_install(const std::string& zip_path) {
     printf("  | |  | |_| || . \\  | |  ___) || |_| |\n");
     printf("  |_|   \\___/ |_|\\_\\|___||____/  \\___/ \n");
     printf("\n");
-    fflush(stdout);  // Ensure banner is output before script execution
+    if (fflush(stdout) != 0) {
+        (void)0;  // best-effort
+    }
+    // Ensure banner is output before script execution
 
     // Ensure binary assets (busybox, etc.) exist - use ignore_if_exist=true since
     // binaries should already be extracted during post-fs-data boot stage
@@ -1091,7 +1101,12 @@ int exec_stage_script(const std::string& stage, bool block) {
             continue;
 
         // Run stage script with module_id for KSU_MODULE env var
-        std::string script = module_path + "/" + stage + ".sh";
+        std::string script;
+        script.reserve(module_path.size() + 1U + stage.size() + 3U);
+        script += module_path;
+        script += "/";
+        script += stage;
+        script += ".sh";
         run_script(script, block, module_id);
     }
 
@@ -1223,13 +1238,19 @@ int load_system_prop() {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
                 const char* k = key.c_str();
                 const char* v = value.c_str();
-                const char* argv_c[] = {"resetprop", "-n", k, v, nullptr};
-                int rc = resetprop_main(4, const_cast<char**>(argv_c));
+                std::array<char*, 5> argv_c = {
+                    const_cast<char*>("resetprop"),
+                    const_cast<char*>("-n"),
+                    const_cast<char*>(k),
+                    const_cast<char*>(v),
+                    nullptr,
+                };
+                int rc = resetprop_main(4, argv_c.data());
                 _exit(rc);
 #else
                 execl(RESETPROP_PATH, "resetprop", "-n", key.c_str(), value.c_str(), nullptr);
                 _exit(127);
-#endif
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
             }
             if (pid > 0) {
                 int status;

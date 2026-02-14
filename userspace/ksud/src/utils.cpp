@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -27,7 +28,7 @@
 namespace ksud {
 
 bool ensure_dir_exists(const std::string& path) {
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) == 0) {
         return S_ISDIR(st.st_mode);
     }
@@ -55,7 +56,7 @@ bool ensure_dir_exists(const std::string& path) {
 bool ensure_clean_dir(const std::string& path) {
     LOGD("ensure_clean_dir: %s", path.c_str());
 
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) == 0) {
         // Remove existing directory
         std::string cmd = "rm -rf " + path;
@@ -69,7 +70,7 @@ bool ensure_file_exists(const std::string& path) {
     int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         if (errno == EEXIST) {
-            struct stat st;
+            struct stat st{};
             if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
                 return true;
             }
@@ -83,7 +84,7 @@ bool ensure_file_exists(const std::string& path) {
 bool ensure_binary(const std::string& path, const uint8_t* data, size_t size,
                    bool ignore_if_exist) {
     if (ignore_if_exist) {
-        struct stat st;
+        struct stat st{};
         if (stat(path.c_str(), &st) == 0) {
             return true;
         }
@@ -159,18 +160,21 @@ bool is_safe_mode() {
 }
 
 bool switch_mnt_ns(pid_t pid) {
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/ns/mnt", pid);
+    std::array<char, 64> path{};
+    const int snp_ret = snprintf(path.data(), path.size(), "/proc/%d/ns/mnt", pid);
+    if (snp_ret < 0 || static_cast<size_t>(snp_ret) >= path.size()) {
+        return false;
+    }
 
-    int fd = open(path, O_RDONLY);
+    int fd = open(path.data(), O_RDONLY);
     if (fd < 0) {
-        LOGE("Failed to open %s: %s", path, strerror(errno));
+        LOGE("Failed to open %s: %s", path.data(), strerror(errno));
         return false;
     }
 
     // Save current directory
-    char cwd[PATH_MAX];
-    char* cwd_result = getcwd(cwd, sizeof(cwd));
+    std::array<char, PATH_MAX> cwd{};
+    char* cwd_result = getcwd(cwd.data(), cwd.size());
 
     // Switch namespace
     if (setns(fd, CLONE_NEWNS) != 0) {
@@ -181,8 +185,8 @@ bool switch_mnt_ns(pid_t pid) {
     close(fd);
 
     // Restore current directory
-    if (cwd_result) {
-        chdir(cwd);
+    if (cwd_result != nullptr) {
+        chdir(cwd.data());
     }
 
     return true;
@@ -191,7 +195,7 @@ bool switch_mnt_ns(pid_t pid) {
 static void switch_cgroup(const char* grp, pid_t pid) {
     std::string path = std::string(grp) + "/cgroup.procs";
 
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) != 0) {
         return;
     }
@@ -275,7 +279,7 @@ std::optional<std::string> read_file(const std::string& path) {
     return ss.str();
 }
 
-bool write_file(const std::string& path, const std::string& content) {
+bool write_file(const std::filesystem::path& path, const std::string& content) {
     std::ofstream ofs(path);
     if (!ofs)
         return false;
@@ -283,7 +287,7 @@ bool write_file(const std::string& path, const std::string& content) {
     return true;
 }
 
-bool append_file(const std::string& path, const std::string& content) {
+bool append_file(const std::filesystem::path& path, const std::string& content) {
     std::ofstream ofs(path, std::ios::app);
     if (!ofs)
         return false;
@@ -297,8 +301,9 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     if (args.empty())
         return result;
 
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0) {
         return result;
     }
 
@@ -321,6 +326,7 @@ ExecResult exec_command(const std::vector<std::string>& args) {
         close(stderr_pipe[1]);
 
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -335,16 +341,16 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     close(stderr_pipe[1]);
 
     // Read stdout
-    char buf[1024];
+    std::array<char, 1024> buf{};
     ssize_t n;
-    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stdout_str.append(buf, n);
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stdout_pipe[0]);
 
     // Read stderr
-    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stderr_str.append(buf, n);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stderr_pipe[0]);
 
@@ -363,8 +369,9 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     if (args.empty())
         return result;
 
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0) {
         return result;
     }
 
@@ -394,6 +401,7 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
         }
 
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -408,16 +416,16 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     close(stderr_pipe[1]);
 
     // Read stdout
-    char buf[1024];
+    std::array<char, 1024> buf{};
     ssize_t n;
-    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stdout_str.append(buf, n);
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stdout_pipe[0]);
 
     // Read stderr
-    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stderr_str.append(buf, n);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stderr_pipe[0]);
 
@@ -443,8 +451,9 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     if (args.empty())
         return result;
 
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0)
         return result;
     pid_t pid = fork();
     if (pid < 0) {
@@ -465,6 +474,7 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
             _exit(127);
         }
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args)
             c_args.push_back(const_cast<char*>(arg.c_str()));
         c_args.push_back(nullptr);
@@ -473,13 +483,13 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     }
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
-    char buf[1024];
+    std::array<char, 1024> buf{};
     ssize_t n;
-    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0)
-        result.stdout_str.append(buf, n);
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0)
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
     close(stdout_pipe[0]);
-    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0)
-        result.stderr_str.append(buf, n);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0)
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     close(stderr_pipe[0]);
     int status;
     waitpid(pid, &status, 0);
@@ -512,6 +522,7 @@ int exec_command_async(const std::vector<std::string>& args) {
     if (pid == 0) {
         // Child process
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -531,16 +542,16 @@ int install(const std::optional<std::string>& magiskboot_path) {
     }
 
     // Copy self to DAEMON_PATH
-    char self_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", self_path, sizeof(self_path) - 1);
+    std::array<char, PATH_MAX> self_path{};
+    ssize_t len = readlink("/proc/self/exe", self_path.data(), self_path.size() - 1);
     if (len < 0) {
         LOGE("Failed to get self path");
         return 1;
     }
-    self_path[len] = '\0';
+    self_path[static_cast<size_t>(len)] = '\0';
 
     // Copy binary
-    std::ifstream src(self_path, std::ios::binary);
+    std::ifstream src(self_path.data(), std::ios::binary);
     std::ofstream dst(DAEMON_PATH, std::ios::binary);
     if (!src || !dst) {
         LOGE("Failed to copy ksud");

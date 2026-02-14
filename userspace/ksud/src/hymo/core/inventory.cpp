@@ -92,7 +92,7 @@ std::vector<Module> scan_modules(const fs::path& source_dir, const Config& confi
                 continue;
             }
 
-            std::string global_mode = "";
+            std::string global_mode;
             auto it = config.module_modes.find(id);
             if (it != config.module_modes.end()) {
                 global_mode = it->second;
@@ -137,7 +137,8 @@ static bool is_mountpoint(const std::string& path) {
     std::string line;
     while (std::getline(mounts, line)) {
         std::stringstream ss(line);
-        std::string device, mountpoint;
+        std::string device;
+        std::string mountpoint;
         ss >> device >> mountpoint;
         if (mountpoint == path) {
             return true;
@@ -202,7 +203,7 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
         // Ignore errors
     }
 
-    return std::vector<std::string>(candidates.begin(), candidates.end());
+    return {candidates.begin(), candidates.end()};
 }
 
 }  // namespace hymo

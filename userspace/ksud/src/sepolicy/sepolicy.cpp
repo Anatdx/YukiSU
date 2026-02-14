@@ -5,6 +5,7 @@
 
 #include <sys/stat.h>
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstring>
 #include <fstream>
@@ -63,9 +64,9 @@ class PolicyObject {
 public:
     enum Type { NONE, ALL, ONE };
 
-    PolicyObject() : type_(NONE) { memset(buf_, 0, sizeof(buf_)); }
+    PolicyObject() = default;
 
-    static PolicyObject none() { return PolicyObject(); }
+    static PolicyObject none() { return {}; }
 
     static PolicyObject all() {
         PolicyObject obj;
@@ -79,30 +80,31 @@ public:
             obj.type_ = ALL;
         } else if (s.length() < SEPOLICY_MAX_LEN) {
             obj.type_ = ONE;
-            strncpy(obj.buf_, s.c_str(), SEPOLICY_MAX_LEN - 1);
+            (void)strncpy(obj.buf_.data(), s.c_str(), SEPOLICY_MAX_LEN - 1);
             obj.buf_[SEPOLICY_MAX_LEN - 1] = '\0';
         }
         return obj;
     }
 
-    const char* c_ptr() const {
+    [[nodiscard]] const char* c_ptr() const {
         if (type_ == ONE) {
-            return buf_;
+            return buf_.data();
         }
         return nullptr;  // NULL for NONE and ALL
     }
 
-    Type type() const { return type_; }
+    [[nodiscard]] Type type() const { return type_; }
 
 private:
-    Type type_;
-    char buf_[SEPOLICY_MAX_LEN];
+    Type type_{NONE};
+    std::array<char, SEPOLICY_MAX_LEN> buf_{};
 };
 
-// AtomicStatement - a single sepolicy operation to send to kernel
+// AtomicStatement - a single sepolicy operation to send to kernel (aggregate for FFI)
 struct AtomicStatement {
-    uint32_t cmd;
-    uint32_t subcmd;
+    // NOLINTBEGIN(misc-non-private-member-variables-in-classes)
+    uint32_t cmd{};
+    uint32_t subcmd{};
     PolicyObject sepol1;
     PolicyObject sepol2;
     PolicyObject sepol3;
@@ -110,8 +112,9 @@ struct AtomicStatement {
     PolicyObject sepol5;
     PolicyObject sepol6;
     PolicyObject sepol7;
+    // NOLINTEND(misc-non-private-member-variables-in-classes)
 
-    FfiPolicy to_ffi() const {
+    [[nodiscard]] FfiPolicy to_ffi() const {
         return FfiPolicy{cmd,
                          subcmd,
                          sepol1.c_ptr(),
@@ -207,7 +210,10 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
         else if (cmd_str == "dontaudit")
             subcmd = SUBCMD_DONTAUDIT;
 
-        std::vector<std::string> sources, targets, classes, perms;
+        std::vector<std::string> sources;
+        std::vector<std::string> targets;
+        std::vector<std::string> classes;
+        std::vector<std::string> perms;
 
         p = parse_seobj(p, sources);
         p = parse_seobj(p, targets);
@@ -263,8 +269,11 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
         else if (cmd_str == "dontauditxperm")
             subcmd = SUBCMD_DONTAUDITXPERM;
 
-        std::vector<std::string> sources, targets, classes;
-        std::string operation, perm_set;
+        std::vector<std::string> sources;
+        std::vector<std::string> targets;
+        std::vector<std::string> classes;
+        std::string operation;
+        std::string perm_set;
 
         p = parse_seobj(p, sources);
         p = parse_seobj(p, targets);
@@ -366,7 +375,8 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
 
     // typeattribute type attr1 attr2 ...
     if (cmd_str == "typeattribute") {
-        std::vector<std::string> types, attrs;
+        std::vector<std::string> types;
+        std::vector<std::string> attrs;
         p = parse_seobj(p, types);
         p = parse_seobj(p, attrs);
 
@@ -399,7 +409,11 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
 
     // type_transition source target:class default_type [object_name]
     if (cmd_str == "type_transition") {
-        std::string source, target, tclass, default_type, object_name;
+        std::string source;
+        std::string target;
+        std::string tclass;
+        std::string default_type;
+        std::string object_name;
 
         p = skip_space(p);
         p = parse_word(p, source);
@@ -457,7 +471,10 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
     if (cmd_str == "type_change" || cmd_str == "type_member") {
         uint32_t subcmd = (cmd_str == "type_change") ? SUBCMD_TYPE_CHANGE : SUBCMD_TYPE_MEMBER;
 
-        std::string source, target, tclass, default_type;
+        std::string source;
+        std::string target;
+        std::string tclass;
+        std::string default_type;
 
         p = skip_space(p);
         p = parse_word(p, source);
@@ -494,7 +511,9 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
 
     // genfscon fs_name partial_path fs_context
     if (cmd_str == "genfscon") {
-        std::string fs_name, partial_path, fs_context;
+        std::string fs_name;
+        std::string partial_path;
+        std::string fs_context;
 
         p = skip_space(p);
         p = parse_word(p, fs_name);
@@ -533,7 +552,7 @@ static bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& st
 static int apply_statement(const AtomicStatement& stmt) {
     FfiPolicy ffi = stmt.to_ffi();
 
-    SetSepolicyCmd cmd;
+    SetSepolicyCmd cmd{};
     cmd.cmd = 0;
     cmd.arg = reinterpret_cast<uint64_t>(&ffi);
 
@@ -603,7 +622,7 @@ static bool is_valid_rule_type(const std::string& trimmed) {
 
 int sepolicy_check_rule(const std::string& policy_or_file) {
     // Check if it's a file path
-    struct stat st;
+    struct stat st{};
     if (stat(policy_or_file.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
         auto content = read_file(policy_or_file);
         if (!content) {

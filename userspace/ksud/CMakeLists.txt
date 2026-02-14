@@ -23,6 +23,21 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
+# clang-tidy: always on for our sources only (third_party/FetchContent excluded)
+find_program(CLANG_TIDY_PROGRAM NAMES clang-tidy clang-tidy-18 clang-tidy-17 clang-tidy-16 clang-tidy-14)
+get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+set(CLANG_TIDY_CONFIG "${REPO_ROOT}/.clang-tidy")
+if(NOT CLANG_TIDY_PROGRAM)
+    message(FATAL_ERROR "clang-tidy not found. Install it (e.g. apt install clang-tidy / brew install llvm) and ensure it is in PATH.")
+endif()
+if(NOT EXISTS "${CLANG_TIDY_CONFIG}")
+    message(FATAL_ERROR ".clang-tidy not found at ${CLANG_TIDY_CONFIG}")
+endif()
+# Do not set CMAKE_*_CLANG_TIDY globally so miniz, picosha2, ndk-busybox are not tidied.
+# We will set CXX_CLANG_TIDY only on the object library that contains our own sources.
+set(CLANG_TIDY_ARGS "${CLANG_TIDY_PROGRAM};--config-file=${CLANG_TIDY_CONFIG}")
+message(STATUS "clang-tidy: will be enabled for ksud own sources only (config=${CLANG_TIDY_CONFIG})")
+
 # ============================================================================
 # Super Aggressive Size Optimization
 # ============================================================================
@@ -181,8 +196,8 @@ if(EXISTS ${NDK_BUSYBOX_DIR}/CMakeLists.txt)
   message(STATUS "ndk-busybox: building busybox into ksud (multi-call)")
 endif()
 
-# Source files
-set(SOURCES
+# Our own sources (clang-tidy will run on these only)
+set(KSUD_OUR_SOURCES
     src/main.cpp
     src/cli.cpp
     src/defs.cpp
@@ -204,11 +219,8 @@ set(SOURCES
     src/init_event.cpp
     src/umount.cpp
     src/debug.cpp
-    # Core features
     src/core/hide_bootloader.cpp
-    # Flash kernel packages
     src/flash/flash_partition.cpp
-    # HymoFS module management (synced with meta-hymo hymod)
     src/hymo/hymo_cli.cpp
     src/hymo/hymo_main.cpp
     src/hymo/utils.cpp
@@ -229,35 +241,70 @@ set(SOURCES
     src/hymo/mount/partition_utils.cpp
     ${ASSETS_CPP}
 )
+
+# Third-party sources (no clang-tidy: MagiskbootAlone, bootctl, resetprop)
+set(KSUD_THIRDPARTY_SOURCES)
 if(MAGISKBOOT_ALONE_AVAILABLE)
-    list(APPEND SOURCES ${MAGISKBOOT_SOURCES})
+    list(APPEND KSUD_THIRDPARTY_SOURCES ${MAGISKBOOT_SOURCES})
 endif()
 if(BOOTCTL_ALONE_AVAILABLE)
-    list(APPEND SOURCES ${BOOTCTL_ALONE_DIR}/src/main.cpp)
+    list(APPEND KSUD_THIRDPARTY_SOURCES ${BOOTCTL_ALONE_DIR}/src/main.cpp)
 endif()
 if(RESETPROP_ALONE_AVAILABLE)
-    list(APPEND SOURCES ${RESETPROP_ALONE_DIR}/src/main.cpp)
+    list(APPEND KSUD_THIRDPARTY_SOURCES ${RESETPROP_ALONE_DIR}/src/main.cpp)
 endif()
 
-# Include directories (src/hymo for hymo/*.cpp includes like "conf/config.hpp", "defs.hpp")
-include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${CMAKE_SOURCE_DIR}/src/hymo)
-include_directories(${picosha2_SOURCE_DIR})
-include_directories(${miniz_SOURCE_DIR})
-include_directories(${LZ4_LIB_DIR})
-include_directories(${GENERATED_DIR})
+# Include directories (for both object libs and ksud)
+set(KSUD_INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/hymo
+    ${picosha2_SOURCE_DIR}
+    ${miniz_SOURCE_DIR}
+    ${miniz_BINARY_DIR}
+    ${LZ4_LIB_DIR}
+    ${GENERATED_DIR}
+)
+include_directories(${KSUD_INCLUDE_DIRS})
 
-add_executable(ksud ${SOURCES})
-
+# Compile definitions shared by our and third-party object libs
+set(KSUD_DEFINES)
 if(MAGISKBOOT_ALONE_AVAILABLE)
-    target_compile_definitions(ksud PRIVATE MAGISKBOOT_ALONE_AVAILABLE=1)
+    list(APPEND KSUD_DEFINES MAGISKBOOT_ALONE_AVAILABLE=1)
 endif()
 if(BOOTCTL_ALONE_AVAILABLE)
-    target_compile_definitions(ksud PRIVATE BOOTCTL_ALONE_AVAILABLE=1)
+    list(APPEND KSUD_DEFINES BOOTCTL_ALONE_AVAILABLE=1)
 endif()
 if(RESETPROP_ALONE_AVAILABLE)
-    target_compile_definitions(ksud PRIVATE RESETPROP_ALONE_AVAILABLE=1)
+    list(APPEND KSUD_DEFINES RESETPROP_ALONE_AVAILABLE=1)
 endif()
+if(NDK_BUSYBOX_AVAILABLE)
+    list(APPEND KSUD_DEFINES NDK_BUSYBOX_AVAILABLE=1)
+endif()
+
+# Object library: our sources (with clang-tidy)
+add_library(ksud_our_objs OBJECT ${KSUD_OUR_SOURCES})
+target_include_directories(ksud_our_objs PRIVATE ${KSUD_INCLUDE_DIRS})
+target_compile_definitions(ksud_our_objs PRIVATE ${KSUD_DEFINES})
+target_compile_features(ksud_our_objs PUBLIC cxx_std_17)
+set_target_properties(ksud_our_objs PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_ARGS}"
+    C_CLANG_TIDY "${CLANG_TIDY_ARGS}"
+)
+
+# Object library: third-party sources (no clang-tidy)
+add_library(ksud_thirdparty_objs OBJECT ${KSUD_THIRDPARTY_SOURCES})
+target_include_directories(ksud_thirdparty_objs PRIVATE ${KSUD_INCLUDE_DIRS})
+target_compile_definitions(ksud_thirdparty_objs PRIVATE ${KSUD_DEFINES})
+if(MAGISKBOOT_ALONE_AVAILABLE)
+    target_compile_features(ksud_thirdparty_objs PUBLIC cxx_std_20)
+endif()
+
+# Executable: link object libs
+add_executable(ksud
+    $<TARGET_OBJECTS:ksud_our_objs>
+    $<TARGET_OBJECTS:ksud_thirdparty_objs>
+)
+target_compile_definitions(ksud PRIVATE ${KSUD_DEFINES})
 if(NDK_BUSYBOX_AVAILABLE)
     target_compile_definitions(ksud PRIVATE NDK_BUSYBOX_AVAILABLE=1)
     target_link_libraries(ksud PRIVATE busybox)

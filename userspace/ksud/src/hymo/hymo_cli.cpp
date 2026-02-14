@@ -27,7 +27,7 @@ int cmd_hymo(const std::vector<std::string>& args) {
     std::vector<char*> argv_ptrs;
     argv_ptrs.reserve(argv_str.size());
     for (auto& s : argv_str) {
-        argv_ptrs.push_back(&s[0]);
+        argv_ptrs.push_back(s.data());
     }
 
     int argc = static_cast<int>(argv_ptrs.size());

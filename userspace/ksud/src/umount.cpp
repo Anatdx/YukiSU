@@ -14,7 +14,7 @@ namespace ksud {
 
 struct UmountEntry {
     std::string path;
-    uint32_t flags;
+    uint32_t flags{};
 };
 
 static std::vector<UmountEntry> load_umount_config() {

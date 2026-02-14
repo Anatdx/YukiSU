@@ -3,6 +3,7 @@
 #include <sys/mount.h>
 #include <unistd.h>
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -148,9 +149,11 @@ static void segregate_custom_rules(MountPlan& plan, const fs::path& mirror_dir) 
     // Magic mount paths are module source directories, not overlay layers
 }
 
-static CliOptions parse_args(int argc, char* argv[]) {
+static CliOptions parse_args(int argc, char** argv) {
     CliOptions opts;
 
+    // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays,modernize-use-nullptr)
+    // getopt_long API
     static struct option long_options[] = {{"config", required_argument, 0, 'c'},
                                            {"moduledir", required_argument, 0, 'm'},
                                            {"tempdir", required_argument, 0, 't'},
@@ -160,6 +163,7 @@ static CliOptions parse_args(int argc, char* argv[]) {
                                            {"output", required_argument, 0, 'o'},
                                            {"help", no_argument, 0, 'h'},
                                            {0, 0, 0, 0}};
+    // NOLINTEND(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays,modernize-use-nullptr)
 
     int opt;
     int option_index = 0;
@@ -220,11 +224,12 @@ static Config load_config(const CliOptions& opts) {
         if (fs::exists(default_path)) {
             std::cerr << "Error loading config: " << e.what() << "\n";
         }
-        return Config();
+        return {};
     }
 }
 
-int hymo::run_hymo_main(int argc, char* argv[]) {
+// NOLINTNEXTLINE(readability-function-size) legacy CLI dispatcher
+int hymo::run_hymo_main(int argc, char** argv) {
     try {
         CliOptions cli = parse_args(argc, argv);
 
@@ -785,7 +790,8 @@ int hymo::run_hymo_main(int argc, char* argv[]) {
                         rule["type"] = json::Value(type_upper);
 
                         if (type_upper == "ADD" || type_upper == "MERGE") {
-                            std::string target, source;
+                            std::string target;
+                            std::string source;
                             ls >> target >> source;
                             rule["target"] = json::Value(target);
                             rule["source"] = json::Value(source);
@@ -797,7 +803,7 @@ int hymo::run_hymo_main(int argc, char* argv[]) {
                             std::string rest;
                             std::getline(ls, rest);
                             if (!rest.empty()) {
-                                size_t first = rest.find_first_not_of(" ");
+                                size_t first = rest.find_first_not_of(' ');
                                 if (first != std::string::npos)
                                     rest = rest.substr(first);
                                 rule["args"] = json::Value(rest);
@@ -1183,7 +1189,7 @@ int hymo::run_hymo_main(int argc, char* argv[]) {
         std::vector<Module> module_list;
 
         HymoFSStatus hymofs_status = HymoFS::check_status();
-        std::string warning_msg = "";
+        std::string warning_msg;
         bool hymofs_active = false;
 
         bool can_use_hymofs = (hymofs_status == HymoFSStatus::Available);

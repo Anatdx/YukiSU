@@ -1,5 +1,6 @@
 // core/sync.cpp - Module content sync
 #include "sync.hpp"
+#include <algorithm>
 #include <fstream>
 #include <set>
 #include "../defs.hpp"
@@ -10,13 +11,10 @@ namespace hymo {
 // Check if module has content for any partition
 static bool has_content(const fs::path& module_path,
                         const std::vector<std::string>& all_partitions) {
-    for (const auto& partition : all_partitions) {
-        fs::path part_path = module_path / partition;
-        if (has_files_recursive(part_path)) {
-            return true;
-        }
-    }
-    return false;
+    return std::any_of(all_partitions.begin(), all_partitions.end(),
+                       [&module_path](const std::string& partition) {
+                           return has_files_recursive(module_path / partition);
+                       });
 }
 
 // Check if module needs sync by comparing module.prop
@@ -82,6 +80,7 @@ static void prune_orphaned_modules(const std::vector<Module>& modules,
 }
 
 // Map SELinux context from system if possible
+// NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
 static void recursive_context_repair(const fs::path& base, const fs::path& current) {
     if (!fs::exists(current)) {
         return;
@@ -130,7 +129,13 @@ static void repair_module_contexts(const fs::path& module_root, const std::strin
             try {
                 recursive_context_repair(module_root, part_root);
             } catch (const std::exception& e) {
-                LOG_WARN("Context repair failed for " + module_id + "/" + partition);
+                std::string msg;
+                msg.reserve(module_id.size() + partition.size() + 32);
+                msg += "Context repair failed for ";
+                msg += module_id;
+                msg += "/";
+                msg += partition;
+                LOG_WARN(msg);
             }
         }
     }

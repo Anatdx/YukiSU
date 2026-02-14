@@ -13,7 +13,7 @@
 namespace ksud {
 
 static bool file_exists(const std::string& path) {
-    struct stat st;
+    struct stat st{};
     return stat(path.c_str(), &st) == 0;
 }
 
@@ -76,7 +76,7 @@ int metamodule_exec_stage_script(const std::string& stage, bool block) {
 // User can create /data/adb/ksu/.disable_builtin_mount to use external metamodule
 static bool should_use_builtin_mount() {
     const char* disable_file = "/data/adb/ksu/.disable_builtin_mount";
-    struct stat st;
+    struct stat st{};
     if (stat(disable_file, &st) == 0) {
         LOGI("Built-in mount disabled by %s", disable_file);
         return false;

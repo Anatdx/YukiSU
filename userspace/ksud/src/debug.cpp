@@ -35,7 +35,7 @@ static bool write_u32(const std::string& path, uint32_t value) {
 
 static bool get_pkg_uid(const std::string& pkg, uint32_t& uid) {
     std::string data_path = "/data/data/" + pkg;
-    struct stat st;
+    struct stat st{};
     if (stat(data_path.c_str(), &st) != 0) {
         printf("Failed to stat %s: %s\n", data_path.c_str(), strerror(errno));
         return false;

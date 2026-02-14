@@ -9,13 +9,19 @@
 
 namespace hymo {
 
-static const std::vector<std::string> STANDARD_PARTITIONS = {"system", "vendor", "product",
-                                                             "system_ext", "odm"};
+static const std::vector<std::string>& get_standard_partitions() {
+    static const std::vector<std::string> kStandard = {"system", "vendor", "product", "system_ext",
+                                                       "odm"};
+    return kStandard;
+}
 
 // Parse a line from /proc/mounts
 static bool parse_mount_line(const std::string& line, PartitionInfo& info) {
     std::istringstream iss(line);
-    std::string device, mount_point, fs_type, options;
+    std::string device;
+    std::string mount_point;
+    std::string fs_type;
+    std::string options;
 
     if (!(iss >> device >> mount_point >> fs_type >> options)) {
         return false;
@@ -99,7 +105,7 @@ std::vector<std::string> get_extra_partitions(const std::vector<PartitionInfo>& 
     for (const auto& part : all_partitions) {
         // Skip standard partitions
         bool is_standard = false;
-        for (const auto& standard : STANDARD_PARTITIONS) {
+        for (const auto& standard : get_standard_partitions()) {
             if (part.name == standard) {
                 is_standard = true;
                 break;
@@ -126,7 +132,8 @@ bool is_partition_mount_point(const fs::path& path) {
     std::string line;
     while (std::getline(mounts, line)) {
         std::istringstream iss(line);
-        std::string device, mount_point;
+        std::string device;
+        std::string mount_point;
 
         if (iss >> device >> mount_point) {
             if (mount_point == path_str) {
@@ -140,17 +147,17 @@ bool is_partition_mount_point(const fs::path& path) {
 
 size_t get_optimal_tmpfs_size(const fs::path& partition_path) {
     // Get available system memory
-    struct sysinfo info;
+    struct sysinfo info{};
     if (sysinfo(&info) != 0) {
         LOG_WARN("Failed to get system memory info, using default tmpfs size");
-        return 256 * 1024 * 1024;  // Default 256MB
+        return static_cast<size_t>(256) * 1024 * 1024;  // Default 256MB
     }
 
     // Get partition size if it exists
-    struct statfs stat;
+    struct statfs stat_buf{};
     size_t partition_size = 0;
-    if (statfs(partition_path.c_str(), &stat) == 0) {
-        partition_size = static_cast<size_t>(stat.f_blocks) * stat.f_bsize;
+    if (statfs(partition_path.c_str(), &stat_buf) == 0) {
+        partition_size = static_cast<size_t>(stat_buf.f_blocks) * stat_buf.f_bsize;
     }
 
     // Calculate optimal size:
@@ -158,7 +165,7 @@ size_t get_optimal_tmpfs_size(const fs::path& partition_path) {
     // - Use at most 512MB
     // - If partition exists, use at most 25% of partition size
     size_t max_from_memory = info.freeram / 10;
-    size_t absolute_max = 512 * 1024 * 1024;  // 512MB
+    const size_t absolute_max = static_cast<size_t>(512) * 1024 * 1024;  // 512MB
 
     size_t optimal = std::min(max_from_memory, absolute_max);
 
@@ -168,8 +175,9 @@ size_t get_optimal_tmpfs_size(const fs::path& partition_path) {
     }
 
     // Ensure at least 32MB
-    if (optimal < 32 * 1024 * 1024) {
-        optimal = 32 * 1024 * 1024;
+    const size_t min_tmpfs = static_cast<size_t>(32) * 1024 * 1024;
+    if (optimal < min_tmpfs) {
+        optimal = min_tmpfs;
     }
 
     LOG_DEBUG("Optimal tmpfs size for " + partition_path.string() + ": " +

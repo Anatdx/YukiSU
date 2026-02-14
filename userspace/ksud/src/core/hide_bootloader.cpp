@@ -5,6 +5,7 @@
 
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -16,10 +17,11 @@ namespace ksud {
 static constexpr const char* BL_HIDE_CONFIG = "/data/adb/ksu/.hide_bootloader";
 
 // Property definitions: {name, expected_value}
-static const struct {
+struct PropDef {
     const char* name;
     const char* expected;
-} PROPS_TO_HIDE[] = {
+};
+static const std::array<PropDef, 24> PROPS_TO_HIDE = {{
     // Generic bootloader/verified boot status
     {"ro.boot.vbmeta.device_state", "locked"},
     {"ro.boot.verifiedbootstate", "green"},
@@ -52,35 +54,35 @@ static const struct {
 
     // OnePlus specific
     {"ro.boot.oem_unlock_support", "0"},
-};
+}};
 
 /**
  * Get property value using getprop
  */
 static std::string get_prop(const char* name) {
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "getprop %s 2>/dev/null", name);
+    std::array<char, 256> cmd{};
+    (void)snprintf(cmd.data(), cmd.size(), "getprop %s 2>/dev/null", name);
 
-    FILE* fp = popen(cmd, "r");
+    FILE* fp = popen(cmd.data(), "r");
     if (!fp)
         return "";
 
-    char buf[256] = {0};
-    if (fgets(buf, sizeof(buf), fp)) {
+    std::array<char, 256> buf{};
+    if (fgets(buf.data(), buf.size(), fp)) {
         // Remove trailing newline
-        size_t len = strlen(buf);
+        size_t len = strlen(buf.data());
         if (len > 0 && buf[len - 1] == '\n') {
             buf[len - 1] = '\0';
         }
     }
-    pclose(fp);
-    return std::string(buf);
+    (void)pclose(fp);
+    return {buf.data()};
 }
 
 // Embedded resetprop entry (from resetpropAlone) when available.
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
-#endif
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 
 /**
  * Set property value using resetprop
@@ -95,13 +97,19 @@ static bool reset_prop(const char* name, const char* value) {
 
     if (pid == 0) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-        const char* argv_c[] = {"resetprop", "-n", name, value, nullptr};
-        int rc = resetprop_main(4, const_cast<char**>(argv_c));
+        std::array<char*, 5> argv_c = {
+            const_cast<char*>("resetprop"),
+            const_cast<char*>("-n"),
+            const_cast<char*>(name),
+            const_cast<char*>(value),
+            nullptr,
+        };
+        int rc = resetprop_main(4, argv_c.data());
         _exit(rc);
 #else
         execl(RESETPROP_PATH, "resetprop", "-n", name, value, nullptr);
         _exit(127);
-#endif
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
 
     int status;
@@ -166,13 +174,19 @@ static void do_hide_bootloader() {
     pid_t wait_pid = fork();
     if (wait_pid == 0) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-        const char* argv_c[] = {"resetprop", "-w", "sys.boot_completed", "0", nullptr};
-        int rc = resetprop_main(4, const_cast<char**>(argv_c));
+        std::array<char*, 5> argv_c = {
+            const_cast<char*>("resetprop"),
+            const_cast<char*>("-w"),
+            const_cast<char*>("sys.boot_completed"),
+            const_cast<char*>("0"),
+            nullptr,
+        };
+        int rc = resetprop_main(4, argv_c.data());
         _exit(rc);
 #else
         execl(RESETPROP_PATH, "resetprop", "-w", "sys.boot_completed", "0", nullptr);
         _exit(127);
-#endif
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
     if (wait_pid > 0) {
         int status;
