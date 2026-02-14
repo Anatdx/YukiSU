@@ -47,8 +47,8 @@ bool CliParser::parse(int argc, char** argv) {
 
             // Long option
             if (arg.size() > 1 && arg[1] == '-') {
-                std::string long_opt = arg.substr(2);
-                size_t eq_pos = long_opt.find('=');
+                const std::string long_opt = arg.substr(2);
+                const size_t eq_pos = long_opt.find('=');
                 if (eq_pos != std::string::npos) {
                     opt_name = long_opt.substr(0, eq_pos);
                     opt_value = long_opt.substr(eq_pos + 1);
@@ -69,7 +69,7 @@ bool CliParser::parse(int argc, char** argv) {
             }
             // Short option
             else {
-                char short_opt = arg[1];
+                const char short_opt = arg[1];
                 for (const auto& opt : options_) {
                     if (opt.short_name == short_opt) {
                         found = true;
@@ -120,7 +120,9 @@ bool CliParser::has_option(const std::string& name) const {
     return parsed_options_.find(name) != parsed_options_.end();
 }
 
-static void print_usage() {
+namespace {
+
+void print_usage() {
     printf("YukiSU userspace daemon\n\n");
     printf("USAGE: ksud <COMMAND>\n\n");
     printf("COMMANDS:\n");
@@ -145,12 +147,11 @@ static void print_usage() {
     printf("  version        Show version\n");
 }
 
-static void print_version() {
+void print_version() {
     printf("ksud version %s (code: %s)\n", VERSION_NAME, VERSION_CODE);
 }
 
-// Module subcommand handlers
-static int cmd_module(const std::vector<std::string>& args) {
+int cmd_module(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud module <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -199,8 +200,7 @@ static int cmd_module(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Feature subcommand handlers
-static int cmd_feature(const std::vector<std::string>& args) {
+int cmd_feature(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud feature <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -251,7 +251,7 @@ static int cmd_feature(const std::vector<std::string>& args) {
             }
         }
         // Show status
-        bool enabled = is_bl_hiding_enabled();
+        const bool enabled = is_bl_hiding_enabled();
         printf("Bootloader hiding: %s\n", enabled ? "enabled" : "disabled");
         return 0;
     }
@@ -260,8 +260,7 @@ static int cmd_feature(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Debug subcommand handlers
-static int cmd_debug(const std::vector<std::string>& args) {
+int cmd_debug(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud debug <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -276,7 +275,7 @@ static int cmd_debug(const std::vector<std::string>& args) {
     const std::string& subcmd = args[0];
 
     if (subcmd == "set-manager") {
-        std::string pkg = args.size() > 1 ? args[1] : "com.anatdx.yukisu";
+        const std::string pkg = args.size() > 1 ? args[1] : "com.anatdx.yukisu";
         return debug_set_manager(pkg);
     } else if (subcmd == "get-sign" && args.size() > 1) {
         return debug_get_sign(args[1]);
@@ -284,7 +283,7 @@ static int cmd_debug(const std::vector<std::string>& args) {
         printf("Kernel Version: %d\n", get_version());
         return 0;
     } else if (subcmd == "su") {
-        bool global_mnt = args.size() > 1 && args[1] == "-g";
+        const bool global_mnt = args.size() > 1 && args[1] == "-g";
         return grant_root_shell(global_mnt);
     } else if (subcmd == "mark" && args.size() > 1) {
         return debug_mark(std::vector<std::string>(args.begin() + 1, args.end()));
@@ -294,8 +293,7 @@ static int cmd_debug(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Umount subcommand handlers
-static int cmd_umount(const std::vector<std::string>& args) {
+int cmd_umount(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud umount <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -311,10 +309,7 @@ static int cmd_umount(const std::vector<std::string>& args) {
     const std::string& subcmd = args[0];
 
     if (subcmd == "add" && args.size() > 1) {
-        uint32_t flags = 0;
-        if (args.size() > 3 && args[2] == "-f") {
-            flags = std::stoul(args[3]);
-        }
+        const uint32_t flags = (args.size() > 3 && args[2] == "-f") ? std::stoul(args[3]) : 0;
         return umount_list_add(args[1], flags) < 0 ? 1 : 0;
     } else if (subcmd == "remove" && args.size() > 1) {
         return umount_remove_entry(args[1]);
@@ -336,8 +331,7 @@ static int cmd_umount(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Kernel subcommand handlers
-static int cmd_kernel(const std::vector<std::string>& args) {
+int cmd_kernel(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud kernel <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -354,7 +348,7 @@ static int cmd_kernel(const std::vector<std::string>& args) {
     } else if (subcmd == "umount" && args.size() > 1) {
         const std::string& op = args[1];
         if (op == "add" && args.size() > 2) {
-            uint32_t flags = args.size() > 3 ? std::stoul(args[3]) : 0;
+            const uint32_t flags = args.size() > 3 ? std::stoul(args[3]) : 0;
             return umount_list_add(args[2], flags);
         } else if (op == "del" && args.size() > 2) {
             return umount_list_del(args[2]);
@@ -370,8 +364,7 @@ static int cmd_kernel(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Sepolicy subcommand handlers
-static int cmd_sepolicy(const std::vector<std::string>& args) {
+int cmd_sepolicy(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud sepolicy <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -395,8 +388,7 @@ static int cmd_sepolicy(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Profile subcommand handlers
-static int cmd_profile(const std::vector<std::string>& args) {
+int cmd_profile(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud profile <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -429,8 +421,7 @@ static int cmd_profile(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Boot info subcommand handlers
-static int cmd_boot_info(const std::vector<std::string>& args) {
+int cmd_boot_info(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud boot-info <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
@@ -456,7 +447,7 @@ static int cmd_boot_info(const std::vector<std::string>& args) {
     } else if (subcmd == "available-partitions") {
         return boot_info_available_partitions();
     } else if (subcmd == "slot-suffix") {
-        bool ota = args.size() > 1 && (args[1] == "-u" || args[1] == "--ota");
+        const bool ota = args.size() > 1 && (args[1] == "-u" || args[1] == "--ota");
         return boot_info_slot_suffix(ota);
     }
 
@@ -464,8 +455,7 @@ static int cmd_boot_info(const std::vector<std::string>& args) {
     return 1;
 }
 
-// Flash subcommand handlers
-static int cmd_flash_new(const std::vector<std::string>& args) {
+int cmd_flash_new(const std::vector<std::string>& args) {
     using namespace flash;
 
     if (args.empty()) {
@@ -518,8 +508,8 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
     }
 
     if (filtered_args[0] == "image" && filtered_args.size() >= 3) {
-        std::string image_path = filtered_args[1];
-        std::string partition = filtered_args[2];
+        const std::string image_path = filtered_args[1];
+        const std::string partition = filtered_args[2];
 
         printf("Flashing %s to %s", image_path.c_str(), partition.c_str());
         if (!target_slot.empty()) {
@@ -536,8 +526,8 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         }
 
     } else if (filtered_args[0] == "backup" && filtered_args.size() >= 3) {
-        std::string partition = filtered_args[1];
-        std::string output = filtered_args[2];
+        const std::string partition = filtered_args[1];
+        const std::string output = filtered_args[2];
 
         printf("Backing up %s to %s", partition.c_str(), output.c_str());
         if (!target_slot.empty()) {
@@ -554,7 +544,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         }
 
     } else if (filtered_args[0] == "list") {
-        std::string slot =
+        const std::string slot =
             target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
         auto partitions = ksud::flash::get_available_partitions(scan_all);
 
@@ -581,8 +571,8 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         return 0;
 
     } else if (filtered_args[0] == "info" && filtered_args.size() >= 2) {
-        std::string partition = filtered_args[1];
-        std::string slot =
+        const std::string partition = filtered_args[1];
+        const std::string slot =
             target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
         auto info = ksud::flash::get_partition_info(partition, slot);
 
@@ -609,8 +599,8 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
             return 0;
         }
 
-        std::string current_slot = ksud::flash::get_current_slot_suffix();
-        std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
+        const std::string current_slot = ksud::flash::get_current_slot_suffix();
+        const std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
 
         printf("Slot Information:\n");
         printf("  Current slot: %s\n", current_slot.c_str());
@@ -654,7 +644,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
                 return 1;
             }
         } else {
-            std::string status = ksud::flash::get_avb_status();
+            const std::string status = ksud::flash::get_avb_status();
             if (status.empty()) {
                 printf("Failed to get AVB status\n");
                 return 1;
@@ -664,7 +654,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         }
 
     } else if (filtered_args[0] == "kernel") {
-        std::string version = ksud::flash::get_kernel_version(target_slot);
+        const std::string version = ksud::flash::get_kernel_version(target_slot);
         if (version.empty()) {
             printf("Failed to get kernel version\n");
             return 1;
@@ -673,7 +663,7 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
         return 0;
 
     } else if (filtered_args[0] == "boot-info") {
-        std::string info = ksud::flash::get_boot_slot_info();
+        const std::string info = ksud::flash::get_boot_slot_info();
         printf("%s\n", info.c_str());
         return 0;
 
@@ -688,14 +678,17 @@ static int cmd_flash_new(const std::vector<std::string>& args) {
     return 1;
 }
 
+}  // namespace
+
 int cli_run(int argc, char** argv) {
     // Initialize logging
     log_init("KernelSU");
 
     // Check if invoked as su or sh
-    std::string arg0 = argv[0];
-    size_t last_slash = arg0.rfind('/');
-    std::string basename = (last_slash != std::string::npos) ? arg0.substr(last_slash + 1) : arg0;
+    const std::string arg0 = argv[0];
+    const size_t last_slash = arg0.rfind('/');
+    const std::string basename =
+        (last_slash != std::string::npos) ? arg0.substr(last_slash + 1) : arg0;
 
     if (basename == "su") {
         return su_main(argc, argv);
@@ -729,7 +722,7 @@ int cli_run(int argc, char** argv) {
         return 0;
     }
 
-    std::string cmd = argv[1];
+    const std::string cmd = argv[1];
     std::vector<std::string> args;
     for (int i = 2; i < argc; i++) {
         args.push_back(argv[i]);

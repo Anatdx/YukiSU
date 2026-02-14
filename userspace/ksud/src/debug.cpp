@@ -15,7 +15,9 @@ namespace ksud {
 
 static constexpr const char* KERNEL_PARAM_PATH = "/sys/module/kernelsu/parameters";
 
-static bool read_u32(const std::string& path, uint32_t& value) {
+namespace {
+
+bool read_u32(const std::string& path, uint32_t& value) {
     std::ifstream ifs(path);
     if (!ifs) {
         return false;
@@ -24,7 +26,7 @@ static bool read_u32(const std::string& path, uint32_t& value) {
     return true;
 }
 
-static bool write_u32(const std::string& path, uint32_t value) {
+bool write_u32(const std::string& path, uint32_t value) {
     std::ofstream ofs(path);
     if (!ofs) {
         return false;
@@ -33,8 +35,8 @@ static bool write_u32(const std::string& path, uint32_t value) {
     return ofs.good();
 }
 
-static bool get_pkg_uid(const std::string& pkg, uint32_t& uid) {
-    std::string data_path = "/data/data/" + pkg;
+bool get_pkg_uid(const std::string& pkg, uint32_t& uid) {
+    const std::string data_path = "/data/data/" + pkg;
     struct stat st{};
     if (stat(data_path.c_str(), &st) != 0) {
         printf("Failed to stat %s: %s\n", data_path.c_str(), strerror(errno));
@@ -43,6 +45,8 @@ static bool get_pkg_uid(const std::string& pkg, uint32_t& uid) {
     uid = st.st_uid;
     return true;
 }
+
+}  // namespace
 
 int debug_set_manager(const std::string& pkg) {
     // Check if CONFIG_KSU_DEBUG is enabled
@@ -61,7 +65,7 @@ int debug_set_manager(const std::string& pkg) {
     printf("Package %s has UID: %u\n", pkg.c_str(), uid);
 
     // Set manager UID via kernel parameter
-    std::string param_path = std::string(KERNEL_PARAM_PATH) + "/ksu_debug_manager_uid";
+    const std::string param_path = std::string(KERNEL_PARAM_PATH) + "/ksu_debug_manager_uid";
 
     uint32_t before_uid = 0;
     read_u32(param_path, before_uid);
@@ -78,7 +82,7 @@ int debug_set_manager(const std::string& pkg) {
 
     // Force-stop the package to apply changes
     printf("Force-stopping package...\n");
-    std::string cmd = "am force-stop " + pkg;
+    const std::string cmd = "am force-stop " + pkg;
     system(cmd.c_str());
 
     printf("Manager set successfully!\n");
@@ -103,10 +107,10 @@ int debug_mark(const std::vector<std::string>& args) {
     }
 
     const std::string& cmd = args[0];
-    int32_t pid = args.size() > 1 ? std::stoi(args[1]) : 0;
+    const int32_t pid = args.size() > 1 ? std::stoi(args[1]) : 0;
 
     if (cmd == "get") {
-        uint32_t result = mark_get(pid);
+        const uint32_t result = mark_get(pid);
         if (pid == 0) {
             printf("Total marked processes: %u\n", result);
         } else {

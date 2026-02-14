@@ -25,13 +25,15 @@ namespace ksud::flash {
 
 namespace fs = std::filesystem;
 
+namespace {
+
 // Helper wrapper to match my previous logic
-static ExecResult exec_command_sync(const std::vector<std::string>& args) {
+ExecResult exec_command_sync(const std::vector<std::string>& args) {
     return exec_command(args);
 }
 
 // Helper: Convert bytes to hex string
-static std::string bytes_to_hex(const unsigned char* data, size_t len) {
+std::string bytes_to_hex(const unsigned char* data, size_t len) {
     static constexpr std::string_view hex_chars = "0123456789abcdef";
     std::string result;
     result.reserve(len * 2);
@@ -43,7 +45,7 @@ static std::string bytes_to_hex(const unsigned char* data, size_t len) {
 }
 
 // Helper: Get file size (handles both regular files and block devices)
-static uint64_t get_file_size(const std::string& path) {
+uint64_t get_file_size(const std::string& path) {
     struct stat st{};
     if (stat(path.c_str(), &st) != 0) {
         LOGE("Failed to stat %s: %s", path.c_str(), strerror(errno));
@@ -52,7 +54,7 @@ static uint64_t get_file_size(const std::string& path) {
 
     // For block devices, use ioctl to get the size
     if (S_ISBLK(st.st_mode)) {
-        int fd = open(path.c_str(), O_RDONLY);
+        const int fd = open(path.c_str(), O_RDONLY);
         if (fd < 0) {
             LOGE("Failed to open block device %s: %s", path.c_str(), strerror(errno));
             return 0;
@@ -75,10 +77,12 @@ static uint64_t get_file_size(const std::string& path) {
 }
 
 // Helper: Execute command and get output
-static std::string exec_cmd(const std::string& cmd) {
+std::string exec_cmd(const std::string& cmd) {
     auto result = exec_command_sync({"/system/bin/sh", "-c", cmd});
     return trim(result.stdout_str);
 }
+
+}  // namespace
 
 std::string get_current_slot_suffix() {
     auto result = exec_command_sync({"getprop", "ro.boot.slot_suffix"});
@@ -99,7 +103,7 @@ std::string find_partition_block_device(const std::string& partition_name,
     // 检查分区名是否以 _a 或 _b 结尾（slotful分区）
     bool is_slotful = false;
     if (partition_name.length() >= 2) {
-        std::string last_two = partition_name.substr(partition_name.length() - 2);
+        const std::string last_two = partition_name.substr(partition_name.length() - 2);
         if (last_two == "_a" || last_two == "_b") {
             is_slotful = true;
         }
@@ -128,7 +132,7 @@ std::string find_partition_block_device(const std::string& partition_name,
     }
 
     // Try multiple common locations
-    std::vector<std::string> base_paths = {
+    const std::vector<std::string> base_paths = {
         "/dev/block/by-name/",
         "/dev/block/mapper/",
         "/dev/block/bootdevice/by-name/",
@@ -136,7 +140,7 @@ std::string find_partition_block_device(const std::string& partition_name,
 
     for (const auto& name : names_to_try) {
         for (const auto& base : base_paths) {
-            std::string path = base + name;
+            const std::string path = base + name;
             if (fs::exists(path)) {
                 LOGD("Found partition %s at %s", partition_name.c_str(), path.c_str());
                 return path;
@@ -150,7 +154,7 @@ std::string find_partition_block_device(const std::string& partition_name,
 
 bool is_partition_logical(const std::string& partition_name) {
     // Check if partition is in mapper (logical partitions use device-mapper)
-    std::string block_dev = find_partition_block_device(partition_name);
+    const std::string block_dev = find_partition_block_device(partition_name);
     if (block_dev.empty()) {
         return false;
     }
@@ -181,17 +185,17 @@ PartitionInfo get_partition_info(const std::string& partition_name,
 
 std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
     std::vector<std::string> partitions;
-    std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
+    const std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
 
     // Scan /dev/block/by-name directory for physical partitions
-    std::string by_name_dir = "/dev/block/by-name";
+    const std::string by_name_dir = "/dev/block/by-name";
     if (fs::exists(by_name_dir)) {
         for (const auto& entry : fs::directory_iterator(by_name_dir)) {
             std::string name = entry.path().filename().string();
 
             // 只有当名字确实以 _a 或 _b 结尾时才去掉槽位后缀
             if (!suffix.empty() && name.length() > 2) {
-                std::string last_two = name.substr(name.length() - 2);
+                const std::string last_two = name.substr(name.length() - 2);
                 if (last_two == "_a" || last_two == "_b") {
                     // 确认这确实是槽位后缀
                     if (last_two == suffix) {
@@ -213,7 +217,7 @@ std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
     }
 
     // Scan /dev/block/mapper directory for logical partitions
-    std::string mapper_dir = "/dev/block/mapper";
+    const std::string mapper_dir = "/dev/block/mapper";
     if (fs::exists(mapper_dir)) {
         for (const auto& entry : fs::directory_iterator(mapper_dir)) {
             std::string name = entry.path().filename().string();
@@ -227,7 +231,7 @@ std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
 
             // 只有当名字确实以 _a 或 _b 结尾时才去掉槽位后缀
             if (!suffix.empty() && name.length() > 2) {
-                std::string last_two = name.substr(name.length() - 2);
+                const std::string last_two = name.substr(name.length() - 2);
                 if (last_two == "_a" || last_two == "_b") {
                     // 确认这确实是槽位后缀
                     if (last_two == suffix) {
@@ -265,13 +269,13 @@ bool is_excluded_from_batch(const std::string& partition_name) {
 
 std::vector<std::string> get_available_partitions(bool scan_all) {
     std::vector<std::string> available;
-    std::string slot_suffix = get_current_slot_suffix();
+    const std::string slot_suffix = get_current_slot_suffix();
 
     if (scan_all) {
         // Scan all partitions from /dev/block/by-name
         auto all_partitions = get_all_partitions(slot_suffix);
         for (const auto& name : all_partitions) {
-            std::string block_dev = find_partition_block_device(name, slot_suffix);
+            const std::string block_dev = find_partition_block_device(name, slot_suffix);
             if (!block_dev.empty() && fs::exists(block_dev)) {
                 available.push_back(name);
             }
@@ -279,7 +283,7 @@ std::vector<std::string> get_available_partitions(bool scan_all) {
     } else {
         // Only check common partitions (silently skip if not found)
         for (const char* name : COMMON_PARTITIONS) {
-            std::string block_dev = find_partition_block_device(name, slot_suffix);
+            const std::string block_dev = find_partition_block_device(name, slot_suffix);
             if (!block_dev.empty() && fs::exists(block_dev)) {
                 available.push_back(name);
             }
@@ -305,8 +309,8 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
     }
 
     // Check sizes
-    uint64_t image_size = get_file_size(image_path);
-    uint64_t partition_size = get_file_size(block_device);
+    const uint64_t image_size = get_file_size(image_path);
+    const uint64_t partition_size = get_file_size(block_device);
 
     if (image_size > partition_size) {
         LOGE("Image size (%lu) exceeds partition size (%lu)", image_size, partition_size);
@@ -327,7 +331,7 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
         return "";
     }
 
-    int fd = open(block_device.c_str(), O_WRONLY | O_SYNC);
+    const int fd = open(block_device.c_str(), O_WRONLY | O_SYNC);
     if (fd < 0) {
         LOGE("Failed to open block device for writing: %s", strerror(errno));
         return "";
@@ -339,7 +343,7 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
     bool success = true;
 
     while (input.read(buffer.data(), buffer.size()) || input.gcount() > 0) {
-        size_t bytes_read = input.gcount();
+        const size_t bytes_read = input.gcount();
 
         // Accumulate for hash
         if (verify_hash) {
@@ -347,7 +351,7 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
         }
 
         // Write to partition
-        ssize_t bytes_written = write(fd, buffer.data(), bytes_read);
+        const ssize_t bytes_written = write(fd, buffer.data(), bytes_read);
         if (bytes_written != static_cast<ssize_t>(bytes_read)) {
             LOGE("Write failed: %s", strerror(errno));
             success = false;
@@ -377,14 +381,14 @@ std::string flash_logical_partition(const std::string& image_path,
     LOGI("Flashing %s to %s%s (logical)", image_path.c_str(), partition_name.c_str(),
          slot_suffix.c_str());
 
-    uint64_t image_size = get_file_size(image_path);
+    const uint64_t image_size = get_file_size(image_path);
     if (image_size == 0) {
         LOGE("Invalid image file: %s", image_path.c_str());
         return "";
     }
 
-    std::string full_partition = partition_name + slot_suffix;
-    std::string temp_partition = partition_name + "_kf";
+    const std::string full_partition = partition_name + slot_suffix;
+    const std::string temp_partition = partition_name + "_kf";
 
     // Try to create temporary partition
     LOGD("Creating temporary partition %s", temp_partition.c_str());
@@ -411,7 +415,7 @@ std::string flash_logical_partition(const std::string& image_path,
             return "";
         }
 
-        std::string block_dev = "/dev/block/mapper/" + full_partition;
+        const std::string block_dev = "/dev/block/mapper/" + full_partition;
         return flash_physical_partition(image_path, block_dev, verify_hash);
     }
 
@@ -419,7 +423,7 @@ std::string flash_logical_partition(const std::string& image_path,
     exec_cmd("lptools unmap " + temp_partition);
     exec_cmd("lptools map " + temp_partition);
 
-    std::string temp_block_dev = "/dev/block/mapper/" + temp_partition;
+    const std::string temp_block_dev = "/dev/block/mapper/" + temp_partition;
     std::string hash = flash_physical_partition(image_path, temp_block_dev, verify_hash);
 
     if (hash.empty()) {
@@ -444,9 +448,9 @@ std::string flash_logical_partition(const std::string& image_path,
 bool flash_partition(const std::string& image_path, const std::string& partition_name,
                      const std::string& slot_suffix, bool verify_hash) {
     // Use provided slot, or auto-detect if empty
-    std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
+    const std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
 
-    PartitionInfo info = get_partition_info(partition_name, suffix);
+    const PartitionInfo info = get_partition_info(partition_name, suffix);
     if (!info.exists) {
         LOGE("Partition %s not found", partition_name.c_str());
         return false;
@@ -466,9 +470,9 @@ bool flash_partition(const std::string& image_path, const std::string& partition
 bool backup_partition(const std::string& partition_name, const std::string& output_path,
                       const std::string& slot_suffix) {
     // Use provided slot, or auto-detect if empty
-    std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
+    const std::string suffix = slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
 
-    PartitionInfo info = get_partition_info(partition_name, suffix);
+    const PartitionInfo info = get_partition_info(partition_name, suffix);
     if (!info.exists) {
         LOGE("Partition %s not found", partition_name.c_str());
         return false;
@@ -477,8 +481,9 @@ bool backup_partition(const std::string& partition_name, const std::string& outp
     LOGI("Backing up %s to %s", partition_name.c_str(), output_path.c_str());
 
     // Use dd for backup
-    auto cmd = "dd if=" + info.block_device + " of=" + output_path + " bs=4096 2>/dev/null && sync";
-    auto result = exec_cmd(cmd);
+    const std::string cmd =
+        "dd if=" + info.block_device + " of=" + output_path + " bs=4096 2>/dev/null && sync";
+    (void)exec_cmd(cmd);
 
     if (fs::exists(output_path) && get_file_size(output_path) > 0) {
         LOGI("Backup complete: %s", output_path.c_str());
@@ -493,7 +498,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
     LOGI("Mapping logical partitions for slot %s", slot_suffix.c_str());
 
     // Get all partitions from mapper directory
-    std::string mapper_dir = "/dev/block/mapper";
+    const std::string mapper_dir = "/dev/block/mapper";
     if (!fs::exists(mapper_dir)) {
         LOGE("Mapper directory does not exist");
         return false;
@@ -501,7 +506,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
 
     std::vector<std::string> logical_partitions;
     for (const auto& entry : fs::directory_iterator(mapper_dir)) {
-        std::string name = entry.path().filename().string();
+        const std::string name = entry.path().filename().string();
 
         // Skip control devices
         if (name == "control" || name.find("loop") == 0) {
@@ -510,7 +515,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
 
         // Only consider partitions for the target slot
         if (!slot_suffix.empty() && name.length() > slot_suffix.length()) {
-            size_t pos = name.find(slot_suffix);
+            const size_t pos = name.find(slot_suffix);
             if (pos != std::string::npos && pos == name.length() - slot_suffix.length()) {
                 logical_partitions.push_back(name);
             }
@@ -526,7 +531,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
     int total_count = 0;
 
     // Super partition is slotless, don't pass slot_suffix
-    std::string super_device = find_partition_block_device("super", "");
+    const std::string super_device = find_partition_block_device("super", "");
     if (super_device.empty()) {
         LOGW("Super partition not found");
     } else {
@@ -538,11 +543,11 @@ bool map_logical_partitions(const std::string& slot_suffix) {
         "system", "vendor", "product", "odm", "system_ext", "vendor_dlkm", "odm_dlkm"};
 
     for (const char* part_base : common_logical) {
-        std::string part_name = std::string(part_base) + slot_suffix;
+        const std::string part_name = std::string(part_base) + slot_suffix;
         total_count++;
 
         // Check if already mapped
-        std::string mapped_path = "/dev/block/mapper/" + part_name;
+        const std::string mapped_path = "/dev/block/mapper/" + part_name;
         if (fs::exists(mapped_path)) {
             LOGD("Partition %s already mapped", part_name.c_str());
             success_count++;
@@ -550,8 +555,8 @@ bool map_logical_partitions(const std::string& slot_suffix) {
         }
 
         // Try to map using dmctl (device-mapper control)
-        std::string cmd = "dmctl create " + part_name;
-        auto result = exec_cmd(cmd);
+        const std::string cmd = "dmctl create " + part_name;
+        (void)exec_cmd(cmd);
 
         if (fs::exists(mapped_path)) {
             LOGI("Successfully mapped %s", part_name.c_str());
@@ -568,14 +573,14 @@ bool map_logical_partitions(const std::string& slot_suffix) {
 
 std::string get_avb_status() {
     // Check AVB flags in vbmeta
-    std::string vbmeta_device = find_partition_block_device("vbmeta", "");
+    const std::string vbmeta_device = find_partition_block_device("vbmeta", "");
     if (vbmeta_device.empty()) {
         LOGW("vbmeta partition not found");
         return "";
     }
 
     // Read vbmeta header flags (offset 123-126)
-    int fd = open(vbmeta_device.c_str(), O_RDONLY);
+    const int fd = open(vbmeta_device.c_str(), O_RDONLY);
     if (fd < 0) {
         LOGE("Failed to open vbmeta: %s", strerror(errno));
         return "";
@@ -598,7 +603,7 @@ std::string get_avb_status() {
 }
 
 bool patch_vbmeta_disable_verification() {
-    std::string vbmeta_device = find_partition_block_device("vbmeta", "");
+    const std::string vbmeta_device = find_partition_block_device("vbmeta", "");
     if (vbmeta_device.empty()) {
         LOGE("vbmeta partition not found");
         return false;
@@ -606,7 +611,7 @@ bool patch_vbmeta_disable_verification() {
 
     LOGI("Patching vbmeta to disable verification: %s", vbmeta_device.c_str());
 
-    int fd = open(vbmeta_device.c_str(), O_RDWR);
+    const int fd = open(vbmeta_device.c_str(), O_RDWR);
     if (fd < 0) {
         LOGE("Failed to open vbmeta: %s", strerror(errno));
         return false;
@@ -635,7 +640,7 @@ std::string get_kernel_version(const std::string& slot_suffix) {
         boot_partition_name = "init_boot";
     }
 
-    std::string device = find_partition_block_device(boot_partition_name, slot_suffix);
+    const std::string device = find_partition_block_device(boot_partition_name, slot_suffix);
     if (device.empty()) {
         LOGE("Could not find boot partition device for slot '%s'", slot_suffix.c_str());
         return "";
@@ -651,10 +656,10 @@ std::string get_kernel_version(const std::string& slot_suffix) {
         LOGE("Failed to create temp directory: %s", strerror(errno));
         return "";
     }
-    std::string workdir = tmp_dir_template.data();
+    const std::string workdir = tmp_dir_template.data();
 
     // Find magiskboot with workdir to ensure it's available there
-    std::string magiskboot = find_magiskboot("", workdir);
+    const std::string magiskboot = find_magiskboot("", workdir);
     if (magiskboot.empty()) {
         LOGE("magiskboot not found");
         exec_command_sync({"rm", "-rf", workdir});
@@ -664,7 +669,7 @@ std::string get_kernel_version(const std::string& slot_suffix) {
     LOGI("Using magiskboot: %s", magiskboot.c_str());
 
     // Unpack boot image in the workdir
-    std::string kernel_path = workdir + "/kernel";
+    const std::string kernel_path = workdir + "/kernel";
     auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", device}, workdir);
 
     std::string result;
@@ -698,11 +703,11 @@ std::string get_kernel_version(const std::string& slot_suffix) {
                 size_t total_read = 0;
 
                 while (total_read < max_bytes && kernel_file.read(buffer.data(), buffer.size())) {
-                    size_t bytes_read = kernel_file.gcount();
+                    const size_t bytes_read = kernel_file.gcount();
                     total_read += bytes_read;
                     content_buffer.append(buffer.data(), bytes_read);
 
-                    size_t pos = content_buffer.find(search_str);
+                    const size_t pos = content_buffer.find(search_str);
                     if (pos != std::string::npos) {
                         size_t end_pos = content_buffer.find('\0', pos);
                         if (end_pos == std::string::npos) {
@@ -745,8 +750,8 @@ std::string get_boot_slot_info() {
         return "{\"is_ab\":false}";
     }
 
-    std::string current_slot = get_current_slot_suffix();
-    std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
+    const std::string current_slot = get_current_slot_suffix();
+    const std::string other_slot = (current_slot == "_a") ? "_b" : "_a";
 
     // Get slot info from properties
     auto result_a = exec_command_sync({"getprop", "ro.boot.slot_suffix"});

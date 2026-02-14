@@ -11,7 +11,7 @@ namespace hymo {
 
 Config Config::load_default() {
     Config config;
-    fs::path default_path = fs::path(BASE_DIR) / "config.json";
+    const fs::path default_path = fs::path(BASE_DIR) / "config.json";
     if (fs::exists(default_path)) {
         try {
             return from_file(default_path);
@@ -32,10 +32,10 @@ Config Config::from_file(const fs::path& path) {
 
     std::stringstream buffer;
     buffer << file.rdbuf();
-    std::string json_str = buffer.str();
+    const std::string json_str = buffer.str();
 
     try {
-        json::Value root = json::parse(json_str);
+        const json::Value root = json::parse(json_str);
         if (root.type == json::Type::Object) {
             const auto& o = root.as_object();
 
@@ -159,11 +159,11 @@ void Config::merge_with_cli(const fs::path& moduledir_override, const fs::path& 
 std::map<std::string, std::string> load_module_modes() {
     std::map<std::string, std::string> modes;
 
-    fs::path mode_file = fs::path(BASE_DIR) / "module_mode.json";
+    const fs::path mode_file = fs::path(BASE_DIR) / "module_mode.json";
     if (!fs::exists(mode_file))
         return modes;
 
-    std::ifstream file(mode_file);
+    std::ifstream file(mode_file);  // NOLINT(misc-const-correctness) stream used for read
     std::stringstream buffer;
     buffer << file.rdbuf();
 
@@ -176,7 +176,7 @@ std::map<std::string, std::string> load_module_modes() {
                 }
             }
         }
-    } catch (...) {
+    } catch (...) {  // NOLINT(bugprone-empty-catch) ignore parse errors, return partial modes
     }
 
     return modes;
@@ -185,11 +185,11 @@ std::map<std::string, std::string> load_module_modes() {
 std::map<std::string, std::vector<ModuleRuleConfig>> load_module_rules() {
     std::map<std::string, std::vector<ModuleRuleConfig>> rules;
 
-    fs::path rules_file = fs::path(BASE_DIR) / "module_rules.json";
+    const fs::path rules_file = fs::path(BASE_DIR) / "module_rules.json";
     if (!fs::exists(rules_file))
         return rules;
 
-    std::ifstream file(rules_file);
+    std::ifstream file(rules_file);  // NOLINT(misc-const-correctness) stream used for read
     std::stringstream buffer;
     buffer << file.rdbuf();
 
@@ -210,14 +210,14 @@ std::map<std::string, std::vector<ModuleRuleConfig>> load_module_rules() {
                 }
             }
         }
-    } catch (...) {
+    } catch (...) {  // NOLINT(bugprone-empty-catch) ignore parse errors, return partial rules
     }
 
     return rules;
 }
 
 bool save_module_modes(const std::map<std::string, std::string>& modes) {
-    fs::path mode_file = fs::path(BASE_DIR) / "module_mode.json";
+    const fs::path mode_file = fs::path(BASE_DIR) / "module_mode.json";
     json::Value root = json::Value::object();
 
     for (const auto& [id, mode] : modes) {
@@ -232,7 +232,7 @@ bool save_module_modes(const std::map<std::string, std::string>& modes) {
 }
 
 bool save_module_rules(const std::map<std::string, std::vector<ModuleRuleConfig>>& rules) {
-    fs::path rules_file = fs::path(BASE_DIR) / "module_rules.json";
+    const fs::path rules_file = fs::path(BASE_DIR) / "module_rules.json";
     json::Value root = json::Value::object();
 
     for (const auto& [id, list] : rules) {

@@ -14,13 +14,15 @@ extern "C" int resetprop_main(int argc, char** argv);
 extern "C" int busybox_main(int argc, char** argv);
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...
 
-static const char* path_basename(const char* path) {
+namespace {
+const char* path_basename(const char* path) {
     const char* base = path;
     for (; *path; ++path)
         if (*path == '/')
             base = path + 1;
     return base;
 }
+}  // namespace
 
 int main(int argc, char** argv) {
     // Dispatch by argv[0] basename (e.g. when invoked as /data/adb/ksu/bin/magiskboot ->
@@ -42,28 +44,28 @@ int main(int argc, char** argv) {
 
 #if defined(MAGISKBOOT_ALONE_AVAILABLE) && MAGISKBOOT_ALONE_AVAILABLE
     {
-        int r = dispatch("magiskboot", magiskboot_main);
+        const int r = dispatch("magiskboot", magiskboot_main);
         if (r >= 0)
             return r;
     }
 #endif  // #if defined(MAGISKBOOT_ALONE_AVAILABLE)...
 #if defined(BOOTCTL_ALONE_AVAILABLE) && BOOTCTL_ALONE_AVAILABLE
     {
-        int r = dispatch("bootctl", bootctl_main);
+        const int r = dispatch("bootctl", bootctl_main);
         if (r >= 0)
             return r;
     }
 #endif  // #if defined(BOOTCTL_ALONE_AVAILABLE) &&...
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
     {
-        int r = dispatch("resetprop", resetprop_main);
+        const int r = dispatch("resetprop", resetprop_main);
         if (r >= 0)
             return r;
     }
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
     {
-        int r = dispatch("busybox", busybox_main);
+        const int r = dispatch("busybox", busybox_main);
         if (r >= 0)
             return r;
     }

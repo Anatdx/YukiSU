@@ -6,6 +6,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   set(CMAKE_ANDROID_API 28 CACHE STRING "Android API level (min 28)" FORCE)
 endif()
 
+# Prefer Clang for C and CXX (LTO, -faddrsig, etc. require Clang; do not use GCC)
+if(NOT ANDROID AND NOT CMAKE_C_COMPILER)
+  find_program(CLANG_CC NAMES clang-18 clang-17 clang-16 clang-15 clang-14 clang)
+  find_program(CLANG_CXX NAMES clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++)
+  if(CLANG_CC AND CLANG_CXX)
+    set(CMAKE_C_COMPILER "${CLANG_CC}" CACHE STRING "C compiler" FORCE)
+    set(CMAKE_CXX_COMPILER "${CLANG_CXX}" CACHE STRING "CXX compiler" FORCE)
+    message(STATUS "Using Clang: C=${CLANG_CC} CXX=${CLANG_CXX}")
+  endif()
+endif()
+
 project(ksud VERSION 1.0.0 LANGUAGES C CXX)
 
 # Allow FetchContent deps (e.g. miniz) that use cmake_minimum_required < 3.5
@@ -23,24 +34,31 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
-# clang-tidy: always on for our sources only (third_party/FetchContent excluded)
-find_program(CLANG_TIDY_PROGRAM NAMES clang-tidy clang-tidy-18 clang-tidy-17 clang-tidy-16 clang-tidy-14)
-get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
-set(CLANG_TIDY_CONFIG "${REPO_ROOT}/.clang-tidy")
-if(NOT CLANG_TIDY_PROGRAM)
-    message(FATAL_ERROR "clang-tidy not found. Install it (e.g. apt install clang-tidy / brew install llvm) and ensure it is in PATH.")
+# clang-tidy: optional for our sources only (third_party/FetchContent excluded). Set KSUD_ENABLE_CLANG_TIDY=OFF to skip.
+option(KSUD_ENABLE_CLANG_TIDY "Run clang-tidy on ksud own sources" ON)
+set(CLANG_TIDY_ARGS "")
+if(KSUD_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_PROGRAM NAMES clang-tidy clang-tidy-18 clang-tidy-17 clang-tidy-16 clang-tidy-14)
+    get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+    set(CLANG_TIDY_CONFIG "${REPO_ROOT}/.clang-tidy")
+    if(NOT CLANG_TIDY_PROGRAM)
+        message(FATAL_ERROR "clang-tidy not found. Install it (e.g. apt install clang-tidy / brew install llvm) or configure with -DKSUD_ENABLE_CLANG_TIDY=OFF")
+    endif()
+    if(NOT EXISTS "${CLANG_TIDY_CONFIG}")
+        message(FATAL_ERROR ".clang-tidy not found at ${CLANG_TIDY_CONFIG}")
+    endif()
+    set(CLANG_TIDY_ARGS "${CLANG_TIDY_PROGRAM};--config-file=${CLANG_TIDY_CONFIG}")
+    message(STATUS "clang-tidy: enabled for ksud own sources (config=${CLANG_TIDY_CONFIG})")
+else()
+    message(STATUS "clang-tidy: disabled (KSUD_ENABLE_CLANG_TIDY=OFF)")
 endif()
-if(NOT EXISTS "${CLANG_TIDY_CONFIG}")
-    message(FATAL_ERROR ".clang-tidy not found at ${CLANG_TIDY_CONFIG}")
-endif()
-# Do not set CMAKE_*_CLANG_TIDY globally so miniz, picosha2, ndk-busybox are not tidied.
-# We will set CXX_CLANG_TIDY only on the object library that contains our own sources.
-set(CLANG_TIDY_ARGS "${CLANG_TIDY_PROGRAM};--config-file=${CLANG_TIDY_CONFIG}")
-message(STATUS "clang-tidy: will be enabled for ksud own sources only (config=${CLANG_TIDY_CONFIG})")
 
 # ============================================================================
 # Super Aggressive Size Optimization
 # ============================================================================
+# Disable LTO if linker reports undefined symbols (e.g. ksud::boot_patch) in some
+# environments (OrbStack host build with object libs + LTO). Use: -DKSUD_DISABLE_LTO=ON
+option(KSUD_DISABLE_LTO "Disable LTO (use if link fails with undefined symbols)" OFF)
 
 # --- Common compile flags (shared by C and C++) ---
 set(_COMMON_COMPILE_FLAGS
@@ -58,28 +76,45 @@ set(_COMMON_COMPILE_FLAGS
     -fno-math-errno              # Math functions don't set errno
 )
 string(REPLACE ";" " " _COMMON_FLAGS_STR "${_COMMON_COMPILE_FLAGS}")
-
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_COMMON_FLAGS_STR}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_COMMON_FLAGS_STR}")
 
 # --- Release build optimization ---
-set(CMAKE_C_FLAGS_RELEASE   "-Oz -DNDEBUG -flto=full")
-set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto=full")
+if(KSUD_DISABLE_LTO)
+    set(CMAKE_C_FLAGS_RELEASE   "-Oz -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG")
+else()
+    set(CMAKE_C_FLAGS_RELEASE   "-Oz -DNDEBUG -flto=full")
+    set(CMAKE_CXX_FLAGS_RELEASE "-Oz -DNDEBUG -flto=full")
+endif()
 
 # --- Aggressive linker optimization ---
-string(CONCAT _LINKER_FLAGS
-    " -fuse-ld=lld"               # Use lld linker
-    " -flto=full"                 # Full LTO: maximum cross-module optimization (smaller than thin LTO)
-    " -Wl,--gc-sections"          # Garbage-collect unused sections
-    " -Wl,--icf=all"              # Identical Code Folding: merge functions with identical bodies
-    " -Wl,--strip-all"            # Strip all symbols
-    " -Wl,--exclude-libs,ALL"     # Don't export symbols from static libraries
-    " -Wl,-O2"                    # Linker optimization level 2 (string table optimization etc.)
-    " -Wl,--lto-O3"              # LTO at O3 level (compile with Oz, but LTO pass uses O3 for aggressive inlining/elimination)
-    " -Wl,--hash-style=gnu"       # GNU hash is more compact than sysv
-    " -Wl,--build-id=none"        # Remove build-id note section
-    " -Wl,-z,norelro"             # Remove RELRO segment (root tool doesn't need this security feature)
-)
+if(KSUD_DISABLE_LTO)
+    string(CONCAT _LINKER_FLAGS
+        " -fuse-ld=lld"
+        " -Wl,--gc-sections"
+        " -Wl,--strip-all"
+        " -Wl,--exclude-libs,ALL"
+        " -Wl,-O2"
+        " -Wl,--hash-style=gnu"
+        " -Wl,--build-id=none"
+        " -Wl,-z,norelro"
+    )
+else()
+    string(CONCAT _LINKER_FLAGS
+        " -fuse-ld=lld"               # Use lld linker
+        " -flto=full"                 # Full LTO: maximum cross-module optimization (smaller than thin LTO)
+        " -Wl,--gc-sections"          # Garbage-collect unused sections
+        " -Wl,--icf=all"              # Identical Code Folding: merge functions with identical bodies
+        " -Wl,--strip-all"            # Strip all symbols
+        " -Wl,--exclude-libs,ALL"     # Don't export symbols from static libraries
+        " -Wl,-O2"                    # Linker optimization level 2 (string table optimization etc.)
+        " -Wl,--lto-O3"              # LTO at O3 level (compile with Oz, but LTO pass uses O3 for aggressive inlining/elimination)
+        " -Wl,--hash-style=gnu"       # GNU hash is more compact than sysv
+        " -Wl,--build-id=none"        # Remove build-id note section
+        " -Wl,-z,norelro"             # Remove RELRO segment (root tool doesn't need this security feature)
+    )
+endif()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}${_LINKER_FLAGS}")
 
 # --- Shrink miniz: disable unused features ---

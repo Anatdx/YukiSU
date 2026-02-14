@@ -40,8 +40,11 @@ struct MountStats {
     int overlayfs_mounts = 0;
 };
 
-static MountStats g_mount_stats;
+namespace {
 
+MountStats g_mount_stats;
+
+// NOLINTNEXTLINE(performance-enum-size) small enum for clarity
 enum class NodeFileType { RegularFile, Directory, Symlink, Whiteout };
 
 struct Node {
@@ -55,9 +58,9 @@ struct Node {
     bool done = false;        // Already processed flag
 };
 
-static bool dir_is_replace(const fs::path& path) {
+bool dir_is_replace(const fs::path& path) {
     std::array<char, 4> buf{};
-    ssize_t len = lgetxattr(path.c_str(), REPLACE_DIR_XATTR, buf.data(), buf.size());
+    const ssize_t len = lgetxattr(path.c_str(), REPLACE_DIR_XATTR, buf.data(), buf.size());
     if (len > 0 && buf[0] == 'y') {
         return true;
     }
@@ -69,7 +72,7 @@ static bool dir_is_replace(const fs::path& path) {
     return false;
 }
 
-static NodeFileType get_file_type(const fs::path& path) {
+NodeFileType get_file_type(const fs::path& path) {
     struct stat st{};
     if (lstat(path.c_str(), &st) != 0) {
         return NodeFileType::RegularFile;
@@ -87,8 +90,8 @@ static NodeFileType get_file_type(const fs::path& path) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
-static bool collect_module_files(Node& node, const fs::path& module_dir,
-                                 const std::string& module_name = "") {
+bool collect_module_files(Node& node, const fs::path& module_dir,
+                          const std::string& module_name = "") {
     if (!fs::exists(module_dir)) {
         LOG_DEBUG("Module dir does not exist: " + module_dir.string());
         return false;
@@ -105,8 +108,8 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
 
     try {
         for (const auto& entry : fs::directory_iterator(module_dir)) {
-            std::string name = entry.path().filename().string();
-            NodeFileType ft = get_file_type(entry.path());
+            const std::string name = entry.path().filename().string();
+            const NodeFileType ft = get_file_type(entry.path());
 
             auto it = node.children.find(name);
             Node* child = nullptr;
@@ -128,7 +131,7 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
             if (ft == NodeFileType::Directory) {
                 dir_count++;
                 child->replace = dir_is_replace(entry.path());
-                bool child_has_file = collect_module_files(*child, entry.path(), module_name);
+                const bool child_has_file = collect_module_files(*child, entry.path(), module_name);
                 has_file |= child_has_file || child->replace;
                 if (child->replace) {
                     LOG_DEBUG("  Replace dir: " + entry.path().string());
@@ -151,8 +154,8 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
     return has_file;
 }
 
-static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
-                                 const std::vector<std::string>& extra_partitions) {
+Node* collect_all_modules(const std::vector<fs::path>& module_paths,
+                          const std::vector<std::string>& extra_partitions) {
     Node* root = new Node{"", NodeFileType::Directory, {}, {}, "", false, false, false};
     Node system{"system", NodeFileType::Directory, {}, {}, "", false, false, false};
     system.module_path = "/system";  // Set source for attribute cloning
@@ -163,7 +166,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
     LOG_INFO("Collecting files from modules directory");
 
     for (const auto& module_path : module_paths) {
-        std::string module_id = module_path.filename().string();
+        const std::string module_id = module_path.filename().string();
 
         // Check if module is disabled or should be skipped
         if (fs::exists(module_path / "disable") || fs::exists(module_path / "remove") ||
@@ -173,7 +176,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
         }
 
         // Check if module has system partition
-        fs::path module_system = module_path / "system";
+        const fs::path module_system = module_path / "system";
         if (!fs::is_directory(module_system)) {
             LOG_DEBUG("Module " + module_id + " has no system directory");
             continue;
@@ -181,7 +184,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
 
         LOG_INFO("Processing module: " + module_id);
         try {
-            bool module_has_file = collect_module_files(system, module_system, module_id);
+            const bool module_has_file = collect_module_files(system, module_system, module_id);
             has_file |= module_has_file;
             if (module_has_file) {
                 LOG_INFO("  Module " + module_id + " has files to mount");
@@ -209,8 +212,8 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
         {"vendor", true}, {"system_ext", true}, {"product", true}, {"odm", false}};
 
     for (const auto& [partition, require_symlink] : BUILTIN_PARTS) {
-        fs::path path_of_root = fs::path("/") / partition;
-        fs::path path_of_system = fs::path("/system") / partition;
+        const fs::path path_of_root = fs::path("/") / partition;
+        const fs::path path_of_system = fs::path("/system") / partition;
 
         if (fs::is_directory(path_of_root) &&
             (!require_symlink || fs::is_symlink(path_of_system))) {
@@ -245,7 +248,7 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
             continue;
         }
 
-        fs::path path_of_root = fs::path("/") / partition;
+        const fs::path path_of_root = fs::path("/") / partition;
         if (fs::is_directory(path_of_root)) {
             auto it = system.children.find(partition);
             if (it != system.children.end()) {
@@ -268,10 +271,9 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
 }
 
 // NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
-static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
-                         const std::string& name) {
-    fs::path src = src_path / name;
-    fs::path dst = dst_path / name;
+bool mount_mirror(const fs::path& src_path, const fs::path& dst_path, const std::string& name) {
+    const fs::path src = src_path / name;
+    const fs::path dst = dst_path / name;
 
     try {
         struct stat st{};
@@ -282,7 +284,7 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
 
         if (S_ISREG(st.st_mode)) {
             // Regular file: create empty file then bind mount
-            int fd = open(dst.c_str(), O_CREAT | O_WRONLY, st.st_mode & 07777);
+            const int fd = open(dst.c_str(), O_CREAT | O_WRONLY, st.st_mode & 07777);
             if (fd < 0) {
                 LOG_ERROR("Failed to create mirror file: " + dst.string());
                 return false;
@@ -308,7 +310,7 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
             // Recursively mirror all children
             bool ok = true;
             for (const auto& entry : fs::directory_iterator(src)) {
-                std::string child_name = entry.path().filename().string();
+                const std::string child_name = entry.path().filename().string();
                 if (!mount_mirror(src, dst, child_name)) {
                     ok = false;
                 }
@@ -319,7 +321,7 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
         } else if (S_ISLNK(st.st_mode)) {
             // Symlink: read target and create symlink
             std::array<char, PATH_MAX> target_buf{};
-            ssize_t len = readlink(src.c_str(), target_buf.data(), target_buf.size() - 1);
+            const ssize_t len = readlink(src.c_str(), target_buf.data(), target_buf.size() - 1);
             if (len < 0) {
                 LOG_ERROR("Failed to read symlink: " + src.string());
                 return false;
@@ -342,12 +344,12 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
     return true;
 }
 
-static bool mount_file(const fs::path& path, const fs::path& work_dir_path, const Node& node,
-                       bool has_tmpfs, bool disable_umount) {
+bool mount_file(const fs::path& path, const fs::path& work_dir_path, const Node& node,
+                bool has_tmpfs, bool disable_umount) {
     g_mount_stats.total_mounts++;
     g_mount_stats.files_mounted++;
 
-    fs::path target_path = has_tmpfs ? work_dir_path : path;
+    const fs::path target_path = has_tmpfs ? work_dir_path : path;
 
     if (has_tmpfs) {
         std::ofstream f(work_dir_path);
@@ -374,7 +376,7 @@ static bool mount_file(const fs::path& path, const fs::path& work_dir_path, cons
     return true;
 }
 
-static bool mount_symlink(const fs::path& work_dir_path, const Node& node) {
+bool mount_symlink(const fs::path& work_dir_path, const Node& node) {
     g_mount_stats.total_mounts++;
     g_mount_stats.symlinks_created++;
 
@@ -400,7 +402,7 @@ static bool mount_symlink(const fs::path& work_dir_path, const Node& node) {
     return true;
 }
 
-static bool create_whiteout(const fs::path& target_path, const fs::path& work_dir_path) {
+bool create_whiteout(const fs::path& target_path, const fs::path& work_dir_path) {
     try {
         fs::create_directories(work_dir_path.parent_path());
 
@@ -415,9 +417,9 @@ static bool create_whiteout(const fs::path& target_path, const fs::path& work_di
         }
 
         if (fs::exists(target_path)) {
-            clone_attr(
-                target_path,
-                work_dir_path);  // NOLINT(readability-suspicious-call-argument) order correct
+            // NOLINTNEXTLINE(readability-suspicious-call-argument) source=target_path,
+            // target=work_dir_path
+            clone_attr(target_path, work_dir_path);
         } else {
             copy_path_context(work_dir_path.parent_path(), work_dir_path);
         }
@@ -430,17 +432,17 @@ static bool create_whiteout(const fs::path& target_path, const fs::path& work_di
     }
 }
 
-static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
-                           bool has_tmpfs, bool disable_umount);
+bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
+                    bool has_tmpfs, bool disable_umount);
 
 // NOLINTNEXTLINE(misc-no-recursion) intentional recursion for directory tree
-static bool mount_directory_children(const fs::path& path, const fs::path& work_dir_path,
-                                     const Node& node, bool has_tmpfs, bool disable_umount) {
+bool mount_directory_children(const fs::path& path, const fs::path& work_dir_path, const Node& node,
+                              bool has_tmpfs, bool disable_umount) {
     bool ok = true;
     if (fs::exists(path) && !node.replace) {
         try {
             for (const auto& entry : fs::directory_iterator(path)) {
-                std::string name = entry.path().filename().string();
+                const std::string name = entry.path().filename().string();
                 auto it = node.children.find(name);
                 if (it != node.children.end()) {
                     if (!it->second->skip) {
@@ -466,7 +468,7 @@ static bool mount_directory_children(const fs::path& path, const fs::path& work_
             continue;
         }
 
-        fs::path real_path = path / name;
+        const fs::path real_path = path / name;
         if (!fs::exists(real_path) && !node.replace) {
             if (!do_magic_mount(path, work_dir_path, *child_node, has_tmpfs, disable_umount)) {
                 ok = false;
@@ -477,7 +479,7 @@ static bool mount_directory_children(const fs::path& path, const fs::path& work_
     return ok;
 }
 
-static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has_tmpfs) {
+bool should_create_tmpfs(const Node& node, const fs::path& path, bool has_tmpfs) {
     if (has_tmpfs) {
         return true;
     }
@@ -487,7 +489,7 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
     }
 
     for (const auto& [name, child] : node.children) {
-        fs::path real_path = path / name;
+        const fs::path real_path = path / name;
 
         bool need = false;
         if (child->file_type == NodeFileType::Symlink) {
@@ -497,7 +499,7 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
         } else {
             try {
                 if (fs::exists(real_path)) {
-                    NodeFileType real_ft = get_file_type(real_path);
+                    const NodeFileType real_ft = get_file_type(real_path);
                     need = (real_ft != child->file_type || real_ft == NodeFileType::Symlink);
                 } else {
                     need = true;
@@ -520,8 +522,7 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) path vs work_dir_path are distinct
-static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_path,
-                              const Node& node) {
+bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_path, const Node& node) {
     try {
         fs::create_directories(work_dir_path);
 
@@ -530,7 +531,7 @@ static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_pat
             return false;
         }
 
-        fs::path src_path = fs::exists(path) ? path : node.module_path;
+        const fs::path src_path = fs::exists(path) ? path : node.module_path;
         clone_attr(src_path, work_dir_path);
 
         mount(work_dir_path.c_str(), work_dir_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
@@ -541,8 +542,8 @@ static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_pat
     return true;
 }
 
-static bool finalize_tmpfs_overlay(const fs::path& path, const fs::path& work_dir_path,
-                                   bool disable_umount) {
+bool finalize_tmpfs_overlay(const fs::path& path, const fs::path& work_dir_path,
+                            bool disable_umount) {
     mount(nullptr, work_dir_path.c_str(), nullptr, MS_REMOUNT | MS_RDONLY | MS_BIND, nullptr);
     mount(work_dir_path.c_str(), path.c_str(), nullptr, MS_MOVE, nullptr);
     mount(nullptr, path.c_str(), nullptr, MS_PRIVATE, nullptr);
@@ -556,10 +557,10 @@ static bool finalize_tmpfs_overlay(const fs::path& path, const fs::path& work_di
 }
 
 // NOLINTNEXTLINE(misc-no-recursion) intentional recursion for directory tree
-static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
-                           bool has_tmpfs, bool disable_umount) {
-    fs::path target_path = path / current.name;
-    fs::path target_work_path = work_dir_path / current.name;
+bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
+                    bool has_tmpfs, bool disable_umount) {
+    const fs::path target_path = path / current.name;
+    const fs::path target_work_path = work_dir_path / current.name;
 
     switch (current.file_type) {
     case NodeFileType::RegularFile:
@@ -574,8 +575,8 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
 
     case NodeFileType::Directory: {
         g_mount_stats.dirs_mounted++;
-        bool create_tmpfs = !has_tmpfs && should_create_tmpfs(current, target_path, false);
-        bool effective_tmpfs = has_tmpfs || create_tmpfs;
+        const bool create_tmpfs = !has_tmpfs && should_create_tmpfs(current, target_path, false);
+        const bool effective_tmpfs = has_tmpfs || create_tmpfs;
 
         if (effective_tmpfs) {
             if (create_tmpfs) {
@@ -585,7 +586,8 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
                 }
             } else if (has_tmpfs && !fs::exists(target_work_path)) {
                 fs::create_directory(target_work_path);
-                fs::path src_path = fs::exists(target_path) ? target_path : current.module_path;
+                const fs::path src_path =
+                    fs::exists(target_path) ? target_path : current.module_path;
                 clone_attr(src_path, target_work_path);
             }
         }
@@ -619,6 +621,8 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
     return true;
 }
 
+}  // namespace
+
 bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& module_paths,
                       const std::string& mount_source,
                       const std::vector<std::string>& extra_partitions, bool disable_umount) {
@@ -629,7 +633,7 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
         return true;
     }
 
-    fs::path work_dir = tmp_path / "workdir";
+    const fs::path work_dir = tmp_path / "workdir";
 
     if (!mount_tmpfs(work_dir)) {
         LOG_ERROR("Failed to create workdir tmpfs at " + work_dir.string());
@@ -710,8 +714,7 @@ MountStatistics get_mount_statistics() {
             stats.dirs_mounted = get_int("dirs_mounted");
             stats.symlinks_created = get_int("symlinks_created");
             stats.overlayfs_mounts = get_int("overlayfs_mounts");
-        } catch (...) {
-            // Return zeros on parse error
+        } catch (...) {  // NOLINT(bugprone-empty-catch) return zeros on parse error
         }
     }
 

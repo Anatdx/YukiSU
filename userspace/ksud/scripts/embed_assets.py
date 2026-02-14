@@ -150,7 +150,7 @@ bool copy_asset_to_file(const std::string& name, const std::string& dest_path) {
     // Decompress
     std::vector<uint8_t> buffer(entry->original_size);
     uLongf destLen = entry->original_size;
-    int ret = uncompress(buffer.data(), &destLen, entry->data, entry->size);
+    const int ret = uncompress(buffer.data(), &destLen, entry->data, entry->size);
     if (ret != Z_OK) {
         LOGE("Decompression failed for %s: %d", name.c_str(), ret);
         return false;
@@ -174,7 +174,7 @@ std::vector<std::string> list_supported_kmi() {
     for (const auto& name : list_assets()) {
         // Format: android15-6.6_kernelsu.ko
         const char* suffix = "_kernelsu.ko";
-        size_t suffix_len = strlen(suffix);
+        const size_t suffix_len = strlen(suffix);
         if (name.size() > suffix_len && 
             name.compare(name.size() - suffix_len, suffix_len, suffix) == 0) {
             result.push_back(name.substr(0, name.size() - suffix_len));
@@ -195,7 +195,7 @@ int ensure_binaries(bool ignore_if_exist) {
             continue;
         }
         
-        std::string dest = std::string(BINARY_DIR) + name;
+        const std::string dest = std::string(BINARY_DIR) + name;
         
         if (ignore_if_exist) {
             struct stat st{};

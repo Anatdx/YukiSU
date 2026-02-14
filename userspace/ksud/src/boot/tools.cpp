@@ -27,9 +27,9 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
             if (realpath(specified_path.c_str(), resolved_path.data()) != nullptr) {
                 // Prefer sibling libmagiskboot.so when caller passed libksud.so.
                 // libksud.so may embed a limited magiskboot entry that lacks cpio commands.
-                fs::path specified_lib = resolved_path.data();
-                fs::path lib_dir = specified_lib.parent_path();
-                fs::path sibling_magiskboot = lib_dir / "libmagiskboot.so";
+                const fs::path specified_lib = resolved_path.data();
+                const fs::path lib_dir = specified_lib.parent_path();
+                const fs::path sibling_magiskboot = lib_dir / "libmagiskboot.so";
                 if (fs::exists(sibling_magiskboot) &&
                     access(sibling_magiskboot.c_str(), X_OK) == 0) {
                     printf("- Using sibling magiskboot: %s\n", sibling_magiskboot.c_str());
@@ -52,14 +52,14 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
                 std::string local_copy = workdir + "/magiskboot";
                 printf("- Trying to copy magiskboot to workdir...\n");
 
-                int src_fd = open(specified_path.c_str(), O_RDONLY);
+                const int src_fd = open(specified_path.c_str(), O_RDONLY);
                 if (src_fd < 0) {
                     LOGE("Failed to open source magiskboot: %s (errno=%d)", specified_path.c_str(),
                          errno);
                     return "";
                 }
 
-                int dst_fd = open(local_copy.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
+                const int dst_fd = open(local_copy.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
                 if (dst_fd < 0) {
                     LOGE("Failed to create dest magiskboot (errno=%d)", errno);
                     close(src_fd);
@@ -98,14 +98,14 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
 
     // Check next to our own executable (e.g. libksud.so -> libmagiskboot.so)
     std::array<char, PATH_MAX> self_path{};
-    ssize_t self_len = readlink("/proc/self/exe", self_path.data(), self_path.size() - 1);
+    const ssize_t self_len = readlink("/proc/self/exe", self_path.data(), self_path.size() - 1);
     if (self_len > 0 && static_cast<size_t>(self_len) < self_path.size()) {
         self_path[static_cast<size_t>(self_len)] = '\0';
-        fs::path bin_path = self_path.data();
-        fs::path lib_dir = bin_path.parent_path();
+        const fs::path bin_path = self_path.data();
+        const fs::path lib_dir = bin_path.parent_path();
 
         // Check for libmagiskboot.so (standard app layout)
-        fs::path magiskboot_lib = lib_dir / "libmagiskboot.so";
+        const fs::path magiskboot_lib = lib_dir / "libmagiskboot.so";
         if (fs::exists(magiskboot_lib)) {
             // If we have a workdir, try to copy it there to ensure it's executable
             // because lib dir might not be executable if it's in /data/app/...
@@ -124,13 +124,13 @@ std::string find_magiskboot(const std::string& specified_path, const std::string
                     fs::copy_file(magiskboot_lib, local_copy, fs::copy_options::overwrite_existing);
                     chmod(local_copy.c_str(), 0755);
                     return local_copy;
-                } catch (...) {
+                } catch (...) {  // NOLINT(bugprone-empty-catch) copy failed, fall back to binary
                 }
             }
         }
 
         // Check for magiskboot (binary layout)
-        fs::path magiskboot_bin = lib_dir / "magiskboot";
+        const fs::path magiskboot_bin = lib_dir / "magiskboot";
         if (access(magiskboot_bin.c_str(), X_OK) == 0) {
             return magiskboot_bin.string();
         }

@@ -9,14 +9,16 @@
 
 namespace hymo {
 
-static const std::vector<std::string>& get_standard_partitions() {
+namespace {
+
+const std::vector<std::string>& get_standard_partitions() {
     static const std::vector<std::string> kStandard = {"system", "vendor", "product", "system_ext",
                                                        "odm"};
     return kStandard;
 }
 
 // Parse a line from /proc/mounts
-static bool parse_mount_line(const std::string& line, PartitionInfo& info) {
+bool parse_mount_line(const std::string& line, PartitionInfo& info) {
     std::istringstream iss(line);
     std::string device;
     std::string mount_point;
@@ -33,8 +35,8 @@ static bool parse_mount_line(const std::string& line, PartitionInfo& info) {
     }
 
     // Extract partition name from mount point (e.g., "/vendor" -> "vendor")
-    fs::path mp(mount_point);
-    std::string part_name = mp.filename().string();
+    const fs::path mp(mount_point);
+    const std::string part_name = mp.filename().string();
 
     // Skip if not a potential Android partition
     // Android partitions are typically at /partition_name
@@ -71,11 +73,13 @@ static bool parse_mount_line(const std::string& line, PartitionInfo& info) {
     info.is_read_only = (options.find("ro") != std::string::npos);
 
     // Check if exists as symlink under /system
-    fs::path system_link = fs::path("/system") / part_name;
+    const fs::path system_link = fs::path("/system") / part_name;
     info.exists_as_symlink = fs::is_symlink(system_link);
 
     return true;
 }
+
+}  // namespace
 
 std::vector<PartitionInfo> detect_partitions() {
     std::vector<PartitionInfo> partitions;
@@ -128,7 +132,7 @@ bool is_partition_mount_point(const fs::path& path) {
         return false;
     }
 
-    std::string path_str = path.string();
+    const std::string path_str = path.string();
     std::string line;
     while (std::getline(mounts, line)) {
         std::istringstream iss(line);
@@ -164,13 +168,13 @@ size_t get_optimal_tmpfs_size(const fs::path& partition_path) {
     // - Use at most 10% of available memory
     // - Use at most 512MB
     // - If partition exists, use at most 25% of partition size
-    size_t max_from_memory = info.freeram / 10;
+    const size_t max_from_memory = info.freeram / 10;
     const size_t absolute_max = static_cast<size_t>(512) * 1024 * 1024;  // 512MB
 
     size_t optimal = std::min(max_from_memory, absolute_max);
 
     if (partition_size > 0) {
-        size_t max_from_partition = partition_size / 4;
+        const size_t max_from_partition = partition_size / 4;
         optimal = std::min(optimal, max_from_partition);
     }
 

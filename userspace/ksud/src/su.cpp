@@ -20,7 +20,9 @@
 
 namespace ksud {
 
-static void print_su_usage() {
+namespace {
+
+void print_su_usage() {
     printf("KernelSU\n\n");
     printf("Usage: su [options] [-] [user [argument...]]\n\n");
     printf("Options:\n");
@@ -37,7 +39,7 @@ static void print_su_usage() {
     printf("  -W, --no-wrapper         don't use ksu fd wrapper\n");
 }
 
-static void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
+void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
     if (!groups.empty()) {
         setgroups(groups.size(), groups.data());
     }
@@ -45,11 +47,11 @@ static void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups)
     setresuid(uid, uid, uid);
 }
 
-static void wrap_tty(int fd) {
+void wrap_tty(int fd) {
     if (isatty(fd) != 1) {
         return;
     }
-    int new_fd = get_wrapped_fd(fd);
+    const int new_fd = get_wrapped_fd(fd);
     if (new_fd < 0) {
         LOGW("Failed to get wrapped fd for %d", fd);
         return;
@@ -59,6 +61,8 @@ static void wrap_tty(int fd) {
     }
     close(new_fd);
 }
+
+}  // namespace
 
 int su_main(int argc, char** argv) {
     // Grant root first
@@ -90,7 +94,7 @@ int su_main(int argc, char** argv) {
 
     int c_index = -1;
     for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
+        const std::string arg = argv[i];
         if (arg == "-c" || arg == "--command") {
             c_index = static_cast<int>(args_vec.size());
             args_vec.push_back(arg);
@@ -187,7 +191,7 @@ int su_main(int argc, char** argv) {
         const char* user = argv[optind];
         // Try to parse as number first
         char* endptr;
-        long uid_num = strtol(user, &endptr, 10);
+        const long uid_num = strtol(user, &endptr, 10);
         if (*endptr == '\0') {
             target_uid = static_cast<uid_t>(uid_num);
         } else {
@@ -266,7 +270,7 @@ int su_main(int argc, char** argv) {
 
     // Build argv for shell (matching Rust behavior)
     // arg0 is "-" for login shell, otherwise the shell path itself
-    std::string arg0 = is_login ? "-" : shell;
+    const std::string arg0 = is_login ? "-" : shell;
 
     std::vector<const char*> shell_argv;
     shell_argv.push_back(arg0.c_str());
@@ -309,7 +313,7 @@ int grant_root_shell(bool global_mnt) {
 
     // Switch to global mount namespace if requested
     if (global_mnt) {
-        int fd = open("/proc/1/ns/mnt", O_RDONLY);
+        const int fd = open("/proc/1/ns/mnt", O_RDONLY);
         if (fd >= 0) {
             setns(fd, CLONE_NEWNS);
             close(fd);

@@ -19,7 +19,9 @@
 
 namespace hymo {
 
-static bool try_setup_tmpfs(const fs::path& target) {
+namespace {
+
+bool try_setup_tmpfs(const fs::path& target) {
     LOG_DEBUG("Attempting Tmpfs...");
 
     if (!mount_tmpfs(target)) {
@@ -38,7 +40,7 @@ static bool try_setup_tmpfs(const fs::path& target) {
 }
 
 // Fix ownership and SELinux context for the storage root
-static void repair_storage_root_permissions(const fs::path& target) {
+void repair_storage_root_permissions(const fs::path& target) {
     LOG_DEBUG("Repairing storage root permissions...");
 
     try {
@@ -58,10 +60,11 @@ static void repair_storage_root_permissions(const fs::path& target) {
     }
 }
 
-// Remove static to expose it
+}  // namespace
+
 bool create_image(const fs::path& base_dir) {
     LOG_INFO("Creating modules.img...");
-    fs::path img_file = base_dir / "modules.img";
+    const fs::path img_file = base_dir / "modules.img";
 
     // Ensure directory exists
     if (!fs::exists(base_dir)) {
@@ -85,7 +88,7 @@ bool create_image(const fs::path& base_dir) {
         }
     }
 
-    std::string dd_cmd =
+    const std::string dd_cmd =
         dd_bin + " if=/dev/zero of=" + img_file.string() + " bs=1M count=2048 >/dev/null 2>&1";
     if (std::system(dd_cmd.c_str()) != 0) {
         LOG_ERROR("Failed to create image file with dd (" + dd_bin + ")");
@@ -102,7 +105,7 @@ bool create_image(const fs::path& base_dir) {
             break;
         }
     }
-    std::string chattr_cmd = chattr_bin + " -c " + img_file.string() + " >/dev/null 2>&1";
+    const std::string chattr_cmd = chattr_bin + " -c " + img_file.string() + " >/dev/null 2>&1";
     std::system(chattr_cmd.c_str());
 
     // 3. Find mke2fs
@@ -117,8 +120,8 @@ bool create_image(const fs::path& base_dir) {
 
     // 4. Format
     // -t ext4 -O ^has_journal,^metadata_csum,^64bit -F
-    std::string mkfs_cmd = mke2fs_bin + " -t ext4 -O ^has_journal,^metadata_csum,^64bit -F " +
-                           img_file.string() + " >/dev/null 2>&1";
+    const std::string mkfs_cmd = mke2fs_bin + " -t ext4 -O ^has_journal,^metadata_csum,^64bit -F " +
+                                 img_file.string() + " >/dev/null 2>&1";
 
     if (std::system(mkfs_cmd.c_str()) != 0) {
         LOG_ERROR("Failed to format ext4 image");
@@ -130,12 +133,14 @@ bool create_image(const fs::path& base_dir) {
     return true;
 }
 
-static bool is_erofs_available() {
+namespace {
+
+bool is_erofs_available() {
     return access("/system/bin/mkfs.erofs", X_OK) == 0 ||
            access("/vendor/bin/mkfs.erofs", X_OK) == 0 || access("/sbin/mkfs.erofs", X_OK) == 0;
 }
 
-static bool create_erofs_image(const fs::path& modules_dir, const fs::path& image_path) {
+bool create_erofs_image(const fs::path& modules_dir, const fs::path& image_path) {
     LOG_INFO("Creating EROFS image from " + modules_dir.string());
 
     if (!fs::exists(modules_dir)) {
@@ -148,7 +153,7 @@ static bool create_erofs_image(const fs::path& modules_dir, const fs::path& imag
     }
 
     // Compress with lz4hc
-    std::string cmd =
+    const std::string cmd =
         "mkfs.erofs -zlz4hc,9 " + image_path.string() + " " + modules_dir.string() + " 2>&1";
 
     FILE* pipe = popen(cmd.c_str(), "r");
@@ -163,7 +168,7 @@ static bool create_erofs_image(const fs::path& modules_dir, const fs::path& imag
         output += buffer.data();
     }
 
-    int ret = pclose(pipe);
+    const int ret = pclose(pipe);
     if (WEXITSTATUS(ret) != 0) {
         LOG_ERROR("Failed to create EROFS image: " + output);
         return false;
@@ -174,8 +179,8 @@ static bool create_erofs_image(const fs::path& modules_dir, const fs::path& imag
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target vs modules_dir are distinct
-static bool try_setup_erofs(const fs::path& target, const fs::path& modules_dir,
-                            const fs::path& image_path) {
+bool try_setup_erofs(const fs::path& target, const fs::path& modules_dir,
+                     const fs::path& image_path) {
     LOG_DEBUG("Attempting EROFS...");
 
     if (!is_erofs_available()) {
@@ -199,6 +204,38 @@ static bool try_setup_erofs(const fs::path& target, const fs::path& modules_dir,
     LOG_INFO("EROFS active (read-only, compressed)");
     return true;
 }
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target vs image_path are distinct
+std::string setup_ext4_image(const fs::path& target, const fs::path& image_path) {
+    LOG_DEBUG("Falling back to Ext4...");
+
+    if (!fs::exists(image_path)) {
+        LOG_WARN("modules.img missing, recreating...");
+        if (!create_image(image_path.parent_path())) {
+            throw std::runtime_error("Failed to create modules.img");
+        }
+    }
+
+    if (!mount_image(image_path, target, "ext4", "loop,rw,noatime")) {
+        LOG_WARN("Mount failed, attempting image repair...");
+
+        if (repair_image(image_path)) {
+            if (!mount_image(image_path, target, "ext4", "loop,rw,noatime")) {
+                throw std::runtime_error("Failed to mount modules.img after repair");
+            }
+        } else {
+            throw std::runtime_error("Failed to repair modules.img");
+        }
+    }
+
+    // Register unmountable path for proper cleanup
+    send_unmountable(target);
+
+    LOG_INFO("Ext4 active.");
+    return "ext4";
+}
+
+}  // namespace
 
 StorageHandle setup_erofs_storage(const fs::path& mnt_dir, const fs::path& source_dir,
                                   const fs::path& image_path) {
@@ -226,35 +263,6 @@ StorageHandle setup_erofs_storage(const fs::path& mnt_dir, const fs::path& sourc
 
     LOG_INFO("EROFS active (read-only, compressed)");
     return StorageHandle{mnt_dir, "erofs"};
-}
-
-static std::string setup_ext4_image(const fs::path& target, const fs::path& image_path) {
-    LOG_DEBUG("Falling back to Ext4...");
-
-    if (!fs::exists(image_path)) {
-        LOG_WARN("modules.img missing, recreating...");
-        if (!create_image(image_path.parent_path())) {
-            throw std::runtime_error("Failed to create modules.img");
-        }
-    }
-
-    if (!mount_image(image_path, target, "ext4", "loop,rw,noatime")) {
-        LOG_WARN("Mount failed, attempting image repair...");
-
-        if (repair_image(image_path)) {
-            if (!mount_image(image_path, target, "ext4", "loop,rw,noatime")) {
-                throw std::runtime_error("Failed to mount modules.img after repair");
-            }
-        } else {
-            throw std::runtime_error("Failed to repair modules.img");
-        }
-    }
-
-    // Register unmountable path for proper cleanup
-    send_unmountable(target);
-
-    LOG_INFO("Ext4 active.");
-    return "ext4";
 }
 
 StorageHandle setup_storage(const fs::path& mnt_dir, const fs::path& image_path,
@@ -330,7 +338,9 @@ void finalize_storage_permissions(const fs::path& storage_root) {
     repair_storage_root_permissions(storage_root);
 }
 
-static std::string format_size(uint64_t bytes) {
+namespace {
+
+std::string format_size(uint64_t bytes) {
     const uint64_t KB = 1024;
     const uint64_t MB = KB * 1024;
     const uint64_t GB = MB * 1024;
@@ -348,7 +358,7 @@ static std::string format_size(uint64_t bytes) {
     return {buf.data()};
 }
 
-static uint64_t calculate_dir_size(const fs::path& path) {
+uint64_t calculate_dir_size(const fs::path& path) {
     uint64_t total = 0;
     try {
         for (const auto& entry : fs::recursive_directory_iterator(path)) {
@@ -356,11 +366,12 @@ static uint64_t calculate_dir_size(const fs::path& path) {
                 total += entry.file_size();
             }
         }
-    } catch (...) {
-        // Ignore errors and return best-effort size
+    } catch (...) {  // NOLINT(bugprone-empty-catch) ignore fs errors, return best-effort size
     }
     return total;
 }
+
+}  // namespace
 
 void print_storage_status() {
     auto state = load_runtime_state();
@@ -368,7 +379,7 @@ void print_storage_status() {
     // Daemon PID is registered in kernel, no need for setns
     // Kernel grants visibility to registered daemon's mounts
 
-    fs::path path =
+    const fs::path path =
         state.mount_point.empty() ? fs::path(FALLBACK_CONTENT_DIR) : fs::path(state.mount_point);
 
     json::Value root = json::Value::object();
@@ -381,7 +392,7 @@ void print_storage_status() {
         return;
     }
 
-    std::string fs_type = state.storage_mode.empty() ? "unknown" : state.storage_mode;
+    const std::string fs_type = state.storage_mode.empty() ? "unknown" : state.storage_mode;
 
     struct statfs stats{};
     if (statfs(path.c_str(), &stats) != 0) {
@@ -390,15 +401,15 @@ void print_storage_status() {
         return;
     }
 
-    uint64_t block_size = stats.f_bsize;
-    uint64_t total_bytes = stats.f_blocks * block_size;
-    uint64_t free_bytes = stats.f_bfree * block_size;
+    const uint64_t block_size = stats.f_bsize;
+    const uint64_t total_bytes = stats.f_blocks * block_size;
+    const uint64_t free_bytes = stats.f_bfree * block_size;
     uint64_t used_bytes = total_bytes > free_bytes ? total_bytes - free_bytes : 0;
     double percent = total_bytes > 0 ? (used_bytes * 100.0 / total_bytes) : 0.0;
 
     // Fallback: if used shows 0 but directory has files, compute logical size
     if (used_bytes == 0 && fs::exists(path)) {
-        uint64_t logical_used = calculate_dir_size(path);
+        const uint64_t logical_used = calculate_dir_size(path);
         if (logical_used > 0) {
             used_bytes = logical_used;
             percent = total_bytes > 0 ? (used_bytes * 100.0 / total_bytes) : 0.0;
@@ -408,18 +419,17 @@ void print_storage_status() {
     // Mirror/tmpfs mode: data may live in moduledir rather than mount_point
     if (used_bytes == 0 && state.storage_mode == "tmpfs") {
         try {
-            Config cfg = Config::load_default();
-            fs::path module_root =
+            const Config cfg = Config::load_default();
+            const fs::path module_root =
                 cfg.moduledir.empty() ? fs::path("/data/adb/modules") : fs::path(cfg.moduledir);
             if (fs::exists(module_root)) {
-                uint64_t logical_used = calculate_dir_size(module_root);
+                const uint64_t logical_used = calculate_dir_size(module_root);
                 if (logical_used > 0) {
                     used_bytes = logical_used;
                     percent = total_bytes > 0 ? (used_bytes * 100.0 / total_bytes) : 0.0;
                 }
             }
-        } catch (...) {
-            // Ignore and keep statfs results
+        } catch (...) {  // NOLINT(bugprone-empty-catch) ignore config load errors, keep statfs
         }
     }
 

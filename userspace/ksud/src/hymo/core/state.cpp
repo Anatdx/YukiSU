@@ -62,19 +62,21 @@ bool RuntimeState::save() const {
     return true;
 }
 
-static std::vector<std::string> parse_json_array(const std::string& line) {
+namespace {
+
+std::vector<std::string> parse_json_array(const std::string& line) {
     std::vector<std::string> result;
     auto start = line.find('[');
     auto end = line.find(']');
     if (start == std::string::npos || end == std::string::npos)
         return result;
 
-    std::string content = line.substr(start + 1, end - start - 1);
+    const std::string content = line.substr(start + 1, end - start - 1);
     std::stringstream ss(content);
     std::string item;
     while (std::getline(ss, item, ',')) {
-        size_t first_quote = item.find('"');
-        size_t last_quote = item.rfind('"');
+        const size_t first_quote = item.find('"');
+        const size_t last_quote = item.rfind('"');
         if (first_quote != std::string::npos && last_quote != std::string::npos &&
             last_quote > first_quote) {
             result.push_back(item.substr(first_quote + 1, last_quote - first_quote - 1));
@@ -82,6 +84,8 @@ static std::vector<std::string> parse_json_array(const std::string& line) {
     }
     return result;
 }
+
+}  // namespace
 
 RuntimeState load_runtime_state() {
     RuntimeState state;

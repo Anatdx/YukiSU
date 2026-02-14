@@ -27,14 +27,16 @@
 
 namespace ksud {
 
+namespace {
+
 // Built-in HymoFS: try to perform an automount at a given init stage,
 // based purely on hymo's JSON config (mount_stage + hymofs_enabled).
 // This handles mount_stage = "post-fs-data" / "services".
-static void try_hymofs_automount(const char* stage_name) {
+void try_hymofs_automount(const char* stage_name) {
     using hymo::Config;
 
     try {
-        Config config = Config::load_default();
+        const Config config = Config::load_default();
 
         // Only proceed when HymoFS is enabled in config
         if (!config.hymofs_enabled) {
@@ -54,7 +56,7 @@ static void try_hymofs_automount(const char* stage_name) {
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS automount(%s): invoking hymod mount", stage_name);
-        int ret = hymo::run_hymo_main(2, argv.data());
+        const int ret = hymo::run_hymo_main(2, argv.data());
         if (ret != 0) {
             LOGW("HymoFS automount(%s) failed, ret=%d", stage_name, ret);
         } else {
@@ -72,11 +74,11 @@ static void try_hymofs_automount(const char* stage_name) {
 // finishing and services about to start. We now emulate this inside ksud:
 // just before executing metamodule mount scripts, if hymofs_enabled=true and
 // mount_stage="metamount", run hymod mount once.
-static void try_hymofs_metamount_mount() {
+void try_hymofs_metamount_mount() {
     using hymo::Config;
 
     try {
-        Config config = Config::load_default();
+        const Config config = Config::load_default();
 
         if (!config.hymofs_enabled) {
             LOGI("HymoFS metamount: hymofs_enabled=false, skip");
@@ -93,7 +95,7 @@ static void try_hymofs_metamount_mount() {
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS metamount: invoking hymod mount");
-        int ret = hymo::run_hymo_main(2, argv.data());
+        const int ret = hymo::run_hymo_main(2, argv.data());
         if (ret != 0) {
             LOGW("HymoFS metamount mount failed, ret=%d", ret);
         } else {
@@ -107,11 +109,11 @@ static void try_hymofs_metamount_mount() {
 }
 
 // Catch boot logs (logcat/dmesg) to file
-static void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
+void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
     ensure_dir_exists(LOG_DIR);
 
-    std::string bootlog = std::string(LOG_DIR) + "/" + logname + ".log";
-    std::string oldbootlog = std::string(LOG_DIR) + "/" + logname + ".old.log";
+    const std::string bootlog = std::string(LOG_DIR) + "/" + logname + ".log";
+    const std::string oldbootlog = std::string(LOG_DIR) + "/" + logname + ".old.log";
 
     // Rotate old log
     if (access(bootlog.c_str(), F_OK) == 0) {
@@ -119,7 +121,7 @@ static void catch_bootlog(const char* logname, const std::vector<const char*>& c
     }
 
     // Fork and exec timeout command
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0) {
         LOGW("Failed to fork for %s: %s", logname, strerror(errno));
         return;
@@ -134,7 +136,7 @@ static void catch_bootlog(const char* logname, const std::vector<const char*>& c
         switch_cgroups();
 
         // Open log file for stdout
-        int fd = open(bootlog.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        const int fd = open(bootlog.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd < 0) {
             _exit(1);
         }
@@ -160,7 +162,7 @@ static void catch_bootlog(const char* logname, const std::vector<const char*>& c
     LOGI("Started %s capture (pid %d)", logname, pid);
 }
 
-static void run_stage(const std::string& stage, bool block) {
+void run_stage(const std::string& stage, bool block) {
     umask(0);
 
     // Check for Magisk (like Rust version)
@@ -184,6 +186,8 @@ static void run_stage(const std::string& stage, bool block) {
     exec_stage_script(stage, block);
 }
 
+}  // namespace
+
 int on_post_data_fs() {
     LOGI("post-fs-data triggered");
 
@@ -206,7 +210,7 @@ int on_post_data_fs() {
     }
 
     // Check for safe mode FIRST (like Rust version)
-    bool safe_mode = is_safe_mode();
+    const bool safe_mode = is_safe_mode();
 
     if (safe_mode) {
         LOGW("safe mode, skip common post-fs-data.d scripts");

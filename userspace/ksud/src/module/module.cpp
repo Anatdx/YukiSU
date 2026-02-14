@@ -45,11 +45,13 @@ struct ModuleInfo {
     std::string webuiIcon;
 };
 
+namespace {
+
 // Escape special characters for JSON string
-static std::string escape_json(const std::string& s) {
+std::string escape_json(const std::string& s) {
     std::string result;
     result.reserve(s.size());
-    for (char c : s) {
+    for (const char c : s) {
         switch (c) {
         case '"':
             result += "\\\"";
@@ -88,13 +90,13 @@ static std::string escape_json(const std::string& s) {
     return result;
 }
 
-static bool file_exists(const std::string& path) {
+bool file_exists(const std::string& path) {
     struct stat st{};
     return stat(path.c_str(), &st) == 0;
 }
 
 // Resolve module icon path with security checks
-static std::string resolve_module_icon_path(
+std::string resolve_module_icon_path(
     const std::string& icon_value,  // NOLINT(bugprone-easily-swappable-parameters)
     const std::string& module_id, const std::filesystem::path& module_path,
     const std::string& key_name) {
@@ -117,7 +119,7 @@ static std::string resolve_module_icon_path(
     }
 
     // Construct full path and verify it exists
-    std::string full_path = (module_path / icon_value).string();
+    const std::string full_path = (module_path / icon_value).string();
     if (!file_exists(full_path)) {
         LOGW("Module %s: %s file does not exist: %s\n", module_id.c_str(), key_name.c_str(),
              full_path.c_str());
@@ -128,7 +130,7 @@ static std::string resolve_module_icon_path(
     return icon_value;
 }
 
-static std::map<std::string, std::string> parse_module_prop(const std::string& path) {
+std::map<std::string, std::string> parse_module_prop(const std::string& path) {
     std::map<std::string, std::string> props;
     std::ifstream ifs(path);
     if (!ifs)
@@ -136,10 +138,10 @@ static std::map<std::string, std::string> parse_module_prop(const std::string& p
 
     std::string line;
     while (std::getline(ifs, line)) {
-        size_t eq = line.find('=');
+        const size_t eq = line.find('=');
         if (eq != std::string::npos) {
-            std::string key = trim(line.substr(0, eq));
-            std::string value = trim(line.substr(eq + 1));
+            const std::string key = trim(line.substr(0, eq));
+            const std::string value = trim(line.substr(eq + 1));
             props[key] = value;
         }
     }
@@ -148,13 +150,13 @@ static std::map<std::string, std::string> parse_module_prop(const std::string& p
 }
 
 // Validate module ID - must be alphanumeric with underscores/hyphens, no path separators
-static bool validate_module_id(const std::string& id) {
+bool validate_module_id(const std::string& id) {
     if (id.empty())
         return false;
     if (id.length() > 64)
         return false;
 
-    for (char c : id) {
+    for (const char c : id) {
         if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' ||
             c == '>' || c == '|') {
             return false;
@@ -165,20 +167,16 @@ static bool validate_module_id(const std::string& id) {
     return id[0] != '.' && id.find("..") == std::string::npos;
 }
 
-// Forward declaration
-static int run_script(const std::string& script, bool block, const std::string& module_id = "");
-
 // Extract zip file to directory using unzip command
-static bool extract_zip(const std::string& zip_path, const std::string& dest_dir) {
+bool extract_zip(const std::string& zip_path, const std::string& dest_dir) {
     auto result = exec_command({"unzip", "-o", "-q", zip_path, "-d", dest_dir});
     return result.exit_code == 0;
 }
 
-// Set permissions recursively (directory tree)
-static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid,
-                               mode_t dir_mode,  // NOLINT(misc-no-recursion)
-                               mode_t file_mode,
-                               const char* secontext = "u:object_r:system_file:s0") {
+// Set permissions recursively (directory tree); recursion is intentional
+// NOLINTNEXTLINE(misc-no-recursion)
+void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid, mode_t dir_mode,
+                        mode_t file_mode, const char* secontext = "u:object_r:system_file:s0") {
     DIR* dir = opendir(path.c_str());
     if (!dir)
         return;
@@ -188,7 +186,7 @@ static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid,
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        std::string fullpath = path + "/" + entry->d_name;
+        const std::string fullpath = path + "/" + entry->d_name;
         struct stat st{};
         if (lstat(fullpath.c_str(), &st) != 0)
             continue;
@@ -209,12 +207,12 @@ static void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid,
 }
 
 // Handle partition symlinks (vendor, system_ext, product, odm)
-static void handle_partition(const std::string& modpath, const std::string& partition) {
-    std::string part_path = modpath + "/system/" + partition;
+void handle_partition(const std::string& modpath, const std::string& partition) {
+    const std::string part_path = modpath + "/system/" + partition;
     if (!file_exists(part_path))
         return;
 
-    std::string native_part = "/" + partition;
+    const std::string native_part = "/" + partition;
     struct stat st{};
 
     // Only move if it's a native directory (not a symlink)
@@ -222,44 +220,44 @@ static void handle_partition(const std::string& modpath, const std::string& part
         lstat(native_part.c_str(), &st) == 0 && !S_ISLNK(st.st_mode)) {
         printf("- Handle partition /%s\n", partition.c_str());
 
-        std::string new_path = modpath + "/" + partition;
-        std::string cmd = "mv -f " + part_path + " " + new_path;
+        const std::string new_path = modpath + "/" + partition;
+        const std::string cmd = "mv -f " + part_path + " " + new_path;
         system(cmd.c_str());
 
-        std::string link_path = modpath + "/system/" + partition;
+        const std::string link_path = modpath + "/system/" + partition;
         symlink(("../" + partition).c_str(), link_path.c_str());
     }
 }
 
 // Mark file for removal (create character device node)
-static void mark_remove(const std::string& path) {
-    std::string dir = path.substr(0, path.find_last_of('/'));
+void mark_remove(const std::string& path) {
+    const std::string dir = path.substr(0, path.find_last_of('/'));
     exec_command({"mkdir", "-p", dir});
     mknod(path.c_str(), S_IFCHR | 0644, makedev(0, 0));
 }
 
 // Check if module is metamodule
-static bool is_metamodule(const std::map<std::string, std::string>& props) {
+bool is_metamodule(const std::map<std::string, std::string>& props) {
     auto it = props.find("metamodule");
     if (it == props.end())
         return false;
-    std::string val = it->second;
+    const std::string val = it->second;
     return val == "1" || val == "true" || val == "TRUE";
 }
 
 // Get current metamodule ID if exists
-static std::string get_metamodule_id() {
-    std::string link_path =
+std::string get_metamodule_id() {
+    const std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
     struct stat st{};
     if (lstat(link_path.c_str(), &st) == 0 && S_ISLNK(st.st_mode)) {
         std::array<char, PATH_MAX> target{};
-        ssize_t len = readlink(link_path.c_str(), target.data(), target.size() - 1);
+        const ssize_t len = readlink(link_path.c_str(), target.data(), target.size() - 1);
         if (len > 0 && static_cast<size_t>(len) < target.size()) {
             target[static_cast<size_t>(len)] = '\0';
-            std::string target_path(target.data());
-            size_t pos = target_path.find_last_of('/');
+            const std::string target_path(target.data());
+            const size_t pos = target_path.find_last_of('/');
             if (pos != std::string::npos) {
                 return target_path.substr(pos + 1);
             }
@@ -270,20 +268,20 @@ static std::string get_metamodule_id() {
 
 // Check if it's safe to install module
 // Returns: 0 = safe, 1 = disabled metamodule, 2 = pending changes
-static int check_install_safety(bool installing_metamodule) {
+int check_install_safety(bool installing_metamodule) {
     if (installing_metamodule)
         return 0;
 
-    std::string metamodule_id = get_metamodule_id();
+    const std::string metamodule_id = get_metamodule_id();
     if (metamodule_id.empty())
         return 0;
 
-    std::string metamodule_path = std::string(MODULE_DIR) + metamodule_id;
+    const std::string metamodule_path = std::string(MODULE_DIR) + metamodule_id;
 
     // Check for marker files
-    bool has_update = file_exists(metamodule_path + "/" + UPDATE_FILE_NAME);
-    bool has_remove = file_exists(metamodule_path + "/" + REMOVE_FILE_NAME);
-    bool has_disable = file_exists(metamodule_path + "/" + DISABLE_FILE_NAME);
+    const bool has_update = file_exists(metamodule_path + "/" + UPDATE_FILE_NAME);
+    const bool has_remove = file_exists(metamodule_path + "/" + REMOVE_FILE_NAME);
+    const bool has_disable = file_exists(metamodule_path + "/" + DISABLE_FILE_NAME);
 
     // Stable state - safe to install
     if (!has_update && !has_remove && !has_disable)
@@ -296,10 +294,10 @@ static int check_install_safety(bool installing_metamodule) {
 }
 
 // Create metamodule symlink
-static bool create_metamodule_symlink(const std::string& module_id) {
-    std::string link_path =
+bool create_metamodule_symlink(const std::string& module_id) {
+    const std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
-    std::string target_path = std::string(MODULE_DIR) + module_id;
+    const std::string target_path = std::string(MODULE_DIR) + module_id;
 
     // Remove existing symlink/directory
     struct stat st{};
@@ -322,8 +320,8 @@ static bool create_metamodule_symlink(const std::string& module_id) {
 }
 
 // Remove metamodule symlink
-static void remove_metamodule_symlink() {
-    std::string link_path =
+void remove_metamodule_symlink() {
+    const std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
     struct stat st{};
@@ -334,8 +332,8 @@ static void remove_metamodule_symlink() {
 }
 
 // Execute customize.sh if present
-static bool exec_customize_sh(const std::string& modpath, const std::string& zipfile) {
-    std::string customize = modpath + "/customize.sh";
+bool exec_customize_sh(const std::string& modpath, const std::string& zipfile) {
+    const std::string customize = modpath + "/customize.sh";
     if (!file_exists(customize))
         return true;
 
@@ -346,7 +344,7 @@ static bool exec_customize_sh(const std::string& modpath, const std::string& zip
         busybox = "/system/bin/sh";
 
     // Create wrapper script with utility functions
-    std::string wrapper = modpath + "/.customize_wrapper.sh";
+    const std::string wrapper = modpath + "/.customize_wrapper.sh";
     std::ofstream wrapper_file(wrapper);
     if (!wrapper_file) {
         printf("! Failed to create wrapper script\n");
@@ -434,7 +432,7 @@ export API ARCH ABI ABI32 IS64BIT
 
     chmod(wrapper.c_str(), 0755);
 
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0)
         return false;
 
@@ -464,7 +462,7 @@ export API ARCH ABI ABI32 IS64BIT
 }
 
 // Native C++ module installation - replaces shell script
-static bool exec_install_script(const std::string& zip_path) {
+bool exec_install_script(const std::string& zip_path) {
     printf("- Extracting module files\n");
 
     // Get absolute path
@@ -473,10 +471,10 @@ static bool exec_install_script(const std::string& zip_path) {
         printf("! Invalid zip path: %s\n", zip_path.c_str());
         return false;
     }
-    std::string zipfile = realpath_buf.data();
+    const std::string zipfile = realpath_buf.data();
 
     // Create temp directory
-    std::string tmpdir = "/dev/tmp";
+    const std::string tmpdir = "/dev/tmp";
     exec_command({"rm", "-rf", tmpdir});
     exec_command({"mkdir", "-p", tmpdir});
     exec_command({"chcon", "u:object_r:system_file:s0", tmpdir});
@@ -491,9 +489,9 @@ static bool exec_install_script(const std::string& zip_path) {
 
     // Parse module.prop
     auto props = parse_module_prop(tmpdir + "/module.prop");
-    std::string mod_id = props.count("id") ? props["id"] : "";
-    std::string mod_name = props.count("name") ? props["name"] : "";
-    std::string mod_author = props.count("author") ? props["author"] : "";
+    const std::string mod_id = props.count("id") ? props["id"] : "";
+    const std::string mod_name = props.count("name") ? props["name"] : "";
+    const std::string mod_author = props.count("author") ? props["author"] : "";
 
     if (mod_id.empty()) {
         printf("! Module ID not found in module.prop\n");
@@ -511,11 +509,11 @@ static bool exec_install_script(const std::string& zip_path) {
     printf("\n");
 
     // Check if this is a metamodule
-    bool installing_metamodule = is_metamodule(props);
+    const bool installing_metamodule = is_metamodule(props);
 
     // Check install safety for regular modules
     if (!installing_metamodule) {
-        int safety = check_install_safety(false);
+        const int safety = check_install_safety(false);
         if (safety != 0) {
             printf("\n❌ Installation Blocked\n");
             printf("┌────────────────────────────────\n");
@@ -536,7 +534,7 @@ static bool exec_install_script(const std::string& zip_path) {
 
     // Check for duplicate metamodule
     if (installing_metamodule) {
-        std::string existing_id = get_metamodule_id();
+        const std::string existing_id = get_metamodule_id();
         if (!existing_id.empty() && existing_id != mod_id) {
             printf("\n❌ Installation Failed\n");
             printf("┌────────────────────────────────\n");
@@ -556,10 +554,10 @@ static bool exec_install_script(const std::string& zip_path) {
     }
 
     // Determine module root path
-    std::string modroot = std::string(MODULE_DIR) + "../modules_update";
+    const std::string modroot = std::string(MODULE_DIR) + "../modules_update";
     exec_command({"mkdir", "-p", modroot});
 
-    std::string modpath = modroot + "/" + mod_id;
+    const std::string modpath = modroot + "/" + mod_id;
     exec_command({"rm", "-rf", modpath});
     exec_command({"mkdir", "-p", modpath});
 
@@ -606,7 +604,7 @@ static bool exec_install_script(const std::string& zip_path) {
         }
 
         // Vendor directory with special secontext
-        std::string vendor_dir = modpath + "/system/vendor";
+        const std::string vendor_dir = modpath + "/system/vendor";
         if (file_exists(vendor_dir))
             set_perm_recursive(vendor_dir, 0, 2000, 0755, 0755, "u:object_r:vendor_file:s0");
     }
@@ -628,7 +626,7 @@ static bool exec_install_script(const std::string& zip_path) {
     handle_partition(modpath, "odm");
 
     // Update existing module if in BOOTMODE
-    std::string final_module = std::string(MODULE_DIR) + mod_id;
+    const std::string final_module = std::string(MODULE_DIR) + mod_id;
     exec_command({"mkdir", "-p", std::string(MODULE_DIR)});
     exec_command({"touch", final_module + "/update"});
     exec_command({"rm", "-f", final_module + "/remove"});
@@ -654,6 +652,12 @@ static bool exec_install_script(const std::string& zip_path) {
     printf("- Done\n");
     return true;
 }
+
+}  // namespace
+
+// Forward declaration for run_script (defined below); used by module_run_action,
+// exec_module_scripts, exec_common_scripts
+int run_script(const std::string& script, bool block, const std::string& module_id = "");
 
 int module_install(const std::string& zip_path) {
     // Ensure stdout is unbuffered for real-time output
@@ -699,7 +703,7 @@ int module_install(const std::string& zip_path) {
 }
 
 int module_uninstall(const std::string& id) {
-    std::string module_dir = std::string(MODULE_DIR) + id;
+    const std::string module_dir = std::string(MODULE_DIR) + id;
 
     if (!file_exists(module_dir)) {
         printf("Module %s not found\n", id.c_str());
@@ -707,7 +711,7 @@ int module_uninstall(const std::string& id) {
     }
 
     // Check if this is the current metamodule
-    std::string current_metamodule = get_metamodule_id();
+    const std::string current_metamodule = get_metamodule_id();
     if (!current_metamodule.empty() && current_metamodule == id) {
         // Remove metamodule symlink when uninstalling
         remove_metamodule_symlink();
@@ -715,8 +719,9 @@ int module_uninstall(const std::string& id) {
     }
 
     // Create remove flag
-    std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
-    std::ofstream ofs(remove_flag);
+    const std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
+    std::ofstream ofs(
+        remove_flag);  // NOLINT(misc-const-correctness) ofstream is non-const for write
     if (!ofs) {
         LOGE("Failed to create remove flag for %s", id.c_str());
         return 1;
@@ -727,8 +732,8 @@ int module_uninstall(const std::string& id) {
 }
 
 int module_undo_uninstall(const std::string& id) {
-    std::string module_dir = std::string(MODULE_DIR) + id;
-    std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
+    const std::string module_dir = std::string(MODULE_DIR) + id;
+    const std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
 
     if (!file_exists(remove_flag)) {
         printf("Module %s is not marked for removal\n", id.c_str());
@@ -745,8 +750,8 @@ int module_undo_uninstall(const std::string& id) {
 }
 
 int module_enable(const std::string& id) {
-    std::string module_dir = std::string(MODULE_DIR) + id;
-    std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
+    const std::string module_dir = std::string(MODULE_DIR) + id;
+    const std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
 
     if (!file_exists(module_dir)) {
         printf("Module %s not found\n", id.c_str());
@@ -765,15 +770,16 @@ int module_enable(const std::string& id) {
 }
 
 int module_disable(const std::string& id) {
-    std::string module_dir = std::string(MODULE_DIR) + id;
+    const std::string module_dir = std::string(MODULE_DIR) + id;
 
     if (!file_exists(module_dir)) {
         printf("Module %s not found\n", id.c_str());
         return 1;
     }
 
-    std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
-    std::ofstream ofs(disable_flag);
+    const std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
+    std::ofstream ofs(
+        disable_flag);  // NOLINT(misc-const-correctness) ofstream is non-const for write
     if (!ofs) {
         LOGE("Failed to create disable flag for %s", id.c_str());
         return 1;
@@ -784,8 +790,8 @@ int module_disable(const std::string& id) {
 }
 
 int module_run_action(const std::string& id) {
-    std::string module_dir = std::string(MODULE_DIR) + id;
-    std::string action_script = module_dir + "/" + MODULE_ACTION_SH;
+    const std::string module_dir = std::string(MODULE_DIR) + id;
+    const std::string action_script = module_dir + "/" + MODULE_ACTION_SH;
 
     if (!file_exists(action_script)) {
         printf("Module %s has no action script\n", id.c_str());
@@ -813,8 +819,8 @@ int module_list() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_path = std::string(MODULE_DIR) + entry->d_name;
-        std::string prop_path = module_path + "/module.prop";
+        const std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+        const std::string prop_path = module_path + "/module.prop";
 
         if (!file_exists(prop_path))
             continue;
@@ -837,7 +843,7 @@ int module_list() {
         info.mount =
             file_exists(module_path + "/system") && !file_exists(module_path + "/skip_mount");
         // Check if module is a metamodule
-        std::string metamodule_val = props.count("metamodule") ? props["metamodule"] : "";
+        const std::string metamodule_val = props.count("metamodule") ? props["metamodule"] : "";
         info.metamodule =
             (metamodule_val == "1" || metamodule_val == "true" || metamodule_val == "TRUE");
 
@@ -919,11 +925,11 @@ int prune_modules() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_path = std::string(MODULE_DIR) + entry->d_name;
-        std::string remove_flag = module_path + "/" + REMOVE_FILE_NAME;
+        const std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+        const std::string remove_flag = module_path + "/" + REMOVE_FILE_NAME;
 
         if (file_exists(remove_flag)) {
-            std::string cmd = "rm -rf " + module_path;
+            const std::string cmd = "rm -rf " + module_path;
             system(cmd.c_str());
             LOGI("Removed module %s", entry->d_name);
         }
@@ -954,7 +960,7 @@ int disable_all_modules() {
 
 int handle_updated_modules() {
     // Check modules_update directory and move updated modules
-    std::string update_dir = std::string(ADB_DIR) + "modules_update/";
+    const std::string update_dir = std::string(ADB_DIR) + "modules_update/";
     DIR* dir = opendir(update_dir.c_str());
     if (!dir)
         return 0;
@@ -966,12 +972,12 @@ int handle_updated_modules() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string src = update_dir + entry->d_name;
-        std::string dst = std::string(MODULE_DIR) + entry->d_name;
+        const std::string src = update_dir + entry->d_name;
+        const std::string dst = std::string(MODULE_DIR) + entry->d_name;
 
         // Remove old module if exists
         if (file_exists(dst)) {
-            std::string cmd = "rm -rf " + dst;
+            const std::string cmd = "rm -rf " + dst;
             system(cmd.c_str());
         }
 
@@ -987,7 +993,7 @@ int handle_updated_modules() {
     return 0;
 }
 
-static int run_script(const std::string& script, bool block, const std::string& module_id) {
+int run_script(const std::string& script, bool block, const std::string& module_id) {
     if (!file_exists(script))
         return 0;
 
@@ -1007,7 +1013,7 @@ static int run_script(const std::string& script, bool block, const std::string& 
 
     // Prepare all environment variable values BEFORE fork
     // to avoid calling C++ library functions in child process
-    std::string ver_code_str = std::to_string(get_version());
+    const std::string ver_code_str = std::to_string(get_version());
     const char* old_path = getenv("PATH");
     std::string binary_dir = std::string(BINARY_DIR);
     if (!binary_dir.empty() && binary_dir.back() == '/')
@@ -1027,7 +1033,7 @@ static int run_script(const std::string& script, bool block, const std::string& 
     const char* path_env = new_path.c_str();
     const char* module_id_cstr = module_id.c_str();
 
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid == 0) {
         // Child process
         setsid();
@@ -1089,8 +1095,8 @@ int exec_stage_script(const std::string& stage, bool block) {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_id = entry->d_name;
-        std::string module_path = std::string(MODULE_DIR) + module_id;
+        const std::string module_id = entry->d_name;
+        const std::string module_path = std::string(MODULE_DIR) + module_id;
 
         // Skip disabled modules
         if (file_exists(module_path + "/" + DISABLE_FILE_NAME))
@@ -1115,7 +1121,7 @@ int exec_stage_script(const std::string& stage, bool block) {
 }
 
 int exec_common_scripts(const std::string& stage_dir, bool block) {
-    std::string dir_path = std::string(ADB_DIR) + stage_dir + "/";
+    const std::string dir_path = std::string(ADB_DIR) + stage_dir + "/";
     DIR* dir = opendir(dir_path.c_str());
     if (!dir)
         return 0;
@@ -1128,11 +1134,11 @@ int exec_common_scripts(const std::string& stage_dir, bool block) {
             continue;
 
         // Only run .sh files
-        std::string name = entry->d_name;
+        const std::string name = entry->d_name;
         if (name.size() < 3 || name.substr(name.size() - 3) != ".sh")
             continue;
 
-        std::string script = dir_path + name;
+        const std::string script = dir_path + name;
         run_script(script, block);
     }
 
@@ -1152,13 +1158,13 @@ int load_sepolicy_rule() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+        const std::string module_path = std::string(MODULE_DIR) + entry->d_name;
 
         // Skip disabled modules
         if (file_exists(module_path + "/" + DISABLE_FILE_NAME))
             continue;
 
-        std::string rule_file = module_path + "/sepolicy.rule";
+        const std::string rule_file = module_path + "/sepolicy.rule";
         if (!file_exists(rule_file))
             continue;
 
@@ -1175,7 +1181,7 @@ int load_sepolicy_rule() {
 
         if (!all_rules.empty()) {
             LOGI("Applying sepolicy rules from %s", entry->d_name);
-            int ret = sepolicy_live_patch(all_rules);
+            const int ret = sepolicy_live_patch(all_rules);
             if (ret != 0) {
                 LOGW("Failed to apply some sepolicy rules from %s", entry->d_name);
             }
@@ -1205,13 +1211,13 @@ int load_system_prop() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+        const std::string module_path = std::string(MODULE_DIR) + entry->d_name;
 
         // Skip disabled modules
         if (file_exists(module_path + "/" + DISABLE_FILE_NAME))
             continue;
 
-        std::string prop_file = module_path + "/system.prop";
+        const std::string prop_file = module_path + "/system.prop";
         if (!file_exists(prop_file))
             continue;
 
@@ -1225,15 +1231,15 @@ int load_system_prop() {
             if (line.empty() || line[0] == '#')
                 continue;
 
-            size_t eq = line.find('=');
+            const size_t eq = line.find('=');
             if (eq == std::string::npos)
                 continue;
 
-            std::string key = trim(line.substr(0, eq));
-            std::string value = trim(line.substr(eq + 1));
+            const std::string key = trim(line.substr(0, eq));
+            const std::string value = trim(line.substr(eq + 1));
 
             // Execute resetprop in a child process
-            pid_t pid = fork();
+            const pid_t pid = fork();
             if (pid == 0) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
                 const char* k = key.c_str();
@@ -1245,7 +1251,7 @@ int load_system_prop() {
                     const_cast<char*>(v),
                     nullptr,
                 };
-                int rc = resetprop_main(4, argv_c.data());
+                const int rc = resetprop_main(4, argv_c.data());
                 _exit(rc);
 #else
                 execl(RESETPROP_PATH, "resetprop", "-n", key.c_str(), value.c_str(), nullptr);
@@ -1264,7 +1270,7 @@ int load_system_prop() {
 }
 
 // Parse bool config value (true, yes, 1, on -> true)
-static bool parse_bool_config(const std::string& value) {
+bool parse_bool_config(const std::string& value) {
     std::string lower = value;
     for (char& c : lower)
         c = tolower(c);
@@ -1272,12 +1278,12 @@ static bool parse_bool_config(const std::string& value) {
 }
 
 // Merge module configs (persist + temp, temp takes priority)
-static std::map<std::string, std::string> merge_module_configs(const std::string& module_id) {
+std::map<std::string, std::string> merge_module_configs(const std::string& module_id) {
     std::map<std::string, std::string> config;
 
-    std::string config_dir = std::string(MODULE_CONFIG_DIR) + module_id + "/";
-    std::string persist_path = config_dir + PERSIST_CONFIG_NAME;
-    std::string temp_path = config_dir + TEMP_CONFIG_NAME;
+    const std::string config_dir = std::string(MODULE_CONFIG_DIR) + module_id + "/";
+    const std::string persist_path = config_dir + PERSIST_CONFIG_NAME;
+    const std::string temp_path = config_dir + TEMP_CONFIG_NAME;
 
     // Load persist config first
     auto persist_content = read_file(persist_path);
@@ -1285,10 +1291,10 @@ static std::map<std::string, std::string> merge_module_configs(const std::string
         std::istringstream iss(*persist_content);
         std::string line;
         while (std::getline(iss, line)) {
-            size_t eq = line.find('=');
+            const size_t eq = line.find('=');
             if (eq != std::string::npos) {
-                std::string key = line.substr(0, eq);
-                std::string value = line.substr(eq + 1);
+                const std::string key = line.substr(0, eq);
+                const std::string value = line.substr(eq + 1);
                 config[key] = value;
             }
         }
@@ -1300,10 +1306,10 @@ static std::map<std::string, std::string> merge_module_configs(const std::string
         std::istringstream iss(*temp_content);
         std::string line;
         while (std::getline(iss, line)) {
-            size_t eq = line.find('=');
+            const size_t eq = line.find('=');
             if (eq != std::string::npos) {
-                std::string key = line.substr(0, eq);
-                std::string value = line.substr(eq + 1);
+                const std::string key = line.substr(0, eq);
+                const std::string value = line.substr(eq + 1);
                 config[key] = value;
             }
         }
@@ -1327,8 +1333,8 @@ std::map<std::string, std::vector<std::string>> get_managed_features() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string module_id = entry->d_name;
-        std::string module_path = std::string(MODULE_DIR) + module_id;
+        const std::string module_id = entry->d_name;
+        const std::string module_path = std::string(MODULE_DIR) + module_id;
 
         // Check if module is active (not disabled/removed)
         if (file_exists(module_path + "/disable"))
@@ -1344,7 +1350,7 @@ std::map<std::string, std::vector<std::string>> get_managed_features() {
         for (const auto& [key, value] : config) {
             // Check if key starts with "manage."
             if (key.size() > 7 && key.substr(0, 7) == "manage.") {
-                std::string feature_name = key.substr(7);
+                const std::string feature_name = key.substr(7);
                 if (parse_bool_config(value)) {
                     feature_list.push_back(feature_name);
                 }

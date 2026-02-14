@@ -42,8 +42,8 @@ std::vector<UserHideRule> load_user_hide_rules() {
 
 bool save_user_hide_rules(const std::vector<UserHideRule>& rules) {
     // Ensure directory exists
-    fs::path file_path(USER_HIDE_RULES_FILE);
-    fs::path dir = file_path.parent_path();
+    const fs::path file_path(USER_HIDE_RULES_FILE);
+    const fs::path dir = file_path.parent_path();
 
     try {
         if (!fs::exists(dir)) {

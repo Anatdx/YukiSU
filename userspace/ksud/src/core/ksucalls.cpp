@@ -190,7 +190,7 @@ int set_sepolicy(const SetSepolicyCmd& cmd) {
 
 std::pair<uint64_t, bool> get_feature(uint32_t feature_id) {
     GetFeatureCmd cmd = {feature_id, 0, 0};
-    int ret = ksuctl(KSU_IOCTL_GET_FEATURE, &cmd);
+    const int ret = ksuctl(KSU_IOCTL_GET_FEATURE, &cmd);
     if (ret < 0) {
         return {0, false};
     }

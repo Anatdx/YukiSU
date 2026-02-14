@@ -82,7 +82,7 @@ bool clone_attr(const fs::path& source, const fs::path& target) {
 #endif  // #ifdef __ANDROID__
 
     // Copy extended attributes (except security.selinux which we already copied)
-    ssize_t list_size = llistxattr(source.c_str(), nullptr, 0);
+    const ssize_t list_size = llistxattr(source.c_str(), nullptr, 0);
 
     if (list_size > 0) {
         std::vector<char> list(static_cast<size_t>(list_size));
@@ -95,7 +95,7 @@ bool clone_attr(const fs::path& source, const fs::path& target) {
                 }
 
                 // Get xattr value
-                ssize_t val_size = lgetxattr(source.c_str(), name, nullptr, 0);
+                const ssize_t val_size = lgetxattr(source.c_str(), name, nullptr, 0);
                 if (val_size > 0) {
                     std::vector<char> value(static_cast<size_t>(val_size));
                     if (lgetxattr(source.c_str(), name, value.data(), val_size) > 0) {
@@ -113,21 +113,23 @@ bool clone_attr(const fs::path& source, const fs::path& target) {
     return true;
 }
 
+namespace {
+
 // Modern mount using open_tree + move_mount
-static bool try_modern_bind_mount(const fs::path& source, const fs::path& target, bool recursive) {
+bool try_modern_bind_mount(const fs::path& source, const fs::path& target, bool recursive) {
 #ifdef __NR_open_tree
     int flags = OPEN_TREE_CLONE_VAL | AT_EMPTY_PATH;
     if (recursive) {
         flags |= static_cast<int>(MOUNT_AT_RECURSIVE);
     }
 
-    int tree_fd = syscall(__NR_open_tree, AT_FDCWD, source.c_str(), flags);
+    const int tree_fd = syscall(__NR_open_tree, AT_FDCWD, source.c_str(), flags);
     if (tree_fd < 0) {
         return false;
     }
 
-    int ret = syscall(__NR_move_mount, tree_fd, "", AT_FDCWD, target.c_str(),
-                      MOVE_MOUNT_F_EMPTY_PATH_VAL);
+    const int ret = syscall(__NR_move_mount, tree_fd, "", AT_FDCWD, target.c_str(),
+                            MOVE_MOUNT_F_EMPTY_PATH_VAL);
     close(tree_fd);
 
     return ret == 0;
@@ -135,6 +137,8 @@ static bool try_modern_bind_mount(const fs::path& source, const fs::path& target
     return false;
 #endif  // #ifdef __NR_open_tree
 }
+
+}  // namespace
 
 bool mount_bind_modern(const fs::path& source, const fs::path& target, bool recursive) {
     // Try modern API first (kernel 5.2+)
@@ -167,7 +171,7 @@ bool mount_with_retry(const char* source, const char* target, const char* filesy
             return true;
         }
 
-        int err = errno;
+        const int err = errno;
         if (attempt < max_retries - 1) {
             LOG_WARN("Mount attempt " + std::to_string(attempt + 1) + " failed: " + strerror(err) +
                      ", retrying...");
@@ -210,7 +214,7 @@ bool is_safe_symlink(const fs::path& link_path, const fs::path& base) {
 
         // Check for absolute paths pointing to sensitive directories
         if (target.is_absolute()) {
-            std::string target_str = target.string();
+            const std::string target_str = target.string();
             const std::vector<std::string> forbidden_prefixes = {"/data/", "/dev/", "/proc/",
                                                                  "/sys/"};
 
@@ -267,7 +271,7 @@ FastFileType get_file_type_fast(const fs::directory_entry& entry) {
         } else if (type == fs::file_type::socket) {
             return FastFileType::Socket;
         }
-    } catch (...) {
+    } catch (...) {  // NOLINT(bugprone-empty-catch) ignore symlink_status failure
     }
 
     return FastFileType::Unknown;

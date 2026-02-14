@@ -5,6 +5,19 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+/* Avoid macro expansion of our constexpr names (glibc sys/mount.h defines these) */
+#ifdef FSOPEN_CLOEXEC
+#undef FSOPEN_CLOEXEC
+#endif  // #ifdef FSOPEN_CLOEXEC
+#ifdef FSMOUNT_CLOEXEC
+#undef FSMOUNT_CLOEXEC
+#endif  // #ifdef FSMOUNT_CLOEXEC
+#ifdef MOVE_MOUNT_F_EMPTY_PATH
+#undef MOVE_MOUNT_F_EMPTY_PATH
+#endif  // #ifdef MOVE_MOUNT_F_EMPTY_PATH
+#ifdef OPEN_TREE_CLONE
+#undef OPEN_TREE_CLONE
+#endif  // #ifdef OPEN_TREE_CLONE
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -37,32 +50,34 @@ constexpr unsigned int OPEN_TREE_AT_RECURSIVE = 0x8000;  // avoid macro AT_RECUR
 constexpr unsigned int OPEN_TREE_CLOEXEC_VAL = 0x1;
 }  // namespace
 
-static int fsopen(const char* fsname, unsigned int flags) {
+namespace {
+
+int fsopen(const char* fsname, unsigned int flags) {
     return syscall(__NR_fsopen, fsname, flags);
 }
 
-static int fsconfig(int fd, unsigned int cmd, const char* key, const void* value, int aux) {
+int fsconfig(int fd, unsigned int cmd, const char* key, const void* value, int aux) {
     return syscall(__NR_fsconfig, fd, cmd, key, value, aux);
 }
 
-static int fsmount(int fd, unsigned int flags, unsigned int attr_flags) {
+int fsmount(int fd, unsigned int flags, unsigned int attr_flags) {
     return syscall(__NR_fsmount, fd, flags, attr_flags);
 }
 
-static int move_mount(int from_dfd, const char* from_pathname, int to_dfd, const char* to_pathname,
-                      unsigned int flags) {
+int move_mount(int from_dfd, const char* from_pathname, int to_dfd, const char* to_pathname,
+               unsigned int flags) {
     return syscall(__NR_move_mount, from_dfd, from_pathname, to_dfd, to_pathname, flags);
 }
 
-static int open_tree(int dfd, const char* filename, unsigned int flags) {
+int open_tree(int dfd, const char* filename, unsigned int flags) {
     return syscall(__NR_open_tree, dfd, filename, flags);
 }
 
-static bool mount_overlayfs_modern(const std::string& lowerdir_config,
-                                   const std::optional<std::string>& upperdir,
-                                   const std::optional<std::string>& workdir,
-                                   const std::string& dest, const std::string& mount_source) {
-    int fs_fd = fsopen("overlay", FSOPEN_CLOEXEC);
+bool mount_overlayfs_modern(const std::string& lowerdir_config,
+                            const std::optional<std::string>& upperdir,
+                            const std::optional<std::string>& workdir, const std::string& dest,
+                            const std::string& mount_source) {
+    const int fs_fd = fsopen("overlay", FSOPEN_CLOEXEC);
     if (fs_fd < 0) {
         return false;
     }
@@ -115,10 +130,10 @@ static bool mount_overlayfs_modern(const std::string& lowerdir_config,
 }
 
 // Escape commas in paths for overlay mount options
-static std::string escape_overlay_path(const std::string& path) {
+std::string escape_overlay_path(const std::string& path) {
     std::string result;
     result.reserve(path.size() + 10);
-    for (char c : path) {
+    for (const char c : path) {
         if (c == ',') {
             result += "\\,";
         } else {
@@ -128,17 +143,17 @@ static std::string escape_overlay_path(const std::string& path) {
     return result;
 }
 
-static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
-                                   const std::optional<std::string>& upperdir,
-                                   const std::optional<std::string>& workdir,
-                                   const std::string& dest, const std::string& mount_source) {
+bool mount_overlayfs_legacy(const std::string& lowerdir_config,
+                            const std::optional<std::string>& upperdir,
+                            const std::optional<std::string>& workdir, const std::string& dest,
+                            const std::string& mount_source) {
     // Escape commas in all paths
-    std::string safe_lowerdir = escape_overlay_path(lowerdir_config);
+    const std::string safe_lowerdir = escape_overlay_path(lowerdir_config);
     std::string data = "lowerdir=" + safe_lowerdir;
 
     if (upperdir && workdir) {
-        std::string safe_upper = escape_overlay_path(*upperdir);
-        std::string safe_work = escape_overlay_path(*workdir);
+        const std::string safe_upper = escape_overlay_path(*upperdir);
+        const std::string safe_work = escape_overlay_path(*workdir);
         data += ",upperdir=" + safe_upper + ",workdir=" + safe_work;
     }
 
@@ -154,7 +169,7 @@ static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
 }
 
 // FIX 1: Add function to get child mount points
-static std::vector<std::string> get_child_mounts(const std::string& target_root) {
+std::vector<std::string> get_child_mounts(const std::string& target_root) {
     std::vector<std::string> mounts;
 
     std::ifstream mountinfo("/proc/self/mountinfo");
@@ -195,17 +210,19 @@ static std::vector<std::string> get_child_mounts(const std::string& target_root)
 }
 
 // Helper to create mirror path
-static std::string get_mirror_path(const std::string& target_root) {
+std::string get_mirror_path(const std::string& target_root) {
     std::string clean_path = target_root;
     std::replace(clean_path.begin(), clean_path.end(), '/', '_');
     return "/dev/hymo_mirror/" + clean_path;
 }
 
+}  // namespace
+
 bool bind_mount(const fs::path& from, const fs::path& to, bool disable_umount) {
     LOG_DEBUG("bind mount " + from.string() + " -> " + to.string());
 
-    int tree_fd = open_tree(AT_FDCWD, from.c_str(),
-                            OPEN_TREE_CLONE | OPEN_TREE_AT_RECURSIVE | OPEN_TREE_CLOEXEC_VAL);
+    const int tree_fd = open_tree(AT_FDCWD, from.c_str(),
+                                  OPEN_TREE_CLONE | OPEN_TREE_AT_RECURSIVE | OPEN_TREE_CLOEXEC_VAL);
     bool success = false;
 
     if (tree_fd >= 0) {
@@ -235,18 +252,23 @@ bool bind_mount(const fs::path& from, const fs::path& to, bool disable_umount) {
     return success;
 }
 
+namespace {
+
 // FIX 2: Fix child mount restoration logic
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) all param pairs distinct by meaning
-static bool mount_overlay_child(
-    const std::string& mount_point, const std::string& relative,
-    const std::vector<std::string>& module_roots, const std::string& stock_root,
-    const std::string& mount_source,  // NOLINT(bugprone-easily-swappable-parameters)
-    bool disable_umount, const std::vector<std::string>& partitions) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) mount_point/relative and
+// stock_root/mount_source distinct by meaning NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+bool mount_overlay_child(
+    const std::string& mount_point,
+    const std::string& relative,  // NOLINT(bugprone-easily-swappable-parameters)
+    const std::vector<std::string>& module_roots,
+    const std::string& stock_root,  // NOLINT(bugprone-easily-swappable-parameters)
+    const std::string& mount_source, bool disable_umount,
+    const std::vector<std::string>& partitions) {
     (void)partitions;
     // Check if any module modified this subpath
     bool has_modification = false;
     for (const auto& lower : module_roots) {
-        fs::path path = fs::path(lower) / relative.substr(1);  // Remove leading /
+        const fs::path path = fs::path(lower) / relative.substr(1);  // Remove leading /
         if (fs::exists(path)) {
             has_modification = true;
             break;
@@ -265,7 +287,7 @@ static bool mount_overlay_child(
     // Collect lowerdirs for this subpath
     std::vector<std::string> lower_dirs;
     for (const auto& lower : module_roots) {
-        fs::path path = fs::path(lower) / relative.substr(1);
+        const fs::path path = fs::path(lower) / relative.substr(1);
         if (fs::is_directory(path)) {
             lower_dirs.push_back(path.string());
         } else if (fs::exists(path)) {
@@ -312,6 +334,8 @@ static bool mount_overlay_child(
     return true;
 }
 
+}  // namespace
+
 bool mount_overlay(const std::string& target_root_raw, const std::vector<std::string>& module_roots,
                    const std::string& mount_source, std::optional<fs::path> upperdir,
                    std::optional<fs::path> workdir, bool disable_umount,
@@ -335,7 +359,7 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
     // 2. Use the mirror as the lowerdir base.
     // 3. Restore child mounts by binding from the mirror.
 
-    std::string mirror_path = get_mirror_path(target_root);
+    const std::string mirror_path = get_mirror_path(target_root);
 
     // Ensure mirror base exists
     if (!fs::exists("/dev/hymo_mirror")) {
@@ -417,7 +441,7 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
         }
 
         // Source is inside the mirror
-        std::string source_path = mirror_path + relative;
+        const std::string source_path = mirror_path + relative;
 
         std::string log_msg;
         log_msg.reserve(mount_point.size() + source_path.size() + 32);

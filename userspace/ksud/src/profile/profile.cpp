@@ -10,7 +10,7 @@
 namespace ksud {
 
 int profile_get_sepolicy(const std::string& package) {
-    std::string path = std::string(PROFILE_SELINUX_DIR) + package;
+    const std::string path = std::string(PROFILE_SELINUX_DIR) + package;
     auto content = read_file(path);
     if (content) {
         printf("%s", content->c_str());
@@ -23,7 +23,7 @@ int profile_get_sepolicy(const std::string& package) {
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) package then policy
 int profile_set_sepolicy(const std::string& package, const std::string& policy) {
     ensure_dir_exists(PROFILE_SELINUX_DIR);
-    std::string path = std::string(PROFILE_SELINUX_DIR) + package;
+    const std::string path = std::string(PROFILE_SELINUX_DIR) + package;
 
     if (!write_file(path, policy)) {
         LOGE("Failed to write sepolicy profile");
@@ -34,7 +34,7 @@ int profile_set_sepolicy(const std::string& package, const std::string& policy) 
 }
 
 int profile_get_template(const std::string& id) {
-    std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
+    const std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
     auto content = read_file(path);
     if (content) {
         printf("%s", content->c_str());
@@ -47,7 +47,7 @@ int profile_get_template(const std::string& id) {
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) id then template content
 int profile_set_template(const std::string& id, const std::string& template_str) {
     ensure_dir_exists(PROFILE_TEMPLATE_DIR);
-    std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
+    const std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
 
     if (!write_file(path, template_str)) {
         LOGE("Failed to write template");
@@ -58,7 +58,7 @@ int profile_set_template(const std::string& id, const std::string& template_str)
 }
 
 int profile_delete_template(const std::string& id) {
-    std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
+    const std::string path = std::string(PROFILE_TEMPLATE_DIR) + id;
     if (unlink(path.c_str()) != 0) {
         LOGE("Failed to delete template %s", id.c_str());
         return 1;
@@ -94,7 +94,7 @@ int apply_profile_sepolies() {
         if (entry->d_name[0] == '.')
             continue;
 
-        std::string path = std::string(PROFILE_SELINUX_DIR) + entry->d_name;
+        const std::string path = std::string(PROFILE_SELINUX_DIR) + entry->d_name;
         auto content = read_file(path);
         if (!content)
             continue;

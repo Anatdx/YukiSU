@@ -12,16 +12,18 @@
 
 namespace ksud {
 
-static std::string get_module_id() {
+namespace {
+
+std::string get_module_id() {
     const char* id = getenv("KSU_MODULE");
     return id ? std::string(id) : "";
 }
 
-static std::string get_config_dir(const std::string& module_id) {
+std::string get_config_dir(const std::string& module_id) {
     return std::string(MODULE_CONFIG_DIR) + module_id + "/";
 }
 
-static std::map<std::string, std::string> load_config(const std::string& path) {
+std::map<std::string, std::string> load_config(const std::string& path) {
     std::map<std::string, std::string> config;
     auto content = read_file(path);
     if (!content)
@@ -30,10 +32,10 @@ static std::map<std::string, std::string> load_config(const std::string& path) {
     std::istringstream iss(*content);
     std::string line;
     while (std::getline(iss, line)) {
-        size_t eq = line.find('=');
+        const size_t eq = line.find('=');
         if (eq != std::string::npos) {
-            std::string key = line.substr(0, eq);
-            std::string value = line.substr(eq + 1);
+            const std::string key = line.substr(0, eq);
+            const std::string value = line.substr(eq + 1);
             config[key] = value;
         }
     }
@@ -41,7 +43,7 @@ static std::map<std::string, std::string> load_config(const std::string& path) {
     return config;
 }
 
-static bool save_config(const std::string& path, const std::map<std::string, std::string>& config) {
+bool save_config(const std::string& path, const std::map<std::string, std::string>& config) {
     std::ofstream ofs(path);
     if (!ofs)
         return false;
@@ -53,23 +55,25 @@ static bool save_config(const std::string& path, const std::map<std::string, std
     return true;
 }
 
+}  // namespace
+
 int module_config_handle(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud module config <get|set|list|delete|clear> ...\n");
         return 1;
     }
 
-    std::string module_id = get_module_id();
+    const std::string module_id = get_module_id();
     if (module_id.empty()) {
         printf("Error: KSU_MODULE environment variable not set\n");
         return 1;
     }
 
-    std::string config_dir = get_config_dir(module_id);
+    const std::string config_dir = get_config_dir(module_id);
     ensure_dir_exists(config_dir);
 
-    std::string persist_path = config_dir + PERSIST_CONFIG_NAME;
-    std::string temp_path = config_dir + TEMP_CONFIG_NAME;
+    const std::string persist_path = config_dir + PERSIST_CONFIG_NAME;
+    const std::string temp_path = config_dir + TEMP_CONFIG_NAME;
 
     const std::string& cmd = args[0];
 
@@ -94,9 +98,9 @@ int module_config_handle(const std::vector<std::string>& args) {
     } else if (cmd == "set" && args.size() > 2) {
         const std::string& key = args[1];
         const std::string& value = args[2];
-        bool is_temp = args.size() > 3 && (args[3] == "-t" || args[3] == "--temp");
+        const bool is_temp = args.size() > 3 && (args[3] == "-t" || args[3] == "--temp");
 
-        std::string path = is_temp ? temp_path : persist_path;
+        const std::string path = is_temp ? temp_path : persist_path;
         auto config = load_config(path);
         config[key] = value;
 
@@ -126,9 +130,9 @@ int module_config_handle(const std::vector<std::string>& args) {
         return 0;
     } else if (cmd == "delete" && args.size() > 1) {
         const std::string& key = args[1];
-        bool is_temp = args.size() > 2 && (args[2] == "-t" || args[2] == "--temp");
+        const bool is_temp = args.size() > 2 && (args[2] == "-t" || args[2] == "--temp");
 
-        std::string path = is_temp ? temp_path : persist_path;
+        const std::string path = is_temp ? temp_path : persist_path;
         auto config = load_config(path);
         config.erase(key);
 
@@ -139,9 +143,9 @@ int module_config_handle(const std::vector<std::string>& args) {
 
         return 0;
     } else if (cmd == "clear") {
-        bool is_temp = args.size() > 1 && (args[1] == "-t" || args[1] == "--temp");
+        const bool is_temp = args.size() > 1 && (args[1] == "-t" || args[1] == "--temp");
 
-        std::string path = is_temp ? temp_path : persist_path;
+        const std::string path = is_temp ? temp_path : persist_path;
         unlink(path.c_str());
 
         return 0;
@@ -166,7 +170,7 @@ void clear_all_temp_configs() {
         if (entry->d_type != DT_DIR)
             continue;
 
-        std::string temp_config =
+        const std::string temp_config =
             std::string(MODULE_CONFIG_DIR) + entry->d_name + "/" + TEMP_CONFIG_NAME;
         if (access(temp_config.c_str(), F_OK) == 0) {
             unlink(temp_config.c_str());

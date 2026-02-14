@@ -17,7 +17,9 @@ struct UmountEntry {
     uint32_t flags{};
 };
 
-static std::vector<UmountEntry> load_umount_config() {
+namespace {
+
+std::vector<UmountEntry> load_umount_config() {
     std::vector<UmountEntry> entries;
     auto content = read_file(UMOUNT_CONFIG_PATH);
     if (!content)
@@ -31,7 +33,7 @@ static std::vector<UmountEntry> load_umount_config() {
             continue;
 
         UmountEntry entry;
-        size_t space = line.find(' ');
+        const size_t space = line.find(' ');
         if (space != std::string::npos) {
             entry.path = line.substr(0, space);
             entry.flags = std::stoul(line.substr(space + 1));
@@ -45,7 +47,7 @@ static std::vector<UmountEntry> load_umount_config() {
     return entries;
 }
 
-static bool save_umount_entries(const std::vector<UmountEntry>& entries) {
+bool save_umount_entries(const std::vector<UmountEntry>& entries) {
     std::ofstream ofs(UMOUNT_CONFIG_PATH);
     if (!ofs)
         return false;
@@ -57,6 +59,8 @@ static bool save_umount_entries(const std::vector<UmountEntry>& entries) {
 
     return true;
 }
+
+}  // namespace
 
 int umount_remove_entry(const std::string& mnt) {
     auto entries = load_umount_config();
@@ -98,7 +102,7 @@ int umount_save_config() {
             continue;
 
         UmountEntry entry;
-        size_t space = line.find(' ');
+        const size_t space = line.find(' ');
         if (space != std::string::npos) {
             entry.path = line.substr(0, space);
             entry.flags = std::stoul(line.substr(space + 1));
@@ -122,7 +126,7 @@ int umount_apply_config() {
     auto entries = load_umount_config();
 
     for (const auto& entry : entries) {
-        int ret = umount_list_add(entry.path, entry.flags);
+        const int ret = umount_list_add(entry.path, entry.flags);
         if (ret < 0) {
             LOGW("Failed to add %s to umount list", entry.path.c_str());
         } else {
@@ -136,7 +140,7 @@ int umount_apply_config() {
 
 int umount_clear_config() {
     // Clear kernel list
-    int ret = umount_list_wipe();
+    const int ret = umount_list_wipe();
     if (ret < 0) {
         LOGE("Failed to clear kernel umount list");
         return 1;

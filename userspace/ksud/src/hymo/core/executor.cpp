@@ -8,19 +8,23 @@
 
 namespace hymo {
 
-static std::string extract_id(const fs::path& path) {
+namespace {
+
+std::string extract_id(const fs::path& path) {
     if (path.has_parent_path()) {
         return path.parent_path().filename().string();
     }
     return "";
 }
 
-static fs::path extract_module_root(const fs::path& partition_path) {
+fs::path extract_module_root(const fs::path& partition_path) {
     if (partition_path.has_parent_path()) {
         return partition_path.parent_path();
     }
     return {};
 }
+
+}  // namespace
 
 ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool hymofs_active) {
     if (!plan.hymofs_module_ids.empty()) {
@@ -35,6 +39,7 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
     // Execute Overlay Operations
     for (const auto& op : plan.overlay_ops) {
         std::vector<std::string> lowerdir_strings;
+        lowerdir_strings.reserve(op.lowerdirs.size());
         for (const auto& p : op.lowerdirs) {
             lowerdir_strings.push_back(p.string());
         }
@@ -53,10 +58,10 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
 
             // Fallback: Add all involved modules to magic queue
             for (const auto& layer_path : op.lowerdirs) {
-                fs::path root = extract_module_root(layer_path);
+                const fs::path root = extract_module_root(layer_path);
                 if (!root.empty()) {
                     magic_queue.push_back(root);
-                    std::string id = extract_id(layer_path);
+                    const std::string id = extract_id(layer_path);
                     if (!id.empty()) {
                         fallback_ids.push_back(id);
                     }
@@ -86,7 +91,7 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
     if (!magic_queue.empty()) {
         fs::path tempdir = select_temp_dir();
         if (!config.tempdir.empty()) {
-            fs::path candidate = config.tempdir;
+            const fs::path candidate = config.tempdir;
             bool candidate_ok = true;
 
             if (!is_safe_temp_dir(candidate, hymofs_active)) {
