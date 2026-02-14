@@ -641,13 +641,9 @@ int boot_patch(const std::vector<std::string>& args) {
     }
     printf("- Boot image size: %ld bytes\n", (long)boot_stat.st_size);
 
-    // On Android, use --skip-decomp to avoid in-process LZ4_LEGACY decompress (SIGSEGV on some
-    // devices). We will decompress ramdisk via Magisk's magiskboot if it is LZ4_LEGACY.
-#ifdef __ANDROID__
-    std::vector<std::string> unpack_args = {"unpack", bootimage, "--skip-decomp"};
-#else
+    // Try normal unpack first (with decompress). On some devices LZ4_LEGACY in-process decompress
+    // crashes (SIGSEGV, exit 139); then we retry with --skip-decomp and tell user to use PC.
     std::vector<std::string> unpack_args = {"unpack", bootimage};
-#endif  // #ifdef __ANDROID__
     auto unpack_result = exec_command_magiskboot(magiskboot, unpack_args, workdir);
     printf("- unpack exit code: %d\n", unpack_result.exit_code);
     if (!unpack_result.stdout_str.empty()) {
@@ -657,28 +653,40 @@ int boot_patch(const std::vector<std::string>& args) {
         printf("- stderr: %s\n", unpack_result.stderr_str.c_str());
     }
 
-    if (unpack_result.exit_code != 0) {
-        LOGE("magiskboot unpack failed with exit code %d", unpack_result.exit_code);
-        cleanup();
-        return 1;
-    }
-
 #ifdef __ANDROID__
-    // LZ4_LEGACY ramdisk: in-process decompress crashes on this device (SIGSEGV).
-    // We use --skip-decomp so unpack succeeds; if ramdisk is still compressed, we cannot continue.
-    constexpr unsigned char LZ4_LEGACY_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
-    std::string ramdisk_cpio = workdir + "/ramdisk.cpio";
-    std::ifstream ramdisk_in(ramdisk_cpio, std::ios::binary);
-    unsigned char magic_buf[4];
-    if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf), 4) &&
-        ramdisk_in.gcount() == 4 && memcmp(magic_buf, LZ4_LEGACY_MAGIC, 4) == 0) {
-        ramdisk_in.close();
-        LOGE("LZ4_LEGACY ramdisk is not supported for on-device patch.");
-        LOGE("Please patch the boot image on a PC (e.g. with magiskboot decompress).");
-        cleanup();
-        return 1;
-    }
+    constexpr int SIGSEGV_EXIT = 128 + 11;  // 139
+    if (unpack_result.exit_code == SIGSEGV_EXIT) {
+        printf(
+            "- Unpack crashed (SIGSEGV); retrying with --skip-decomp to avoid LZ4 decompress.\n");
+        unpack_args.push_back("--skip-decomp");
+        unpack_result = exec_command_magiskboot(magiskboot, unpack_args, workdir);
+        printf("- unpack (skip-decomp) exit code: %d\n", unpack_result.exit_code);
+        if (unpack_result.exit_code != 0) {
+            LOGE("magiskboot unpack failed with exit code %d", unpack_result.exit_code);
+            cleanup();
+            return 1;
+        }
+        constexpr unsigned char LZ4_LEGACY_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
+        std::string ramdisk_cpio = workdir + "/ramdisk.cpio";
+        std::ifstream ramdisk_in(ramdisk_cpio, std::ios::binary);
+        unsigned char magic_buf[4];
+        if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf), 4) &&
+            ramdisk_in.gcount() == 4 && memcmp(magic_buf, LZ4_LEGACY_MAGIC, 4) == 0) {
+            ramdisk_in.close();
+            LOGE("Ramdisk is LZ4_LEGACY; on-device decompress crashed (SIGSEGV), so it was "
+                 "skipped.");
+            LOGE("Cannot continue without decompressed ramdisk. Patch the boot image on a PC "
+                 "instead.");
+            cleanup();
+            return 1;
+        }
+    } else
 #endif  // #ifdef __ANDROID__
+        if (unpack_result.exit_code != 0) {
+            LOGE("magiskboot unpack failed with exit code %d", unpack_result.exit_code);
+            cleanup();
+            return 1;
+        }
 
     // Find ramdisk
     std::string ramdisk;
@@ -896,12 +904,31 @@ int boot_restore(const std::vector<std::string>& args) {
 
     // Unpack boot image (must run in workdir so output files go there)
     printf("- Unpacking boot image\n");
-#ifdef __ANDROID__
-    std::vector<std::string> unpack_args_restore = {"unpack", bootimage, "--skip-decomp"};
-#else
     std::vector<std::string> unpack_args_restore = {"unpack", bootimage};
-#endif  // #ifdef __ANDROID__
     auto unpack_result = exec_command_magiskboot(magiskboot, unpack_args_restore, workdir);
+#ifdef __ANDROID__
+    constexpr int SIGSEGV_EXIT_R = 128 + 11;  // 139
+    if (unpack_result.exit_code == SIGSEGV_EXIT_R) {
+        printf("- Unpack crashed (SIGSEGV); retrying with --skip-decomp.\n");
+        unpack_args_restore.push_back("--skip-decomp");
+        unpack_result = exec_command_magiskboot(magiskboot, unpack_args_restore, workdir);
+    }
+    if (unpack_result.exit_code == 0) {
+        constexpr unsigned char LZ4_LEG_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
+        std::string rd_cpio = workdir + "/ramdisk.cpio";
+        std::ifstream rd_in(rd_cpio, std::ios::binary);
+        unsigned char mb[4];
+        if (rd_in && rd_in.read(reinterpret_cast<char*>(mb), 4) && rd_in.gcount() == 4 &&
+            memcmp(mb, LZ4_LEG_MAGIC, 4) == 0) {
+            rd_in.close();
+            LOGE("Ramdisk is LZ4_LEGACY; on-device decompress crashed (SIGSEGV), so it was "
+                 "skipped.");
+            LOGE("Restore or patch the boot image on a PC instead.");
+            cleanup();
+            return 1;
+        }
+    }
+#endif  // #ifdef __ANDROID__
     if (unpack_result.exit_code != 0) {
         LOGE("magiskboot unpack failed");
         if (!unpack_result.stderr_str.empty()) {
@@ -910,23 +937,6 @@ int boot_restore(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
-
-#ifdef __ANDROID__
-    {
-        constexpr unsigned char LZ4_LEG_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
-        std::string rd_cpio = workdir + "/ramdisk.cpio";
-        std::ifstream rd_in(rd_cpio, std::ios::binary);
-        unsigned char mb[4];
-        if (rd_in && rd_in.read(reinterpret_cast<char*>(mb), 4) && rd_in.gcount() == 4 &&
-            memcmp(mb, LZ4_LEG_MAGIC, 4) == 0) {
-            rd_in.close();
-            LOGE("LZ4_LEGACY ramdisk is not supported for on-device restore.");
-            LOGE("Please patch or restore the boot image on a PC.");
-            cleanup();
-            return 1;
-        }
-    }
-#endif  // #ifdef __ANDROID__
 
     // Find ramdisk
     std::string ramdisk;
