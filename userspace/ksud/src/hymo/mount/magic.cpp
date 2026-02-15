@@ -24,8 +24,9 @@
 #include "partition_utils.hpp"
 
 namespace {
-constexpr unsigned long TMPFS_MAGIC = 0x01021994;
-}
+// Same value as linux/magic.h TMPFS_MAGIC; avoid macro name conflict.
+constexpr unsigned long kTmpfsMagic = 0x01021994;
+}  // namespace
 
 namespace hymo {
 
