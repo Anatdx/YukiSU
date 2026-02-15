@@ -13,6 +13,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <array>
+#include <climits>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -444,9 +445,10 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
-                                   const std::vector<std::string>& sub_args,
+// magiskboot is linked into ksud (multi-call); call its main in-process.
+extern int magiskboot_main(int argc, char** argv);
+
+ExecResult exec_command_magiskboot(const std::vector<std::string>& sub_args,
                                    const std::string& workdir) {
     std::vector<std::string> args;
     args.reserve(1 + sub_args.size());
@@ -455,41 +457,57 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
         args.push_back(a);
 
     ExecResult result{-1, "", ""};
-    if (args.empty())
+    if (args.size() < 2)
         return result;
+
+    std::array<char, PATH_MAX> saved_cwd{};
+    if (!workdir.empty()) {
+        if (getcwd(saved_cwd.data(), saved_cwd.size()) == nullptr)
+            return result;
+        if (chdir(workdir.c_str()) != 0)
+            return result;
+    }
 
     std::array<int, 2> stdout_pipe{};
     std::array<int, 2> stderr_pipe{};
-    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0)
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0) {
+        if (!workdir.empty())
+            chdir(saved_cwd.data());
         return result;
-    const pid_t pid = fork();
-    if (pid < 0) {
+    }
+
+    const int saved_stdout = dup(STDOUT_FILENO);
+    const int saved_stderr = dup(STDERR_FILENO);
+    if (saved_stdout < 0 || saved_stderr < 0) {
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
         close(stderr_pipe[0]);
         close(stderr_pipe[1]);
+        if (!workdir.empty())
+            chdir(saved_cwd.data());
         return result;
     }
-    if (pid == 0) {
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        if (!workdir.empty() && chdir(workdir.c_str()) != 0) {
-            _exit(127);
-        }
-        std::vector<char*> c_args;
-        c_args.reserve(args.size() + 1U);
-        for (const auto& arg : args)
-            c_args.push_back(const_cast<char*>(arg.c_str()));
-        c_args.push_back(nullptr);
-        execv(magiskboot_path.c_str(), c_args.data());
-        _exit(127);
-    }
+
+    dup2(stdout_pipe[1], STDOUT_FILENO);
+    dup2(stderr_pipe[1], STDERR_FILENO);
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
+
+    std::vector<char*> c_args;
+    c_args.reserve(args.size() + 1U);
+    for (auto& arg : args)
+        c_args.push_back(arg.data());
+    c_args.push_back(nullptr);
+
+    const int exit_code = magiskboot_main(static_cast<int>(c_args.size() - 1), c_args.data());
+
+    (void)fflush(stdout);
+    (void)fflush(stderr);
+    dup2(saved_stdout, STDOUT_FILENO);
+    dup2(saved_stderr, STDERR_FILENO);
+    close(saved_stdout);
+    close(saved_stderr);
+
     std::array<char, 1024> buf{};
     ssize_t n;
     while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0)
@@ -498,23 +516,11 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0)
         result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     close(stderr_pipe[0]);
-    int status;
-    waitpid(pid, &status, 0);
-    if (WIFEXITED(status))
-        result.exit_code = WEXITSTATUS(status);
-    else if (WIFSIGNALED(status)) {
-        const int sig = WTERMSIG(status);
-        result.exit_code = 128 + sig;
-        result.stderr_str.append("magiskboot terminated by signal ");
-        result.stderr_str.append(std::to_string(sig));
-        const char* sig_name = strsignal(sig);
-        if (sig_name && sig_name[0]) {
-            result.stderr_str.append(" (");
-            result.stderr_str.append(sig_name);
-            result.stderr_str.append(")");
-        }
-        result.stderr_str.push_back('\n');
-    }
+
+    if (!workdir.empty())
+        chdir(saved_cwd.data());
+
+    result.exit_code = exit_code;
     return result;
 }
 

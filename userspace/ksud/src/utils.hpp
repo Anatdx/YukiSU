@@ -52,10 +52,8 @@ struct ExecResult {
 };
 ExecResult exec_command(const std::vector<std::string>& args);
 ExecResult exec_command(const std::vector<std::string>& args, const std::string& workdir);
-/** Run magiskboot binary (path may be multi-call ksud); argv[0] is set to "magiskboot" so it
- * dispatches correctly. */
-ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
-                                   const std::vector<std::string>& sub_args,
+/** Run magiskboot in-process (same binary); no fork/exec. */
+ExecResult exec_command_magiskboot(const std::vector<std::string>& sub_args,
                                    const std::string& workdir = "");
 int exec_command_async(const std::vector<std::string>& args);
 

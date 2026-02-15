@@ -658,19 +658,9 @@ std::string get_kernel_version(const std::string& slot_suffix) {
     }
     const std::string workdir = tmp_dir_template.data();
 
-    // Find magiskboot with workdir to ensure it's available there
-    const std::string magiskboot = find_magiskboot("", workdir);
-    if (magiskboot.empty()) {
-        LOGE("magiskboot not found");
-        exec_command_sync({"rm", "-rf", workdir});
-        return "";
-    }
-
-    LOGI("Using magiskboot: %s", magiskboot.c_str());
-
-    // Unpack boot image in the workdir
+    // Unpack boot image in the workdir (magiskboot runs in-process)
     const std::string kernel_path = workdir + "/kernel";
-    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", device}, workdir);
+    auto unpack_result = exec_command_magiskboot({"unpack", device}, workdir);
 
     std::string result;
     if (unpack_result.exit_code == 0) {
