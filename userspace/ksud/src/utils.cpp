@@ -458,25 +458,17 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     if (args.empty())
         return result;
 
-    std::array<int, 2> stdout_pipe{};
-    std::array<int, 2> stderr_pipe{};
-    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0)
-        return result;
     const pid_t pid = fork();
-    if (pid < 0) {
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
+    if (pid < 0)
         return result;
-    }
     if (pid == 0) {
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > STDERR_FILENO)
+                close(devnull);
+        }
         if (!workdir.empty() && chdir(workdir.c_str()) != 0) {
             _exit(127);
         }
@@ -488,16 +480,6 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
         execv(magiskboot_path.c_str(), c_args.data());
         _exit(127);
     }
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-    std::array<char, 1024> buf{};
-    ssize_t n;
-    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0)
-        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
-    close(stdout_pipe[0]);
-    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0)
-        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
-    close(stderr_pipe[0]);
     int status;
     waitpid(pid, &status, 0);
     if (WIFEXITED(status))
