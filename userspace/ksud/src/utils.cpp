@@ -26,6 +26,9 @@
 #include <zip.h>
 #endif  // #ifdef USE_LIBZIP
 
+// MagiskbootAlone entry (global namespace); called in-process from exec_command_magiskboot.
+extern int magiskboot_main(int argc, char** argv);
+
 namespace ksud {
 
 bool ensure_dir_exists(const std::string& path) {
@@ -445,9 +448,6 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
-// magiskboot is linked into ksud (multi-call); call its main in-process.
-extern int magiskboot_main(int argc, char** argv);
-
 ExecResult exec_command_magiskboot(const std::vector<std::string>& sub_args,
                                    const std::string& workdir) {
     std::vector<std::string> args;
@@ -499,7 +499,7 @@ ExecResult exec_command_magiskboot(const std::vector<std::string>& sub_args,
         c_args.push_back(arg.data());
     c_args.push_back(nullptr);
 
-    const int exit_code = magiskboot_main(static_cast<int>(c_args.size() - 1), c_args.data());
+    const int exit_code = ::magiskboot_main(static_cast<int>(c_args.size() - 1), c_args.data());
 
     (void)fflush(stdout);
     (void)fflush(stderr);
