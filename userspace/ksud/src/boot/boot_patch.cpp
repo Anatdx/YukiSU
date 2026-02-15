@@ -769,10 +769,13 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     // that require: repack <in-boot.img> <out-boot.img>.
     const std::string new_boot = workdir + "/new-boot.img";
     printf("- Repacking boot image\n");
-    // Keep compatibility with reduced magiskboot ports that don't implement
-    // all compression codecs (e.g. LZ4 legacy re-compress): write raw blobs.
-    auto repack_result = exec_command_magiskboot(
-        magiskboot, {"repack", bootimage, new_boot, "--skip-comp"}, workdir);
+    // MagiskbootAlone supports LZ4_LEGACY, GZIP, and LZ4 compression natively.
+    // Do NOT use --skip-comp: the ramdisk must be recompressed to fit the
+    // partition. Without recompression the uncompressed ramdisk makes the output
+    // image far larger than the original, exhausting cache space and overflowing
+    // the boot partition.
+    auto repack_result =
+        exec_command_magiskboot(magiskboot, {"repack", bootimage, new_boot}, workdir);
     if (repack_result.exit_code != 0) {
         LOGE("magiskboot repack failed");
         if (!repack_result.stdout_str.empty()) {
