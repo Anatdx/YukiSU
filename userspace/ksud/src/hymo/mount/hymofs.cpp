@@ -24,10 +24,12 @@ int get_anon_fd() {
         return s_hymo_fd;
     }
 
-    // Request anonymous fd from kernel via GET_FD syscall
-    const int fd = syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, 0);
+    // Request anonymous fd from kernel via SYS_reboot kprobe (KernelSU style).
+    // The kernel writes fd to &fd via put_user; syscall return value is ignored.
+    int fd = -1;
+    syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
     if (fd < 0) {
-        LOG_ERROR("Failed to get HymoFS anonymous fd: " + std::string(strerror(errno)));
+        LOG_ERROR("Failed to get HymoFS anonymous fd (fd=" + std::to_string(fd) + ")");
         return -1;
     }
 
