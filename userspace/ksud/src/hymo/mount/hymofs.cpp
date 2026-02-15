@@ -27,15 +27,23 @@ int get_anon_fd() {
         return s_hymo_fd;
     }
 
-    // Prefer prctl (SECCOMP-safe); fallback to SYS_reboot for older LKM.
+    // Prefer prctl (SECCOMP-safe); fallback to SYS_reboot. Retry with backoff if LKM loads after
+    // us.
     int fd = -1;
-    prctl(HYMO_PRCTL_GET_FD, reinterpret_cast<unsigned long>(&fd), 0, 0, 0);
-    if (fd < 0) {
-        for (int attempt = 0; attempt < 2 && fd < 0; ++attempt) {
-            if (attempt > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    const int kWaitAttempts = 4;  // ~0 + 1s + 2s + 3s
+    const int kShortRetries = 2;  // 80ms between prctl/reboot
+    for (int wait = 0; wait < kWaitAttempts && fd < 0; ++wait) {
+        if (wait > 0) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        prctl(HYMO_PRCTL_GET_FD, reinterpret_cast<unsigned long>(&fd), 0, 0, 0);
+        if (fd < 0) {
+            for (int attempt = 0; attempt < kShortRetries && fd < 0; ++attempt) {
+                if (attempt > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                }
+                syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
             }
-            syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
         }
     }
     if (fd < 0) {
