@@ -43,8 +43,14 @@ void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
     if (!groups.empty()) {
         setgroups(groups.size(), groups.data());
     }
-    setresgid(gid, gid, gid);
-    setresuid(uid, uid, uid);
+    // Only change creds when not already the target (when already root, no setres* — avoids
+    // seccomp).
+    if (getegid() != gid) {
+        setresgid(gid, gid, gid);
+    }
+    if (geteuid() != uid) {
+        setresuid(uid, uid, uid);
+    }
 }
 
 void wrap_tty(int fd) {
@@ -71,9 +77,13 @@ int su_main(int argc, char** argv) {
         return 1;
     }
 
-    // Set UID/GID to 0 temporarily
-    setgid(0);
-    setuid(0);
+    // Only change uid/gid when we are the su binary and YukiSU kernel has granted root (grant_root
+    // just did the kernel side; we set userspace creds here). When the app is already root (e.g.
+    // third-party like IcePatch), do not call setuid/setgid — no need and seccomp would SIGSYS.
+    if (geteuid() != 0 || getegid() != 0) {
+        setgid(0);
+        setuid(0);
+    }
 
     // Parse options
     std::string command;
@@ -307,9 +317,12 @@ int grant_root_shell(bool global_mnt) {
         return 1;
     }
 
-    // Set UID/GID to 0
-    setgid(0);
-    setuid(0);
+    // Only set uid/gid when not already root (su binary + YukiSU kernel path). When already root
+    // (e.g. IcePatch), skip to avoid seccomp SIGSYS.
+    if (geteuid() != 0 || getegid() != 0) {
+        setgid(0);
+        setuid(0);
+    }
 
     // Switch to global mount namespace if requested
     if (global_mnt) {
