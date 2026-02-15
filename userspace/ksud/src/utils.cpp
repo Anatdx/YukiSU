@@ -45,11 +45,11 @@ bool ensure_dir_exists(const std::string& path) {
         }
     }
 
-    if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST) {
+    if (mkdir(path.c_str(), 0755) != 0 &&
+        errno != EEXIST) {  // NOLINT(readability-simplify-boolean-expr)
         LOGE("Failed to create directory %s: %s", path.c_str(), strerror(errno));
         return false;
     }
-
     return true;
 }
 
@@ -112,11 +112,10 @@ bool ensure_binary(const std::string& path, const uint8_t* data, size_t size,
     const ssize_t written = write(fd, data, size);
     close(fd);
 
-    if (written != static_cast<ssize_t>(size)) {
+    if (written != static_cast<ssize_t>(size)) {  // NOLINT(readability-simplify-boolean-expr)
         LOGE("Failed to write %s: %s", path.c_str(), strerror(errno));
         return false;
     }
-
     return true;
 }
 
@@ -220,7 +219,7 @@ void switch_cgroups() {
     }
 }
 
-void umask(mode_t mask) {
+void umask(mode_t mask) {  // NOLINT(misc-unused-parameters) forwarded to ::umask
     ::umask(mask);
 }
 
@@ -252,7 +251,8 @@ std::string trim(const std::string& str) {
     return str.substr(start, end - start + 1);
 }
 
-std::vector<std::string> split(const std::string& str, char delim) {
+std::vector<std::string> split(const std::string& str,
+                               char delim) {  // NOLINT(bugprone-easily-swappable-parameters)
     std::vector<std::string> result;
     std::stringstream ss(str);
     std::string item;
@@ -262,11 +262,13 @@ std::vector<std::string> split(const std::string& str, char delim) {
     return result;
 }
 
-bool starts_with(const std::string& str, const std::string& prefix) {
+bool starts_with(const std::string& str,
+                 const std::string& prefix) {  // NOLINT(bugprone-easily-swappable-parameters)
     return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
 }
 
-bool ends_with(const std::string& str, const std::string& suffix) {
+bool ends_with(const std::string& str,
+               const std::string& suffix) {  // NOLINT(bugprone-easily-swappable-parameters)
     return str.size() >= suffix.size() &&
            str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
@@ -281,17 +283,19 @@ std::optional<std::string> read_file(const std::string& path) {
     return ss.str();
 }
 
-bool write_file(const std::filesystem::path& path, const std::string& content) {
+bool write_file(const std::filesystem::path& path,
+                const std::string& content) {  // NOLINT(bugprone-easily-swappable-parameters)
     std::ofstream ofs(path);
-    if (!ofs)
+    if (!ofs)  // NOLINT(readability-simplify-boolean-expr)
         return false;
     ofs << content;
     return true;
 }
 
-bool append_file(const std::filesystem::path& path, const std::string& content) {
+bool append_file(const std::filesystem::path& path,
+                 const std::string& content) {  // NOLINT(bugprone-easily-swappable-parameters)
     std::ofstream ofs(path, std::ios::app);
-    if (!ofs)
+    if (!ofs)  // NOLINT(readability-simplify-boolean-expr)
         return false;
     ofs << content;
     return true;
@@ -365,7 +369,9 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     return result;
 }
 
-ExecResult exec_command(const std::vector<std::string>& args, const std::string& workdir) {
+ExecResult exec_command(
+    const std::vector<std::string>& args,
+    const std::string& workdir) {  // NOLINT(bugprone-easily-swappable-parameters)
     ExecResult result{-1, "", ""};
 
     if (args.empty())
@@ -440,9 +446,9 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
-ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
-                                   const std::vector<std::string>& sub_args,
-                                   const std::string& workdir) {
+ExecResult exec_command_magiskboot(
+    const std::string& magiskboot_path,  // NOLINT(bugprone-easily-swappable-parameters)
+    const std::vector<std::string>& sub_args, const std::string& workdir) {
     std::vector<std::string> args;
     args.reserve(1 + sub_args.size());
     args.push_back("magiskboot");

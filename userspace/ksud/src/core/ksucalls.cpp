@@ -26,8 +26,8 @@ constexpr int KSU_PRCTL_GET_FD = static_cast<int>(0x59554B4AU);  // "YUKJ" in he
 namespace {
 
 struct PrctlGetFdCmd {
-    int32_t result;
-    int32_t fd;
+    int32_t result{};
+    int32_t fd{};
 };
 
 int g_driver_fd = -1;
@@ -98,7 +98,7 @@ auto init_driver_fd() -> int {
     }
 
     // Method 3: Fallback to reboot syscall (may be blocked by SECCOMP)
-    int fd_reboot = -1;
+    int fd_reboot = -1;  // NOLINT(misc-const-correctness) written via pointer by syscall
     syscall(SYS_reboot, KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, &fd_reboot);
     if (fd_reboot >= 0) {
         LOGD("Got driver fd via reboot syscall: %d", fd_reboot);
@@ -197,7 +197,8 @@ std::pair<uint64_t, bool> get_feature(uint32_t feature_id) {
     return {cmd.value, cmd.supported != 0};
 }
 
-int set_feature(uint32_t feature_id, uint64_t value) {
+int set_feature(uint32_t feature_id,
+                uint64_t value) {  // NOLINT(bugprone-easily-swappable-parameters)
     SetFeatureCmd cmd = {feature_id, value};
     return ksuctl(KSU_IOCTL_SET_FEATURE, &cmd);
 }
@@ -238,7 +239,8 @@ int umount_list_wipe() {
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
 
-int umount_list_add(const std::string& path, uint32_t flags) {
+int umount_list_add(const std::string& path,
+                    uint32_t flags) {  // NOLINT(bugprone-easily-swappable-parameters)
     AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), flags, UMOUNT_ADD};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
