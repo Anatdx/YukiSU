@@ -197,8 +197,8 @@ std::pair<uint64_t, bool> get_feature(uint32_t feature_id) {
     return {cmd.value, cmd.supported != 0};
 }
 
-int set_feature(uint32_t feature_id,
-                uint64_t value) {  // NOLINT(bugprone-easily-swappable-parameters)
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+int set_feature(uint32_t feature_id, uint64_t value) {
     SetFeatureCmd cmd = {feature_id, value};
     return ksuctl(KSU_IOCTL_SET_FEATURE, &cmd);
 }
@@ -239,8 +239,8 @@ int umount_list_wipe() {
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
 
-int umount_list_add(const std::string& path,
-                    uint32_t flags) {  // NOLINT(bugprone-easily-swappable-parameters)
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+int umount_list_add(const std::string& path, uint32_t flags) {
     AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), flags, UMOUNT_ADD};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }

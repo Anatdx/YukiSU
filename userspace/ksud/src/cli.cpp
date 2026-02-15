@@ -32,8 +32,8 @@ void CliParser::add_option(const CliOption& opt) {
     options_.push_back(opt);
 }
 
-bool CliParser::parse(int argc,
-                      char** argv) {  // NOLINT(readability-convert-member-functions-to-static)
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+bool CliParser::parse(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -101,8 +101,8 @@ bool CliParser::parse(int argc,
     return true;
 }
 
-std::optional<std::string> CliParser::get_option(
-    const std::string& name) const {  // NOLINT(readability-convert-member-functions-to-static)
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+std::optional<std::string> CliParser::get_option(const std::string& name) const {
     auto it = parsed_options_.find(name);
     if (it != parsed_options_.end()) {
         return it->second;
