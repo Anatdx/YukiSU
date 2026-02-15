@@ -39,6 +39,9 @@ constexpr uint64_t LKM_PRIORITY_MAGIC = 0x4F4952504D4B4C;
 
 namespace {
 
+// LZ4 legacy ramdisk magic (reject before cpio to avoid huge cache/hang).
+constexpr std::array<unsigned char, 4> LZ4_LEGACY_MAGIC = {0x02, 0x21, 0x4c, 0x18};
+
 uint64_t hash_superkey(const std::string& key) {
     uint64_t hash = 1000000007;
     for (const char c : key) {
@@ -682,12 +685,11 @@ int boot_patch_impl(const std::vector<std::string>& args) {
             cleanup();
             return 1;
         }
-        constexpr unsigned char LZ4_LEGACY_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
         std::string ramdisk_cpio = workdir + "/ramdisk.cpio";
         std::ifstream ramdisk_in(ramdisk_cpio, std::ios::binary);
-        unsigned char magic_buf[4];
-        if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf), 4) &&
-            ramdisk_in.gcount() == 4 && memcmp(magic_buf, LZ4_LEGACY_MAGIC, 4) == 0) {
+        std::array<unsigned char, 4> magic_buf{};
+        if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf.data()), 4) &&
+            ramdisk_in.gcount() == 4 && memcmp(magic_buf.data(), LZ4_LEGACY_MAGIC.data(), 4) == 0) {
             ramdisk_in.close();
             LOGE("Ramdisk is LZ4_LEGACY; on-device decompress crashed (SIGSEGV), so it was "
                  "skipped.");
@@ -723,6 +725,19 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         // Create empty ramdisk (use a valid entry name; "." is invalid for some magiskboot builds)
         if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "mkdir 000 .backup")) {
             LOGE("Failed to create default ramdisk");
+            cleanup();
+            return 1;
+        }
+    } else {
+        // Unconditionally reject LZ4 ramdisk before any cpio (avoids cpio parsing LZ4 as cpio →
+        // huge cache/hang).
+        std::ifstream ramdisk_check(ramdisk, std::ios::binary);
+        std::array<unsigned char, 4> magic_buf{};
+        if (ramdisk_check && ramdisk_check.read(reinterpret_cast<char*>(magic_buf.data()), 4) &&
+            ramdisk_check.gcount() == 4 &&
+            memcmp(magic_buf.data(), LZ4_LEGACY_MAGIC.data(), 4) == 0) {
+            ramdisk_check.close();
+            LOGE("Ramdisk is LZ4 compressed; cannot patch. Use PC to patch this boot image.\n");
             cleanup();
             return 1;
         }
