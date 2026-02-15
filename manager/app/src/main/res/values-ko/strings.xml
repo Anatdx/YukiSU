@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">KernelSU 알아보기</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">KernelSU 설치 방법과 모듈 사용 방법을 확인합니다</string>
-    <string name="home_support_title">지원이 필요합니다</string>
-    <string name="home_support_content">KernelSU는 지금도, 앞으로도 항상 무료이며 오픈 소스로 유지됩니다. 기부를 통해 여러분의 관심을 보여주세요.</string>
+    <string name="home_support_title">개발 지원</string>
+    <string name="home_support_content">KernelSU는 무료 오픈소스를 유지합니다. 공식 KernelSU 개발자에게 기부하여 지원을 표시해 주세요.</string>
     <string name="about_source_code"><![CDATA[View source code at %1$s<br/>Join our %2$s channel]]></string>
     <string name="profile_default">기본값</string>
     <string name="profile_template">템플릿</string>
@@ -210,10 +210,10 @@
     <string name="home_kpm_version">KPM Version</string>
     <string name="close_notice">Close</string>
     <string name="kernel_module_notice">The following kernel module functions were developed by KernelPatch and modified to include the kernel module functions of YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU Look forward to</string>
+    <string name="home_ContributionCard_kernelsu">YukiSU 비전</string>
     <string name="kpm_control_success">Success</string>
     <string name="kpm_control_failed">Failed</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU will be a relatively independent branch of KSU in the future, but we still appreciate the official KernelSU and MKSU etc. for their contributions!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU는 매우 공격적이고 독립적인 KSU 브랜치이지만, 공식 KernelSU, SukiSU, Magisk, APatch 등에 감사드립니다.</string>
     <string name="not_supported">Unsupported</string>
     <string name="supported">Supported</string>
     <string name="kernel_patched">Kernel not patched</string>

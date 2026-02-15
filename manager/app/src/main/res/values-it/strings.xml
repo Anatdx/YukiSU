@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">Scopri KernelSU</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Scopri come installare KernelSU e utilizzare i moduli</string>
-    <string name="home_support_title">Supportaci</string>
-    <string name="home_support_content">KernelSU è, e sempre sarà, gratuito e open source. Puoi comunque mostrarci il tuo apprezzamento facendo una donazione.</string>
+    <string name="home_support_title">Sostieni lo sviluppo</string>
+    <string name="home_support_content">KernelSU resterà gratuito e open source; dona agli sviluppatori ufficiali di KernelSU per mostrare il tuo sostegno.</string>
     <string name="about_source_code"><![CDATA[View source code at %1$s<br/>Join our %2$s channel]]></string>
     <string name="profile_default">Predefinito</string>
     <string name="profile_template">Modello</string>
@@ -212,10 +212,10 @@
     <string name="home_kpm_version">KPM Version</string>
     <string name="close_notice">Close</string>
     <string name="kernel_module_notice">The following kernel module functions were developed by KernelPatch and modified to include the kernel module functions of YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU Look forward to</string>
+    <string name="home_ContributionCard_kernelsu">Visione YukiSU</string>
     <string name="kpm_control_success">Success</string>
     <string name="kpm_control_failed">Failed</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU will be a relatively independent branch of KSU in the future, but we still appreciate the official KernelSU and MKSU etc. for their contributions!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU è un ramo KSU estremamente aggressivo e indipendente, ma ringraziamo comunque KernelSU ufficiale, SukiSU, Magisk, APatch e altri per i loro contributi.</string>
     <string name="not_supported">Unsupported</string>
     <string name="supported">Supported</string>
     <string name="kernel_patched">Kernel not patched</string>

@@ -5,8 +5,6 @@
 #include "../log.hpp"
 #include "../utils.hpp"
 
-namespace fs = std::filesystem;
-
 namespace ksud {
 
 // Note: ensure_binaries() is implemented in generated/assets_data.cpp

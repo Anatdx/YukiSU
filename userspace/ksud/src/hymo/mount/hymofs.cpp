@@ -5,26 +5,39 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
+#include <thread>
+#include <vector>
 #include "../utils.hpp"
 #include "hymo_magic.h"
 
 namespace hymo {
 
-static HymoFSStatus s_cached_status = HymoFSStatus::NotPresent;
-static bool s_status_checked = false;
-static int s_hymo_fd = -1;  // Cached anonymous fd
+namespace {
+
+HymoFSStatus s_cached_status = HymoFSStatus::NotPresent;
+bool s_status_checked = false;
+int s_hymo_fd = -1;  // Cached anonymous fd
 
 // Get anonymous fd from kernel (only way to communicate with HymoFS)
-static int get_anon_fd() {
+int get_anon_fd() {
     if (s_hymo_fd >= 0) {
         return s_hymo_fd;
     }
 
-    // Request anonymous fd from kernel via GET_FD syscall
-    int fd = syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, 0);
+    // Request anonymous fd from kernel via SYS_reboot kprobe (KernelSU style).
+    // The kernel writes fd to &fd via put_user. First call may fail (seccomp/context);
+    // retry once after a short delay so second attempt often succeeds.
+    int fd = -1;
+    for (int attempt = 0; attempt < 2 && fd < 0; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        }
+        syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
+    }
     if (fd < 0) {
-        LOG_ERROR("Failed to get HymoFS anonymous fd: " + std::string(strerror(errno)));
+        LOG_ERROR("Failed to get HymoFS anonymous fd (fd=" + std::to_string(fd) + ")");
         return -1;
     }
 
@@ -34,21 +47,23 @@ static int get_anon_fd() {
 }
 
 // Execute command via anonymous fd ioctl (only method)
-static int hymo_execute_cmd(unsigned int ioctl_cmd, void* arg) {
-    int fd = get_anon_fd();
+int hymo_execute_cmd(unsigned int ioctl_cmd, void* arg) {
+    const int fd = get_anon_fd();
     if (fd < 0) {
         return -1;
     }
 
-    int ret = ioctl(fd, ioctl_cmd, arg);
+    const int ret = ioctl(fd, ioctl_cmd, arg);
     if (ret < 0) {
         LOG_ERROR("HymoFS ioctl failed: " + std::string(strerror(errno)));
     }
     return ret;
 }
 
+}  // namespace
+
 int HymoFS::get_protocol_version() {
-    int fd = get_anon_fd();
+    const int fd = get_anon_fd();
     if (fd < 0) {
         return -1;
     }
@@ -69,7 +84,7 @@ HymoFSStatus HymoFS::check_status() {
         return s_cached_status;
     }
 
-    int k_ver = get_protocol_version();
+    const int k_ver = get_protocol_version();
     if (k_ver < 0) {
         LOG_WARN("HymoFS check_status: NotPresent (syscall failed)");
         s_cached_status = HymoFSStatus::NotPresent;
@@ -104,7 +119,7 @@ bool HymoFS::is_available() {
 
 bool HymoFS::clear_rules() {
     LOG_INFO("HymoFS: Clearing all rules...");
-    bool ret = hymo_execute_cmd(HYMO_IOC_CLEAR_ALL, nullptr) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_CLEAR_ALL, nullptr) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: clear_rules failed: " + std::string(strerror(errno)));
     } else {
@@ -118,7 +133,7 @@ bool HymoFS::add_rule(const std::string& src, const std::string& target, int typ
 
     LOG_INFO("HymoFS: Adding rule src=" + src + ", target=" + target +
              ", type=" + std::to_string(type));
-    bool ret = hymo_execute_cmd(HYMO_IOC_ADD_RULE, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_ADD_RULE, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: add_rule failed: " + std::string(strerror(errno)));
     }
@@ -129,7 +144,7 @@ bool HymoFS::add_merge_rule(const std::string& src, const std::string& target) {
     struct hymo_syscall_arg arg = {.src = src.c_str(), .target = target.c_str(), .type = 0};
 
     LOG_INFO("HymoFS: Adding merge rule src=" + src + ", target=" + target);
-    bool ret = hymo_execute_cmd(HYMO_IOC_ADD_MERGE_RULE, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_ADD_MERGE_RULE, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: add_merge_rule failed: " + std::string(strerror(errno)));
     }
@@ -137,10 +152,10 @@ bool HymoFS::add_merge_rule(const std::string& src, const std::string& target) {
 }
 
 bool HymoFS::delete_rule(const std::string& src) {
-    struct hymo_syscall_arg arg = {.src = src.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = src.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Deleting rule src=" + src);
-    bool ret = hymo_execute_cmd(HYMO_IOC_DEL_RULE, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_DEL_RULE, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: delete_rule failed: " + std::string(strerror(errno)));
     }
@@ -148,10 +163,10 @@ bool HymoFS::delete_rule(const std::string& src) {
 }
 
 bool HymoFS::set_mirror_path(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Setting mirror path=" + path);
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_MIRROR_PATH, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_SET_MIRROR_PATH, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: set_mirror_path failed: " + std::string(strerror(errno)));
     }
@@ -159,16 +174,17 @@ bool HymoFS::set_mirror_path(const std::string& path) {
 }
 
 bool HymoFS::hide_path(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Hiding path=" + path);
-    bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_RULE, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_RULE, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: hide_path failed: " + std::string(strerror(errno)));
     }
     return ret;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) target_base vs module_dir are distinct
 bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
     if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
         return false;
@@ -178,14 +194,14 @@ bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::pat
             const fs::path& current_path = entry.path();
 
             // Calculate relative path from module root
-            fs::path rel_path = fs::relative(current_path, module_dir);
-            fs::path target_path = target_base / rel_path;
+            const fs::path rel_path = fs::relative(current_path, module_dir);
+            const fs::path target_path = target_base / rel_path;
 
             if (entry.is_regular_file() || entry.is_symlink()) {
                 add_rule(target_path.string(), current_path.string());
             } else if (entry.is_character_file()) {
                 // Redirection for whiteout (0:0)
-                struct stat st;
+                struct stat st{};
                 if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
                     hide_path(target_path.string());
                 }
@@ -198,7 +214,10 @@ bool HymoFS::add_rules_from_directory(const fs::path& target_base, const fs::pat
     return true;
 }
 
-bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
+bool HymoFS::remove_rules_from_directory(
+    const fs::path& target_base,
+    const fs::path& module_dir) {  // NOLINT(bugprone-easily-swappable-parameters) target_base vs
+                                   // module_dir distinct
     if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
         return false;
 
@@ -207,15 +226,15 @@ bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::
             const fs::path& current_path = entry.path();
 
             // Calculate relative path from module root
-            fs::path rel_path = fs::relative(current_path, module_dir);
-            fs::path target_path = target_base / rel_path;
+            const fs::path rel_path = fs::relative(current_path, module_dir);
+            const fs::path target_path = target_base / rel_path;
 
             if (entry.is_regular_file() || entry.is_symlink()) {
                 // Delete rule for this file
                 delete_rule(target_path.string());
             } else if (entry.is_character_file()) {
                 // Check for whiteout (0:0)
-                struct stat st;
+                struct stat st{};
                 if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
                     delete_rule(target_path.string());
                 }
@@ -229,37 +248,31 @@ bool HymoFS::remove_rules_from_directory(const fs::path& target_base, const fs::
 }
 
 std::string HymoFS::get_active_rules() {
-    size_t buf_size = 16 * 1024;  // 16KB buffer
-    char* raw_buf = (char*)malloc(buf_size);
-    if (!raw_buf) {
-        return "Error: Out of memory\n";
-    }
-    memset(raw_buf, 0, buf_size);
+    const size_t buf_size = static_cast<size_t>(16) * 1024;  // 16KB buffer
+    std::vector<char> raw_buf(buf_size, 0);
 
-    struct hymo_syscall_list_arg arg = {.buf = raw_buf, .size = buf_size};
+    struct hymo_syscall_list_arg arg = {.buf = raw_buf.data(), .size = buf_size};
 
     LOG_INFO("HymoFS: Listing active rules...");
-    int ret = hymo_execute_cmd(HYMO_IOC_LIST_RULES, &arg);
+    const int ret = hymo_execute_cmd(HYMO_IOC_LIST_RULES, &arg);
     if (ret < 0) {
         std::string err = "Error: command failed: ";
         err += strerror(errno);
         err += "\n";
         LOG_ERROR("HymoFS: get_active_rules failed: " + std::string(strerror(errno)));
-        free(raw_buf);
         return err;
     }
 
-    std::string result(raw_buf);
+    std::string result(raw_buf.data());
     LOG_INFO("HymoFS: get_active_rules returned " + std::to_string(result.length()) + " bytes");
 
-    free(raw_buf);
     return result;
 }
 
 bool HymoFS::set_debug(bool enable) {
     int val = enable ? 1 : 0;
     LOG_INFO("HymoFS: Setting debug=" + std::string(enable ? "true" : "false"));
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_DEBUG, &val) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_SET_DEBUG, &val) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: set_debug failed: " + std::string(strerror(errno)));
     }
@@ -269,7 +282,7 @@ bool HymoFS::set_debug(bool enable) {
 bool HymoFS::set_stealth(bool enable) {
     int val = enable ? 1 : 0;
     LOG_INFO("HymoFS: Setting stealth=" + std::string(enable ? "true" : "false"));
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_STEALTH, &val) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_SET_STEALTH, &val) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: set_stealth failed: " + std::string(strerror(errno)));
     }
@@ -279,7 +292,7 @@ bool HymoFS::set_stealth(bool enable) {
 bool HymoFS::set_enabled(bool enable) {
     int val = enable ? 1 : 0;
     LOG_INFO("HymoFS: Setting enabled=" + std::string(enable ? "true" : "false"));
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_ENABLED, &val) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_SET_ENABLED, &val) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: set_enabled failed: " + std::string(strerror(errno)));
     } else {
@@ -290,8 +303,7 @@ bool HymoFS::set_enabled(bool enable) {
 
 bool HymoFS::set_uname(const std::string& release, const std::string& version) {
     // Always execute to allow clearing (sending empty strings)
-    struct hymo_spoof_uname uname_data;
-    memset(&uname_data, 0, sizeof(uname_data));
+    struct hymo_spoof_uname uname_data{};
 
     if (!release.empty()) {
         strncpy(uname_data.release, release.c_str(), HYMO_UNAME_LEN - 1);
@@ -304,7 +316,7 @@ bool HymoFS::set_uname(const std::string& release, const std::string& version) {
     }
 
     LOG_INFO("HymoFS: Setting uname: release=\"" + release + "\", version=\"" + version + "\"");
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_UNAME, &uname_data) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_SET_UNAME, &uname_data) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: set_uname failed: " + std::string(strerror(errno)));
     } else {
@@ -315,7 +327,7 @@ bool HymoFS::set_uname(const std::string& release, const std::string& version) {
 
 bool HymoFS::fix_mounts() {
     LOG_INFO("HymoFS: Fixing mounts (reorder mnt_id)...");
-    bool ret = hymo_execute_cmd(HYMO_IOC_REORDER_MNT_ID, nullptr) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_REORDER_MNT_ID, nullptr) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: fix_mounts failed: " + std::string(strerror(errno)));
     } else {
@@ -325,10 +337,10 @@ bool HymoFS::fix_mounts() {
 }
 
 bool HymoFS::hide_overlay_xattrs(const std::string& path) {
-    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = NULL, .type = 0};
+    struct hymo_syscall_arg arg = {.src = path.c_str(), .target = nullptr, .type = 0};
 
     LOG_INFO("HymoFS: Hiding overlay xattrs for path=" + path);
-    bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_OVERLAY_XATTRS, &arg) == 0;
+    const bool ret = hymo_execute_cmd(HYMO_IOC_HIDE_OVERLAY_XATTRS, &arg) == 0;
     if (!ret) {
         LOG_ERROR("HymoFS: hide_overlay_xattrs failed: " + std::string(strerror(errno)));
     }

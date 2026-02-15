@@ -26,6 +26,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
+        submodules: recursive
 
     - name: Download artifacts
       uses: actions/download-artifact@v4
@@ -40,37 +41,10 @@ jobs:
       if: ${{ inputs.pack_ksuinit }}
       run: |
         mkdir -p ./userspace/ksud/assets
-        # C++ 版本: ksuinit 直接在 artifact 根目录
+        # C++ build: ksuinit is in the artifact root directory
         if [ -f ksuinit/ksuinit ]; then
           cp ksuinit/ksuinit ./userspace/ksud/assets/
         fi
-
-    - name: Prepare binary tools (busybox, resetprop, bootctl)
-      run: |
-        mkdir -p ./userspace/ksud/assets
-        # Copy binary tools from Rust ksud bin directory (same arch)
-        case "${{ inputs.target }}" in
-          aarch64-linux-android|aarch64)
-            BIN_DIR=./userspace/ksud/bin/aarch64
-            ;;
-          x86_64-linux-android|x86_64)
-            BIN_DIR=./userspace/ksud/bin/x86_64
-            ;;
-          armv7-linux-androideabi|armv7)
-            BIN_DIR=./userspace/ksud/bin/arm
-            ;;
-        esac
-        
-        if [ -d "$BIN_DIR" ]; then
-          cp "$BIN_DIR/busybox" ./userspace/ksud/assets/ || true
-          cp "$BIN_DIR/resetprop" ./userspace/ksud/assets/ || true
-          cp "$BIN_DIR/bootctl" ./userspace/ksud/assets/ || true
-          ls -la ./userspace/ksud/assets/
-        fi
-
-    - name: Setup NDK
-      run: |
-        echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
 
     - name: Determine target settings
       id: target
@@ -97,12 +71,23 @@ jobs:
             ;;
         esac
 
+    # busybox is built into ksud (ndk-busybox multi-call); no standalone busybox in assets
+
+    - name: Install UPX
+      run: |
+        UPX_VERSION="4.2.4"
+        wget -q "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        tar -xf "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        sudo mv "upx-${UPX_VERSION}-amd64_linux/upx" /usr/local/bin/
+        rm -rf "upx-${UPX_VERSION}-amd64_linux" "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        upx --version | head -1
+
     - name: Build ksud
       run: |
         cd userspace/ksud
         mkdir -p build && cd build
         
-        # 使用 Android NDK 工具链进行交叉编译
+        # Cross-compile using Android NDK toolchain
         TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
         export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
         export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
@@ -117,12 +102,10 @@ jobs:
           -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
           -DCMAKE_C_COMPILER=$CC \
           -DCMAKE_CXX_COMPILER=$CXX \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release \
+          -DKSUD_UPX=ON
         
         ninja
-        
-        # Strip the binary
-        $STRIP ksud
         
         # Show binary info
         ls -lh ksud

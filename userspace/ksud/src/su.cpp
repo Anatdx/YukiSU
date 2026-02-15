@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -19,7 +20,9 @@
 
 namespace ksud {
 
-static void print_su_usage() {
+namespace {
+
+void print_su_usage() {
     printf("KernelSU\n\n");
     printf("Usage: su [options] [-] [user [argument...]]\n\n");
     printf("Options:\n");
@@ -36,19 +39,25 @@ static void print_su_usage() {
     printf("  -W, --no-wrapper         don't use ksu fd wrapper\n");
 }
 
-static void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
+void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
     if (!groups.empty()) {
         setgroups(groups.size(), groups.data());
     }
-    setresgid(gid, gid, gid);
-    setresuid(uid, uid, uid);
+    // Only change creds when not already the target (when already root, no setres* — avoids
+    // seccomp).
+    if (getegid() != gid) {
+        setresgid(gid, gid, gid);
+    }
+    if (geteuid() != uid) {
+        setresuid(uid, uid, uid);
+    }
 }
 
-static void wrap_tty(int fd) {
+void wrap_tty(int fd) {
     if (isatty(fd) != 1) {
         return;
     }
-    int new_fd = get_wrapped_fd(fd);
+    const int new_fd = get_wrapped_fd(fd);
     if (new_fd < 0) {
         LOGW("Failed to get wrapped fd for %d", fd);
         return;
@@ -59,16 +68,22 @@ static void wrap_tty(int fd) {
     close(new_fd);
 }
 
-int su_main(int argc, char* argv[]) {
+}  // namespace
+
+int su_main(int argc, char** argv) {
     // Grant root first
     if (grant_root() < 0) {
         LOGE("Failed to grant root");
         return 1;
     }
 
-    // Set UID/GID to 0 temporarily
-    setgid(0);
-    setuid(0);
+    // Only change uid/gid when we are the su binary and YukiSU kernel has granted root (grant_root
+    // just did the kernel side; we set userspace creds here). When the app is already root (e.g.
+    // third-party like IcePatch), do not call setuid/setgid — no need and seccomp would SIGSYS.
+    if (geteuid() != 0 || getegid() != 0) {
+        setgid(0);
+        setuid(0);
+    }
 
     // Parse options
     std::string command;
@@ -89,7 +104,7 @@ int su_main(int argc, char* argv[]) {
 
     int c_index = -1;
     for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
+        const std::string arg = argv[i];
         if (arg == "-c" || arg == "--command") {
             c_index = static_cast<int>(args_vec.size());
             args_vec.push_back(arg);
@@ -110,28 +125,31 @@ int su_main(int argc, char* argv[]) {
 
     // Convert back to char**
     std::vector<char*> new_argv;
+    new_argv.reserve(args_vec.size() + 1);
     for (auto& s : args_vec) {
         new_argv.push_back(const_cast<char*>(s.c_str()));
     }
     new_argv.push_back(nullptr);
-    argc = new_argv.size() - 1;
+    argc = static_cast<int>(new_argv.size() - 1);
     argv = new_argv.data();
 
-    static struct option long_options[] = {{"command", required_argument, 0, 'c'},
-                                           {"help", no_argument, 0, 'h'},
-                                           {"login", no_argument, 0, 'l'},
-                                           {"preserve-environment", no_argument, 0, 'p'},
-                                           {"shell", required_argument, 0, 's'},
-                                           {"version", no_argument, 0, 'v'},
-                                           {"mount-master", no_argument, 0, 'M'},
-                                           {"group", required_argument, 0, 'g'},
-                                           {"supp-group", required_argument, 0, 'G'},
-                                           {"no-wrapper", no_argument, 0, 'W'},
-                                           {0, 0, 0, 0}};
+    static const std::array<struct option, 11> long_options = {{
+        {"command", required_argument, nullptr, 'c'},
+        {"help", no_argument, nullptr, 'h'},
+        {"login", no_argument, nullptr, 'l'},
+        {"preserve-environment", no_argument, nullptr, 'p'},
+        {"shell", required_argument, nullptr, 's'},
+        {"version", no_argument, nullptr, 'v'},
+        {"mount-master", no_argument, nullptr, 'M'},
+        {"group", required_argument, nullptr, 'g'},
+        {"supp-group", required_argument, nullptr, 'G'},
+        {"no-wrapper", no_argument, nullptr, 'W'},
+        {nullptr, 0, nullptr, 0},
+    }};
 
     optind = 1;  // Reset getopt
     int opt;
-    while ((opt = getopt_long(argc, argv, "c:hlps:vVMg:G:W", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "c:hlps:vVMg:G:W", long_options.data(), nullptr)) != -1) {
         switch (opt) {
         case 'c':
             command = optarg;
@@ -183,7 +201,7 @@ int su_main(int argc, char* argv[]) {
         const char* user = argv[optind];
         // Try to parse as number first
         char* endptr;
-        long uid_num = strtol(user, &endptr, 10);
+        const long uid_num = strtol(user, &endptr, 10);
         if (*endptr == '\0') {
             target_uid = static_cast<uid_t>(uid_num);
         } else {
@@ -262,7 +280,7 @@ int su_main(int argc, char* argv[]) {
 
     // Build argv for shell (matching Rust behavior)
     // arg0 is "-" for login shell, otherwise the shell path itself
-    std::string arg0 = is_login ? "-" : shell;
+    const std::string arg0 = is_login ? "-" : shell;
 
     std::vector<const char*> shell_argv;
     shell_argv.push_back(arg0.c_str());
@@ -284,8 +302,8 @@ int su_main(int argc, char* argv[]) {
 
 // Legacy functions for backward compatibility
 int root_shell() {
-    char* argv[] = {const_cast<char*>("su"), nullptr};
-    return su_main(1, argv);
+    std::array<char*, 2> argv = {const_cast<char*>("su"), nullptr};
+    return su_main(1, argv.data());
 }
 
 // Simple grant_root for "debug su" command
@@ -299,13 +317,16 @@ int grant_root_shell(bool global_mnt) {
         return 1;
     }
 
-    // Set UID/GID to 0
-    setgid(0);
-    setuid(0);
+    // Only set uid/gid when not already root (su binary + YukiSU kernel path). When already root
+    // (e.g. IcePatch), skip to avoid seccomp SIGSYS.
+    if (geteuid() != 0 || getegid() != 0) {
+        setgid(0);
+        setuid(0);
+    }
 
     // Switch to global mount namespace if requested
     if (global_mnt) {
-        int fd = open("/proc/1/ns/mnt", O_RDONLY);
+        const int fd = open("/proc/1/ns/mnt", O_RDONLY);
         if (fd >= 0) {
             setns(fd, CLONE_NEWNS);
             close(fd);
@@ -323,8 +344,8 @@ int grant_root_shell(bool global_mnt) {
 
     // Exec to sh immediately (matching Rust behavior)
     // This avoids any complex operations that might trigger SECCOMP
-    char* shell_argv[] = {const_cast<char*>("sh"), nullptr};
-    execv("/system/bin/sh", shell_argv);
+    std::array<char*, 2> shell_argv = {const_cast<char*>("sh"), nullptr};
+    execv("/system/bin/sh", shell_argv.data());
 
     LOGE("Failed to exec shell: %s", strerror(errno));
     return 127;

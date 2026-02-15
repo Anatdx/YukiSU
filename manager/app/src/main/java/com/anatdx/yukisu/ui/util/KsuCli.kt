@@ -137,7 +137,27 @@ object KsuCli {
             null
         }
     }
-    
+
+    /**
+     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
+     * e.g. "1.3.0-1-g56b0efb0" -> "v1.3.0-56b0efb0"
+     */
+    fun formatKsudVersionForDisplay(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val s = raw.trim().removePrefix("v")
+        // Match x.x.x optionally followed by -anything; capture semver and trailing alphanumeric for 8-char
+        val semverMatch = Regex("""^(\d+\.\d+\.\d+)""").find(s) ?: return "v$s"
+        val semver = semverMatch.value
+        val rest = s.drop(semver.length).trimStart('-')
+        val hashPart = Regex("""[a-fA-F0-9]+""").findAll(rest).map { it.value }.joinToString("").takeLast(8)
+        val suffix = when {
+            hashPart.length >= 8 -> hashPart.take(8)
+            rest.isNotEmpty() -> rest.filter { it.isLetterOrDigit() }.take(8)
+            else -> ""
+        }
+        return if (suffix.isNotEmpty()) "v$semver-$suffix" else "v$semver"
+    }
+
     /**
      * Get installed ksud version from /data/adb/ksud.
      */
@@ -145,7 +165,6 @@ object KsuCli {
         return try {
             val result = ShellUtils.fastCmd(SHELL, "/data/adb/ksud version 2>/dev/null")
             if (result.isBlank()) return null
-            // Parse version from output
             val match = Regex("""version\s+([^\s]+)""").find(result)
             match?.groupValues?.get(1)
         } catch (e: Exception) {
@@ -155,10 +174,13 @@ object KsuCli {
     }
 
     /**
-     * Public helper for UI: get ksud versions (APK-bundled and installed daemon).
+     * Public helper for UI: get ksud versions (APK-bundled and installed daemon),
+     * formatted as vx.x.x-xxxxxxxx. Returns (formattedApk, formattedInstalled).
      */
     suspend fun getKsudVersionsForUi(): Pair<String?, String?> = withContext(Dispatchers.IO) {
-        getApkKsudVersion() to getInstalledKsudVersion()
+        val apk = getApkKsudVersion()
+        val installed = getInstalledKsudVersion()
+        formatKsudVersionForDisplay(apk) to formatKsudVersionForDisplay(installed)
     }
 
     /**
@@ -195,11 +217,14 @@ object KsuCli {
             // Ensure directories
             "mkdir -p /data/adb/ksu/bin",
             "mkdir -p /data/adb/ksu/log",
-            // Copy new daemon binary
+            // Copy new daemon binary (multi-call: ksud + magiskboot via argv0)
             "cp -f ${ksudSo.absolutePath} /data/adb/ksud",
             "chmod 0755 /data/adb/ksud",
-            // Symlink into ksu/bin for tools / wrappers that expect it there
+            // Symlinks in ksu/bin: ksud, magiskboot, bootctl, resetprop all point to the same binary (multi-call)
             "ln -sf /data/adb/ksud /data/adb/ksu/bin/ksud",
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/magiskboot",
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/bootctl",
+            "ln -sf /data/adb/ksud /data/adb/ksu/bin/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
             "restorecon /data/adb/ksud || true",
             "restorecon -R /data/adb/ksu || true"
@@ -286,10 +311,9 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
 fun install() {
     val start = SystemClock.elapsedRealtime()
     val ksudPath = getKsuDaemonPath()
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so").absolutePath
-    Log.i(TAG, "install: ksud=$ksudPath, magiskboot=$magiskboot")
-    Log.i(TAG, "install: ksud exists=${File(ksudPath).exists()}, magiskboot exists=${File(magiskboot).exists()}")
-    val result = execKsud("install --magiskboot $magiskboot", true)
+    // magiskboot is built into ksud (multi-call binary); pass ksud path so it can exec itself as magiskboot
+    Log.i(TAG, "install: ksud=$ksudPath")
+    val result = execKsud("install --magiskboot $ksudPath", true)
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
 }
 
@@ -439,9 +463,9 @@ fun runModuleAction(
 fun restoreBoot(
     onFinish: (Boolean, Int) -> Unit, onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): Boolean {
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
+    val ksudPath = getKsuDaemonPath()
     val result = flashWithIO(
-        "${getKsuDaemonPath()} boot-restore -f --magiskboot $magiskboot",
+        "${getKsuDaemonPath()} boot-restore -f --magiskboot $ksudPath",
         onStdout,
         onStderr
     )
@@ -452,9 +476,9 @@ fun restoreBoot(
 fun uninstallPermanently(
     onFinish: (Boolean, Int) -> Unit, onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): Boolean {
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
+    val ksudPath = getKsuDaemonPath()
     val result =
-        flashWithIO("${getKsuDaemonPath()} uninstall --magiskboot $magiskboot", onStdout, onStderr)
+        flashWithIO("${getKsuDaemonPath()} uninstall --magiskboot $ksudPath", onStdout, onStderr)
     onFinish(result.isSuccess, result.code)
     return result.isSuccess
 }
@@ -490,8 +514,8 @@ fun installBoot(
         }
     }
 
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    var cmd = "boot-patch --magiskboot ${magiskboot.absolutePath}"
+    val ksudPath = getKsuDaemonPath()
+    var cmd = "boot-patch --magiskboot $ksudPath"
 
     cmd += if (bootFile == null) {
         // no boot.img, use -f to force install

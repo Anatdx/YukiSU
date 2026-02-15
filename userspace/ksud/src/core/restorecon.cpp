@@ -1,5 +1,6 @@
 #include "restorecon.hpp"
 #include <sys/xattr.h>
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <vector>
@@ -13,7 +14,7 @@ namespace ksud {
 static constexpr const char* SELINUX_XATTR = "security.selinux";
 
 bool lsetfilecon(const fs::path& path, const std::string& con) {
-    int ret = lsetxattr(path.c_str(), SELINUX_XATTR, con.c_str(), con.length() + 1, 0);
+    const int ret = lsetxattr(path.c_str(), SELINUX_XATTR, con.c_str(), con.length() + 1, 0);
     if (ret != 0) {
         LOGW("Failed to set SELinux context for %s: %s", path.c_str(), strerror(errno));
         return false;
@@ -22,13 +23,13 @@ bool lsetfilecon(const fs::path& path, const std::string& con) {
 }
 
 std::string lgetfilecon(const fs::path& path) {
-    char buf[256];
-    ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf, sizeof(buf) - 1);
+    std::array<char, 256> buf{};
+    const ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf.data(), buf.size() - 1);
     if (len < 0) {
         return "";
     }
-    buf[len] = '\0';
-    return std::string(buf);
+    buf[static_cast<size_t>(len)] = '\0';
+    return {buf.data()};
 }
 
 bool setsyscon(const fs::path& path) {
@@ -60,7 +61,7 @@ bool restore_syscon_if_unlabeled(const fs::path& dir) {
 
     try {
         for (const auto& entry : fs::recursive_directory_iterator(dir)) {
-            std::string con = lgetfilecon(entry.path());
+            const std::string con = lgetfilecon(entry.path());
             if (con.empty() || con == UNLABEL_CON) {
                 if (!lsetfilecon(entry.path(), SYSTEM_CON)) {
                     LOGW("Failed to restore context for %s", entry.path().c_str());

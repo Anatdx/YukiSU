@@ -8,8 +8,8 @@ namespace ksud {
 // Version info
 constexpr const char* KSUD_VERSION = "1.0.0";
 constexpr int KSUD_VERSION_CODE = 10000;
-extern const char* VERSION_CODE;
-extern const char* VERSION_NAME;
+extern const char* const VERSION_CODE;
+extern const char* const VERSION_NAME;
 
 // Paths
 constexpr const char* ADB_DIR = "/data/adb/";

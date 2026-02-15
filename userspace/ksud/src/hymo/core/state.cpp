@@ -62,19 +62,21 @@ bool RuntimeState::save() const {
     return true;
 }
 
-static std::vector<std::string> parse_json_array(const std::string& line) {
+namespace {
+
+std::vector<std::string> parse_json_array(const std::string& line) {
     std::vector<std::string> result;
-    auto start = line.find("[");
-    auto end = line.find("]");
+    auto start = line.find('[');
+    auto end = line.find(']');
     if (start == std::string::npos || end == std::string::npos)
         return result;
 
-    std::string content = line.substr(start + 1, end - start - 1);
+    const std::string content = line.substr(start + 1, end - start - 1);
     std::stringstream ss(content);
     std::string item;
     while (std::getline(ss, item, ',')) {
-        size_t first_quote = item.find("\"");
-        size_t last_quote = item.rfind("\"");
+        const size_t first_quote = item.find('"');
+        const size_t last_quote = item.rfind('"');
         if (first_quote != std::string::npos && last_quote != std::string::npos &&
             last_quote > first_quote) {
             result.push_back(item.substr(first_quote + 1, last_quote - first_quote - 1));
@@ -82,6 +84,8 @@ static std::vector<std::string> parse_json_array(const std::string& line) {
     }
     return result;
 }
+
+}  // namespace
 
 RuntimeState load_runtime_state() {
     RuntimeState state;
@@ -101,13 +105,13 @@ RuntimeState load_runtime_state() {
 
         if (line.find("\"storage_mode\"") != std::string::npos) {
             auto start = line.find(": \"") + 3;
-            auto end = line.find("\"", start);
+            auto end = line.find('"', start);
             if (end != std::string::npos) {
                 state.storage_mode = line.substr(start, end - start);
             }
         } else if (line.find("\"mount_point\"") != std::string::npos) {
             auto start = line.find(": \"") + 3;
-            auto end = line.find("\"", start);
+            auto end = line.find('"', start);
             if (end != std::string::npos) {
                 state.mount_point = line.substr(start, end - start);
             }
@@ -124,12 +128,12 @@ RuntimeState load_runtime_state() {
         } else if (line.find("\"active_mounts\"") != std::string::npos) {
             state.active_mounts = parse_json_array(line);
         } else if (line.find("\"pid\"") != std::string::npos) {
-            if (line.find(":") != std::string::npos) {
+            if (line.find(':') != std::string::npos) {
                 try {
-                    std::string val = line.substr(line.find(":") + 1);
+                    std::string val = line.substr(line.find(':') + 1);
                     // Remove trailing comma if any
-                    if (val.find(",") != std::string::npos)
-                        val = val.substr(0, val.find(","));
+                    if (val.find(',') != std::string::npos)
+                        val = val.substr(0, val.find(','));
                     state.pid = std::stoi(val);
                 } catch (...) {
                     state.pid = 0;

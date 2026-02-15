@@ -16,55 +16,64 @@
 
 namespace ksud {
 
-// Binary config constants
-static const std::string FEATURE_CONFIG_PATH = std::string(WORKING_DIR) + ".feature_config";
-static constexpr uint32_t FEATURE_MAGIC = 0x7f4b5355;
-static constexpr uint32_t FEATURE_VERSION = 1;
+namespace {
 
-// Feature name to ID mapping
-static const std::map<std::string, uint32_t> FEATURE_MAP = {
-    {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
-    {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
-    {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
-    {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
-};
+const std::string& get_feature_config_path() {
+    static const std::string path = std::string(WORKING_DIR) + ".feature_config";
+    return path;
+}
+constexpr uint32_t FEATURE_MAGIC = 0x7f4b5355;
+constexpr uint32_t FEATURE_VERSION = 1;
 
-static const std::map<uint32_t, const char*> FEATURE_DESCRIPTIONS = {
-    {static_cast<uint32_t>(FeatureId::SuCompat),
-     "SU Compatibility Mode - allows authorized apps to gain root via traditional 'su' command"},
-    {static_cast<uint32_t>(FeatureId::KernelUmount),
-     "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
-    {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
-     "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
-    {static_cast<uint32_t>(FeatureId::SuLog),
-     "SU Log - enables logging of SU command usage to kernel log for auditing purposes"},
-};
+const std::map<std::string, uint32_t>& get_feature_map() {
+    static const std::map<std::string, uint32_t> map = {
+        {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
+        {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
+        {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
+        {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
+    };
+    return map;
+}
 
-// Returns {feature_id, valid}. Use pair because SuCompat ID is 0
-static std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
+const std::map<uint32_t, const char*>& get_feature_descriptions() {
+    static const std::map<uint32_t, const char*> desc = {
+        {static_cast<uint32_t>(FeatureId::SuCompat),
+         "SU Compatibility Mode - allows authorized apps to gain root via traditional 'su' "
+         "command"},
+        {static_cast<uint32_t>(FeatureId::KernelUmount),
+         "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
+        {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
+         "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
+        {static_cast<uint32_t>(FeatureId::SuLog),
+         "SU Log - enables logging of SU command usage to kernel log for auditing purposes"},
+    };
+    return desc;
+}
+
+std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
     // Try numeric first
     try {
-        uint32_t num = std::stoul(id);
+        const uint32_t num = std::stoul(id);
         // Check if it's a known feature ID
-        for (const auto& [name, fid] : FEATURE_MAP) {
+        for (const auto& [name, fid] : get_feature_map()) {
             if (fid == num)
                 return {num, true};
         }
         return {0, false};
-    } catch (...) {
+    } catch (...) {  // NOLINT(bugprone-empty-catch) not a number, fall through to name lookup
     }
 
     // Try name lookup
-    auto it = FEATURE_MAP.find(id);
-    if (it != FEATURE_MAP.end()) {
+    auto it = get_feature_map().find(id);
+    if (it != get_feature_map().end()) {
         return {it->second, true};
     }
 
     return {0, false};
 }
 
-static const char* feature_id_to_name(uint32_t id) {
-    for (const auto& [name, fid] : FEATURE_MAP) {
+const char* feature_id_to_name(uint32_t id) {
+    for (const auto& [name, fid] : get_feature_map()) {
         if (fid == id) {
             return name.c_str();
         }
@@ -72,13 +81,15 @@ static const char* feature_id_to_name(uint32_t id) {
     return "unknown";
 }
 
-static const char* feature_id_to_description(uint32_t id) {
-    auto it = FEATURE_DESCRIPTIONS.find(id);
-    if (it != FEATURE_DESCRIPTIONS.end()) {
+const char* feature_id_to_description(uint32_t id) {
+    auto it = get_feature_descriptions().find(id);
+    if (it != get_feature_descriptions().end()) {
         return it->second;
     }
     return "Unknown feature";
 }
+
+}  // namespace
 
 int feature_get(const std::string& id) {
     auto [feature_id, valid] = parse_feature_id(id);
@@ -109,7 +120,7 @@ int feature_set(const std::string& id, uint64_t value) {
         return 1;
     }
 
-    int ret = set_feature(feature_id, value);
+    const int ret = set_feature(feature_id, value);
     if (ret < 0) {
         LOGE("Failed to set feature %s to %" PRIu64, id.c_str(), value);
         return 1;
@@ -124,7 +135,7 @@ void feature_list() {
     printf("Available Features:\n");
     printf("================================================================================\n");
 
-    for (const auto& [name, id] : FEATURE_MAP) {
+    for (const auto& [name, id] : get_feature_map()) {
         auto [value, supported] = get_feature(id);
 
         const char* status;
@@ -162,7 +173,7 @@ int feature_check(const std::string& id) {
 }
 
 int feature_load_config() {
-    std::string config_path = std::string(KSURC_PATH);
+    const std::string config_path = std::string(KSURC_PATH);
     auto content = read_file(config_path);
     if (!content) {
         LOGI("No feature config file found");
@@ -177,17 +188,17 @@ int feature_load_config() {
         if (line.empty() || line[0] == '#')
             continue;
 
-        size_t eq = line.find('=');
+        const size_t eq = line.find('=');
         if (eq == std::string::npos)
             continue;
 
-        std::string key = trim(line.substr(0, eq));
-        std::string val = trim(line.substr(eq + 1));
+        const std::string key = trim(line.substr(0, eq));
+        const std::string val = trim(line.substr(eq + 1));
 
         auto [feature_id, valid] = parse_feature_id(key);
         if (valid) {
             try {
-                uint64_t value = std::stoull(val);
+                const uint64_t value = std::stoull(val);
                 set_feature(feature_id, value);
                 LOGI("Loaded feature %s = %" PRIu64, key.c_str(), value);
             } catch (...) {
@@ -200,7 +211,7 @@ int feature_load_config() {
 }
 
 int feature_save_config() {
-    std::string config_path = std::string(KSURC_PATH);
+    const std::string config_path = std::string(KSURC_PATH);
     std::ofstream ofs(config_path);
     if (!ofs) {
         LOGE("Failed to open config file for writing");
@@ -208,7 +219,7 @@ int feature_save_config() {
     }
 
     ofs << "# KernelSU feature configuration\n";
-    for (const auto& [name, id] : FEATURE_MAP) {
+    for (const auto& [name, id] : get_feature_map()) {
         auto [value, supported] = get_feature(id);
         if (supported) {
             ofs << name << "=" << value << "\n";
@@ -222,7 +233,7 @@ int feature_save_config() {
 std::map<uint32_t, uint64_t> load_binary_config() {
     std::map<uint32_t, uint64_t> features;
 
-    std::ifstream ifs(FEATURE_CONFIG_PATH, std::ios::binary);
+    std::ifstream ifs(get_feature_config_path(), std::ios::binary);
     if (!ifs) {
         LOGI("Feature binary config not found, using defaults");
         return features;
@@ -266,7 +277,7 @@ std::map<uint32_t, uint64_t> load_binary_config() {
 int save_binary_config(const std::map<uint32_t, uint64_t>& features) {
     ensure_dir_exists(WORKING_DIR);
 
-    std::ofstream ofs(FEATURE_CONFIG_PATH, std::ios::binary | std::ios::trunc);
+    std::ofstream ofs(get_feature_config_path(), std::ios::binary | std::ios::trunc);
     if (!ofs) {
         LOGE("Failed to create feature binary config file");
         return -1;
@@ -300,7 +311,7 @@ void apply_config(const std::map<uint32_t, uint64_t>& features) {
 
     int applied = 0;
     for (const auto& [id, value] : features) {
-        int ret = set_feature(id, value);
+        const int ret = set_feature(id, value);
         if (ret >= 0) {
             LOGI("Set feature %s to %" PRIu64, feature_id_to_name(id), value);
             applied++;

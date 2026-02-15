@@ -7,9 +7,9 @@
 #include "../utils.hpp"
 #include "json.hpp"
 
-#define USER_HIDE_RULES_FILE "/data/adb/hymo/user_hide_rules.json"
-
 namespace hymo {
+
+constexpr const char* USER_HIDE_RULES_FILE = "/data/adb/hymo/user_hide_rules.json";
 
 std::vector<UserHideRule> load_user_hide_rules() {
     std::vector<UserHideRule> rules;
@@ -42,8 +42,8 @@ std::vector<UserHideRule> load_user_hide_rules() {
 
 bool save_user_hide_rules(const std::vector<UserHideRule>& rules) {
     // Ensure directory exists
-    fs::path file_path(USER_HIDE_RULES_FILE);
-    fs::path dir = file_path.parent_path();
+    const fs::path file_path(USER_HIDE_RULES_FILE);
+    const fs::path dir = file_path.parent_path();
 
     try {
         if (!fs::exists(dir)) {

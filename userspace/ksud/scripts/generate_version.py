@@ -48,8 +48,8 @@ if __name__ == "__main__":
 namespace ksud {{
 
 // Auto-generated at build time
-const char* VERSION_CODE = "{code}";
-const char* VERSION_NAME = "{name}";
+const char* const VERSION_CODE = "{code}";
+const char* const VERSION_NAME = "{name}";
 
 }}  // namespace ksud
 '''

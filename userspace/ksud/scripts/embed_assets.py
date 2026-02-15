@@ -54,6 +54,7 @@ def main():
 #include "defs.hpp"
 #include "utils.hpp"
 #include "log.hpp"
+#include <array>
 #include <cstring>
 #include <map>
 #include <sys/stat.h>
@@ -84,7 +85,8 @@ namespace ksud {
         
         asset_infos.append((filepath.name, name, size, original_size))
     
-    # Generate asset registry
+    # Generate asset registry (std::array for clang-tidy)
+    n_entries = len(asset_infos) + 1  # +1 for sentinel
     output += '''
 struct AssetEntry {
     const char* name;
@@ -93,21 +95,22 @@ struct AssetEntry {
     size_t original_size;
 };
 
-static const AssetEntry asset_registry[] = {
+static const std::array<AssetEntry, ''' + str(n_entries) + '''> asset_registry = {{
 '''
     
     for filename, name, size, original_size in asset_infos:
         output += f'    {{"{filename}", asset_{name}, asset_{name}_size, asset_{name}_original_size}},\n'
     
     output += '''    {nullptr, nullptr, 0, 0}  // sentinel
-};
+}};
 
 const std::vector<std::string>& list_assets() {
     static std::vector<std::string> names;
     static bool initialized = false;
     if (!initialized) {
-        for (const auto* entry = asset_registry; entry->name != nullptr; ++entry) {
-            names.push_back(entry->name);
+        for (const auto& entry : asset_registry) {
+            if (entry.name == nullptr) break;
+            names.push_back(entry.name);
         }
         initialized = true;
     }
@@ -115,10 +118,11 @@ const std::vector<std::string>& list_assets() {
 }
 
 bool get_asset(const std::string& name, const uint8_t*& data, size_t& size) {
-    for (const auto* entry = asset_registry; entry->name != nullptr; ++entry) {
-        if (name == entry->name) {
-            data = entry->data;
-            size = entry->size;
+    for (const auto& entry : asset_registry) {
+        if (entry.name == nullptr) break;
+        if (name == entry.name) {
+            data = entry.data;
+            size = entry.size;
             return true;
         }
     }
@@ -127,9 +131,10 @@ bool get_asset(const std::string& name, const uint8_t*& data, size_t& size) {
 
 bool copy_asset_to_file(const std::string& name, const std::string& dest_path) {
     const AssetEntry* entry = nullptr;
-    for (const auto* e = asset_registry; e->name != nullptr; ++e) {
-        if (name == e->name) {
-            entry = e;
+    for (const auto& e : asset_registry) {
+        if (e.name == nullptr) break;
+        if (name == e.name) {
+            entry = &e;
             break;
         }
     }
@@ -145,7 +150,7 @@ bool copy_asset_to_file(const std::string& name, const std::string& dest_path) {
     // Decompress
     std::vector<uint8_t> buffer(entry->original_size);
     uLongf destLen = entry->original_size;
-    int ret = uncompress(buffer.data(), &destLen, entry->data, entry->size);
+    const int ret = uncompress(buffer.data(), &destLen, entry->data, entry->size);
     if (ret != Z_OK) {
         LOGE("Decompression failed for %s: %d", name.c_str(), ret);
         return false;
@@ -169,7 +174,7 @@ std::vector<std::string> list_supported_kmi() {
     for (const auto& name : list_assets()) {
         // Format: android15-6.6_kernelsu.ko
         const char* suffix = "_kernelsu.ko";
-        size_t suffix_len = strlen(suffix);
+        const size_t suffix_len = strlen(suffix);
         if (name.size() > suffix_len && 
             name.compare(name.size() - suffix_len, suffix_len, suffix) == 0) {
             result.push_back(name.substr(0, name.size() - suffix_len));
@@ -190,10 +195,10 @@ int ensure_binaries(bool ignore_if_exist) {
             continue;
         }
         
-        std::string dest = std::string(BINARY_DIR) + name;
+        const std::string dest = std::string(BINARY_DIR) + name;
         
         if (ignore_if_exist) {
-            struct stat st;
+            struct stat st{};
             if (stat(dest.c_str(), &st) == 0) {
                 continue;
             }
@@ -207,7 +212,7 @@ int ensure_binaries(bool ignore_if_exist) {
     }
     
     // Ensure ksud symlink exists (like Rust version's link_ksud_to_bin)
-    struct stat st;
+    struct stat st{};
     if (stat(DAEMON_PATH, &st) == 0 && stat(DAEMON_LINK_PATH, &st) != 0) {
         unlink(DAEMON_LINK_PATH);  // Remove if broken symlink
         if (symlink(DAEMON_PATH, DAEMON_LINK_PATH) != 0) {

@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -27,14 +28,14 @@
 namespace ksud {
 
 bool ensure_dir_exists(const std::string& path) {
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) == 0) {
         return S_ISDIR(st.st_mode);
     }
 
     // Create directory recursively
     std::string current;
-    for (char c : path) {
+    for (const char c : path) {
         current += c;
         if (c == '/' && !current.empty()) {
             if (mkdir(current.c_str(), 0755) != 0 && errno != EEXIST) {
@@ -46,19 +47,18 @@ bool ensure_dir_exists(const std::string& path) {
 
     if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST) {
         LOGE("Failed to create directory %s: %s", path.c_str(), strerror(errno));
-        return false;
+        return false;  // NOLINT(readability-simplify-boolean-expr)
     }
-
     return true;
 }
 
 bool ensure_clean_dir(const std::string& path) {
     LOGD("ensure_clean_dir: %s", path.c_str());
 
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) == 0) {
         // Remove existing directory
-        std::string cmd = "rm -rf " + path;
+        const std::string cmd = "rm -rf " + path;
         system(cmd.c_str());
     }
 
@@ -66,10 +66,10 @@ bool ensure_clean_dir(const std::string& path) {
 }
 
 bool ensure_file_exists(const std::string& path) {
-    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         if (errno == EEXIST) {
-            struct stat st;
+            struct stat st{};
             if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
                 return true;
             }
@@ -83,16 +83,16 @@ bool ensure_file_exists(const std::string& path) {
 bool ensure_binary(const std::string& path, const uint8_t* data, size_t size,
                    bool ignore_if_exist) {
     if (ignore_if_exist) {
-        struct stat st;
+        struct stat st{};
         if (stat(path.c_str(), &st) == 0) {
             return true;
         }
     }
 
     // Ensure parent directory exists
-    size_t pos = path.rfind('/');
+    const size_t pos = path.rfind('/');
     if (pos != std::string::npos) {
-        std::string parent = path.substr(0, pos);
+        const std::string parent = path.substr(0, pos);
         if (!ensure_dir_exists(parent)) {
             return false;
         }
@@ -102,20 +102,19 @@ bool ensure_binary(const std::string& path, const uint8_t* data, size_t size,
     unlink(path.c_str());
 
     // Write file
-    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
+    const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
     if (fd < 0) {
         LOGE("Failed to create %s: %s", path.c_str(), strerror(errno));
         return false;
     }
 
-    ssize_t written = write(fd, data, size);
+    const ssize_t written = write(fd, data, size);
     close(fd);
 
     if (written != static_cast<ssize_t>(size)) {
         LOGE("Failed to write %s: %s", path.c_str(), strerror(errno));
-        return false;
+        return false;  // NOLINT(readability-simplify-boolean-expr)
     }
-
     return true;
 }
 
@@ -149,7 +148,7 @@ bool is_safe_mode() {
     }
 
     // Check kernel safemode via ksucalls (volume down key detection)
-    bool kernel_safemode = check_kernel_safemode();
+    const bool kernel_safemode = check_kernel_safemode();
     if (kernel_safemode) {
         LOGI("safemode: true (kernel volume down)");
         return true;
@@ -159,18 +158,21 @@ bool is_safe_mode() {
 }
 
 bool switch_mnt_ns(pid_t pid) {
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/ns/mnt", pid);
+    std::array<char, 64> path{};
+    const int snp_ret = snprintf(path.data(), path.size(), "/proc/%d/ns/mnt", pid);
+    if (snp_ret < 0 || static_cast<size_t>(snp_ret) >= path.size()) {
+        return false;
+    }
 
-    int fd = open(path, O_RDONLY);
+    const int fd = open(path.data(), O_RDONLY);
     if (fd < 0) {
-        LOGE("Failed to open %s: %s", path, strerror(errno));
+        LOGE("Failed to open %s: %s", path.data(), strerror(errno));
         return false;
     }
 
     // Save current directory
-    char cwd[PATH_MAX];
-    char* cwd_result = getcwd(cwd, sizeof(cwd));
+    std::array<char, PATH_MAX> cwd{};
+    char* cwd_result = getcwd(cwd.data(), cwd.size());
 
     // Switch namespace
     if (setns(fd, CLONE_NEWNS) != 0) {
@@ -181,17 +183,18 @@ bool switch_mnt_ns(pid_t pid) {
     close(fd);
 
     // Restore current directory
-    if (cwd_result) {
-        chdir(cwd);
+    if (cwd_result != nullptr) {
+        chdir(cwd.data());
     }
 
     return true;
 }
 
-static void switch_cgroup(const char* grp, pid_t pid) {
-    std::string path = std::string(grp) + "/cgroup.procs";
+namespace {
+void switch_cgroup(const char* grp, pid_t pid) {
+    const std::string path = std::string(grp) + "/cgroup.procs";
 
-    struct stat st;
+    struct stat st{};
     if (stat(path.c_str(), &st) != 0) {
         return;
     }
@@ -201,9 +204,10 @@ static void switch_cgroup(const char* grp, pid_t pid) {
         ofs << pid;
     }
 }
+}  // namespace
 
 void switch_cgroups() {
-    pid_t pid = getpid();
+    const pid_t pid = getpid();
     switch_cgroup("/acct", pid);
     switch_cgroup("/dev/cg2_bpf", pid);
     switch_cgroup("/sys/fs/cgroup", pid);
@@ -214,7 +218,7 @@ void switch_cgroups() {
     }
 }
 
-void umask(mode_t mask) {
+void umask(mode_t mask) {  // NOLINT(misc-unused-parameters) forwarded to ::umask
     ::umask(mask);
 }
 
@@ -224,12 +228,12 @@ bool has_magisk() {
     if (!path_env)
         return false;
 
-    std::string path_str(path_env);
+    const std::string path_str(path_env);
     std::stringstream ss(path_str);
     std::string dir;
 
     while (std::getline(ss, dir, ':')) {
-        std::string magisk_path = dir + "/magisk";
+        const std::string magisk_path = dir + "/magisk";
         if (access(magisk_path.c_str(), X_OK) == 0) {
             return true;
         }
@@ -239,13 +243,14 @@ bool has_magisk() {
 }
 
 std::string trim(const std::string& str) {
-    size_t start = str.find_first_not_of(" \t\n\r");
+    const size_t start = str.find_first_not_of(" \t\n\r");
     if (start == std::string::npos)
         return "";
-    size_t end = str.find_last_not_of(" \t\n\r");
+    const size_t end = str.find_last_not_of(" \t\n\r");
     return str.substr(start, end - start + 1);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<std::string> split(const std::string& str, char delim) {
     std::vector<std::string> result;
     std::stringstream ss(str);
@@ -256,17 +261,19 @@ std::vector<std::string> split(const std::string& str, char delim) {
     return result;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool starts_with(const std::string& str, const std::string& prefix) {
     return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool ends_with(const std::string& str, const std::string& suffix) {
     return str.size() >= suffix.size() &&
            str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 std::optional<std::string> read_file(const std::string& path) {
-    std::ifstream ifs(path);
+    std::ifstream ifs(path);  // NOLINT(misc-const-correctness) - stream has mutable state
     if (!ifs)
         return std::nullopt;
 
@@ -275,18 +282,20 @@ std::optional<std::string> read_file(const std::string& path) {
     return ss.str();
 }
 
-bool write_file(const std::string& path, const std::string& content) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+bool write_file(const std::filesystem::path& path, const std::string& content) {
     std::ofstream ofs(path);
     if (!ofs)
-        return false;
+        return false;  // NOLINT(readability-simplify-boolean-expr)
     ofs << content;
     return true;
 }
 
-bool append_file(const std::string& path, const std::string& content) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+bool append_file(const std::filesystem::path& path, const std::string& content) {
     std::ofstream ofs(path, std::ios::app);
     if (!ofs)
-        return false;
+        return false;  // NOLINT(readability-simplify-boolean-expr)
     ofs << content;
     return true;
 }
@@ -297,12 +306,13 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     if (args.empty())
         return result;
 
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0) {
         return result;
     }
 
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0) {
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
@@ -321,6 +331,7 @@ ExecResult exec_command(const std::vector<std::string>& args) {
         close(stderr_pipe[1]);
 
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -335,16 +346,16 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     close(stderr_pipe[1]);
 
     // Read stdout
-    char buf[1024];
+    std::array<char, 1024> buf{};
     ssize_t n;
-    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stdout_str.append(buf, n);
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stdout_pipe[0]);
 
     // Read stderr
-    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stderr_str.append(buf, n);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stderr_pipe[0]);
 
@@ -357,18 +368,20 @@ ExecResult exec_command(const std::vector<std::string>& args) {
     return result;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 ExecResult exec_command(const std::vector<std::string>& args, const std::string& workdir) {
     ExecResult result{-1, "", ""};
 
     if (args.empty())
         return result;
 
-    int stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0) {
         return result;
     }
 
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0) {
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
@@ -394,6 +407,7 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
         }
 
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -408,16 +422,16 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     close(stderr_pipe[1]);
 
     // Read stdout
-    char buf[1024];
+    std::array<char, 1024> buf{};
     ssize_t n;
-    while ((n = read(stdout_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stdout_str.append(buf, n);
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stdout_pipe[0]);
 
     // Read stderr
-    while ((n = read(stderr_pipe[0], buf, sizeof(buf))) > 0) {
-        result.stderr_str.append(buf, n);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0) {
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
     }
     close(stderr_pipe[0]);
 
@@ -430,17 +444,92 @@ ExecResult exec_command(const std::vector<std::string>& args, const std::string&
     return result;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
+                                   const std::vector<std::string>& sub_args,
+                                   const std::string& workdir) {
+    std::vector<std::string> args;
+    args.reserve(1 + sub_args.size());
+    args.push_back("magiskboot");
+    for (const auto& a : sub_args)
+        args.push_back(a);
+
+    ExecResult result{-1, "", ""};
+    if (args.empty())
+        return result;
+
+    std::array<int, 2> stdout_pipe{};
+    std::array<int, 2> stderr_pipe{};
+    if (pipe(stdout_pipe.data()) != 0 || pipe(stderr_pipe.data()) != 0)
+        return result;
+    const pid_t pid = fork();
+    if (pid < 0) {
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[0]);
+        close(stderr_pipe[1]);
+        return result;
+    }
+    if (pid == 0) {
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+        dup2(stderr_pipe[1], STDERR_FILENO);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        if (!workdir.empty() && chdir(workdir.c_str()) != 0) {
+            _exit(127);
+        }
+        std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
+        for (const auto& arg : args)
+            c_args.push_back(const_cast<char*>(arg.c_str()));
+        c_args.push_back(nullptr);
+        execv(magiskboot_path.c_str(), c_args.data());
+        _exit(127);
+    }
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    std::array<char, 1024> buf{};
+    ssize_t n;
+    while ((n = read(stdout_pipe[0], buf.data(), buf.size())) > 0)
+        result.stdout_str.append(buf.data(), static_cast<size_t>(n));
+    close(stdout_pipe[0]);
+    while ((n = read(stderr_pipe[0], buf.data(), buf.size())) > 0)
+        result.stderr_str.append(buf.data(), static_cast<size_t>(n));
+    close(stderr_pipe[0]);
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status))
+        result.exit_code = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status)) {
+        const int sig = WTERMSIG(status);
+        result.exit_code = 128 + sig;
+        result.stderr_str.append("magiskboot terminated by signal ");
+        result.stderr_str.append(std::to_string(sig));
+        const char* sig_name = strsignal(sig);
+        if (sig_name && sig_name[0]) {
+            result.stderr_str.append(" (");
+            result.stderr_str.append(sig_name);
+            result.stderr_str.append(")");
+        }
+        result.stderr_str.push_back('\n');
+    }
+    return result;
+}
+
 int exec_command_async(const std::vector<std::string>& args) {
     if (args.empty())
         return -1;
 
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0)
         return -1;
 
     if (pid == 0) {
         // Child process
         std::vector<char*> c_args;
+        c_args.reserve(args.size() + 1U);
         for (const auto& arg : args) {
             c_args.push_back(const_cast<char*>(arg.c_str()));
         }
@@ -460,16 +549,16 @@ int install(const std::optional<std::string>& magiskboot_path) {
     }
 
     // Copy self to DAEMON_PATH
-    char self_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", self_path, sizeof(self_path) - 1);
+    std::array<char, PATH_MAX> self_path{};
+    const ssize_t len = readlink("/proc/self/exe", self_path.data(), self_path.size() - 1);
     if (len < 0) {
         LOGE("Failed to get self path");
         return 1;
     }
-    self_path[len] = '\0';
+    self_path[static_cast<size_t>(len)] = '\0';
 
     // Copy binary
-    std::ifstream src(self_path, std::ios::binary);
+    std::ifstream src(self_path.data(), std::ios::binary);
     std::ofstream dst(DAEMON_PATH, std::ios::binary);
     if (!src || !dst) {
         LOGE("Failed to copy ksud");
@@ -486,9 +575,9 @@ int install(const std::optional<std::string>& magiskboot_path) {
         LOGW("Failed to restore SELinux contexts");
     }
 
-    // Extract binary assets
-    if (!ensure_binaries(false)) {
-        LOGW("Failed to extract binary assets");
+    // Ensure BINARY_DIR and symlinks (ksud, busybox) exist
+    if (ensure_binaries(false) != 0) {
+        LOGW("Failed to ensure binaries");
     }
 
     // Create symlink
@@ -504,7 +593,7 @@ int install(const std::optional<std::string>& magiskboot_path) {
 
     // Copy magiskboot if provided
     if (magiskboot_path) {
-        std::ifstream mb_src(*magiskboot_path, std::ios::binary);
+        std::ifstream mb_src(*magiskboot_path, std::ios::binary);  // NOLINT(misc-const-correctness)
         std::ofstream mb_dst(MAGISKBOOT_PATH, std::ios::binary);
         if (mb_src && mb_dst) {
             mb_dst << mb_src.rdbuf();
@@ -523,7 +612,7 @@ int uninstall(const std::optional<std::string>& magiskboot_path) {
         try {
             for (const auto& entry : std::filesystem::directory_iterator(MODULE_DIR)) {
                 if (entry.is_directory()) {
-                    std::string disable_file = entry.path().string() + "/disable";
+                    const std::string disable_file = entry.path().string() + "/disable";
                     std::ofstream(disable_file).close();
                 }
             }
@@ -545,7 +634,7 @@ int uninstall(const std::optional<std::string>& magiskboot_path) {
     }
     restore_args.push_back("--flash");
 
-    int ret = boot_restore(restore_args);
+    const int ret = boot_restore(restore_args);
     if (ret != 0) {
         LOGE("Boot image restoration failed");
         printf("Warning: Failed to restore boot image, you may need to manually restore\n");

@@ -2,6 +2,7 @@
 #include "../log.hpp"
 #include "picosha2.h"
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -11,11 +12,15 @@
 
 namespace ksud {
 
-static std::string sha256_digest(const uint8_t* data, size_t len) {
+namespace {
+
+std::string sha256_digest(const uint8_t* data, size_t len) {
     std::vector<unsigned char> hash(picosha2::k_digest_size);
     picosha2::hash256(data, data + len, hash.begin(), hash.end());
     return picosha2::bytes_to_hex_string(hash.begin(), hash.end());
 }
+
+}  // namespace
 
 std::pair<uint32_t, std::string> get_apk_signature(const std::string& apk_path) {
     std::ifstream ifs(apk_path, std::ios::binary | std::ios::ate);
@@ -24,7 +29,7 @@ std::pair<uint32_t, std::string> get_apk_signature(const std::string& apk_path) 
         return {0, ""};
     }
 
-    std::streamsize file_size = ifs.tellg();
+    const std::streamsize file_size = ifs.tellg();
     ifs.seekg(0);
 
     // Find EOCD (End of Central Directory)
@@ -76,17 +81,17 @@ std::pair<uint32_t, std::string> get_apk_signature(const std::string& apk_path) 
     ifs.seekg(cd_offset - 0x18, std::ios::beg);
 
     uint64_t block_size;
-    char magic[16];
+    std::array<char, 16> magic{};
     ifs.read(reinterpret_cast<char*>(&block_size), 8);
-    ifs.read(magic, 16);
+    ifs.read(magic.data(), 16);
 
-    if (memcmp(magic, "APK Sig Block 42", 16) != 0) {
+    if (memcmp(magic.data(), "APK Sig Block 42", 16) != 0) {
         LOGE("APK Signing Block not found");
         return {0, ""};
     }
 
     // Seek to start of signing block
-    uint64_t block_start = cd_offset - (block_size + 8);
+    const uint64_t block_start = cd_offset - (block_size + 8);
     ifs.seekg(block_start, std::ios::beg);
 
     uint64_t block_size_check;
@@ -114,11 +119,13 @@ std::pair<uint32_t, std::string> get_apk_signature(const std::string& apk_path) 
         }
 
         ifs.read(reinterpret_cast<char*>(&pair_id), 4);
-        std::streampos value_start = ifs.tellg();
+        const std::streampos value_start = ifs.tellg();
 
         if (pair_id == 0x7109871a) {
             // V2 signature scheme
-            uint32_t signer_seq_len, signer_len, signed_data_len;
+            uint32_t signer_seq_len;
+            uint32_t signer_len;
+            uint32_t signed_data_len;
             ifs.read(reinterpret_cast<char*>(&signer_seq_len), 4);
             ifs.read(reinterpret_cast<char*>(&signer_len), 4);
             ifs.read(reinterpret_cast<char*>(&signed_data_len), 4);
@@ -129,7 +136,8 @@ std::pair<uint32_t, std::string> get_apk_signature(const std::string& apk_path) 
             ifs.seekg(digests_len, std::ios::cur);
 
             // Read certificate
-            uint32_t certs_len, cert_len;
+            uint32_t certs_len;
+            uint32_t cert_len;
             ifs.read(reinterpret_cast<char*>(&certs_len), 4);
             ifs.read(reinterpret_cast<char*>(&cert_len), 4);
 

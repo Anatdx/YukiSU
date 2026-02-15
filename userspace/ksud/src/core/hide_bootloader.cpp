@@ -5,6 +5,7 @@
 
 #include <sys/wait.h>
 #include <unistd.h>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -12,14 +13,15 @@
 
 namespace ksud {
 
-// Config file path
-static constexpr const char* BL_HIDE_CONFIG = "/data/adb/ksu/.hide_bootloader";
+// Config file path (used by is_bl_hiding_enabled/set_bl_hiding_enabled)
+constexpr const char* BL_HIDE_CONFIG = "/data/adb/ksu/.hide_bootloader";
 
 // Property definitions: {name, expected_value}
-static const struct {
+struct PropDef {
     const char* name;
     const char* expected;
-} PROPS_TO_HIDE[] = {
+};
+static const std::array<PropDef, 24> PROPS_TO_HIDE = {{
     // Generic bootloader/verified boot status
     {"ro.boot.vbmeta.device_state", "locked"},
     {"ro.boot.verifiedbootstate", "green"},
@@ -52,49 +54,66 @@ static const struct {
 
     // OnePlus specific
     {"ro.boot.oem_unlock_support", "0"},
-};
+}};
+
+namespace {
 
 /**
  * Get property value using getprop
  */
-static std::string get_prop(const char* name) {
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "getprop %s 2>/dev/null", name);
+std::string get_prop(const char* name) {
+    std::array<char, 256> cmd{};
+    (void)snprintf(cmd.data(), cmd.size(), "getprop %s 2>/dev/null", name);
 
-    FILE* fp = popen(cmd, "r");
+    FILE* fp = popen(cmd.data(), "r");
     if (!fp)
         return "";
 
-    char buf[256] = {0};
-    if (fgets(buf, sizeof(buf), fp)) {
+    std::array<char, 256> buf{};
+    if (fgets(buf.data(), buf.size(), fp)) {
         // Remove trailing newline
-        size_t len = strlen(buf);
+        const size_t len = strlen(buf.data());
         if (len > 0 && buf[len - 1] == '\n') {
             buf[len - 1] = '\0';
         }
     }
-    pclose(fp);
-    return std::string(buf);
+    (void)pclose(fp);
+    return {buf.data()};
 }
+
+// Embedded resetprop entry (from resetpropAlone) when available.
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+extern "C" int resetprop_main(int argc, char** argv);
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 
 /**
  * Set property value using resetprop
  * Uses -n to skip init trigger (like Shamiko)
  */
-static bool reset_prop(const char* name, const char* value) {
-    pid_t pid = fork();
+bool reset_prop(const char* name, const char* value) {
+    const pid_t pid = fork();
     if (pid < 0) {
         LOGW("hide_bl: fork failed: %s", strerror(errno));
         return false;
     }
 
     if (pid == 0) {
-        // Child process
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+        std::array<char*, 5> argv_c = {
+            const_cast<char*>("resetprop"),
+            const_cast<char*>("-n"),
+            const_cast<char*>(name),
+            const_cast<char*>(value),
+            nullptr,
+        };
+        const int rc = resetprop_main(4, argv_c.data());
+        _exit(rc);
+#else
         execl(RESETPROP_PATH, "resetprop", "-n", name, value, nullptr);
         _exit(127);
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
 
-    // Parent: wait for child
     int status;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
@@ -103,8 +122,8 @@ static bool reset_prop(const char* name, const char* value) {
 /**
  * Check and reset prop if value doesn't match expected
  */
-static void check_reset_prop(const char* name, const char* expected) {
-    std::string value = get_prop(name);
+void check_reset_prop(const char* name, const char* expected) {
+    const std::string value = get_prop(name);
 
     // Skip if empty (property doesn't exist) or already matches
     if (value.empty() || value == expected) {
@@ -118,14 +137,16 @@ static void check_reset_prop(const char* name, const char* expected) {
 /**
  * Check if prop contains substring and reset if so
  */
-static void contains_reset_prop(const char* name, const char* contains, const char* newval) {
-    std::string value = get_prop(name);
+void contains_reset_prop(const char* name, const char* contains, const char* newval) {
+    const std::string value = get_prop(name);
 
     if (value.find(contains) != std::string::npos) {
         LOGI("hide_bl: resetting %s (contains '%s') to '%s'", name, contains, newval);
         reset_prop(name, newval);
     }
 }
+
+}  // namespace
 
 bool is_bl_hiding_enabled() {
     return access(BL_HIDE_CONFIG, F_OK) == 0;
@@ -135,7 +156,7 @@ void set_bl_hiding_enabled(bool enabled) {
     if (enabled) {
         // Create config file
         std::ofstream f(BL_HIDE_CONFIG);
-        f << "1" << std::endl;
+        f << "1\n";
         f.close();
         LOGI("hide_bl: enabled");
     } else {
@@ -145,19 +166,33 @@ void set_bl_hiding_enabled(bool enabled) {
     }
 }
 
+namespace {
+
 /**
  * Internal function that does the actual hiding work
  * Called in a forked child process
  */
-static void do_hide_bootloader() {
+void do_hide_bootloader() {
     // Wait for boot_completed like Shamiko does
     // resetprop -w blocks until property exists with given value
     LOGI("hide_bl: waiting for sys.boot_completed=0");
 
-    pid_t wait_pid = fork();
+    const pid_t wait_pid = fork();
     if (wait_pid == 0) {
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+        std::array<char*, 5> argv_c = {
+            const_cast<char*>("resetprop"),
+            const_cast<char*>("-w"),
+            const_cast<char*>("sys.boot_completed"),
+            const_cast<char*>("0"),
+            nullptr,
+        };
+        const int rc = resetprop_main(4, argv_c.data());
+        _exit(rc);
+#else
         execl(RESETPROP_PATH, "resetprop", "-w", "sys.boot_completed", "0", nullptr);
         _exit(127);
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
     if (wait_pid > 0) {
         int status;
@@ -176,6 +211,8 @@ static void do_hide_bootloader() {
     LOGI("hide_bl: bootloader status hiding completed");
 }
 
+}  // namespace
+
 void hide_bootloader_status() {
     // Check if enabled
     if (!is_bl_hiding_enabled()) {
@@ -183,14 +220,8 @@ void hide_bootloader_status() {
         return;
     }
 
-    // Check if resetprop exists
-    if (access(RESETPROP_PATH, X_OK) != 0) {
-        LOGW("hide_bl: resetprop not found at %s", RESETPROP_PATH);
-        return;
-    }
-
     // Fork to background so we don't block boot
-    pid_t pid = fork();
+    const pid_t pid = fork();
     if (pid < 0) {
         LOGW("hide_bl: fork failed: %s", strerror(errno));
         return;

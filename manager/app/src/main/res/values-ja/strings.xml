@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">KernelSU について学ぶ</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/ja_JP/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">KernelSU のインストール方法やモジュールの使い方を学習できます。</string>
-    <string name="home_support_title">支援する</string>
-    <string name="home_support_content">KernelSU は今後も無料でオープンソースです。ですが、寄付をして頂けると開発者への貢献になります。</string>
+    <string name="home_support_title">開発を支援</string>
+    <string name="home_support_content">KernelSU は無料・オープンソースを維持します。公式 KernelSU の開発者に寄付して支援を示してください。</string>
     <string name="about_source_code"><![CDATA[ソースコードは %1$s で確認できます<br/>%2$s チャンネルにご参加ください]]></string>
     <string name="profile_default">デフォルト</string>
     <string name="profile_template">テンプレート</string>
@@ -224,10 +224,10 @@
     <string name="home_kpm_version">KPM バージョン</string>
     <string name="close_notice">閉じる</string>
     <string name="kernel_module_notice">以下のカーネルモジュール関数は KernelPatch によって開発され、YukiSU のカーネルモジュール関数を含むように変更されました</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU の今後にご期待ください</string>
+    <string name="home_ContributionCard_kernelsu">YukiSU の展望</string>
     <string name="kpm_control_success">成功</string>
     <string name="kpm_control_failed">失敗</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU は将来的に KSU から比較的に独立したブランチになりますが、公式の KernelSU や MKSU などの貢献に感謝しています！</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU は非常にアグレッシブで独立した KSU ブランチですが、公式 KernelSU、SukiSU、Magisk、APatch などへの貢献に感謝します。</string>
     <string name="not_supported">非対応</string>
     <string name="supported">対応</string>
     <string name="kernel_patched">カーネルはパッチされていません</string>

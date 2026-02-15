@@ -47,8 +47,8 @@
     <string name="home_learn_kernelsu">Découvrir KernelSU</string>
     <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
     <string name="home_click_to_learn_kernelsu">Découvrez comment installer KernelSU et utiliser les modules</string>
-    <string name="home_support_title">Soutenez-nous</string>
-    <string name="home_support_content">KernelSU est, et restera toujours, gratuit et open source. Vous pouvez cependant nous témoigner de votre soutien en nous faisant un don.</string>
+    <string name="home_support_title">Soutenir le développement</string>
+    <string name="home_support_content">KernelSU restera gratuit et open source ; faites un don aux développeurs officiels de KernelSU pour montrer votre soutien.</string>
     <string name="about_source_code"><![CDATA[Voir le code source à %1$s<br/>Rejoignez notre canal %2$s]]></string>
     <string name="profile_default">Par défaut</string>
     <string name="profile_template">Modèle</string>
@@ -212,10 +212,10 @@
     <string name="home_kpm_version">Version de KPM</string>
     <string name="close_notice">Fermer</string>
     <string name="kernel_module_notice">Les fonctions suivantes du module du noyau ont été développées par KernelPatch et modifiées pour inclure les fonctions du module du noyau de YukiSU</string>
-    <string name="home_ContributionCard_kernelsu">YukiSU attend avec impatience</string>
+    <string name="home_ContributionCard_kernelsu">Vision YukiSU</string>
     <string name="kpm_control_success">Succès</string>
     <string name="kpm_control_failed">Echoué</string>
-    <string name="home_click_to_ContributionCard_kernelsu">YukiSU sera une branche relativement indépendante de KSU dans le futur, mais nous apprécions toujours le KernelSU officiel, MKSU etc. pour leurs contributions!</string>
+    <string name="home_click_to_ContributionCard_kernelsu">YukiSU est une branche KSU extrêmement agressive et indépendante, mais nous remercions tout de même le KernelSU officiel, SukiSU, Magisk, APatch et d\'autres pour leurs contributions.</string>
     <string name="not_supported">Non pris en charge</string>
     <string name="supported">Pris en charge</string>
     <string name="kernel_patched">Noyau non corrigé</string>

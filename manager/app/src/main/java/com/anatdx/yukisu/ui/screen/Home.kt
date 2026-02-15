@@ -325,7 +325,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     if (!viewModel.isSimpleMode && !viewModel.isHideLinkCard) {
                         ContributionCard()
                         DonateCard()
-                        LearnMoreCard()
                     }
                 }
 
@@ -805,40 +804,6 @@ fun ContributionCard() {
 }
 
 @Composable
-fun LearnMoreCard() {
-    val uriHandler = LocalUriHandler.current
-    val url = stringResource(R.string.home_learn_kernelsu_url)
-
-    ElevatedCard(
-        colors = getCardColors(MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    uriHandler.openUri(url)
-                }
-                .padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.home_learn_kernelsu),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.home_click_to_learn_kernelsu),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun DonateCard() {
     val uriHandler = LocalUriHandler.current
 
@@ -985,9 +950,10 @@ private fun InfoCard(
 
             val ksudContent = when {
                 apkVer == null && installedVer == null -> ksudUnknown
-                installedVer == null -> "APK: ${apkVer ?: ksudUnknown}"
+                installedVer == null -> apkVer ?: ksudUnknown
                 apkVer == null -> installedVer
-                else -> "${installedVer} / APK: $apkVer"
+                apkVer == installedVer -> apkVer
+                else -> "$installedVer / APK: $apkVer"
             }
 
             InfoCardItem(
@@ -1029,14 +995,23 @@ private fun InfoCard(
             }
 
             if (showKsudDialog) {
-                KsudVersionDialog(onDismiss = { showKsudDialog = false })
+                KsudVersionDialog(
+                    onDismiss = { showKsudDialog = false },
+                    onVersionsUpdated = { apk, installed ->
+                        ksudApkVersion = apk
+                        ksudInstalledVersion = installed
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun KsudVersionDialog(onDismiss: () -> Unit) {
+private fun KsudVersionDialog(
+    onDismiss: () -> Unit,
+    onVersionsUpdated: (apk: String?, installed: String?) -> Unit = { _, _ -> }
+) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -1104,6 +1079,7 @@ private fun KsudVersionDialog(onDismiss: () -> Unit) {
                         val (apk, installed) = KsuCli.getKsudVersionsForUi()
                         apkVersion = apk
                         installedVersion = installed
+                        onVersionsUpdated(apk, installed)
                         syncing = false
                     }
                 }

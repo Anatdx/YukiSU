@@ -8,7 +8,7 @@
 
 namespace ksud {
 
-int cli_run(int argc, char* argv[]);
+int cli_run(int argc, char** argv);
 
 // Command handler type
 using CommandHandler = std::function<int(const std::vector<std::string>&)>;
@@ -25,7 +25,7 @@ struct CliOption {
 class CliParser {
 public:
     void add_option(const CliOption& opt);
-    bool parse(int argc, char* argv[]);
+    bool parse(int argc, char** argv);
 
     std::optional<std::string> get_option(const std::string& name) const;
     bool has_option(const std::string& name) const;

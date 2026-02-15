@@ -4,7 +4,7 @@
 
 namespace ksud {
 
-// Ensure all binary assets are extracted
-bool ensure_binaries(bool ignore_if_exist);
+// Ensure BINARY_DIR exists and symlinks (ksud, busybox) are created. Returns 0 on success.
+int ensure_binaries(bool ignore_if_exist);
 
 }  // namespace ksud
