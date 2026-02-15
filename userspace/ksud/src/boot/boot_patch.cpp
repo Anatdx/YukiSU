@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <array>
 #include <climits>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -401,6 +402,8 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
 int boot_patch_impl(const std::vector<std::string>& args) {
     auto parsed = parse_boot_patch_args(args);
 
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
     printf("\n");
     printf("__   __ _   _  _  __ ___  ____   _   _ \n");
     printf("\\ \\ / /| | | || |/ /|_ _|/ ___| | | | |\n");
@@ -646,6 +649,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
 
     // Unpack boot image (must run in workdir so output files go there)
     printf("- Unpacking boot image\n");
+    fflush(stdout);
     printf("- magiskboot: %s\n", magiskboot.c_str());
     printf("- bootimage: %s\n", bootimage.c_str());
     printf("- workdir: %s\n", workdir.c_str());
@@ -783,6 +787,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     // that require: repack <in-boot.img> <out-boot.img>.
     const std::string new_boot = workdir + "/new-boot.img";
     printf("- Repacking boot image\n");
+    fflush(stdout);
     // MagiskbootAlone supports LZ4_LEGACY, GZIP, and LZ4 compression natively.
     // Do NOT use --skip-comp: the ramdisk must be recompressed to fit the
     // partition. Without recompression the uncompressed ramdisk makes the output

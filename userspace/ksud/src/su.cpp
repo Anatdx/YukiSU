@@ -23,7 +23,7 @@ namespace ksud {
 namespace {
 
 void print_su_usage() {
-    printf("KernelSU\n\n");
+    printf("YukiSU\n\n");
     printf("Usage: su [options] [-] [user [argument...]]\n\n");
     printf("Options:\n");
     printf("  -c, --command COMMAND    pass COMMAND to the invoked shell\n");
