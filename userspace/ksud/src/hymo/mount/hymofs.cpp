@@ -1,6 +1,7 @@
 #include "hymofs.hpp"
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -26,15 +27,16 @@ int get_anon_fd() {
         return s_hymo_fd;
     }
 
-    // Request anonymous fd from kernel via SYS_reboot kprobe (KernelSU style).
-    // The kernel writes fd to &fd via put_user. First call may fail (seccomp/context);
-    // retry once after a short delay so second attempt often succeeds.
+    // Prefer prctl (SECCOMP-safe); fallback to SYS_reboot for older LKM.
     int fd = -1;
-    for (int attempt = 0; attempt < 2 && fd < 0; ++attempt) {
-        if (attempt > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    prctl(HYMO_PRCTL_GET_FD, reinterpret_cast<unsigned long>(&fd), 0, 0, 0);
+    if (fd < 0) {
+        for (int attempt = 0; attempt < 2 && fd < 0; ++attempt) {
+            if (attempt > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+            }
+            syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
         }
-        syscall(SYS_reboot, HYMO_MAGIC1, HYMO_MAGIC2, HYMO_CMD_GET_FD, &fd);
     }
     if (fd < 0) {
         LOG_ERROR("Failed to get HymoFS anonymous fd (fd=" + std::to_string(fd) + ")");

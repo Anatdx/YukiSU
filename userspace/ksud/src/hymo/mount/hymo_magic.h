@@ -36,6 +36,8 @@
 
 // Only one syscall command: Get anonymous FD
 #define HYMO_CMD_GET_FD 0x48021
+// prctl option for GET_FD (SECCOMP-safe). arg2 = (int *) for fd output.
+#define HYMO_PRCTL_GET_FD 0x48021
 
 struct hymo_syscall_arg {
     const char* src;
