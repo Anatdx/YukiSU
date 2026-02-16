@@ -44,6 +44,7 @@ import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestina
 import com.ramcosta.composedestinations.spec.NavHostGraphSpec
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
 import com.anatdx.yukisu.Natives
+import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.activity.component.BottomBar
 import com.anatdx.yukisu.ui.activity.util.AnimatedBottomBar
 import com.anatdx.yukisu.ui.activity.util.DataRefreshUtils
