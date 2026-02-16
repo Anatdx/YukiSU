@@ -7,7 +7,7 @@
 
 A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](https://github.com/ShirkNeko/SukiSU-Ultra), removed some useless stuff, and added some interesting changes.
 
-> <div style="display:none">**![Screenshot_2026-02-11-16-54-23-15](Screenshot_2026-02-11-16-54-23-15.jpg)</div>⚠️ Important Notice**
+> ⚠️ Important Notice**
 >
 > YukiSU has been **completely rewritten in C++** (previously Rust-based). This rewrite means that YukiSU may behave differently from other KernelSU forks. If you encounter any issues, please report them to us rather than to upstream projects.
 >
