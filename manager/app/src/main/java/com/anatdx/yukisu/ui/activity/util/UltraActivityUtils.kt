@@ -26,7 +26,6 @@ import com.anatdx.yukisu.ui.component.ZipFileDetector
 import com.anatdx.yukisu.ui.component.ZipFileInfo
 import com.anatdx.yukisu.ui.component.ZipType
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
 import com.anatdx.yukisu.ui.screen.FlashIt
 import kotlinx.coroutines.withContext
 import androidx.core.content.edit
@@ -65,22 +64,14 @@ object UltraActivityUtils {
     ) {
         activity.lifecycleScope.launch {
             val moduleUris = zipFiles.filter { it.type == ZipType.MODULE }.map { it.uri }
-            val kernelUris = zipFiles.filter { it.type == ZipType.KERNEL }.map { it.uri }
 
-            when {
-                kernelUris.isNotEmpty() && moduleUris.isEmpty() -> {
-                    navigator.navigate(InstallScreenDestination())
-                    setAutoExitAfterFlash(activity)
-                }
-
-                moduleUris.isNotEmpty() -> {
-                    navigator.navigate(
-                        FlashScreenDestination(
-                            FlashIt.FlashModules(ArrayList(moduleUris))
-                        )
+            if (moduleUris.isNotEmpty()) {
+                navigator.navigate(
+                    FlashScreenDestination(
+                        FlashIt.FlashModules(ArrayList(moduleUris))
                     )
-                    setAutoExitAfterFlash(activity)
-                }
+                )
+                setAutoExitAfterFlash(activity)
             }
         }
     }

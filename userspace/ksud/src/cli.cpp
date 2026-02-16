@@ -473,7 +473,6 @@ int cmd_flash_new(const std::vector<std::string>& args) {
         printf("  avb disable                Disable AVB/dm-verity\\n");
         printf("  kernel [--slot SLOT]       Show kernel version\\n");
         printf("  boot-info                  Show boot slot information\\n");
-        printf("  ak3 <ZIP>                  Flash AnyKernel3 zip\n");
         printf("\nOPTIONS:\n");
         printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
         printf("                             Default: current active slot\n");
@@ -668,11 +667,6 @@ int cmd_flash_new(const std::vector<std::string>& args) {
         const std::string info = ksud::flash::get_boot_slot_info();
         printf("%s\n", info.c_str());
         return 0;
-
-    } else if (filtered_args[0] == "ak3") {
-        printf("AnyKernel3 flash is no longer supported. Use 'ksud flash image' for partition "
-               "flash.\n");
-        return 1;
     }
 
     printf("Unknown flash subcommand: %s\n", subcmd.c_str());
