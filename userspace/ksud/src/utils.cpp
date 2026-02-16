@@ -495,7 +495,7 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     // Cap capture at 1MB per stream to prevent cache/memory explosion if magiskboot
     // enters an infinite loop writing output.
     constexpr size_t kMaxCapture = 1024ULL * 1024;
-    auto read_fd_into = [](int fd, std::string* out) {
+    auto read_fd_into = [](int fd, std::string* out, bool forward_to_stdout) {
         std::array<char, 1024> buf{};
         ssize_t n;
         while ((n = read(fd, buf.data(), buf.size())) > 0) {
@@ -504,11 +504,15 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
                     std::min(static_cast<size_t>(n), kMaxCapture - out->size());
                 out->append(buf.data(), to_append);
             }
+            if (forward_to_stdout && n > 0) {
+                fwrite(buf.data(), 1, static_cast<size_t>(n), stdout);
+                fflush(stdout);
+            }
         }
         close(fd);
     };
-    std::thread t_stdout(read_fd_into, stdout_pipe[0], &result.stdout_str);
-    std::thread t_stderr(read_fd_into, stderr_pipe[0], &result.stderr_str);
+    std::thread t_stdout(read_fd_into, stdout_pipe[0], &result.stdout_str, false);
+    std::thread t_stderr(read_fd_into, stderr_pipe[0], &result.stderr_str, true);
     int status;
     waitpid(pid, &status, 0);
     t_stdout.join();
