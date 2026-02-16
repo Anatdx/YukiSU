@@ -26,11 +26,7 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 2. Module system based on [Magic Mount](https://github.com/5ec1cff/KernelSU)
    > **Note:** YukiSU now delegates all module mounting to the installed *metamodule*; the core no longer handles mount operations.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
-4. Support non-GKI and GKI 1.0
-5. Built-in [HymoFS](https://github.com/backslashxx/HymoFS) for kernel-level filesystem hiding (replaces susfs)
-6. Tweaks to the manager theme
-
-> **Note:** YukiSU no longer supports susfs. HymoFS is our built-in solution for filesystem hiding.
+4. Tweaks to the manager theme
 
 ## Compatibility Status
 
