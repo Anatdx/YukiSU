@@ -785,7 +785,13 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     // Repack boot image (must run in workdir where unpack output files are)
     // Pass explicit output path for compatibility with older magiskboot variants
     // that require: repack <in-boot.img> <out-boot.img>.
-    const std::string new_boot = workdir + "/new-boot.img";
+    // Output filename must match input format: boot -> new-boot.img, init_boot -> new-init_boot.img
+    // (aligned with Magisk payload extract: partition.partition_name -> {partition}.img)
+    const bool is_init_boot =
+        (patch_file && bootimage.find("init_boot") != std::string::npos) ||
+        (!bootdevice.empty() && bootdevice.find("init_boot") != std::string::npos);
+    const std::string new_boot =
+        workdir + "/" + (is_init_boot ? "new-init_boot.img" : "new-boot.img");
     printf("- Repacking boot image\n");
     fflush(stdout);
     // MagiskbootAlone supports LZ4_LEGACY, GZIP, and LZ4 compression natively.
@@ -1056,14 +1062,23 @@ int boot_restore(const std::vector<std::string>& args) {
         }
 
         // Repack (must run in workdir where unpack output files are)
+        // Output filename must match input format: boot -> new-boot.img, init_boot ->
+        // new-init_boot.img
+        const bool is_init_boot_restore =
+            (!parsed.boot_image.empty() &&
+             parsed.boot_image.find("init_boot") != std::string::npos) ||
+            (!bootdevice.empty() && bootdevice.find("init_boot") != std::string::npos);
+        const std::string out_img =
+            workdir + "/" + (is_init_boot_restore ? "new-init_boot.img" : "new-boot.img");
         printf("- Repacking boot image\n");
-        auto repack_result = exec_command_magiskboot(magiskboot, {"repack", bootimage}, workdir);
+        auto repack_result =
+            exec_command_magiskboot(magiskboot, {"repack", bootimage, out_img}, workdir);
         if (repack_result.exit_code != 0) {
             LOGE("magiskboot repack failed");
             cleanup();
             return 1;
         }
-        new_boot = workdir + "/new-boot.img";
+        new_boot = out_img;
     }
 
     // Output restored image
