@@ -461,6 +461,7 @@
     <string name="unknown_package">Unknown</string>
     <string name="unknown_kernel">Unknown Kernel</string>
     <string name="unknown_file">Unknown File</string>
+    <string name="unsupported_file_format">Unsupported file format. Only Magisk/KernelSU module packages are supported.</string>
     <string name="version">Version</string>
     <string name="author">Author</string>
     <string name="description">Description</string>

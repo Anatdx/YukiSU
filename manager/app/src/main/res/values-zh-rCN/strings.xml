@@ -447,6 +447,7 @@
     <string name="unknown_package">未知类型</string>
     <string name="unknown_kernel">未知内核</string>
     <string name="unknown_file">未知文件</string>
+    <string name="unsupported_file_format">不支持的文件格式，仅支持 Magisk/KernelSU 模块包。</string>
     <string name="version">版本</string>
     <string name="author">作者</string>
     <string name="description">描述</string>

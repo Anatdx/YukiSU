@@ -270,8 +270,8 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                 }
 
-                // ?????????????????????????????????
-                if (isExternalInstall || shouldAutoExit) {
+                // 仅 shouldAutoExit 时自动退出；作为打开方式进入时停留在界面让用户查看结果
+                if (shouldAutoExit) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
@@ -280,10 +280,8 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
                         }
-                        if (shouldAutoExit) {
-                            val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                            sharedPref.edit { remove("auto_exit_after_flash") }
-                        }
+                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
+                        sharedPref.edit { remove("auto_exit_after_flash") }
                         (context as? ComponentActivity)?.finish()
                     }
                 }
@@ -389,8 +387,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         kotlinx.coroutines.delay(500)
                         navigator.navigate(FlashScreenDestination(nextFlashIt))
                     }
-                } else if ((isExternalInstall || shouldAutoExit) && flashIt is FlashIt.FlashModules && flashIt.currentIndex >= flashIt.uris.size - 1) {
-                    // ????????????????????????????????
+                } else if (shouldAutoExit && flashIt is FlashIt.FlashModules && flashIt.currentIndex >= flashIt.uris.size - 1) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
@@ -399,14 +396,11 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
                         }
-                        if (shouldAutoExit) {
-                            val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                            sharedPref.edit { remove("auto_exit_after_flash") }
-                        }
+                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
+                        sharedPref.edit { remove("auto_exit_after_flash") }
                         (context as? ComponentActivity)?.finish()
                     }
-                } else if ((isExternalInstall || shouldAutoExit) && flashIt is FlashIt.FlashModule) {
-                    // ?????????????????????????????
+                } else if (shouldAutoExit && flashIt is FlashIt.FlashModule) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
@@ -415,10 +409,8 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                         while (shouldWarningUserMetaModule) {
                             kotlinx.coroutines.delay(100)
                         }
-                        if (shouldAutoExit) {
-                            val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                            sharedPref.edit { remove("auto_exit_after_flash") }
-                        }
+                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
+                        sharedPref.edit { remove("auto_exit_after_flash") }
                         (context as? ComponentActivity)?.finish()
                     }
                 }

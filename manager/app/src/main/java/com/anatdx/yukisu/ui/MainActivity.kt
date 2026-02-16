@@ -21,6 +21,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -190,7 +191,13 @@ class MainActivity : ComponentActivity() {
                                         pendingZipFiles.value = infos
                                         showConfirmationDialog.value = true
                                     } else {
-                                        finish()
+                                        lifecycleScope.launch {
+                                            snackBarHostState.showSnackbar(
+                                                getString(R.string.unsupported_file_format),
+                                                withDismissAction = true
+                                            )
+                                        }
+                                        // 停留在当前 Activity，让用户看到提示
                                     }
                                 }
                             }
@@ -210,6 +217,7 @@ class MainActivity : ComponentActivity() {
                         LocalSnackbarHost provides snackBarHostState
                     ) {
                         Scaffold(
+                            snackbarHost = { SnackbarHost(hostState = snackBarHostState) },
                             bottomBar = {
                                 AnimatedBottomBar.AnimatedBottomBarWrapper(
                                     showBottomBar = showBottomBar,

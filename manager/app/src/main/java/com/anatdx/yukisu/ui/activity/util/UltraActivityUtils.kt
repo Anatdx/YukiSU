@@ -71,7 +71,7 @@ object UltraActivityUtils {
                         FlashIt.FlashModules(ArrayList(moduleUris))
                     )
                 )
-                setAutoExitAfterFlash(activity)
+                // 不设置 auto_exit，刷入完成后停留在 FlashScreen 让用户查看结果
             }
         }
     }
