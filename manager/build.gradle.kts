@@ -10,6 +10,11 @@ plugins {
     alias(libs.plugins.lsplugin.cmaker)
 }
 
+val buildAbiList = provider {
+    val abi = findProperty("ABI")?.toString()
+    if (abi != null) listOf(abi) else listOf("arm64-v8a", "x86_64", "armeabi-v7a")
+}
+
 cmaker {
     default {
         arguments.addAll(
@@ -17,7 +22,7 @@ cmaker {
                 "-DANDROID_STL=none",
             )
         )
-        abiFilters("arm64-v8a", "x86_64", "armeabi-v7a")
+        abiFilters(buildAbiList.get())
     }
     buildTypes {
         if (it.name == "release") {
@@ -66,7 +71,7 @@ subprojects {
                     versionName = managerVersionName
                 }
                 ndk {
-                    abiFilters += listOf("arm64-v8a", "x86_64", "armeabi-v7a")
+                    abiFilters += (rootProject.findProperty("ABI")?.toString()?.let { listOf(it) } ?: listOf("arm64-v8a", "x86_64", "armeabi-v7a"))
                 }
             }
 

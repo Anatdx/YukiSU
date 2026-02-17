@@ -16,6 +16,18 @@ jobs:
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v6
+
+      - name: Merge Manager APKs
+        run: |
+          mkdir -p Manager
+          for dir in Manager-arm64-v8a Manager-x86_64 Manager-armv7; do
+            if [ -d "$dir" ]; then
+              find "$dir" -name "*.apk" -exec cp {} Manager/ \;
+              find "$dir" -name "*.sig" -exec cp {} Manager/ \;
+            fi
+          done
+          ls -la Manager/
+
       - name: Rename ksud
         run: |
           mkdir -p ksud
