@@ -30,8 +30,16 @@ jobs:
     secrets: inherit
 
   build-ksuinit:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-linux-android
+          - target: x86_64-linux-android
+          - target: armv7-linux-androideabi
     uses: ./.github/workflows/ksuinit.yml
     secrets: inherit
+    with:
+      target: ${{ matrix.target }}
 
   build-ksud:
     needs: [build-lkm, build-ksuinit]

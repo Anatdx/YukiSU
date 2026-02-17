@@ -26,6 +26,7 @@ jobs:
         else
           echo "UPLOAD=false" >> $GITHUB_OUTPUT
         fi
+
     - name: Build su
       working-directory: ./userspace/su
       run: $ANDROID_NDK/ndk-build

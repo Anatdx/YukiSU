@@ -2,6 +2,10 @@ name: Build ksuinit
 on:
   workflow_call:
     inputs:
+      target:
+        required: true
+        type: string
+        description: "Target architecture: aarch64, x86_64, armv7"
       os:
         required: false
         type: string
@@ -18,32 +22,59 @@ jobs:
       run: |
         echo "Using NDK from ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
 
+    - name: Determine target settings
+      id: target
+      run: |
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64)
+            echo "abi=arm64-v8a" >> $GITHUB_OUTPUT
+            echo "android_target=aarch64-linux-android26" >> $GITHUB_OUTPUT
+            ;;
+          x86_64-linux-android|x86_64)
+            echo "abi=x86_64" >> $GITHUB_OUTPUT
+            echo "android_target=x86_64-linux-android26" >> $GITHUB_OUTPUT
+            ;;
+          armv7-linux-androideabi|armv7)
+            echo "abi=armeabi-v7a" >> $GITHUB_OUTPUT
+            echo "android_target=armv7a-linux-androideabi26" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "Unknown target: ${{ inputs.target }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Install UPX
+      run: |
+        UPX_VERSION="4.2.4"
+        wget -q "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        tar -xf "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        sudo mv "upx-${UPX_VERSION}-amd64_linux/upx" /usr/local/bin/
+        rm -rf "upx-${UPX_VERSION}-amd64_linux" "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+        upx --version | head -1
+
     - name: Build ksuinit
       run: |
         cd userspace/ksuinit
         mkdir -p build && cd build
         
-        # 使用 Android NDK 工具链进行交叉编译
         TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-        export CC=$TOOLCHAIN/bin/aarch64-linux-android26-clang
-        export CXX=$TOOLCHAIN/bin/aarch64-linux-android26-clang++
+        export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
+        export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
         export AR=$TOOLCHAIN/bin/llvm-ar
         export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-        export STRIP=$TOOLCHAIN/bin/llvm-strip
-        
+
         cmake .. \
           -G Ninja \
           -DCMAKE_SYSTEM_NAME=Android \
-          -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+          -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
           -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
           -DCMAKE_C_COMPILER=$CC \
           -DCMAKE_CXX_COMPILER=$CXX \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release \
+          -DKSUINIT_UPX=ON
         
         ninja
-        
-        # Strip the binary
-        $STRIP ksuinit
         
         # Show binary info
         ls -lh ksuinit
@@ -77,7 +108,7 @@ jobs:
     - name: Upload ksuinit artifact
       uses: actions/upload-artifact@v5
       with:
-        name: ksuinit
+        name: ksuinit-${{ inputs.target }}
         path: |
           userspace/ksuinit/build/ksuinit
           userspace/ksuinit/build/ksuinit.sig

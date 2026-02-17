@@ -41,9 +41,8 @@ jobs:
       if: ${{ inputs.pack_ksuinit }}
       run: |
         mkdir -p ./userspace/ksud/assets
-        # C++ build: ksuinit is in the artifact root directory
-        if [ -f ksuinit/ksuinit ]; then
-          cp ksuinit/ksuinit ./userspace/ksud/assets/
+        if [ -f ksuinit-${{ inputs.target }}/ksuinit ]; then
+          cp ksuinit-${{ inputs.target }}/ksuinit ./userspace/ksud/assets/
         fi
 
     - name: Determine target settings
