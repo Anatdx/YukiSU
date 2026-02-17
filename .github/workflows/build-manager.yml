@@ -202,7 +202,7 @@ jobs:
         run: |
           if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
             export VERSION=$(git rev-list --count HEAD)
-            APKS=$(find ./app/build/outputs/apk/release ./app/build/outputs/apk/debug -name "*.apk")
+            APKS=$(find ./app/build/outputs/apk/release -name "*arm64-v8a*" -name "*.apk")
             pip3 install telethon
             python3 $GITHUB_WORKSPACE/scripts/ksubot.py $APKS
           fi

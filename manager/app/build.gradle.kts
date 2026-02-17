@@ -79,10 +79,25 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64", "armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
+
     applicationVariants.all {
         outputs.forEach {
             val output = it as BaseVariantOutputImpl
-            output.outputFileName = "YukiSU_${managerVersionName}_${managerVersionCode}-$name.apk"
+            val abi = when {
+                output.baseName.contains("arm64") -> "arm64-v8a"
+                output.baseName.contains("x86_64") -> "x86_64"
+                output.baseName.contains("armeabi") -> "armeabi-v7a"
+                else -> "universal"
+            }
+            output.outputFileName = "YukiSU_${managerVersionName}_${managerVersionCode}-${abi}-$name.apk"
         }
         kotlin.sourceSets {
             getByName(name) {
