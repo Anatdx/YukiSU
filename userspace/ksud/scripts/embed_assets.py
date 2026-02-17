@@ -222,6 +222,18 @@ int ensure_binaries(bool ignore_if_exist) {
         }
     }
     
+    // Ensure su symlink: su -> ksud (ksud invokes su_main when basename is "su")
+    // Overwrites any existing su (e.g. busybox applet symlink that causes "applet not found")
+    const char* su_link = BINARY_DIR "su";
+    if (stat(DAEMON_PATH, &st) == 0) {
+        unlink(su_link);
+        if (symlink(DAEMON_PATH, su_link) != 0) {
+            LOGW("Failed to create su symlink: %s", strerror(errno));
+        } else {
+            LOGI("Created su symlink: %s -> %s", su_link, DAEMON_PATH);
+        }
+    }
+    
     return 0;
 }
 
