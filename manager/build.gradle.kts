@@ -22,7 +22,7 @@ cmaker {
                 "-DANDROID_STL=none",
             )
         )
-        abiFilters(buildAbiList.get())
+        abiFilters(*buildAbiList.get().toTypedArray())
     }
     buildTypes {
         if (it.name == "release") {
