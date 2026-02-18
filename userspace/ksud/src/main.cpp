@@ -71,9 +71,10 @@ int main(int argc, char** argv) {
     }
     // If invoked via a symlink whose name matches a busybox applet (e.g. "ls"),
     // and it's not one of ksud's own tools or a .so path, delegate to busybox.
+    // Exclude "su": sucompat hijacks root shell to ksud; must not be delegated to busybox.
     if (base && base[0] && std::strcmp(base, "ksud") != 0 && std::strcmp(base, "magiskboot") != 0 &&
         std::strcmp(base, "bootctl") != 0 && std::strcmp(base, "resetprop") != 0 &&
-        std::strstr(base, ".so") == nullptr) {
+        std::strcmp(base, "su") != 0 && std::strstr(base, ".so") == nullptr) {
         return busybox_main(argc, argv);
     }
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...
