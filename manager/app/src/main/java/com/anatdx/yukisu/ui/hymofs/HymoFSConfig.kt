@@ -1819,9 +1819,12 @@ private fun RuleItem(rule: HymoFSManager.ActiveRule) {
 
 // ==================== Logs Tab ====================
 
+// Log level colors aligned with webui: V=purple, D=green, I=blue, W=orange, E=red, other=white
 enum class LogLevel(val displayNameRes: Int, val color: Color, val tag: String) {
     ALL(R.string.hymofs_logs_filter_all, Color.Unspecified, ""),
-    INFO(R.string.hymofs_logs_filter_info, Color(0xFF4CAF50), "INFO"),
+    VERBOSE(R.string.hymofs_logs_filter_verbose, Color(0xFF9C27B0), "VERBOSE"),
+    DEBUG(R.string.hymofs_logs_filter_debug, Color(0xFF4CAF50), "DEBUG"),
+    INFO(R.string.hymofs_logs_filter_info, Color(0xFF2196F3), "INFO"),
     WARN(R.string.hymofs_logs_filter_warn, Color(0xFFFF9800), "WARN"),
     ERROR(R.string.hymofs_logs_filter_error, Color(0xFFF44336), "ERROR")
 }
@@ -1853,15 +1856,17 @@ private fun LogsTab(
         }
     }
     
-    // Parse and colorize logs
+    // Parse and colorize logs (V紫 D绿 I蓝 W橙 E红 其余白, same as webui)
     val annotatedLogContent = remember(filteredLogContent) {
         buildAnnotatedString {
             filteredLogContent.lines().forEach { line ->
                 val color = when {
-                    line.contains("ERROR", ignoreCase = true) -> LogLevel.ERROR.color
-                    line.contains("WARN", ignoreCase = true) -> LogLevel.WARN.color
-                    line.contains("INFO", ignoreCase = true) -> LogLevel.INFO.color
-                    else -> Color(0xFFD4D4D4)
+                    line.contains("ERROR", ignoreCase = true) -> LogLevel.ERROR.color   // E red
+                    line.contains("WARN", ignoreCase = true) -> LogLevel.WARN.color    // W orange
+                    line.contains("INFO", ignoreCase = true) -> LogLevel.INFO.color    // I blue
+                    line.contains("DEBUG", ignoreCase = true) -> LogLevel.DEBUG.color  // D green
+                    line.contains("VERBOSE", ignoreCase = true) -> LogLevel.VERBOSE.color // V purple
+                    else -> Color(0xFFFFFFFF)
                 }
                 withStyle(style = SpanStyle(color = color)) {
                     append(line)

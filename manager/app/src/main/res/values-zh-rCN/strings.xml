@@ -567,6 +567,8 @@
     <string name="hymofs_logs_copy">复制</string>
     <string name="hymofs_logs_copy_success">日志已复制到剪贴板</string>
     <string name="hymofs_logs_filter_all">全部</string>
+    <string name="hymofs_logs_filter_verbose">详细</string>
+    <string name="hymofs_logs_filter_debug">调试</string>
     <string name="hymofs_logs_filter_info">信息</string>
     <string name="hymofs_logs_filter_warn">警告</string>
     <string name="hymofs_logs_filter_error">错误</string>

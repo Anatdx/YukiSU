@@ -579,6 +579,8 @@
     <string name="hymofs_logs_copy">Copy</string>
     <string name="hymofs_logs_copy_success">Log copied to clipboard</string>
     <string name="hymofs_logs_filter_all">All</string>
+    <string name="hymofs_logs_filter_verbose">Verbose</string>
+    <string name="hymofs_logs_filter_debug">Debug</string>
     <string name="hymofs_logs_filter_info">Info</string>
     <string name="hymofs_logs_filter_warn">Warn</string>
     <string name="hymofs_logs_filter_error">Error</string>

@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.TaskAlt
@@ -959,7 +960,7 @@ private fun InfoCard(
             InfoCardItem(
                 label = stringResource(id = R.string.home_ksud_daemon_title),
                 content = ksudContent,
-                icon = Icons.Default.SettingsSuggest,
+                icon = Icons.Filled.Engineering,
                 contentColor = if (hasMismatch) MaterialTheme.colorScheme.error else Color.Unspecified,
                 onClick = { showKsudDialog = true }
             )
