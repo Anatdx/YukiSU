@@ -255,27 +255,27 @@ int on_post_data_fs() {
     // Load feature config (with init_features handling managed features)
     init_features();
 
-    // Execute metamodule post-fs-data script first (priority)
+    // KernelSU execution order (https://kernelsu.org/guide/metamodule.html):
+    // 1. Common post-fs-data.d, prune, restorecon, sepolicy
+    // 2. Metamodule's post-fs-data.sh
+    // 3. Regular modules' post-fs-data.sh
+    // 4. Load system.prop
+    // 5. Metamodule's metamount.sh  <-- MUST run AFTER all post-fs-data
+    // 6. post-mount.d
+
     metamodule_exec_stage_script("post-fs-data", true);
-
-    // Execute module post-fs-data scripts
     exec_stage_script("post-fs-data", true);
-
-    // Load system.prop from modules
     load_system_prop();
 
-    // If built-in HymoFS is enabled and mount_stage == "metamount",
-    // perform the mount here in the blocking window between post-fs-data
-    // finishing and services about to start.
-    try_hymofs_metamount_mount();
-
-    // Execute metamodule mount script
+    // Metamodule metamount runs AFTER all post-fs-data (modules may load LKM in post-fs-data).
+    // When no external metamodule, this runs built-in hymo mount.
     metamodule_exec_mount_script();
 
-    // Load umount config and apply to kernel
-    umount_apply_config();
+    // When external metamodule (e.g. meta-overlayfs) exists and mount_stage=metamount,
+    // run hymod after metamodule metamount; metamodule may not invoke hymo's metamount.sh.
+    try_hymofs_metamount_mount();
 
-    // Run post-mount stage
+    umount_apply_config();
     run_stage("post-mount", true);
 
     // Built-in HymoFS: optionally perform automount at post-fs-data.

@@ -91,7 +91,25 @@ bool should_use_builtin_mount() {
 int metamodule_exec_mount_script() {
     const std::string script = std::string(METAMODULE_DIR) + "metamount.sh";
 
-    // Check if external metamodule exists
+    // Built-in Hymo mount check first; only use metamodule when no built-in path
+    if (should_use_builtin_mount() && !file_exists(script)) {
+        LOGI("No external metamodule found, using built-in hymo mount");
+        const int ret = hymo::cmd_hymo({"mount"});
+        if (ret == 0) {
+            LOGI("Built-in hymo mount completed successfully");
+        } else {
+            LOGE("Built-in hymo mount failed with code: %d", ret);
+        }
+        return ret;
+    }
+
+    if (!should_use_builtin_mount() && !file_exists(script)) {
+        LOGI("Built-in mount disabled, skipping (install a metamodule or remove "
+             ".disable_builtin_mount)");
+        return 0;
+    }
+
+    // External metamodule exists
     if (file_exists(script)) {
         LOGI("External metamodule found, executing metamount.sh: %s", script.c_str());
 
@@ -138,26 +156,7 @@ int metamodule_exec_mount_script() {
         return ret;
     }
 
-    // No external metamodule
-    // Check if user wants to use built-in mount
-    if (!should_use_builtin_mount()) {
-        LOGI("Built-in mount disabled, skipping built-in hymo mount");
-        LOGI("To use module mounting, install a metamodule or remove .disable_builtin_mount");
-        return 0;
-    }
-
-    LOGI("No external metamodule found, using built-in hymo mount");
-
-    // Call built-in hymo mount
-    const int ret = hymo::cmd_hymo({"mount"});
-
-    if (ret == 0) {
-        LOGI("Built-in hymo mount completed successfully");
-    } else {
-        LOGE("Built-in hymo mount failed with code: %d", ret);
-    }
-
-    return ret;
+    return 0;
 }
 
 }  // namespace ksud
