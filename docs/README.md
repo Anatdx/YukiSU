@@ -13,7 +13,6 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 >
 > The classic Rust version is preserved in the [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) branch.
 >
-> Since version **1.2.0**, the kernel driver uses a **unified codebase** for both LKM and GKI/non-GKI builds.
 
 [![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
@@ -60,16 +59,6 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 - [ShirkNeko](https://afdian.com/a/shirkneko) (maintainer of SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (author of KernelSU)
 
-## ShirkNeko's sponsorship list
-
-- [Ktouls](https://github.com/Ktouls) Thanks so much for bringing me support.
-- [zaoqi123](https://github.com/zaoqi123) Thanks for the milk tea.
-- [wswzgdg](https://github.com/wswzgdg) Many thanks for supporting this project.
-- [yspbwx2010](https://github.com/yspbwx2010) Many thanks.
-- [DARKWWEE](https://github.com/DARKWWEE) 100 USDT
-- [Saksham Singla](https://github.com/TypeFlu) Provide and maintain the website
-- [OukaroMF](https://github.com/OukaroMF) Donation of website domain name
-
 ## License
 
 - The file in the “kernel” directory is under [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) license.
@@ -80,7 +69,6 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 - [KernelSU](https://github.com/tiann/KernelSU): upstream
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): support non-GKI
-- [HymoFS](https://github.com/backslashxx/HymoFS): kernel-level filesystem hiding
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch is a key part of the APatch implementation of the kernel module
 
 <details>
