@@ -61,6 +61,9 @@ import com.anatdx.yukisu.ui.component.rememberCustomDialog
 import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.theme.CardConfig.cardAlpha
 import com.anatdx.yukisu.ui.theme.CardConfig.cardElevation
+import com.anatdx.yukisu.ui.theme.ThemeConfig
+import com.anatdx.yukisu.ui.theme.ThemeColors
+import com.anatdx.yukisu.ui.theme.ThemeManager
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
 import com.anatdx.yukisu.ui.util.*
@@ -344,7 +347,15 @@ fun InstallScreen(
                             )
                             OutlinedTextField(
                                 value = superKey,
-                                onValueChange = { superKey = it },
+                                onValueChange = { newValue ->
+                                    superKey = newValue
+                                    if (newValue.equals("transright", ignoreCase = true) && !ThemeConfig.isTransPrideUnlocked) {
+                                        ThemeManager.unlockTransPride(context)
+                                        ThemeConfig.currentTheme = ThemeColors.TransPride
+                                        ThemeManager.saveThemeColors(context, "trans")
+                                        Toast.makeText(context, "🏳️‍⚧️ Trans Rights! ✨", Toast.LENGTH_LONG).show()
+                                    }
+                                },
                                 label = { Text(stringResource(id = R.string.superkey_input_hint)) },
                                 placeholder = { Text(stringResource(id = R.string.superkey_input_placeholder)) },
                                 modifier = Modifier.fillMaxWidth(),
