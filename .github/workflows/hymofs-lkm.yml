@@ -87,49 +87,57 @@ jobs:
             LLVM_ARGS="LLVM=1 LLVM_IAS=1"
             case "$ARCH" in
               arm64)   CROSS_ARGS="" ;;
-              armv7)   CROSS_ARGS="CROSS_COMPILE=arm-linux-gnueabi-" ; CC_EXTRA='CC=ccache clang' ;;
+              armv7)   CROSS_ARGS="CROSS_COMPILE=arm-linux-gnueabi-"
+                # Kernel passes -r to compiler; ccache treats -r as its own option. Use wrapper to rewrite -r -> --relocatable.
+                WRAP_DIR="$GITHUB_WORKSPACE/.ccache_clang_wrap"
+                mkdir -p "$WRAP_DIR"
+                printf '%s\n' '#!/bin/bash' 'args=()' 'for a in "$@"; do' '  [[ "$a" == "-r" ]] && a="--relocatable"' '  args+=("$a")' 'done' 'exec ccache clang "${args[@]}"' > "$WRAP_DIR/clang"
+                chmod +x "$WRAP_DIR/clang"
+                CC_EXTRA="CC=$WRAP_DIR/clang" ;;
               x86_64)  CROSS_ARGS="" ;;
               *) echo "Unknown arch: $ARCH"; exit 1 ;;
             esac
           fi
           [ -n "$CC_EXTRA" ] && OPT_CC="$CC_EXTRA" || OPT_CC=""
+          [ -n "$CROSS_ARGS" ] && OPT_CROSS="$CROSS_ARGS" || OPT_CROSS=""
+          [ -n "$LLVM_ARGS" ] && OPT_LLVM="$LLVM_ARGS" || OPT_LLVM=""
 
           unset M
           echo "Preparing kernel tree (KMI=$KMI, ARCH=$ARCH)..."
 
           if [[ "$ARCH" == "arm64" ]]; then
-            make -C "$KERNEL_SRC" ARCH=arm64 "$CROSS_ARGS" $LLVM_ARGS gki_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=arm64 "$CROSS_ARGS" $LLVM_ARGS defconfig
+            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM gki_defconfig 2>/dev/null || \
+              make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM defconfig
             if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
               $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=arm64 "$CROSS_ARGS" $LLVM_ARGS olddefconfig 2>/dev/null || true
+              make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM olddefconfig 2>/dev/null || true
             fi
-            make -C "$KERNEL_SRC" ARCH=arm64 "$CROSS_ARGS" $LLVM_ARGS modules_prepare
+            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM modules_prepare
             echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=arm64)..."
-            make -C "$KERNEL_SRC" ARCH=arm64 "$CROSS_ARGS" $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
+            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM M="$SRC" KBUILD_MODPOST_WARN=1 \
               CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
           elif [[ "$ARCH" == "armv7" ]]; then
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $OPT_CC multi_v7_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $OPT_CC defconfig
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC multi_v7_defconfig 2>/dev/null || \
+              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC defconfig
             if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
               $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $OPT_CC olddefconfig 2>/dev/null || true
+              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC olddefconfig 2>/dev/null || true
             fi
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $OPT_CC modules_prepare
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC modules_prepare
             echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=arm)..."
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $OPT_CC M="$SRC" KBUILD_MODPOST_WARN=1 \
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC M="$SRC" KBUILD_MODPOST_WARN=1 \
               CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
           else
             # x86_64: kernel ARCH=x86
-            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS gki_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS x86_64_defconfig
+            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM gki_defconfig 2>/dev/null || \
+              make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM x86_64_defconfig
             if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
               $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS olddefconfig 2>/dev/null || true
+              make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM olddefconfig 2>/dev/null || true
             fi
-            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS modules_prepare
+            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM modules_prepare
             echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=x86)..."
-            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
+            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM M="$SRC" KBUILD_MODPOST_WARN=1 \
               CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
           fi
 
