@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace hymo {
 
 // LKM management for HymoFS kernel module
