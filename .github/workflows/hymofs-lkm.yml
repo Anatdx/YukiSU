@@ -174,5 +174,5 @@ jobs:
         with:
           name: ${{ inputs.kmi }}-${{ inputs.arch }}-hymofs-lkm
           path: |
-            $OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko
-            $OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko.asc
+            ${{ env.OUT }}/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko
+            ${{ env.OUT }}/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko.asc
