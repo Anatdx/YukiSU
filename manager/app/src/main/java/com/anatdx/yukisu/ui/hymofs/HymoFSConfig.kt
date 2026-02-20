@@ -168,6 +168,7 @@ fun HymoFSConfigScreen(
                 when (selectedTab) {
                     HymoFSTab.STATUS -> StatusTab(
                         hymofsStatus = hymofsStatus,
+                        hymofsBuiltin = config.hymofsBuiltin,
                         version = version,
                         systemInfo = systemInfo,
                         storageInfo = storageInfo,
@@ -180,6 +181,7 @@ fun HymoFSConfigScreen(
                         systemInfo = systemInfo,
                         config = config,
                         onRefresh = { loadData() },
+                        snackbarHostState = snackbarHostState,
                         onLkmAutoloadChanged = { enable ->
                             coroutineScope.launch {
                                 if (HymoFSManager.setLkmAutoload(enable)) {
@@ -333,6 +335,7 @@ fun HymoFSConfigScreen(
 @Composable
 private fun StatusTab(
     hymofsStatus: HymoFSStatus,
+    hymofsBuiltin: Boolean,
     version: String,
     systemInfo: HymoFSManager.SystemInfo,
     storageInfo: HymoFSManager.StorageInfo,
@@ -385,11 +388,16 @@ private fun StatusTab(
                         )
                         Text(
                             text = stringResource(
-                                when (hymofsStatus) {
-                                    HymoFSStatus.AVAILABLE -> R.string.hymofs_status_available
-                                    HymoFSStatus.NOT_PRESENT -> R.string.hymofs_status_not_present
-                                    HymoFSStatus.KERNEL_TOO_OLD -> R.string.hymofs_status_kernel_too_old
-                                    HymoFSStatus.MODULE_TOO_OLD -> R.string.hymofs_status_module_too_old
+                                when {
+                                    hymofsStatus == HymoFSStatus.AVAILABLE && hymofsBuiltin ->
+                                        R.string.hymofs_status_builtin
+                                    hymofsStatus == HymoFSStatus.AVAILABLE ->
+                                        R.string.hymofs_status_available
+                                    hymofsStatus == HymoFSStatus.NOT_PRESENT ->
+                                        R.string.hymofs_status_not_present
+                                    hymofsStatus == HymoFSStatus.KERNEL_TOO_OLD ->
+                                        R.string.hymofs_status_kernel_too_old
+                                    else -> R.string.hymofs_status_module_too_old
                                 }
                             ),
                             style = MaterialTheme.typography.bodyMedium,
@@ -626,8 +634,11 @@ private fun LkmTab(
     systemInfo: HymoFSManager.SystemInfo,
     config: HymoFSManager.HymoConfig,
     onRefresh: () -> Unit,
+    snackbarHostState: SnackbarHostState,
     onLkmAutoloadChanged: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -674,11 +685,16 @@ private fun LkmTab(
                         )
                         Text(
                             text = stringResource(
-                                when (hymofsStatus) {
-                                    HymoFSStatus.AVAILABLE -> R.string.hymofs_status_available
-                                    HymoFSStatus.NOT_PRESENT -> R.string.hymofs_status_not_present
-                                    HymoFSStatus.KERNEL_TOO_OLD -> R.string.hymofs_status_kernel_too_old
-                                    HymoFSStatus.MODULE_TOO_OLD -> R.string.hymofs_status_module_too_old
+                                when {
+                                    hymofsStatus == HymoFSStatus.AVAILABLE && config.hymofsBuiltin ->
+                                        R.string.hymofs_status_builtin
+                                    hymofsStatus == HymoFSStatus.AVAILABLE ->
+                                        R.string.hymofs_status_available
+                                    hymofsStatus == HymoFSStatus.NOT_PRESENT ->
+                                        R.string.hymofs_status_not_present
+                                    hymofsStatus == HymoFSStatus.KERNEL_TOO_OLD ->
+                                        R.string.hymofs_status_kernel_too_old
+                                    else -> R.string.hymofs_status_module_too_old
                                 }
                             ),
                             style = MaterialTheme.typography.bodyMedium,
@@ -745,6 +761,100 @@ private fun LkmTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // KMI Override card (when hymofs available - for LKM load/autoload even in builtin mode)
+        if (hymofsStatus == HymoFSStatus.AVAILABLE) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = getCardElevation()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.hymofs_lkm_kmi_override_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.hymofs_lkm_kmi_override_desc),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    var kmiInput by remember { mutableStateOf(config.lkmKmiOverride) }
+                    LaunchedEffect(config.lkmKmiOverride) {
+                        kmiInput = config.lkmKmiOverride
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = kmiInput,
+                            onValueChange = { kmiInput = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = {
+                                Text(stringResource(R.string.hymofs_lkm_kmi_override_placeholder))
+                            },
+                            singleLine = true
+                        )
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    val kmi = kmiInput.trim()
+                                    if (kmi.isEmpty()) return@launch
+                                    if (HymoFSManager.setLkmKmiOverride(kmi)) {
+                                        onRefresh()
+                                        snackbarHostState.showSnackbar(
+                                            context.getString(R.string.hymofs_lkm_kmi_set_success)
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            context.getString(R.string.hymofs_lkm_kmi_failed)
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Text(stringResource(R.string.hymofs_lkm_kmi_override_set))
+                        }
+                        if (config.lkmKmiOverride.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (HymoFSManager.clearLkmKmiOverride()) {
+                                            kmiInput = ""
+                                            onRefresh()
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_kmi_cleared)
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_kmi_failed)
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.hymofs_lkm_kmi_override_clear))
+                            }
+                        }
+                    }
+                    if (config.lkmKmiOverride.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.hymofs_lkm_kmi_override_current, config.lkmKmiOverride),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
             }
         }
     }

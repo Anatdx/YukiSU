@@ -85,8 +85,43 @@ static bool ensure_base_dir() {
     }
 }
 
+// Check if hymofs_lkm.ko module is loaded (not HymoFS builtin in kernel)
 bool lkm_is_loaded() {
-    return HymoFS::is_available();
+    return fs::exists("/sys/module/hymofs_lkm");
+}
+
+static std::string lkm_get_effective_kmi() {
+    std::string override_val = read_file_first_line(LKM_KMI_OVERRIDE_FILE);
+    if (!override_val.empty()) {
+        // Trim whitespace
+        size_t start = override_val.find_first_not_of(" \t\n\r");
+        if (start != std::string::npos) {
+            size_t end = override_val.find_last_not_of(" \t\n\r");
+            return override_val.substr(start, end - start + 1);
+        }
+    }
+    return ksud::get_current_kmi();
+}
+
+bool lkm_set_kmi_override(const std::string& kmi) {
+    if (!ensure_base_dir())
+        return false;
+    return write_file(LKM_KMI_OVERRIDE_FILE, kmi);
+}
+
+bool lkm_clear_kmi_override() {
+    try {
+        if (fs::exists(LKM_KMI_OVERRIDE_FILE)) {
+            fs::remove(LKM_KMI_OVERRIDE_FILE);
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+std::string lkm_get_kmi_override() {
+    return read_file_first_line(LKM_KMI_OVERRIDE_FILE);
 }
 
 // Arch suffix for embedded hymofs .ko (matches workflow artifact naming)
@@ -102,7 +137,7 @@ bool lkm_is_loaded() {
 
 bool lkm_load() {
     std::string ko_path;
-    const std::string kmi = ksud::get_current_kmi();
+    const std::string kmi = lkm_get_effective_kmi();
 
     if (!kmi.empty() && ensure_base_dir()) {
         const std::string asset_name = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
@@ -142,6 +177,8 @@ bool lkm_load() {
 }
 
 bool lkm_unload() {
+    if (!lkm_is_loaded())
+        return true;  // nothing to unload
     if (HymoFS::is_available()) {
         HymoFS::clear_rules();
     }
@@ -188,9 +225,9 @@ void lkm_autoload_post_fs_data() {
         return;
     }
 
-    const std::string kmi = ksud::get_current_kmi();
+    const std::string kmi = lkm_get_effective_kmi();
     if (kmi.empty()) {
-        const char* msg = "HymoFS LKM: cannot detect KMI, skip";
+        const char* msg = "HymoFS LKM: cannot detect KMI (and no override set), skip";
         LOGW("%s", msg);
         lkm_autoload_log_failure(msg);
         return;

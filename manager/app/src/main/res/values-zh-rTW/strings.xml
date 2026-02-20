@@ -341,6 +341,7 @@
     <string name="kernel_flashing">內核刷寫</string>
     <!-- HymoFS status text -->
     <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_builtin">HymoFS 內建</string>
     <string name="hymofs_status_not_present">未偵測到</string>
     <string name="hymofs_status_kernel_too_old">內核版本過低，不支援 HymoFS</string>
     <string name="hymofs_status_module_too_old">模組版本過低，請更新內建 Hymo</string>

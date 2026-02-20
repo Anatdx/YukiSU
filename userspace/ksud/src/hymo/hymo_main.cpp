@@ -87,7 +87,10 @@ void print_help() {
     std::cout << "  lkm load           Load HymoFS kernel module\n";
     std::cout << "  lkm unload         Unload HymoFS kernel module\n";
     std::cout << "  lkm status         Show LKM status (loaded, autoload)\n";
-    std::cout << "  lkm set-autoload on|off  Enable/disable load at boot\n\n";
+    std::cout << "  lkm set-autoload on|off  Enable/disable load at boot\n";
+    std::cout
+        << "  lkm set-kmi <kmi>        Override KMI for LKM loading (e.g. 6.6.30-android15)\n";
+    std::cout << "  lkm clear-kmi            Clear KMI override\n\n";
 
     std::cout << "Privacy Commands (hide <subcommand>):\n";
     std::cout << "  hide list          List user-defined hide rules\n";
@@ -338,6 +341,10 @@ int hymo::run_hymo_main(int argc, char** argv) {
                           << (HymoFS::is_available() ? "true" : "false") << ",\n";
                 std::cout << "  \"hymofs_status\": " << (int)HymoFS::check_status() << ",\n";
                 std::cout << "  \"lkm_autoload\": " << (lkm_get_autoload() ? "true" : "false")
+                          << ",\n";
+                std::cout << "  \"lkm_kmi_override\": \"" << lkm_get_kmi_override() << "\",\n";
+                std::cout << "  \"hymofs_builtin\": "
+                          << (HymoFS::is_available() && !lkm_is_loaded() ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"tmpfs_xattr_supported\": "
                           << (check_tmpfs_xattr() ? "true" : "false") << ",\n";
@@ -996,7 +1003,11 @@ int hymo::run_hymo_main(int argc, char** argv) {
             } else if (subcmd == "lkm") {
                 std::cout << "{\n";
                 std::cout << "  \"loaded\": " << (lkm_is_loaded() ? "true" : "false") << ",\n";
-                std::cout << "  \"autoload\": " << (lkm_get_autoload() ? "true" : "false") << "\n";
+                std::cout << "  \"autoload\": " << (lkm_get_autoload() ? "true" : "false") << ",\n";
+                std::cout << "  \"kmi_override\": \"" << lkm_get_kmi_override() << "\",\n";
+                std::cout << "  \"hymofs_builtin\": "
+                          << (HymoFS::is_available() && !lkm_is_loaded() ? "true" : "false")
+                          << "\n";
                 std::cout << "}\n";
             } else {
                 std::cerr << "Unknown api subcommand: " << subcmd << "\n";
@@ -1100,7 +1111,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
         case Command::LKM: {
             if (cli.args.empty()) {
-                std::cerr << "Usage: hymod lkm <load|unload|status|set-autoload>\n";
+                std::cerr
+                    << "Usage: hymod lkm <load|unload|status|set-autoload|set-kmi|clear-kmi>\n";
                 return 1;
             }
             const std::string lkm_subcmd = cli.args[0];
@@ -1137,9 +1149,29 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     std::cerr << "Failed to set autoload.\n";
                     return 1;
                 }
+            } else if (lkm_subcmd == "set-kmi") {
+                if (cli.args.size() < 2) {
+                    std::cerr << "Usage: hymod lkm set-kmi <kmi>\n";
+                    std::cerr << "Example: hymod lkm set-kmi 6.6.30-android15\n";
+                    return 1;
+                }
+                const std::string kmi = cli.args[1];
+                if (lkm_set_kmi_override(kmi)) {
+                    std::cout << "KMI override set to: " << kmi << "\n";
+                } else {
+                    std::cerr << "Failed to set KMI override.\n";
+                    return 1;
+                }
+            } else if (lkm_subcmd == "clear-kmi") {
+                if (lkm_clear_kmi_override()) {
+                    std::cout << "KMI override cleared.\n";
+                } else {
+                    std::cerr << "Failed to clear KMI override.\n";
+                    return 1;
+                }
             } else {
                 std::cerr << "Unknown lkm subcommand: " << lkm_subcmd << "\n";
-                std::cerr << "Available: load, unload, status, set-autoload\n";
+                std::cerr << "Available: load, unload, status, set-autoload, set-kmi, clear-kmi\n";
                 return 1;
             }
             return 0;

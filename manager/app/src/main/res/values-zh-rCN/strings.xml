@@ -357,6 +357,7 @@
     <string name="kernel_flashing">内核刷写</string>
     <!-- HymoFS status text -->
     <string name="hymofs_status_available">可用</string>
+    <string name="hymofs_status_builtin">HymoFS 内置</string>
     <string name="hymofs_status_not_present">未检测到</string>
     <string name="hymofs_status_kernel_too_old">内核版本过低，不支持 HymoFS</string>
     <string name="hymofs_status_module_too_old">模块版本过低，请更新内置 Hymo</string>
@@ -546,6 +547,19 @@
     <string name="hymofs_lkm_autoload_failed">设置失败</string>
     <string name="hymofs_lkm_kernel_label">内核 (SYS)</string>
     <string name="hymofs_lkm_kmi_label">uname 欺骗</string>
+    <string name="hymofs_lkm_kmi_override">KMI 覆盖</string>
+    <string name="hymofs_lkm_kmi_override_desc">自动检测失败时手动指定 KMI 用于加载 LKM（如 6.6.30-android15）</string>
+    <string name="hymofs_lkm_kmi_override_set">设置</string>
+    <string name="hymofs_lkm_kmi_override_clear">清除</string>
+    <string name="hymofs_lkm_kmi_override_title">KMI 覆盖</string>
+    <string name="hymofs_lkm_kmi_override_desc">自动检测失败时，可手动指定 KMI（如 6.6.30-android15）</string>
+    <string name="hymofs_lkm_kmi_override_placeholder">如 6.6.30-android15</string>
+    <string name="hymofs_lkm_kmi_override_set">设置</string>
+    <string name="hymofs_lkm_kmi_override_clear">清除</string>
+    <string name="hymofs_lkm_kmi_override_current">当前: %s</string>
+    <string name="hymofs_lkm_kmi_set_success">KMI 覆盖已设置</string>
+    <string name="hymofs_lkm_kmi_cleared">KMI 覆盖已清除</string>
+    <string name="hymofs_lkm_kmi_failed">设置 KMI 覆盖失败</string>
     <string name="hymofs_storage">存储</string>
     <string name="hymofs_modules_count">模块数</string>
     <string name="hymofs_system_info">系统信息</string>

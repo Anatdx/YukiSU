@@ -111,7 +111,9 @@ object HymoFSManager {
         val partitions: List<String> = emptyList(),
         val unameRelease: String = "",
         val unameVersion: String = "",
-        val lkmAutoload: Boolean = true
+        val lkmAutoload: Boolean = true,
+        val lkmKmiOverride: String = "",
+        val hymofsBuiltin: Boolean = false
     )
     
     /**
@@ -216,7 +218,9 @@ object HymoFSManager {
                     } ?: emptyList(),
                     unameRelease = json.optString("uname_release", ""),
                     unameVersion = json.optString("uname_version", ""),
-                    lkmAutoload = json.optBoolean("lkm_autoload", true)
+                    lkmAutoload = json.optBoolean("lkm_autoload", true),
+                    lkmKmiOverride = json.optString("lkm_kmi_override", ""),
+                    hymofsBuiltin = json.optBoolean("hymofs_builtin", false)
                 )
             } else {
                 HymoConfig()
@@ -584,6 +588,62 @@ object HymoFSManager {
         }
     }
     
+    /**
+     * Set manual KMI override for LKM loading (when auto-detect fails).
+     */
+    suspend fun setLkmKmiOverride(kmi: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Escape single quotes for shell: ' -> '\''
+            val escaped = kmi.replace("'", "'\\''")
+            val result = Shell.cmd("${getKsud()} hymo lkm set-kmi '$escaped'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set LKM KMI override", e)
+            false
+        }
+    }
+
+    /**
+     * Clear manual KMI override.
+     */
+    suspend fun clearLkmKmiOverride(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm clear-kmi").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear LKM KMI override", e)
+            false
+        }
+    }
+
+    /**
+     * Set HymoFS LKM boot autoload (post-fs-data).
+     * When enabled: ksud loads LKM at boot; failures are logged to /data/adb/hymo/lkm_autoload.log
+     * When disabled: skip loading at boot
+     */
+    suspend fun setLkmKmiOverride(kmi: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm set-kmi '$kmi'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set LKM KMI override", e)
+            false
+        }
+    }
+
+    /**
+     * Clear LKM KMI override.
+     */
+    suspend fun clearLkmKmiOverride(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm clear-kmi").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear LKM KMI override", e)
+            false
+        }
+    }
+
     /**
      * Set HymoFS LKM boot autoload (post-fs-data).
      * When enabled: ksud loads LKM at boot; failures are logged to /data/adb/hymo/lkm_autoload.log

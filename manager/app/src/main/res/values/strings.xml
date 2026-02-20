@@ -373,6 +373,7 @@
     <string name="kernel_flashing">Kernel Flashing</string>
     <!-- HymoFS status text -->
     <string name="hymofs_status_available">Available</string>
+    <string name="hymofs_status_builtin">HymoFS builtin</string>
     <string name="hymofs_status_not_present">Not present</string>
     <string name="hymofs_status_kernel_too_old">Kernel too old</string>
     <string name="hymofs_status_module_too_old">Module too old</string>
@@ -558,6 +559,19 @@
     <string name="hymofs_lkm_autoload_failed">Failed to set</string>
     <string name="hymofs_lkm_kernel_label">Kernel (SYS)</string>
     <string name="hymofs_lkm_kmi_label">uname override</string>
+    <string name="hymofs_lkm_kmi_override">KMI Override</string>
+    <string name="hymofs_lkm_kmi_override_desc">Override KMI for LKM loading when auto-detect fails (e.g. 6.6.30-android15)</string>
+    <string name="hymofs_lkm_kmi_override_set">Set</string>
+    <string name="hymofs_lkm_kmi_override_clear">Clear</string>
+    <string name="hymofs_lkm_kmi_override_title">KMI Override</string>
+    <string name="hymofs_lkm_kmi_override_desc">When auto-detect fails, specify KMI manually (e.g. 6.6.30-android15)</string>
+    <string name="hymofs_lkm_kmi_override_placeholder">e.g. 6.6.30-android15</string>
+    <string name="hymofs_lkm_kmi_override_set">Set</string>
+    <string name="hymofs_lkm_kmi_override_clear">Clear</string>
+    <string name="hymofs_lkm_kmi_override_current">Current: %s</string>
+    <string name="hymofs_lkm_kmi_set_success">KMI override set</string>
+    <string name="hymofs_lkm_kmi_cleared">KMI override cleared</string>
+    <string name="hymofs_lkm_kmi_failed">Failed to set KMI override</string>
     <string name="hymofs_storage">Storage</string>
     <string name="hymofs_modules_count">Modules</string>
     <string name="hymofs_system_info">System Info</string>

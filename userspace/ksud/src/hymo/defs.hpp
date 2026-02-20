@@ -22,6 +22,7 @@ constexpr const char* MODULE_PROP_FILE = HYMO_MODULE_DIR "/module.prop";
 constexpr const char* LKM_KO = HYMO_MODULE_DIR "/hymofs_lkm.ko";
 constexpr const char* LKM_AUTOLOAD_FILE = HYMO_DATA_DIR "/lkm_autoload";
 constexpr const char* LKM_AUTOLOAD_LOG_FILE = HYMO_DATA_DIR "/lkm_autoload.log";
+constexpr const char* LKM_KMI_OVERRIDE_FILE = HYMO_DATA_DIR "/lkm_kmi_override";
 constexpr const char* USER_HIDE_RULES_FILE = HYMO_DATA_DIR "/user_hide_rules.json";
 
 // Marker files
