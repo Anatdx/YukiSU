@@ -244,18 +244,30 @@ jobs:
             CROSS_ARGS="CC=ccache clang"
           fi
           
-          echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=$KERN_ARCH, DEFCONFIG=$DEFCONFIG)..."
+          echo "Preparing kernel tree (KMI=$KMI, ARCH=$KERN_ARCH, DEFCONFIG=$DEFCONFIG)..."
           if [[ "$KERN_ARCH" == "arm" ]]; then
-            make -C $KERNEL_SRC ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $CROSS_ARGS $LLVM_ARGS $DEFCONFIG 2>/dev/null || true
-            make -C $KERNEL_SRC ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $CROSS_ARGS $LLVM_ARGS modules_prepare
-            make -C $KERNEL_SRC ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $CROSS_ARGS $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
+            unset M
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS $DEFCONFIG 2>/dev/null || \
+              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS defconfig
+            if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
+              $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
+              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS olddefconfig 2>/dev/null || true
+            fi
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS modules_prepare
+            echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=arm)..."
+            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- "$CROSS_ARGS" $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
               CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${{ steps.parse_version.outputs.VERSION }}\\\"" modules
           elif [[ "$KERN_ARCH" == "x86_64" ]]; then
-            # Kernel uses ARCH=x86 for both 32/64-bit; defconfig is in arch/x86/configs/
-            make -C $KERNEL_SRC ARCH=x86 $CROSS_ARGS $LLVM_ARGS $DEFCONFIG 2>/dev/null || \
-              make -C $KERNEL_SRC ARCH=x86 $CROSS_ARGS $LLVM_ARGS x86_64_defconfig 2>/dev/null || true
-            make -C $KERNEL_SRC ARCH=x86 $CROSS_ARGS $LLVM_ARGS modules_prepare
-            make -C $KERNEL_SRC ARCH=x86 $CROSS_ARGS $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
+            unset M
+            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS $DEFCONFIG 2>/dev/null || \
+              make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS x86_64_defconfig
+            if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
+              $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
+              make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS olddefconfig 2>/dev/null || true
+            fi
+            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS modules_prepare
+            echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=x86)..."
+            make -C "$KERNEL_SRC" ARCH=x86 "$CROSS_ARGS" $LLVM_ARGS M="$SRC" KBUILD_MODPOST_WARN=1 \
               CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${{ steps.parse_version.outputs.VERSION }}\\\"" modules
           fi
           OUT="$GITHUB_WORKSPACE/out"
