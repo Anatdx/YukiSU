@@ -1,6 +1,6 @@
 # Build HymoFS kernel module for one KMI + arch.
-# Called by build-hymofs-lkm.yml with matrix (kmi x arch).
-# Uses llvm-strip on .ko (UPX not applicable - kernel loads raw ELF).
+# arm64: DDK container (same as ddk-lkm).
+# armv7/x86_64: manual kernel clone + build.
 name: Build HymoFS Kernel Module
 
 on:
@@ -19,10 +19,99 @@ on:
         required: false
         default: "main"
         type: string
+      ddk_release:
+        description: 'DDK release version'
+        required: false
+        default: '20251104'
+        type: string
 
 jobs:
-  build-hymofs-ko:
-    name: Build hymofs_lkm.ko ${{ inputs.kmi }} ${{ inputs.arch }}
+  build-arm64:
+    name: Build hymofs arm64 ${{ inputs.kmi }}
+    if: inputs.arch == 'arm64'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      options: --privileged
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Clone HymoFS
+        run: |
+          git clone --depth 1 "https://github.com/Anatdx/HymoFS.git" hymofs_src
+          (cd hymofs_src && git fetch --depth 1 origin "${{ inputs.hymofs_ref }}" && git checkout FETCH_HEAD 2>/dev/null || true)
+          ls -la hymofs_src/src/
+
+      - name: Generate version
+        id: parse_version
+        run: |
+          COMMIT_NUM=$(cd hymofs_src && git rev-list --count HEAD)
+          VERSION=$(echo "$COMMIT_NUM + 200" | bc)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build hymofs_lkm.ko (DDK)
+        run: |
+          git config --global --add safe.directory /__w/YukiSU/YukiSU || true
+          cd kernel
+
+          echo "=== Building hymofs_lkm.ko for KMI: ${{ inputs.kmi }} (arm64) ==="
+          make -C $KDIR M="$GITHUB_WORKSPACE/hymofs_src/src" CC=clang \
+            CFLAGS_MODULE="-DHYMOFS_VERSION=\"0.1.${{ steps.parse_version.outputs.VERSION }}\"" \
+            KBUILD_MODPOST_WARN=1 modules
+
+          echo "=== Build completed ==="
+          mkdir -p /github/workspace/out
+          OUTPUT_NAME="${{ inputs.kmi }}_arm64_hymofs_lkm.ko"
+          cp "$GITHUB_WORKSPACE/hymofs_src/src/hymofs_lkm.ko" "/github/workspace/out/$OUTPUT_NAME"
+
+          echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
+          ls -la "/github/workspace/out/$OUTPUT_NAME"
+          echo "Size: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
+          llvm-strip -d "/github/workspace/out/$OUTPUT_NAME"
+          echo "Size after stripping: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
+
+      - name: Install GPG
+        run: apt-get update && apt-get install -y gnupg
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "$GPG_PRIVATE_KEY" > key.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
+          rm -f key.asc
+
+      - name: Sign hymofs_lkm.ko with GPG
+        run: |
+          cd /github/workspace/out
+          KO_FILE="${{ inputs.kmi }}_arm64_hymofs_lkm.ko"
+          echo "Signing $KO_FILE..."
+          gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
+            --output "${KO_FILE}.sig" "$KO_FILE"
+          if [ -f "${KO_FILE}.sig" ]; then
+            echo "Signature created successfully"
+            ls -lh "${KO_FILE}.sig"
+          else
+            echo "Error: Signature file not created!"
+            exit 1
+          fi
+
+      - name: Upload hymofs_lkm.ko artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.kmi }}-arm64-hymofs-lkm
+          path: |
+            /github/workspace/out/${{ inputs.kmi }}_arm64_hymofs_lkm.ko
+            /github/workspace/out/${{ inputs.kmi }}_arm64_hymofs_lkm.ko.sig
+
+  build-armv7-x86_64:
+    name: Build hymofs ${{ inputs.arch }} ${{ inputs.kmi }}
+    if: inputs.arch == 'armv7' || inputs.arch == 'x86_64'
     runs-on: ubuntu-latest
 
     steps:
@@ -75,7 +164,6 @@ jobs:
         run: |
           set -euo pipefail
           KMI="${{ inputs.kmi }}"
-          ARCH="${{ inputs.arch }}"
           KERNEL_SRC="$GITHUB_WORKSPACE/kernel"
           if [ ! -f "$KERNEL_SRC/Makefile" ]; then
             rm -rf "$KERNEL_SRC"
@@ -89,11 +177,6 @@ jobs:
         run: |
           ARCH="${{ inputs.arch }}"
           case "$ARCH" in
-            arm64)
-              echo "kern_arch=arm64" >> $GITHUB_OUTPUT
-              echo "defconfig=gki_defconfig" >> $GITHUB_OUTPUT
-              echo "cross_prefix=aarch64-linux-gnu-" >> $GITHUB_OUTPUT
-              ;;
             armv7)
               echo "kern_arch=arm" >> $GITHUB_OUTPUT
               echo "defconfig=multi_v7_defconfig" >> $GITHUB_OUTPUT
@@ -141,7 +224,7 @@ jobs:
           fi
           echo "CCACHE_CROSS_WRAP=$WRAP_DIR/" >> $GITHUB_ENV
 
-      - name: Build hymofs_lkm.ko
+      - name: Build hymofs_lkm.ko (manual)
         run: |
           set -euo pipefail
           KMI="${{ inputs.kmi }}"
@@ -159,8 +242,7 @@ jobs:
           fi
 
           echo "Preparing kernel tree (KMI=$KMI, ARCH=$KERN_ARCH, defconfig=$DEFCONFIG)..."
-          make -C "$KERNEL_SRC" ARCH="$KERN_ARCH" "$CROSS_ARGS" $LLVM_ARGS "$DEFCONFIG" 2>/dev/null || \
-            make -C "$KERNEL_SRC" ARCH="$KERN_ARCH" "$CROSS_ARGS" $LLVM_ARGS defconfig
+          make -C "$KERNEL_SRC" ARCH="$KERN_ARCH" "$CROSS_ARGS" $LLVM_ARGS "$DEFCONFIG"
           if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
             $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
             make -C "$KERNEL_SRC" ARCH="$KERN_ARCH" "$CROSS_ARGS" $LLVM_ARGS olddefconfig 2>/dev/null || true
@@ -178,10 +260,45 @@ jobs:
         run: |
           mkdir -p out
           cp hymofs_src/src/hymofs_lkm.ko "out/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
+          echo "Size: $(du -h out/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko | cut -f1)"
           ls -la out/
+
+      - name: Install GPG
+        run: |
+          sudo apt-get update && sudo apt-get install -y gnupg
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "$GPG_PRIVATE_KEY" > key.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
+          rm -f key.asc
+
+      - name: Sign hymofs_lkm.ko with GPG
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          cd out
+          KO_FILE="${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
+          echo "Signing $KO_FILE..."
+          gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
+            --output "${KO_FILE}.sig" "$KO_FILE"
+          if [ -f "${KO_FILE}.sig" ]; then
+            echo "Signature created successfully"
+            ls -lh "${KO_FILE}.sig"
+          else
+            echo "Error: Signature file not created!"
+            exit 1
+          fi
 
       - name: Upload .ko
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.kmi }}-${{ inputs.arch }}-hymofs-lkm
-          path: out/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko
+          path: |
+            out/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko
+            out/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko.sig

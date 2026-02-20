@@ -41,7 +41,7 @@ jobs:
           aarch64|aarch64-linux-android) arch_suffix="_arm64" ;;
           x86_64|x86_64-linux-android) arch_suffix="_x86_64" ;;
           armv7|armv7-linux-androideabi) arch_suffix="_armv7" ;;
-          *) arch_suffix="_arm64" ;;  # default
+          *) arch_suffix="_arm64" ;;
         esac
         cp *-hymofs-lkm/*${arch_suffix}_hymofs_lkm.ko ./userspace/ksud/assets/ 2>/dev/null || true
     
