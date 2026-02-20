@@ -58,7 +58,7 @@ jobs:
 
           echo "=== Building hymofs_lkm.ko for KMI: ${{ inputs.kmi }} (arm64) ==="
           make -C $KDIR M="$GITHUB_WORKSPACE/hymofs_src/src" CC=clang \
-            CFLAGS_MODULE="-DHYMOFS_VERSION=\"0.1.${{ steps.parse_version.outputs.VERSION }}\"" \
+            CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${{ steps.parse_version.outputs.VERSION }}\\\"" \
             KBUILD_MODPOST_WARN=1 modules
 
           echo "=== Build completed ==="
@@ -183,7 +183,7 @@ jobs:
               echo "cross_prefix=arm-linux-gnueabi-" >> $GITHUB_OUTPUT
               ;;
             x86_64)
-              echo "kern_arch=x86" >> $GITHUB_OUTPUT
+              echo "kern_arch=x86_64" >> $GITHUB_OUTPUT
               echo "defconfig=gki_defconfig" >> $GITHUB_OUTPUT
               echo "cross_prefix=" >> $GITHUB_OUTPUT
               ;;
