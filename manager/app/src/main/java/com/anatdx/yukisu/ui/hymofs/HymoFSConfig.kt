@@ -179,7 +179,24 @@ fun HymoFSConfigScreen(
                         version = version,
                         systemInfo = systemInfo,
                         config = config,
-                        onRefresh = { loadData() }
+                        onRefresh = { loadData() },
+                        onLkmAutoloadChanged = { enable ->
+                            coroutineScope.launch {
+                                if (HymoFSManager.setLkmAutoload(enable)) {
+                                    config = config.copy(lkmAutoload = enable)
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(
+                                            if (enable) R.string.hymofs_lkm_autoload_enabled
+                                            else R.string.hymofs_lkm_autoload_disabled
+                                        )
+                                    )
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.hymofs_lkm_autoload_failed)
+                                    )
+                                }
+                            }
+                        }
                     )
                     HymoFSTab.MODULES -> ModulesTab(
                         modules = modules,
@@ -608,7 +625,8 @@ private fun LkmTab(
     version: String,
     systemInfo: HymoFSManager.SystemInfo,
     config: HymoFSManager.HymoConfig,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onLkmAutoloadChanged: (Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -690,7 +708,7 @@ private fun LkmTab(
             }
         }
 
-        // Loading / how LKM is loaded
+        // Loading / how LKM is loaded + autoload toggle
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -698,15 +716,33 @@ private fun LkmTab(
             elevation = getCardElevation()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = stringResource(R.string.hymofs_lkm_loading_card_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.hymofs_lkm_loading_card_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.hymofs_lkm_loading_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = config.lkmAutoload,
+                        onCheckedChange = onLkmAutoloadChanged
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.hymofs_lkm_loading_desc),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.hymofs_lkm_autoload_hint),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

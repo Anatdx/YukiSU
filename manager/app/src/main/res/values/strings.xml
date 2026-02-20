@@ -552,8 +552,12 @@
     <string name="hymofs_lkm_card_title">HymoFS Loadable Kernel Module</string>
     <string name="hymofs_lkm_loading_card_title">Loading</string>
     <string name="hymofs_lkm_loading_desc">ksud automatically loads the matching HymoFS kernel module (.ko) at post-fs-data based on the current kernel KMI. No manual action required.</string>
-    <string name="hymofs_lkm_kernel_label">Kernel (uname -r)</string>
-    <string name="hymofs_lkm_kmi_label">uname override (uname -r)</string>
+    <string name="hymofs_lkm_autoload_hint">When on: load LKM at boot; failures logged to /data/adb/hymo/lkm_autoload.log. When off: skip loading at boot.</string>
+    <string name="hymofs_lkm_autoload_enabled">LKM boot autoload enabled</string>
+    <string name="hymofs_lkm_autoload_disabled">LKM boot autoload disabled</string>
+    <string name="hymofs_lkm_autoload_failed">Failed to set</string>
+    <string name="hymofs_lkm_kernel_label">Kernel (SYS)</string>
+    <string name="hymofs_lkm_kmi_label">uname override</string>
     <string name="hymofs_storage">Storage</string>
     <string name="hymofs_modules_count">Modules</string>
     <string name="hymofs_system_info">System Info</string>

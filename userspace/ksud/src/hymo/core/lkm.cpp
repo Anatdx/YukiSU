@@ -2,11 +2,13 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include "../../assets.hpp"
 #include "../../boot/boot_patch.hpp"
@@ -159,6 +161,21 @@ bool lkm_get_autoload() {
     return (v == "1" || v == "on" || v == "true");
 }
 
+static void lkm_autoload_log_failure(const char* msg) {
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    struct tm tm_buf;
+    localtime_r(&tv.tv_sec, &tm_buf);
+    char ts[64];
+    snprintf(ts, sizeof(ts), "%04d-%02d-%02d %02d:%02d:%02d.%03ld", tm_buf.tm_year + 1900,
+             tm_buf.tm_mon + 1, tm_buf.tm_mday, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec,
+             static_cast<long>(tv.tv_usec / 1000));
+    std::ofstream f(LKM_AUTOLOAD_LOG_FILE, std::ios::app);
+    if (f) {
+        f << "[" << ts << "] " << msg << "\n";
+    }
+}
+
 // Called from post-fs-data: extract embedded LKM, load, cleanup. No shell.
 // Ksud knows its arch; embedded hymofs .ko matches each ksud build (arm64/armv7/x86_64).
 void lkm_autoload_post_fs_data() {
@@ -173,12 +190,16 @@ void lkm_autoload_post_fs_data() {
 
     const std::string kmi = ksud::get_current_kmi();
     if (kmi.empty()) {
-        LOGW("HymoFS LKM: cannot detect KMI, skip");
+        const char* msg = "HymoFS LKM: cannot detect KMI, skip";
+        LOGW("%s", msg);
+        lkm_autoload_log_failure(msg);
         return;
     }
 
     if (!ensure_base_dir()) {
-        LOGW("HymoFS LKM: cannot create " HYMO_DATA_DIR);
+        const char* msg = "HymoFS LKM: cannot create " HYMO_DATA_DIR;
+        LOGW("%s", msg);
+        lkm_autoload_log_failure(msg);
         return;
     }
 
@@ -187,21 +208,31 @@ void lkm_autoload_post_fs_data() {
     snprintf(tmp_path, sizeof(tmp_path), "%s/.lkm_XXXXXX", HYMO_DATA_DIR);
     int tmp_fd = mkstemp(tmp_path);
     if (tmp_fd < 0) {
-        LOGW("HymoFS LKM: mkstemp failed: %s", strerror(errno));
+        char msg[128];
+        snprintf(msg, sizeof(msg), "HymoFS LKM: mkstemp failed: %s", strerror(errno));
+        LOGW("%s", msg);
+        lkm_autoload_log_failure(msg);
         return;
     }
     close(tmp_fd);
 
     if (!ksud::copy_asset_to_file(asset_name, tmp_path)) {
-        // Fallback: try LKM_KO from Magisk module
         unlink(tmp_path);
+        // Fallback: try LKM_KO from Magisk module
         if (fs::exists(LKM_KO)) {
             char params[64];
             snprintf(params, sizeof(params), "hymo_syscall_nr=%d", HYMO_SYSCALL_NR);
             if (load_module_via_finit(LKM_KO, params)) {
                 LOGI("HymoFS LKM loaded from " HYMO_MODULE_DIR);
+                return;
             }
         }
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "HymoFS LKM: no matching module (asset %s, fallback " HYMO_MODULE_DIR " failed)",
+                 asset_name.c_str());
+        LOGW("%s", msg);
+        lkm_autoload_log_failure(msg);
         return;
     }
 
@@ -209,6 +240,10 @@ void lkm_autoload_post_fs_data() {
     snprintf(params, sizeof(params), "hymo_syscall_nr=%d", HYMO_SYSCALL_NR);
     if (load_module_via_finit(tmp_path, params)) {
         LOGI("HymoFS LKM loaded from embedded %s", asset_name.c_str());
+    } else {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "HymoFS LKM: finit_module failed for %s", asset_name.c_str());
+        lkm_autoload_log_failure(msg);
     }
     unlink(tmp_path);
 }

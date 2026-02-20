@@ -540,8 +540,12 @@
     <string name="hymofs_lkm_card_title">HymoFS 可加载内核模块</string>
     <string name="hymofs_lkm_loading_card_title">加载方式</string>
     <string name="hymofs_lkm_loading_desc">由 ksud 在 post-fs-data 阶段根据当前内核 KMI 自动加载匹配的 hymofs 内核模块 (.ko)，无需手动操作。</string>
-    <string name="hymofs_lkm_kernel_label">内核 (uname -r)</string>
-    <string name="hymofs_lkm_kmi_label">uname 欺骗 (uname -r)</string>
+    <string name="hymofs_lkm_autoload_hint">开启时开机加载 LKM，失败时日志写入 /data/adb/hymo/lkm_autoload.log；关闭时开机跳过加载。</string>
+    <string name="hymofs_lkm_autoload_enabled">已开启开机加载 LKM</string>
+    <string name="hymofs_lkm_autoload_disabled">已关闭开机加载 LKM</string>
+    <string name="hymofs_lkm_autoload_failed">设置失败</string>
+    <string name="hymofs_lkm_kernel_label">内核 (SYS)</string>
+    <string name="hymofs_lkm_kmi_label">uname 欺骗</string>
     <string name="hymofs_storage">存储</string>
     <string name="hymofs_modules_count">模块数</string>
     <string name="hymofs_system_info">系统信息</string>

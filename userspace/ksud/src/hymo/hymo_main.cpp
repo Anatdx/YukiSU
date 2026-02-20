@@ -337,6 +337,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 std::cout << "  \"hymofs_available\": "
                           << (HymoFS::is_available() ? "true" : "false") << ",\n";
                 std::cout << "  \"hymofs_status\": " << (int)HymoFS::check_status() << ",\n";
+                std::cout << "  \"lkm_autoload\": " << (lkm_get_autoload() ? "true" : "false")
+                          << ",\n";
                 std::cout << "  \"tmpfs_xattr_supported\": "
                           << (check_tmpfs_xattr() ? "true" : "false") << ",\n";
                 std::cout << "  \"partitions\": [";

@@ -110,7 +110,8 @@ object HymoFSManager {
         val mountStage: String = "metamount",     // "post-fs-data", "metamount", "services"
         val partitions: List<String> = emptyList(),
         val unameRelease: String = "",
-        val unameVersion: String = ""
+        val unameVersion: String = "",
+        val lkmAutoload: Boolean = true
     )
     
     /**
@@ -214,7 +215,8 @@ object HymoFSManager {
                         (0 until arr.length()).map { arr.getString(it) }
                     } ?: emptyList(),
                     unameRelease = json.optString("uname_release", ""),
-                    unameVersion = json.optString("uname_version", "")
+                    unameVersion = json.optString("uname_version", ""),
+                    lkmAutoload = json.optBoolean("lkm_autoload", true)
                 )
             } else {
                 HymoConfig()
@@ -431,9 +433,9 @@ object HymoFSManager {
      */
     suspend fun getSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         try {
-            // Get kernel and selinux
-            val kernelResult = Shell.cmd("uname -r").exec()
-            val kernel = if (kernelResult.isSuccess) kernelResult.out.firstOrNull() ?: "Unknown" else "Unknown"
+            // Get kernel from /proc/sys (real kernel, not spoofed by uname)
+            val kernelResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
+            val kernel = if (kernelResult.isSuccess) kernelResult.out.firstOrNull()?.trim() ?: "Unknown" else "Unknown"
             
             val selinuxResult = Shell.cmd("getenforce").exec()
             val selinux = if (selinuxResult.isSuccess) selinuxResult.out.firstOrNull() ?: "Unknown" else "Unknown"
@@ -578,6 +580,21 @@ object HymoFSManager {
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set stealth mode", e)
+            false
+        }
+    }
+    
+    /**
+     * Set HymoFS LKM boot autoload (post-fs-data).
+     * When enabled: ksud loads LKM at boot; failures are logged to /data/adb/hymo/lkm_autoload.log
+     * When disabled: skip loading at boot
+     */
+    suspend fun setLkmAutoload(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm set-autoload ${if (enable) "on" else "off"}").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set LKM autoload", e)
             false
         }
     }
