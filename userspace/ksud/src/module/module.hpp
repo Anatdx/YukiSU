@@ -32,4 +32,7 @@ int load_system_prop();
 // Returns: map<ModuleId, vector<ManagedFeature>>
 std::map<std::string, std::vector<std::string>> get_managed_features();
 
+// Metamodule
+std::string get_metamodule_id();
+
 }  // namespace ksud

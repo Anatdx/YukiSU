@@ -189,13 +189,38 @@ bool lkm_is_loaded() {
     return HymoFS::is_available();
 }
 
+std::string lkm_get_kmi_override() {
+    return read_file_first_line(LKM_KMI_OVERRIDE_FILE);
+}
+
+bool lkm_set_kmi_override(const std::string& kmi) {
+    if (!ensure_base_dir())
+        return false;
+    return write_file(LKM_KMI_OVERRIDE_FILE, kmi);
+}
+
+bool lkm_clear_kmi_override() {
+    if (unlink(LKM_KMI_OVERRIDE_FILE) == 0)
+        return true;
+    return errno == ENOENT;
+}
+
+void lkm_autoload_post_fs_data() {
+    if (lkm_get_autoload() && !lkm_is_loaded()) {
+        lkm_load();
+    }
+}
+
 bool lkm_load() {
     if (lkm_is_loaded()) {
         return true;
     }
 
     std::string ko_path;
-    const std::string kmi = get_current_kmi();
+    std::string kmi = lkm_get_kmi_override();
+    if (kmi.empty()) {
+        kmi = get_current_kmi();
+    }
 
     if (!kmi.empty() && ensure_base_dir()) {
         const std::string asset_name = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
