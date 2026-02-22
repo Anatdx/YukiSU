@@ -8,10 +8,10 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include "../../assets.hpp"
 #include "../defs.hpp"
 #include "../mount/hymofs.hpp"
 #include "../utils.hpp"
-#include "assets.hpp"
 
 namespace fs = std::filesystem;
 namespace hymo {
@@ -230,7 +230,7 @@ bool lkm_load() {
         int tmp_fd = mkstemp(tmp_path);
         if (tmp_fd >= 0) {
             close(tmp_fd);
-            if (copy_asset_to_file(asset_name, tmp_path)) {
+            if (ksud::copy_asset_to_file(asset_name, tmp_path)) {
                 ko_path = tmp_path;
             } else {
                 unlink(tmp_path);
