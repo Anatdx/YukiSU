@@ -50,9 +50,7 @@ void try_hymofs_automount(const char* stage_name) {
             return;
         }
 
-        // Reset Hymo daemon log so each boot-stage mount has fresh logs,
-        // similar to the original wrapper behavior.
-        ::unlink(hymo::DAEMON_LOG_FILE);
+        // Built-in hymo uses ksud log (stderr), no separate daemon.log to unlink
 
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
@@ -95,7 +93,7 @@ void try_hymofs_metamount_mount() {
             return;
         }
 
-        // Do NOT unlink daemon.log: same reason as automount.
+        // Built-in hymo uses ksud log, no separate daemon.log
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS metamount: invoking hymod mount");
