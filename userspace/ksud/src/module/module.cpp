@@ -245,8 +245,8 @@ bool is_metamodule(const std::map<std::string, std::string>& props) {
     return val == "1" || val == "true" || val == "TRUE";
 }
 
-// Get current metamodule ID if exists
-std::string get_metamodule_id() {
+// Get current metamodule ID if exists (internal impl)
+static std::string get_metamodule_id_impl() {
     const std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
