@@ -125,5 +125,6 @@ struct hymo_spoof_cmdline {
 #define HYMO_IOC_SET_CMDLINE _IOW(HYMO_IOC_MAGIC, 18, struct hymo_spoof_cmdline)
 #define HYMO_IOC_GET_FEATURES _IOR(HYMO_IOC_MAGIC, 19, int)
 #define HYMO_IOC_SET_ENABLED _IOW(HYMO_IOC_MAGIC, 20, int)
+#define HYMO_IOC_GET_HOOKS _IOWR(HYMO_IOC_MAGIC, 22, struct hymo_syscall_list_arg)
 
 #endif /* _LINUX_HYMO_MAGIC_H */
