@@ -71,14 +71,19 @@ void try_hymofs_automount(const char* stage_name) {
 }
 
 // Built-in HymoFS: special handling for legacy "metamount" stage.
-// Historically, "metamount" runs in the blocking window between post-fs-data
-// finishing and services about to start. We now emulate this inside ksud:
-// just before executing metamodule mount scripts, if hymofs_enabled=true and
-// mount_stage="metamount", run hymod mount once.
 void try_hymofs_metamount_mount() {
     using hymo::Config;
 
     try {
+        if (access("/data/adb/ksu/.disable_builtin_mount", F_OK) == 0) {
+            LOGI("HymoFS metamount: built-in mount disabled by .disable_builtin_mount, skip");
+            return;
+        }
+        if (ksud::get_metamodule_id() == "hymo") {
+            LOGI("HymoFS metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
+            return;
+        }
+
         const Config config = Config::load_default();
 
         if (!config.hymofs_enabled) {
@@ -90,9 +95,7 @@ void try_hymofs_metamount_mount() {
             return;
         }
 
-        // Reset Hymo daemon log before metamount-run as well, to avoid stale logs.
-        ::unlink(hymo::DAEMON_LOG_FILE);
-
+        // Do NOT unlink daemon.log: same reason as automount.
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
         LOGI("HymoFS metamount: invoking hymod mount");

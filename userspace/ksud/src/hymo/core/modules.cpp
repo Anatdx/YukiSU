@@ -1,6 +1,5 @@
 // core/modules.cpp - Module description updates implementation
 #include "modules.hpp"
-#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -12,16 +11,16 @@
 
 namespace hymo {
 
-namespace {
-
-bool has_content(const fs::path& module_path, const std::vector<std::string>& all_partitions) {
-    return std::any_of(all_partitions.begin(), all_partitions.end(),
-                       [&module_path](const std::string& partition) {
-                           return has_files_recursive(module_path / partition);
-                       });
+static bool has_content(const fs::path& module_path,
+                        const std::vector<std::string>& all_partitions) {
+    for (const auto& partition : all_partitions) {
+        fs::path part_path = module_path / partition;
+        if (has_files_recursive(part_path)) {
+            return true;
+        }
+    }
+    return false;
 }
-
-}  // namespace
 
 void update_module_description(bool success, const std::string& storage_mode, bool nuke_active,
                                size_t overlay_count, size_t magic_count, size_t hymofs_count,
@@ -52,7 +51,7 @@ void update_module_description(bool success, const std::string& storage_mode, bo
     bool desc_updated = false;
     bool name_updated = false;
 
-    const std::string new_name = hymofs_active ? "Hymo - HymoFS Enabled" : "Hymo";
+    std::string new_name = hymofs_active ? "Hymo - HymoFS Enabled" : "Hymo";
 
     while (std::getline(infile, line)) {
         if (line.find("description=") == 0) {
@@ -136,7 +135,7 @@ void print_module_list(const Config& config) {
     }
 
     root["modules"] = mods_arr;
-    std::cout << json::dump(root, 2) << "\n";
+    std::cerr << json::dump(root, 2) << "\n";
 }
 
 }  // namespace hymo

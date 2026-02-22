@@ -7,16 +7,19 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <sys/xattr.h>
 #include <unistd.h>
-#include <array>
 #include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <sstream>
+#include <vector>
 #include "defs.hpp"
+
+extern char** environ;
 
 namespace hymo {
 
@@ -26,30 +29,41 @@ Logger& Logger::getInstance() {
     return instance;
 }
 
-void Logger::init(bool debug, bool verbose, const fs::path& log_path) {
-    debug_ = debug || verbose;
+void Logger::init(bool debug, bool verbose) {
+    debug_ = debug;
     verbose_ = verbose;
-    (void)log_path;
-    log_file_.reset();
 }
 
-void Logger::log(const std::string& level, const std::string& message) const {
-    if (level == "VERBOSE" && !verbose_) {
-        return;
+void Logger::init(bool debug, bool verbose, const char* log_path) {
+    debug_ = debug;
+    verbose_ = verbose;
+    if (log_path && *log_path) {
+        fs::path p(log_path);
+        if (!p.parent_path().empty())
+            fs::create_directories(p.parent_path());
+        log_file_ = std::make_unique<std::ofstream>(log_path, std::ios::app);
     }
-    if (level == "DEBUG" && !debug_) {
+}
+
+void Logger::log(const std::string& level, const std::string& message) {
+    if (level == "VERBOSE" && !verbose_)
         return;
-    }
+    if (level == "DEBUG" && !debug_)
+        return;
 
     auto now = std::time(nullptr);
-    std::array<char, 64> time_buf{};
-    (void)std::strftime(time_buf.data(), time_buf.size(), "%Y-%m-%d %H:%M:%S",
-                        std::localtime(&now));
+    char time_buf[64];
+    std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
 
-    const std::string log_line =
-        std::string("[") + time_buf.data() + "] [" + level + "] " + message + "\n";
+    std::string log_line = std::string("[") + time_buf + "] [" + level + "] " + message + "\n";
 
-    std::cerr << log_line;
+    if (log_file_ && log_file_->is_open()) {
+        *log_file_ << log_line;
+        log_file_->flush();
+    } else {
+        std::clog << log_line;
+        std::clog.flush();
+    }
 }
 
 // File system utilities
@@ -66,8 +80,6 @@ bool ensure_dir_exists(const fs::path& path) {
 }
 
 bool lsetfilecon(const fs::path& path, const std::string& context) {
-    (void)path;
-    (void)context;
 #ifdef __ANDROID__
     if (lsetxattr(path.c_str(), SELINUX_XATTR, context.c_str(), context.length(), 0) == 0) {
         return true;
@@ -78,12 +90,11 @@ bool lsetfilecon(const fs::path& path, const std::string& context) {
 }
 
 std::string lgetfilecon(const fs::path& path) {
-    (void)path;
 #ifdef __ANDROID__
-    std::array<char, 256> buf{};
-    ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf.data(), buf.size());
+    char buf[256];
+    ssize_t len = lgetxattr(path.c_str(), SELINUX_XATTR, buf, sizeof(buf));
     if (len > 0) {
-        return std::string(buf.data(), static_cast<size_t>(len));
+        return std::string(buf, len);
     }
 #endif  // #ifdef __ANDROID__
     return DEFAULT_SELINUX_CONTEXT;
@@ -92,14 +103,13 @@ std::string lgetfilecon(const fs::path& path) {
 // Get appropriate SELinux context based on path
 // /vendor and /odm paths should use vendor_file context
 std::string get_context_for_path(const fs::path& path) {
-    const std::string path_str = path.string();
+    std::string path_str = path.string();
     if (path_str.find("/vendor") == 0 || path_str.find("/odm") == 0) {
         return VENDOR_SELINUX_CONTEXT;
     }
     return DEFAULT_SELINUX_CONTEXT;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) src vs dst are distinct
 bool copy_path_context(const fs::path& src, const fs::path& dst) {
     std::string context;
     if (fs::exists(src)) {
@@ -121,7 +131,7 @@ bool is_xattr_supported(const fs::path& path) {
         f << "test";
         f.close();
 
-        const bool supported = lsetfilecon(test_file, DEFAULT_SELINUX_CONTEXT);
+        bool supported = lsetfilecon(test_file, DEFAULT_SELINUX_CONTEXT);
         fs::remove(test_file);
         return supported;
     } catch (...) {
@@ -129,12 +139,13 @@ bool is_xattr_supported(const fs::path& path) {
     }
 }
 
-bool mount_tmpfs(const fs::path& target) {
+bool mount_tmpfs(const fs::path& target, const char* source) {
     if (!ensure_dir_exists(target)) {
         return false;
     }
 
-    if (mount("tmpfs", target.c_str(), "tmpfs", 0, "mode=0755") != 0) {
+    const char* src = (source && *source) ? source : OVERLAY_SOURCE;
+    if (mount(src, target.c_str(), "tmpfs", 0, "mode=0755") != 0) {
         LOG_ERROR("Failed to mount tmpfs at " + target.string() + ": " + strerror(errno));
         return false;
     }
@@ -160,6 +171,9 @@ bool has_files_recursive(const fs::path& path) {
     return false;
 }
 
+// Forward declaration for loop device helper
+static int setup_loop_device(const std::string& image_path, std::string& loop_path, bool read_only);
+
 // EROFS support - check if kernel supports EROFS filesystem
 bool is_erofs_supported() {
     std::ifstream fs("/proc/filesystems");
@@ -175,17 +189,16 @@ bool is_erofs_supported() {
     return false;
 }
 
-namespace {
-
 // Loop device helpers
-int setup_loop_device(const std::string& image_path, std::string& loop_path, bool read_only) {
-    const int control_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
+static int setup_loop_device(const std::string& image_path, std::string& loop_path,
+                             bool read_only) {
+    int control_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
     if (control_fd < 0) {
         LOG_ERROR("Failed to open /dev/loop-control: " + std::string(strerror(errno)));
         return -1;
     }
 
-    const int loop_nr = ioctl(control_fd, LOOP_CTL_GET_FREE);
+    int loop_nr = ioctl(control_fd, LOOP_CTL_GET_FREE);
     close(control_fd);
 
     if (loop_nr < 0) {
@@ -195,7 +208,7 @@ int setup_loop_device(const std::string& image_path, std::string& loop_path, boo
 
     loop_path = "/dev/block/loop" + std::to_string(loop_nr);
     if (access(loop_path.c_str(), F_OK) != 0) {
-        struct stat st{};
+        struct stat st;
         // Check if /dev/block directory exists, if not fallback to /dev/loop
         if (stat("/dev/block", &st) == 0 && S_ISDIR(st.st_mode)) {
             // Maybe we need to mknod? try /dev/loop first as it is more standard
@@ -214,13 +227,13 @@ int setup_loop_device(const std::string& image_path, std::string& loop_path, boo
             loop_path = "/dev/block/loop" + std::to_string(loop_nr);
     }
 
-    const int loop_fd = open(loop_path.c_str(), O_RDWR | O_CLOEXEC);
+    int loop_fd = open(loop_path.c_str(), O_RDWR | O_CLOEXEC);
     if (loop_fd < 0) {
         LOG_ERROR("Failed to open loop device " + loop_path + ": " + strerror(errno));
         return -1;
     }
 
-    const int file_fd = open(image_path.c_str(), read_only ? O_RDONLY : O_RDWR | O_CLOEXEC);
+    int file_fd = open(image_path.c_str(), read_only ? O_RDONLY : O_RDWR | O_CLOEXEC);
     if (file_fd < 0) {
         LOG_ERROR("Failed to open image " + image_path + ": " + strerror(errno));
         close(loop_fd);
@@ -235,7 +248,8 @@ int setup_loop_device(const std::string& image_path, std::string& loop_path, boo
     }
     close(file_fd);
 
-    struct loop_info64 info{};
+    struct loop_info64 info;
+    memset(&info, 0, sizeof(info));
     info.lo_flags = LO_FLAGS_AUTOCLEAR;
     if (read_only)
         info.lo_flags |= LO_FLAGS_READ_ONLY;
@@ -250,9 +264,6 @@ int setup_loop_device(const std::string& image_path, std::string& loop_path, boo
     return loop_fd;
 }
 
-}  // namespace
-
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) fs_type vs options are distinct
 bool mount_image(const fs::path& image_path, const fs::path& target, const std::string& fs_type,
                  const std::string& options) {
     if (!ensure_dir_exists(target)) {
@@ -314,7 +325,7 @@ bool mount_image(const fs::path& image_path, const fs::path& target, const std::
         source = image_path.string();
     }
 
-    const int ret = mount(source.c_str(), target.c_str(), fs_type.c_str(), flags, data.c_str());
+    int ret = mount(source.c_str(), target.c_str(), fs_type.c_str(), flags, data.c_str());
 
     if (ret != 0) {
         LOG_ERROR("mount failed: " + std::string(strerror(errno)) + " (src=" + source +
@@ -334,31 +345,61 @@ bool mount_image(const fs::path& image_path, const fs::path& target, const std::
     return true;
 }
 
+// Run external binary via execve (no shell)
+static bool exec_run(const char* bin_path, const std::vector<const char*>& argv) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOG_ERROR("fork failed: " + std::string(strerror(errno)));
+        return false;
+    }
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > 2)
+                close(devnull);
+        }
+        execve(bin_path, const_cast<char* const*>(argv.data()), environ);
+        _exit(127);
+    }
+    int status;
+    if (waitpid(pid, &status, 0) != pid) {
+        LOG_ERROR("waitpid failed");
+        return false;
+    }
+    return WIFEXITED(status) && (WEXITSTATUS(status) <= 2);
+}
+
 bool repair_image(const fs::path& image_path) {
     LOG_INFO("Running e2fsck on " + image_path.string());
 
-    const std::string cmd = "e2fsck -y -f " + image_path.string() + " >/dev/null 2>&1";
-    const int ret = system(cmd.c_str());
-
-    if (WIFEXITED(ret)) {
-        const int code = WEXITSTATUS(ret);
-        if (code <= 2) {
-            LOG_INFO("Image repair success (code " + std::to_string(code) + ")");
-            return true;
-        } else {
-            LOG_ERROR("e2fsck failed: " + std::to_string(code));
-            return false;
+    const char* e2fsck_paths[] = {"/system/bin/e2fsck", "/sbin/e2fsck", "/vendor/bin/e2fsck"};
+    const char* e2fsck_bin = nullptr;
+    for (const auto& p : e2fsck_paths) {
+        if (access(p, X_OK) == 0) {
+            e2fsck_bin = p;
+            break;
         }
     }
+    if (!e2fsck_bin) {
+        LOG_ERROR("e2fsck not found");
+        return false;
+    }
 
-    LOG_ERROR("e2fsck execution failed");
-    return false;
+    std::string path_str = image_path.string();
+    std::vector<const char*> argv = {e2fsck_bin, "-y", "-f", path_str.c_str(), nullptr};
+
+    if (!exec_run(e2fsck_bin, argv)) {
+        LOG_ERROR("e2fsck failed");
+        return false;
+    }
+    LOG_INFO("Image repair success");
+    return true;
 }
 
-namespace {
-
-// NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
-bool native_cp_r(const fs::path& src, const fs::path& dst) {
+static bool native_cp_r(const fs::path& src, const fs::path& dst) {
     try {
         LOG_DEBUG("native_cp_r: " + src.string() + " -> " + dst.string());
 
@@ -401,8 +442,6 @@ bool native_cp_r(const fs::path& src, const fs::path& dst) {
     }
 }
 
-}  // namespace
-
 bool sync_dir(const fs::path& src, const fs::path& dst) {
     LOG_DEBUG("sync_dir: " + src.string() + " -> " + dst.string());
 
@@ -416,18 +455,18 @@ bool sync_dir(const fs::path& src, const fs::path& dst) {
         return false;
     }
 
-    const bool result = native_cp_r(src, dst);
+    bool result = native_cp_r(src, dst);
     LOG_DEBUG("sync_dir result: " + std::to_string(result));
     return result;
 }
 
 // Check if tmpfs supports xattr on this device
 bool check_tmpfs_xattr() {
-    const fs::path temp_dir = select_temp_dir() / "xattr_check";
+    fs::path temp_dir = select_temp_dir() / "xattr_check";
     if (!mount_tmpfs(temp_dir)) {
         return false;
     }
-    const bool supported = is_xattr_supported(temp_dir);
+    bool supported = is_xattr_supported(temp_dir);
     umount2(temp_dir.c_str(), MNT_DETACH);
     rmdir(temp_dir.c_str());
     return supported;
@@ -443,14 +482,12 @@ bool camouflage_process(const std::string& name) {
 }
 
 fs::path select_temp_dir() {
-    const fs::path run_dir(RUN_DIR);
+    fs::path run_dir(RUN_DIR);
     ensure_dir_exists(run_dir);
     return run_dir / "workdir";
 }
 
-namespace {
-
-std::string normalize_path_string(const fs::path& path) {
+static std::string normalize_path_string(const fs::path& path) {
     std::string normalized = path.lexically_normal().string();
     if (normalized.size() > 1 && normalized.back() == '/') {
         normalized.pop_back();
@@ -458,8 +495,8 @@ std::string normalize_path_string(const fs::path& path) {
     return normalized;
 }
 
-bool is_dangerous_temp_path(const fs::path& path, bool allow_dev_mirror) {
-    const std::string p = normalize_path_string(path);
+static bool is_dangerous_temp_path(const fs::path& path, bool allow_dev_mirror) {
+    std::string p = normalize_path_string(path);
     if (p.empty() || p == "." || p == "..") {
         return true;
     }
@@ -478,8 +515,6 @@ bool is_dangerous_temp_path(const fs::path& path, bool allow_dev_mirror) {
 
     return false;
 }
-
-}  // namespace
 
 bool is_safe_temp_dir(const fs::path& temp_dir, bool allow_dev_mirror) {
     return !is_dangerous_temp_path(temp_dir, allow_dev_mirror);
@@ -518,13 +553,9 @@ void cleanup_temp_dir(const fs::path& temp_dir, bool allow_dev_mirror) {
     }
 }
 
-namespace {
-
 // KSU utilities
-int ksu_fd = -1;
-bool ksu_checked = false;
-
-}  // namespace
+static int ksu_fd = -1;
+static bool ksu_checked = false;
 
 int grab_ksu_fd() {
     if (!ksu_checked) {
@@ -547,7 +578,6 @@ struct NukeExt4SysfsCmd {
 #endif  // #ifdef __ANDROID__
 
 bool send_unmountable(const fs::path& target) {
-    (void)target;
 #ifdef __ANDROID__
     static std::set<std::string> sent_unmounts;
 
@@ -579,7 +609,6 @@ bool send_unmountable(const fs::path& target) {
 }
 
 bool ksu_nuke_sysfs(const std::string& target) {
-    (void)target;
 #ifdef __ANDROID__
     int fd = grab_ksu_fd();
     if (fd < 0) {

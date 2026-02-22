@@ -10,22 +10,20 @@
 
 namespace hymo {
 
-namespace {
-
-void parse_module_prop(const fs::path& module_path, Module& module) {
-    const fs::path prop_file = module_path / "module.prop";
+static void parse_module_prop(const fs::path& module_path, Module& module) {
+    fs::path prop_file = module_path / "module.prop";
     if (!fs::exists(prop_file))
         return;
 
     std::ifstream file(prop_file);
     std::string line;
     while (std::getline(file, line)) {
-        const size_t eq = line.find('=');
+        size_t eq = line.find('=');
         if (eq == std::string::npos)
             continue;
 
-        const std::string key = line.substr(0, eq);
-        const std::string value = line.substr(eq + 1);
+        std::string key = line.substr(0, eq);
+        std::string value = line.substr(eq + 1);
 
         if (key == "name")
             module.name = value;
@@ -40,8 +38,8 @@ void parse_module_prop(const fs::path& module_path, Module& module) {
     }
 }
 
-void parse_module_rules(const fs::path& module_path, Module& module) {
-    const fs::path rules_file = module_path / "hymo_rules.conf";
+static void parse_module_rules(const fs::path& module_path, Module& module) {
+    fs::path rules_file = module_path / "hymo_rules.conf";
     if (!fs::exists(rules_file))
         return;
 
@@ -69,7 +67,7 @@ void parse_module_rules(const fs::path& module_path, Module& module) {
     }
 }
 
-std::vector<Module> scan_modules_impl(const fs::path& source_dir, const Config& config) {
+std::vector<Module> scan_modules(const fs::path& source_dir, const Config& config) {
     std::vector<Module> modules;
 
     if (!fs::exists(source_dir)) {
@@ -82,7 +80,7 @@ std::vector<Module> scan_modules_impl(const fs::path& source_dir, const Config& 
                 continue;
             }
 
-            const std::string id = entry.path().filename().string();
+            std::string id = entry.path().filename().string();
 
             if (id == "hymo" || id == "lost+found" || id == ".git") {
                 continue;
@@ -94,7 +92,7 @@ std::vector<Module> scan_modules_impl(const fs::path& source_dir, const Config& 
                 continue;
             }
 
-            std::string global_mode;
+            std::string global_mode = "";
             auto it = config.module_modes.find(id);
             if (it != config.module_modes.end()) {
                 global_mode = it->second;
@@ -134,25 +132,18 @@ std::vector<Module> scan_modules_impl(const fs::path& source_dir, const Config& 
     return modules;
 }
 
-bool is_mountpoint(const std::string& path) {
+static bool is_mountpoint(const std::string& path) {
     std::ifstream mounts("/proc/mounts");
     std::string line;
     while (std::getline(mounts, line)) {
         std::stringstream ss(line);
-        std::string device;
-        std::string mountpoint;
+        std::string device, mountpoint;
         ss >> device >> mountpoint;
         if (mountpoint == path) {
             return true;
         }
     }
     return false;
-}
-
-}  // namespace
-
-std::vector<Module> scan_modules(const fs::path& source_dir, const Config& config) {
-    return scan_modules_impl(source_dir, config);
 }
 
 std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
@@ -183,7 +174,7 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
                 if (!entry.is_directory())
                     continue;
 
-                const std::string name = entry.path().filename().string();
+                std::string name = entry.path().filename().string();
 
                 // Skip module metadata directories
                 if (module_metadata.find(name) != module_metadata.end())
@@ -200,17 +191,18 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
                 // Only include if:
                 // 1. Directory exists in root filesystem
                 // 2. It is actually a mountpoint (real partition)
-                const std::string root_path_str = "/" + name;
+                std::string root_path_str = "/" + name;
 
                 if (is_mountpoint(root_path_str)) {
                     candidates.insert(name);
                 }
             }
         }
-    } catch (...) {  // NOLINT(bugprone-empty-catch) ignore fs errors, return partial list
+    } catch (...) {
+        // Ignore errors
     }
 
-    return {candidates.begin(), candidates.end()};
+    return std::vector<std::string>(candidates.begin(), candidates.end());
 }
 
 }  // namespace hymo

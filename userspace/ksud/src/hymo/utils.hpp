@@ -2,6 +2,7 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 
@@ -13,8 +14,9 @@ namespace hymo {
 class Logger {
 public:
     static Logger& getInstance();
-    void init(bool debug, bool verbose, const fs::path& log_path);
-    void log(const std::string& level, const std::string& message) const;
+    void init(bool debug, bool verbose);
+    void init(bool debug, bool verbose, const char* log_path);  // YukiSU: write to file
+    void log(const std::string& level, const std::string& message);
 
 private:
     Logger() = default;
@@ -37,7 +39,7 @@ std::string lgetfilecon(const fs::path& path);
 std::string get_context_for_path(const fs::path& path);
 bool copy_path_context(const fs::path& src, const fs::path& dst);
 
-bool mount_tmpfs(const fs::path& target);
+bool mount_tmpfs(const fs::path& target, const char* source = nullptr);
 bool mount_image(const fs::path& image_path, const fs::path& target,
                  const std::string& fs_type = "ext4",
                  const std::string& options = "loop,rw,noatime");

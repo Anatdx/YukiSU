@@ -1,6 +1,5 @@
 // core/sync.cpp - Module content sync
 #include "sync.hpp"
-#include <algorithm>
 #include <fstream>
 #include <set>
 #include "../defs.hpp"
@@ -8,24 +7,26 @@
 
 namespace hymo {
 
-namespace {
-
 // Check if module has content for any partition
-bool has_content(const fs::path& module_path, const std::vector<std::string>& all_partitions) {
-    return std::any_of(all_partitions.begin(), all_partitions.end(),
-                       [&module_path](const std::string& partition) {
-                           return has_files_recursive(module_path / partition);
-                       });
+static bool has_content(const fs::path& module_path,
+                        const std::vector<std::string>& all_partitions) {
+    for (const auto& partition : all_partitions) {
+        fs::path part_path = module_path / partition;
+        if (has_files_recursive(part_path)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Check if module needs sync by comparing module.prop
-bool should_sync(const fs::path& src, const fs::path& dst) {
+static bool should_sync(const fs::path& src, const fs::path& dst) {
     if (!fs::exists(dst)) {
         return true;  // New module
     }
 
-    const fs::path src_prop = src / "module.prop";
-    const fs::path dst_prop = dst / "module.prop";
+    fs::path src_prop = src / "module.prop";
+    fs::path dst_prop = dst / "module.prop";
 
     if (!fs::exists(src_prop) || !fs::exists(dst_prop)) {
         return true;  // Force sync if prop missing
@@ -35,10 +36,10 @@ bool should_sync(const fs::path& src, const fs::path& dst) {
         std::ifstream src_file(src_prop, std::ios::binary);
         std::ifstream dst_file(dst_prop, std::ios::binary);
 
-        const std::string src_content((std::istreambuf_iterator<char>(src_file)),
-                                      std::istreambuf_iterator<char>());
-        const std::string dst_content((std::istreambuf_iterator<char>(dst_file)),
-                                      std::istreambuf_iterator<char>());
+        std::string src_content((std::istreambuf_iterator<char>(src_file)),
+                                std::istreambuf_iterator<char>());
+        std::string dst_content((std::istreambuf_iterator<char>(dst_file)),
+                                std::istreambuf_iterator<char>());
 
         return src_content != dst_content;
     } catch (...) {
@@ -47,7 +48,8 @@ bool should_sync(const fs::path& src, const fs::path& dst) {
 }
 
 // Remove orphaned module directories
-void prune_orphaned_modules(const std::vector<Module>& modules, const fs::path& storage_root) {
+static void prune_orphaned_modules(const std::vector<Module>& modules,
+                                   const fs::path& storage_root) {
     if (!fs::exists(storage_root)) {
         return;
     }
@@ -59,7 +61,7 @@ void prune_orphaned_modules(const std::vector<Module>& modules, const fs::path& 
 
     try {
         for (const auto& entry : fs::directory_iterator(storage_root)) {
-            const std::string name = entry.path().filename().string();
+            std::string name = entry.path().filename().string();
 
             if (name == "lost+found" || name == "hymo") {
                 continue;
@@ -80,28 +82,27 @@ void prune_orphaned_modules(const std::vector<Module>& modules, const fs::path& 
 }
 
 // Map SELinux context from system if possible
-// NOLINTNEXTLINE(misc-no-recursion) intentional directory recursion
-void recursive_context_repair(const fs::path& base, const fs::path& current) {
+static void recursive_context_repair(const fs::path& base, const fs::path& current) {
     if (!fs::exists(current)) {
         return;
     }
 
     try {
-        const std::string file_name = current.filename().string();
+        std::string file_name = current.filename().string();
 
         // Use parent context for internal overlay structs
         if (file_name == "upperdir" || file_name == "workdir") {
             if (current.has_parent_path()) {
-                const fs::path parent = current.parent_path();
+                fs::path parent = current.parent_path();
                 try {
-                    const std::string parent_ctx = lgetfilecon(parent);
+                    std::string parent_ctx = lgetfilecon(parent);
                     lsetfilecon(current, parent_ctx);
-                } catch (...) {  // NOLINT(bugprone-empty-catch) ignore context copy failure
+                } catch (...) {
                 }
             }
         } else {
-            const fs::path relative = fs::relative(current, base);
-            const fs::path system_path = fs::path("/") / relative;
+            fs::path relative = fs::relative(current, base);
+            fs::path system_path = fs::path("/") / relative;
 
             if (fs::exists(system_path)) {
                 copy_path_context(system_path, current);
@@ -118,30 +119,22 @@ void recursive_context_repair(const fs::path& base, const fs::path& current) {
     }
 }
 
-void repair_module_contexts(const fs::path& module_root, const std::string& module_id,
-                            const std::vector<std::string>& all_partitions) {
+static void repair_module_contexts(const fs::path& module_root, const std::string& module_id,
+                                   const std::vector<std::string>& all_partitions) {
     LOG_DEBUG("Repairing SELinux contexts for: " + module_id);
 
     for (const auto& partition : all_partitions) {
-        const fs::path part_root = module_root / partition;
+        fs::path part_root = module_root / partition;
 
         if (fs::exists(part_root) && fs::is_directory(part_root)) {
             try {
                 recursive_context_repair(module_root, part_root);
             } catch (const std::exception& e) {
-                std::string msg;
-                msg.reserve(module_id.size() + partition.size() + 32);
-                msg += "Context repair failed for ";
-                msg += module_id;
-                msg += "/";
-                msg += partition;
-                LOG_WARN(msg);
+                LOG_WARN("Context repair failed for " + module_id + "/" + partition);
             }
         }
     }
 }
-
-}  // namespace
 
 void perform_sync(const std::vector<Module>& modules, const fs::path& storage_root,
                   const Config& config) {
@@ -155,7 +148,7 @@ void perform_sync(const std::vector<Module>& modules, const fs::path& storage_ro
     prune_orphaned_modules(modules, storage_root);
 
     for (const auto& module : modules) {
-        const fs::path dst = storage_root / module.id;
+        fs::path dst = storage_root / module.id;
 
         if (!has_content(module.source_path, all_partitions)) {
             LOG_DEBUG("Skipping empty module: " + module.id);

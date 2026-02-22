@@ -544,6 +544,74 @@ private fun StatusTab(
             }
         }
         
+        // Mount Statistics (aligned with WebUI StatusPage)
+        systemInfo.mountStats?.let { ms ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = getCardElevation()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Mount Statistics",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        StatCard(modifier = Modifier.weight(1f), value = ms.totalMounts.toString(), label = "Total")
+                        StatCard(modifier = Modifier.weight(1f), value = ms.successfulMounts.toString(), label = "Success")
+                        StatCard(modifier = Modifier.weight(1f), value = ms.failedMounts.toString(), label = "Failed")
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            value = ms.successRate?.let { "${it.toInt()}%" } ?: "N/A",
+                            label = "Rate"
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Files: ${ms.filesMounted}", style = MaterialTheme.typography.bodySmall)
+                        Text("Dirs: ${ms.dirsMounted}", style = MaterialTheme.typography.bodySmall)
+                        Text("Symlinks: ${ms.symlinksCreated}", style = MaterialTheme.typography.bodySmall)
+                        Text("Overlay: ${ms.overlayfsMounts}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        
+        // Partitions (aligned with WebUI)
+        if (systemInfo.detectedPartitions.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = getCardElevation()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Partitions",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(systemInfo.detectedPartitions) { p ->
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(p.name) },
+                                modifier = Modifier.height(32.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
         // Warning for mismatch
         if (systemInfo.hymofsMismatch) {
             Card(

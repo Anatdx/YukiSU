@@ -1030,8 +1030,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     if (HymoFS::set_debug(enable)) {
                         std::cout << "Kernel debug logging " << (enable ? "enabled" : "disabled")
                                   << ".\n";
-                        LOG_INFO("Kernel debug logging " +
-                                 std::string(enable ? "enabled" : "disabled"));
+                        LOG_VERBOSE("Kernel debug logging " +
+                                    std::string(enable ? "enabled" : "disabled"));
                     } else {
                         std::cerr << "Failed to set kernel debug logging.\n";
                         return 1;
@@ -1053,7 +1053,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 if (HymoFS::is_available()) {
                     if (HymoFS::set_stealth(enable)) {
                         std::cout << "Stealth mode " << (enable ? "enabled" : "disabled") << ".\n";
-                        LOG_INFO("Stealth mode " + std::string(enable ? "enabled" : "disabled"));
+                        LOG_VERBOSE("Stealth mode " + std::string(enable ? "enabled" : "disabled"));
                     } else {
                         std::cerr << "Failed to set stealth mode.\n";
                         return 1;
@@ -1089,7 +1089,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                         if (HymoFS::set_uname(release, version)) {
                             std::cout << "Applied uname spoofing to kernel.\n";
-                            LOG_INFO("Kernel uname updated: " + release + " " + version);
+                            LOG_VERBOSE("Kernel uname updated: " + release + " " + version);
                         } else {
                             std::cerr << "Warning: Failed to apply uname to kernel.\n";
                         }
@@ -1336,7 +1336,11 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             // Kernel defaults to hymofs_enabled=false; must set from config on every mount
             if (HymoFS::set_enabled(config.hymofs_enabled)) {
-                LOG_INFO("HymoFS enabled=" + std::string(config.hymofs_enabled ? "true" : "false"));
+                LOG_VERBOSE("HymoFS enabled=" +
+                            std::string(config.hymofs_enabled ? "true" : "false"));
+                if (config.hymofs_enabled) {
+                    hymofs_active = true;
+                }
             } else {
                 LOG_WARN("Failed to set HymoFS enabled state.");
             }
@@ -1364,7 +1368,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
             // Apply Kernel Debug Setting
             if (config.enable_kernel_debug) {
                 if (HymoFS::set_debug(true)) {
-                    LOG_INFO("Kernel debug logging enabled via config.");
+                    LOG_VERBOSE("Kernel debug logging enabled via config.");
                 } else {
                     LOG_WARN("Failed to enable kernel debug logging (config).");
                 }
@@ -1373,8 +1377,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
             // Apply Stealth Mode
             if (config.enable_stealth) {
                 if (HymoFS::set_stealth(config.enable_stealth)) {
-                    LOG_INFO("Stealth mode set to: " +
-                             std::string(config.enable_stealth ? "true" : "false"));
+                    LOG_VERBOSE("Stealth mode set to: " +
+                                std::string(config.enable_stealth ? "true" : "false"));
                 } else {
                     LOG_WARN("Failed to set stealth mode.");
                 }
@@ -1383,8 +1387,9 @@ int hymo::run_hymo_main(int argc, char** argv) {
             // Apply Uname Spoofing if configured
             if (!config.uname_release.empty() || !config.uname_version.empty()) {
                 if (HymoFS::set_uname(config.uname_release, config.uname_version)) {
-                    LOG_INFO("Applied kernel version spoofing: release=\"" + config.uname_release +
-                             "\", version=\"" + config.uname_version + "\"");
+                    LOG_VERBOSE("Applied kernel version spoofing: release=\"" +
+                                config.uname_release + "\", version=\"" + config.uname_version +
+                                "\"");
                 } else {
                     LOG_WARN("Failed to apply kernel version spoofing.");
                 }
@@ -1759,8 +1764,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
         // Apply HymoFS Enable/Disable at the very end to avoid race conditions/crashes during setup
         if (can_use_hymofs) {
             if (HymoFS::set_enabled(config.hymofs_enabled)) {
-                LOG_INFO("HymoFS enabled set to: " +
-                         std::string(config.hymofs_enabled ? "true" : "false"));
+                LOG_VERBOSE("HymoFS enabled set to: " +
+                            std::string(config.hymofs_enabled ? "true" : "false"));
             } else {
                 LOG_WARN("Failed to set HymoFS enabled state.");
             }

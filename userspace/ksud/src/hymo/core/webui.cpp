@@ -11,11 +11,9 @@
 
 namespace hymo {
 
-namespace {
-
-std::string escape_json_string(const std::string& str) {
+static std::string escape_json_string(const std::string& str) {
     std::ostringstream oss;
-    for (const char c : str) {
+    for (char c : str) {
         switch (c) {
         case '"':
             oss << "\\\"";
@@ -39,8 +37,6 @@ std::string escape_json_string(const std::string& str) {
     }
     return oss.str();
 }
-
-}  // namespace
 
 std::string export_mount_stats_json() {
     auto stats = get_mount_statistics();
@@ -92,10 +88,10 @@ std::string export_system_info_json() {
         std::string full_version;
         std::getline(proc_version, full_version);
         // Extract version number from "Linux version X.X.X-xxx ..."
-        const size_t version_pos = full_version.find("Linux version ");
+        size_t version_pos = full_version.find("Linux version ");
         if (version_pos != std::string::npos) {
-            const size_t start = version_pos + 14;  // Length of "Linux version "
-            const size_t end = full_version.find(' ', start);
+            size_t start = version_pos + 14;  // Length of "Linux version "
+            size_t end = full_version.find(' ', start);
             if (end != std::string::npos) {
                 kernel = full_version.substr(start, end - start);
             }
@@ -119,7 +115,7 @@ std::string export_system_info_json() {
 
     // Get mount base from runtime state or use default
     auto state = load_runtime_state();
-    const std::string mount_base = state.mount_point.empty() ? HYMO_MIRROR_DEV : state.mount_point;
+    std::string mount_base = state.mount_point.empty() ? HYMO_MIRROR_DEV : state.mount_point;
 
     std::ostringstream json;
     json << "{"

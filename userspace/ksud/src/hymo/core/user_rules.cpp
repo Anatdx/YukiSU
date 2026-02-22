@@ -35,14 +35,14 @@ std::vector<UserHideRule> load_user_hide_rules() {
         LOG_ERROR("Failed to parse user rules JSON: " + std::string(e.what()));
     }
 
-    LOG_INFO("Loaded " + std::to_string(rules.size()) + " user hide rules");
+    LOG_VERBOSE("Loaded " + std::to_string(rules.size()) + " user hide rules");
     return rules;
 }
 
 bool save_user_hide_rules(const std::vector<UserHideRule>& rules) {
     // Ensure directory exists
-    const fs::path file_path(USER_HIDE_RULES_FILE);
-    const fs::path dir = file_path.parent_path();
+    fs::path file_path(USER_HIDE_RULES_FILE);
+    fs::path dir = file_path.parent_path();
 
     try {
         if (!fs::exists(dir)) {
@@ -83,7 +83,7 @@ bool add_user_hide_rule(const std::string& path) {
     // Check if rule already exists
     for (const auto& rule : rules) {
         if (rule.path == path) {
-            std::cout << "Hide rule already exists: " << path << "\n";
+            std::cerr << "Hide rule already exists: " << path << "\n";
             return true;
         }
     }
@@ -103,10 +103,10 @@ bool add_user_hide_rule(const std::string& path) {
             std::cerr << "Warning: Failed to apply hide rule to kernel (saved to file)\n";
             // We still return true because it was saved
         } else {
-            std::cout << "Hide rule added and applied: " << path << "\n";
+            std::cerr << "Hide rule added and applied: " << path << "\n";
         }
     } else {
-        std::cout << "Hide rule added (will be applied on next boot): " << path << "\n";
+        std::cerr << "Hide rule added (will be applied on next boot): " << path << "\n";
     }
 
     LOG_INFO("Added user hide rule: " + path);
@@ -135,8 +135,8 @@ bool remove_user_hide_rule(const std::string& path) {
 
     // Try to remove from kernel (but we can't actually do this safely
     // because kernel doesn't distinguish user vs module rules)
-    std::cout << "Hide rule removed from user list: " << path << "\n";
-    std::cout << "Note: Kernel rule will persist until next reload\n";
+    std::cerr << "Hide rule removed from user list: " << path << "\n";
+    std::cerr << "Note: Kernel rule will persist until next reload\n";
 
     LOG_INFO("Removed user hide rule: " + path);
     return true;

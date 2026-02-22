@@ -32,6 +32,7 @@ public:
 
     // Debug & Stealth
     static std::string get_active_rules();
+    static std::string get_hooks();
     static bool set_debug(bool enable);
     static bool set_stealth(bool enable);
     static bool set_enabled(bool enable);

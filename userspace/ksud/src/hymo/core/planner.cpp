@@ -14,18 +14,22 @@
 namespace hymo {
 
 bool MountPlan::is_covered_by_overlay(const std::string& path) const {
-    return std::any_of(overlay_ops.begin(), overlay_ops.end(), [&path](const auto& op) {
-        const std::string& t_str = op.target;
-        if (path == t_str)
+    for (const auto& op : overlay_ops) {
+        std::string p_str = path;
+        std::string t_str = op.target;
+
+        if (p_str == t_str)
             return true;
-        return path.size() > t_str.size() && path.compare(0, t_str.size(), t_str) == 0 &&
-               path[t_str.size()] == '/';
-    });
+
+        if (p_str.size() > t_str.size() && p_str.compare(0, t_str.size(), t_str) == 0 &&
+            p_str[t_str.size()] == '/') {
+            return true;
+        }
+    }
+    return false;
 }
 
-namespace {
-
-bool has_files(const fs::path& path) {
+static bool has_files(const fs::path& path) {
     if (!fs::exists(path) || !fs::is_directory(path)) {
         return false;
     }
@@ -40,22 +44,26 @@ bool has_files(const fs::path& path) {
     return false;
 }
 
-bool has_meaningful_content(const fs::path& base, const std::vector<std::string>& partitions) {
-    return std::any_of(partitions.begin(), partitions.end(), [&base](const std::string& part) {
-        const fs::path p = base / part;
-        return fs::exists(p) && has_files(p);
-    });
+static bool has_meaningful_content(const fs::path& base,
+                                   const std::vector<std::string>& partitions) {
+    for (const auto& part : partitions) {
+        fs::path p = base / part;
+        if (fs::exists(p) && has_files(p)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Helper: Resolve symlinks in directory symlinks but preserve filename logic
-std::string resolve_path_for_hymofs(const std::string& path_str) {
+static std::string resolve_path_for_hymofs(const std::string& path_str) {
     try {
-        const fs::path p(path_str);
+        fs::path p(path_str);
         if (!p.has_parent_path())
             return path_str;
 
-        const fs::path parent = p.parent_path();
-        const fs::path filename = p.filename();
+        fs::path parent = p.parent_path();
+        fs::path filename = p.filename();
 
         fs::path curr = parent;
         std::vector<fs::path> suffix;
@@ -83,8 +91,6 @@ std::string resolve_path_for_hymofs(const std::string& path_str) {
     }
 }
 
-}  // namespace
-
 MountPlan generate_plan(const Config& config, const std::vector<Module>& modules,
                         const fs::path& storage_root) {
     MountPlan plan;
@@ -99,14 +105,13 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
         target_partitions.push_back(part);
     }
 
-    const HymoFSStatus status = HymoFS::check_status();
-    const bool use_hymofs =
-        (status == HymoFSStatus::Available) ||
-        (config.ignore_protocol_mismatch &&
-         (status == HymoFSStatus::KernelTooOld || status == HymoFSStatus::ModuleTooOld));
+    HymoFSStatus status = HymoFS::check_status();
+    bool use_hymofs = (status == HymoFSStatus::Available) ||
+                      (config.ignore_protocol_mismatch && (status == HymoFSStatus::KernelTooOld ||
+                                                           status == HymoFSStatus::ModuleTooOld));
 
     for (const auto& module : modules) {
-        const fs::path content_path = storage_root / module.id;
+        fs::path content_path = storage_root / module.id;
 
         if (!fs::exists(content_path))
             continue;
@@ -118,7 +123,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
         if (default_mode == "auto")
             default_mode = use_hymofs ? "hymofs" : "overlay";
 
-        const bool has_rules = !module.rules.empty();
+        bool has_rules = !module.rules.empty();
 
         if (!has_rules) {
             if (default_mode == "none") {
@@ -131,7 +136,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
                 continue;
             }
 
-            const bool force_overlay = (default_mode == "overlay");
+            bool force_overlay = (default_mode == "overlay");
 
             if (use_hymofs && !force_overlay) {
                 plan.hymofs_module_ids.push_back(module.id);
@@ -139,9 +144,9 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
                 // Fallback to OverlayFS or Forced OverlayFS
                 bool participates_in_overlay = false;
                 for (const auto& part : target_partitions) {
-                    const fs::path part_path = content_path / part;
+                    fs::path part_path = content_path / part;
                     if (fs::is_directory(part_path) && has_files(part_path)) {
-                        const std::string part_root = "/" + part;
+                        std::string part_root = "/" + part;
                         overlay_layers[part_root].push_back(part_path);
                         participates_in_overlay = true;
                     }
@@ -157,12 +162,12 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
             bool magic_active = false;
 
             for (const auto& part : target_partitions) {
-                const fs::path part_root = content_path / part;
+                fs::path part_root = content_path / part;
                 if (!fs::exists(part_root))
                     continue;
 
                 for (const auto& entry : fs::recursive_directory_iterator(part_root)) {
-                    const fs::path rel = fs::relative(entry.path(), content_path);
+                    fs::path rel = fs::relative(entry.path(), content_path);
                     std::string path_str = "/" + rel.string();
 
                     std::string mode = default_mode;
@@ -257,7 +262,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
                     target_path = fs::path(target).parent_path() / target_path;
                 }
                 target_path = fs::canonical(target_path);
-            } catch (...) {  // NOLINT(bugprone-empty-catch) symlink read failed, skip
+            } catch (...) {
             }
         }
 
@@ -332,7 +337,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
         if (!is_hymofs)
             continue;
 
-        const fs::path mod_path = storage_root / module.id;
+        fs::path mod_path = storage_root / module.id;
 
         // Determine default mode for this module
         std::string default_mode = module.mode;
@@ -341,7 +346,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                                       // effectively hymofs unless overridden
 
         for (const auto& part : target_partitions) {
-            const fs::path part_root = mod_path / part;
+            fs::path part_root = mod_path / part;
             if (!fs::exists(part_root))
                 continue;
 
@@ -349,8 +354,8 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                 for (auto dir_it = fs::recursive_directory_iterator(part_root);
                      dir_it != fs::recursive_directory_iterator(); ++dir_it) {
                     const auto& entry = *dir_it;
-                    const fs::path rel = fs::relative(entry.path(), mod_path);
-                    const fs::path virtual_path = fs::path("/") / rel;
+                    fs::path rel = fs::relative(entry.path(), mod_path);
+                    fs::path virtual_path = fs::path("/") / rel;
                     std::string path_str = virtual_path.string();
 
                     // Check rules
@@ -378,9 +383,9 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                     // Use reference to allow modification of lowerdirs
                     for (auto& op : plan.overlay_ops) {
                         std::string p_str = virtual_path.string();
-                        const std::string t_str = op.target;
+                        std::string t_str = op.target;
 
-                        const bool match =
+                        bool match =
                             (p_str == t_str) || (p_str.size() > t_str.size() &&
                                                  p_str.compare(0, t_str.size(), t_str) == 0 &&
                                                  p_str[t_str.size()] == '/');
@@ -389,7 +394,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                             covered = true;
                             // Add layer if not present
                             if (t_str.size() > 1) {
-                                const fs::path layer_path = mod_path / t_str.substr(1);
+                                fs::path layer_path = mod_path / t_str.substr(1);
                                 bool exists = false;
                                 for (const auto& l : op.lowerdirs) {
                                     if (l == layer_path) {
@@ -410,7 +415,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                     }
 
                     if (entry.is_directory()) {
-                        const std::string final_virtual_path =
+                        std::string final_virtual_path =
                             resolve_path_for_hymofs(virtual_path.string());
                         if (fs::exists(final_virtual_path) &&
                             fs::is_directory(final_virtual_path)) {
@@ -447,12 +452,12 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                         else if (entry.is_socket())
                             type = DT_SOCK;
 
-                        const std::string final_virtual_path =
+                        std::string final_virtual_path =
                             resolve_path_for_hymofs(virtual_path.string());
                         add_rules.push_back({final_virtual_path, entry.path().string(), type});
                     } else if (entry.is_character_file()) {
                         // Check for whiteout (0:0)
-                        struct stat st{};
+                        struct stat st;
                         if (stat(entry.path().c_str(), &st) == 0) {
                             if (major(st.st_rdev) == 0 && minor(st.st_rdev) == 0) {
                                 hide_rules.push_back(
@@ -481,8 +486,10 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
     // Apply user-defined hide rules
     apply_user_hide_rules();
 
-    // Restore enabled state (CLEAR_ALL must not disable; re-apply in case of old kernel)
-    HymoFS::set_enabled(config.hymofs_enabled);
+    // Activate rules: we just added them, kernel must have hymofs_enabled=true for
+    // redirect/hide to take effect. Do not use config.hymofs_enabled here — if we
+    // reached update_hymofs_mappings we intend to use HymoFS.
+    HymoFS::set_enabled(true);
 
     LOG_INFO("HymoFS mappings updated.");
 }
