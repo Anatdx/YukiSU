@@ -552,10 +552,7 @@
     <string name="hymofs_lkm_kmi_override_set">设置</string>
     <string name="hymofs_lkm_kmi_override_clear">清除</string>
     <string name="hymofs_lkm_kmi_override_title">KMI 覆盖</string>
-    <string name="hymofs_lkm_kmi_override_desc">自动检测失败时，可手动指定 KMI（如 6.6.30-android15）</string>
     <string name="hymofs_lkm_kmi_override_placeholder">如 6.6.30-android15</string>
-    <string name="hymofs_lkm_kmi_override_set">设置</string>
-    <string name="hymofs_lkm_kmi_override_clear">清除</string>
     <string name="hymofs_lkm_kmi_override_current">当前: %s</string>
     <string name="hymofs_lkm_kmi_set_success">KMI 覆盖已设置</string>
     <string name="hymofs_lkm_kmi_cleared">KMI 覆盖已清除</string>

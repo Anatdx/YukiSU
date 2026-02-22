@@ -564,10 +564,7 @@
     <string name="hymofs_lkm_kmi_override_set">Set</string>
     <string name="hymofs_lkm_kmi_override_clear">Clear</string>
     <string name="hymofs_lkm_kmi_override_title">KMI Override</string>
-    <string name="hymofs_lkm_kmi_override_desc">When auto-detect fails, specify KMI manually (e.g. 6.6.30-android15)</string>
     <string name="hymofs_lkm_kmi_override_placeholder">e.g. 6.6.30-android15</string>
-    <string name="hymofs_lkm_kmi_override_set">Set</string>
-    <string name="hymofs_lkm_kmi_override_clear">Clear</string>
     <string name="hymofs_lkm_kmi_override_current">Current: %s</string>
     <string name="hymofs_lkm_kmi_set_success">KMI override set</string>
     <string name="hymofs_lkm_kmi_cleared">KMI override cleared</string>
