@@ -1199,30 +1199,29 @@ private fun ModuleList(
                             onUninstallClicked = {
                                 scope.launch { onModuleUninstallClicked(module) }
                             },
-                            onCheckChanged = {
-                                scope.launch {
-                                    val success = withContext(Dispatchers.IO) {
-                                        toggleModule(module.dirId, !module.enabled)
-                                    }
-                                    if (success) {
-                                        viewModel.fetchModuleList()
-                                        val now = System.currentTimeMillis()
-                                        if (now - lastRebootSnackbarTime > 1500) {
-                                            lastRebootSnackbarTime = now
-                                            val result = snackBarHost.showSnackbar(
-                                                message = rebootToApply,
-                                                actionLabel = reboot,
-                                                duration = SnackbarDuration.Long
-                                            )
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                reboot()
-                                            }
-                                        }
-                                    } else {
-                                        val message = if (module.enabled) failedDisable else failedEnable
-                                        snackBarHost.showSnackbar(message.format(module.name))
-                                    }
+                            onCheckChanged = { newChecked ->
+                                val success = withContext(Dispatchers.IO) {
+                                    toggleModule(module.dirId, newChecked)
                                 }
+                                if (success) {
+                                    viewModel.fetchModuleList()
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastRebootSnackbarTime > 1500) {
+                                        lastRebootSnackbarTime = now
+                                        val result = snackBarHost.showSnackbar(
+                                            message = rebootToApply,
+                                            actionLabel = reboot,
+                                            duration = SnackbarDuration.Long
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            reboot()
+                                        }
+                                    }
+                                } else {
+                                    val message = if (newChecked) failedEnable else failedDisable
+                                    snackBarHost.showSnackbar(message.format(module.name))
+                                }
+                                success
                             },
                             onUpdate = {
                                 scope.launch {
@@ -1501,7 +1500,7 @@ fun ModuleItem(
     hymoModuleInfo: HymoFSManager.ModuleInfo? = null,
     onShowHymoMountDialog: (moduleId: String, moduleName: String) -> Unit = { _, _ -> },
     onUninstallClicked: (ModuleViewModel.ModuleInfo) -> Unit,
-    onCheckChanged: (Boolean) -> Unit,
+    onCheckChanged: suspend (Boolean) -> Boolean,
     onUpdate: (ModuleViewModel.ModuleInfo) -> Unit,
     onClick: (ModuleViewModel.ModuleInfo) -> Unit,
     onAddShortcut: () -> Unit = {}
@@ -1524,6 +1523,9 @@ fun ModuleItem(
         val interactionSource = remember { MutableInteractionSource() }
         val indication = LocalIndication.current
         val viewModel = viewModel<ModuleViewModel>()
+        
+        var localEnabled by remember(module.enabled) { mutableStateOf(module.enabled) }
+        val scope = rememberCoroutineScope()
 
         val sizeStr = remember(module.dirId) {
             viewModel.getModuleSize(module.dirId)
@@ -1534,8 +1536,8 @@ fun ModuleItem(
                 .run {
                     if (module.hasWebUi) {
                         toggleable(
-                            value = module.enabled,
-                            enabled = !module.remove && module.enabled,
+                            value = localEnabled,
+                            enabled = !module.remove && localEnabled,
                             interactionSource = interactionSource,
                             role = Role.Button,
                             indication = indication,
@@ -1632,8 +1634,16 @@ fun ModuleItem(
                 ) {
                     Switch(
                         enabled = !module.update,
-                        checked = module.enabled,
-                        onCheckedChange = onCheckChanged,
+                        checked = localEnabled,
+                        onCheckedChange = { newChecked ->
+                            localEnabled = newChecked
+                            scope.launch {
+                                val success = onCheckChanged(newChecked)
+                                if (!success) {
+                                    localEnabled = !newChecked
+                                }
+                            }
+                        },
                         interactionSource = if (!module.hasWebUi) interactionSource else null,
                     )
                 }
@@ -1750,7 +1760,7 @@ fun ModuleItem(
                 if (hasHymoMountConfig) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
-                        enabled = !module.remove && module.enabled,
+                        enabled = !module.remove && localEnabled,
                         onClick = { onShowHymoMountDialog(module.dirId, module.name) },
                         contentPadding = ButtonDefaults.TextButtonContentPadding,
                     ) {
@@ -1764,7 +1774,7 @@ fun ModuleItem(
                 if (module.hasActionScript) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
-                        enabled = !module.remove && module.enabled,
+                        enabled = !module.remove && localEnabled,
                         onClick = {
                             navigator.navigate(ExecuteModuleActionScreenDestination(module.dirId))
                             viewModel.markNeedRefresh()
@@ -1782,7 +1792,7 @@ fun ModuleItem(
                 if (module.hasWebUi) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
-                        enabled = !module.remove && module.enabled,
+                        enabled = !module.remove && localEnabled,
                         onClick = { onClick(module) },
                         interactionSource = interactionSource,
                         contentPadding = ButtonDefaults.TextButtonContentPadding,
@@ -1878,7 +1888,7 @@ fun ModuleItemPreview() {
         updateUrl = "",
         hasHymoMountConfig = false,
         onUninstallClicked = {},
-        onCheckChanged = {},
+        onCheckChanged = { true },
         onUpdate = {},
         onClick = {}
     )
