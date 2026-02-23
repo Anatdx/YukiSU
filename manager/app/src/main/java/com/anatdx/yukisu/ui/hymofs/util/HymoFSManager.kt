@@ -198,15 +198,22 @@ object HymoFSManager {
     
     /**
      * Read current kernel uname info from sysfs (/proc/sys/kernel/osrelease and version).
+     * Falls back to uname -r / uname -v if file read fails (e.g. sandboxed).
      * Returns Pair(unameRelease, unameVersion).
      */
     suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
-        val release = runCatching {
+        var release = runCatching {
             File("/proc/sys/kernel/osrelease").readText().trim()
         }.getOrElse { "" }
-        val version = runCatching {
+        var version = runCatching {
             File("/proc/sys/kernel/version").readText().trim()
         }.getOrElse { "" }
+        if (release.isEmpty() || version.isEmpty()) {
+            val unameR = Shell.cmd("uname -r").exec()
+            val unameV = Shell.cmd("uname -v").exec()
+            if (release.isEmpty() && unameR.isSuccess) release = unameR.out.joinToString("").trim()
+            if (version.isEmpty() && unameV.isSuccess) version = unameV.out.joinToString("").trim()
+        }
         Pair(release, version)
     }
     

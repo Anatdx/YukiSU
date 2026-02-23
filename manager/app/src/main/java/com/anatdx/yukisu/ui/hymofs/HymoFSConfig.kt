@@ -1371,37 +1371,6 @@ private fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // Kernel uname spoofing (release + version)
-                Text(
-                    text = stringResource(R.string.hymofs_uname_title),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-
-                var unameRelease by remember { mutableStateOf(config.unameRelease) }
-                SettingTextField(
-                    title = stringResource(R.string.hymofs_uname_release),
-                    subtitle = stringResource(R.string.hymofs_uname_release_desc),
-                    value = unameRelease,
-                    onValueChange = { unameRelease = it },
-                    onConfirm = {
-                        updateAndSave(config.copy(unameRelease = unameRelease))
-                    }
-                )
-
-                var unameVersion by remember { mutableStateOf(config.unameVersion) }
-                SettingTextField(
-                    title = stringResource(R.string.hymofs_uname_version),
-                    subtitle = stringResource(R.string.hymofs_uname_version_desc),
-                    value = unameVersion,
-                    onValueChange = { unameVersion = it },
-                    onConfirm = {
-                        updateAndSave(config.copy(unameVersion = unameVersion))
-                    }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
                 // Mirror path / mount base presets (like hymo webui)
                 var mirrorPath by remember { mutableStateOf(config.mirrorPath) }
                 val effectiveMirrorPath = if (mirrorPath.isEmpty()) "/dev/hymo_mirror" else mirrorPath
