@@ -6,7 +6,7 @@
 
 namespace hymo {
 
-// Run full hymod CLI (same as hymo main). Used by cmd_hymo.
+// Run full ksud hymo CLI. Used by cmd_hymo.
 // argc/argv: program name should be first (e.g. argv[0] = "ksud_hymo").
 int run_hymo_main(int argc, char** argv);
 

@@ -554,6 +554,19 @@
     <string name="hymofs_lkm_kmi_set_success">KMI 覆盖已设置</string>
     <string name="hymofs_lkm_kmi_cleared">KMI 覆盖已清除</string>
     <string name="hymofs_lkm_kmi_failed">设置 KMI 覆盖失败</string>
+    <string name="hymofs_lkm_load">加载 LKM</string>
+    <string name="hymofs_lkm_unload">卸载 LKM</string>
+    <string name="hymofs_lkm_load_success">LKM 已加载</string>
+    <string name="hymofs_lkm_load_failed">加载 LKM 失败</string>
+    <string name="hymofs_lkm_unload_success">LKM 已卸载</string>
+    <string name="hymofs_lkm_unload_failed">卸载 LKM 失败</string>
+    <string name="hymofs_lkm_hooks_title">当前 LKM Hooks</string>
+    <string name="hymofs_lkm_hooks_refresh">刷新</string>
+    <string name="hymofs_lkm_hooks_empty">无 hooks（展开并刷新以获取）</string>
+    <string name="hymofs_lkm_kmi_selection_title">KMI 选择</string>
+    <string name="hymofs_lkm_kmi_selection_label">选择 KMI</string>
+    <string name="hymofs_lkm_kmi_selection_placeholder">选择 KMI（默认关闭）</string>
+    <string name="hymofs_lkm_kmi_selection_empty">无支持的 KMI</string>
     <string name="hymofs_storage">存储</string>
     <string name="hymofs_modules_count">模块数</string>
     <string name="hymofs_system_info">系统信息</string>
@@ -630,11 +643,6 @@
     <string name="hymofs_mirror_preset_debug_ramdisk">/debug_ramdisk</string>
     <string name="hymofs_mirror_preset_dev_mirror">/dev/hymo_mirror</string>
     <string name="hymofs_mirror_preset_custom">自定义</string>
-    <string name="hymofs_mount_stage">挂载阶段</string>
-    <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
-    <string name="hymofs_mount_stage_meta">metamount</string>
-    <string name="hymofs_mount_stage_services">services</string>
-    <string name="hymofs_create_image">在 /data/adb 创建 modules.img</string>
     <!-- HymoFS uname spoofing -->
     <string name="hymofs_uname_title">内核版本伪装</string>
     <string name="hymofs_uname_release">版本名称</string>

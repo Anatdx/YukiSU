@@ -69,8 +69,6 @@ Config Config::from_file(const fs::path& path) {
                 config.uname_release = o.at("uname_release").as_string();
             if (o.count("uname_version"))
                 config.uname_version = o.at("uname_version").as_string();
-            if (o.count("mount_stage"))
-                config.mount_stage = o.at("mount_stage").as_string();
 
             if (o.count("partitions") && o.at("partitions").type == json::Type::Array) {
                 for (const auto& p : o.at("partitions").as_array()) {
@@ -118,8 +116,6 @@ bool Config::save_to_file(const fs::path& path) const {
         root["uname_release"] = json::Value(uname_release);
     if (!uname_version.empty())
         root["uname_version"] = json::Value(uname_version);
-    if (!mount_stage.empty())
-        root["mount_stage"] = json::Value(mount_stage);
 
     if (!partitions.empty()) {
         json::Value parts = json::Value::array();

@@ -135,7 +135,6 @@ object HymoFSManager {
         val enableStealth: Boolean = true,
         val hymofsEnabled: Boolean = true,
         val mirrorPath: String = "",
-        val mountStage: String = "metamount",     // "post-fs-data", "metamount", "services"
         val partitions: List<String> = emptyList(),
         val unameRelease: String = "",
         val unameVersion: String = "",
@@ -254,7 +253,6 @@ object HymoFSManager {
                     enableStealth = json.optBoolean("enable_stealth", true),
                     hymofsEnabled = json.optBoolean("hymofs_enabled", true),
                     mirrorPath = json.optString("mirror_path", ""),
-                    mountStage = json.optString("mount_stage", "metamount"),
                     partitions = json.optJSONArray("partitions")?.let { arr ->
                         (0 until arr.length()).map { arr.getString(it) }
                     } ?: emptyList(),
@@ -293,9 +291,6 @@ object HymoFSManager {
                 put("hymofs_enabled", config.hymofsEnabled)
                 if (config.mirrorPath.isNotEmpty()) {
                     put("mirror_path", config.mirrorPath)
-                }
-                if (config.mountStage.isNotEmpty()) {
-                    put("mount_stage", config.mountStage)
                 }
                 if (config.partitions.isNotEmpty()) {
                     put("partitions", JSONArray(config.partitions))
@@ -652,22 +647,6 @@ object HymoFSManager {
     }
 
     /**
-     * Create modules.img via hymod (config create-image).
-     */
-    suspend fun createModulesImage(baseDir: String = "/data/adb"): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val result = Shell.cmd("${getKsud()} hymo config create-image $baseDir").exec()
-            if (!result.isSuccess) {
-                Log.w(TAG, "create-image failed: ${result.err.joinToString(";")}")
-            }
-            result.isSuccess
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create modules image", e)
-            false
-        }
-    }
-    
-    /**
      * Set kernel debug mode
      */
     suspend fun setKernelDebug(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
@@ -734,6 +713,49 @@ object HymoFSManager {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear LKM KMI override", e)
             false
+        }
+    }
+
+    /**
+     * Load HymoFS LKM manually.
+     */
+    suspend fun loadLkm(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm load").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load LKM", e)
+            false
+        }
+    }
+
+    /**
+     * Unload HymoFS LKM.
+     */
+    suspend fun unloadLkm(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo lkm unload").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to unload LKM", e)
+            false
+        }
+    }
+
+    /**
+     * Get current LKM hooks (when HymoFS is available).
+     */
+    suspend fun getLkmHooks(): String = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo api hooks").exec()
+            if (result.isSuccess) {
+                (result.out + result.err).joinToString("\n").trim()
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get LKM hooks", e)
+            ""
         }
     }
 

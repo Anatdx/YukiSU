@@ -570,6 +570,19 @@
     <string name="hymofs_lkm_kmi_set_success">KMI override set</string>
     <string name="hymofs_lkm_kmi_cleared">KMI override cleared</string>
     <string name="hymofs_lkm_kmi_failed">Failed to set KMI override</string>
+    <string name="hymofs_lkm_load">Load LKM</string>
+    <string name="hymofs_lkm_unload">Unload LKM</string>
+    <string name="hymofs_lkm_load_success">LKM loaded</string>
+    <string name="hymofs_lkm_load_failed">Failed to load LKM</string>
+    <string name="hymofs_lkm_unload_success">LKM unloaded</string>
+    <string name="hymofs_lkm_unload_failed">Failed to unload LKM</string>
+    <string name="hymofs_lkm_hooks_title">Current LKM Hooks</string>
+    <string name="hymofs_lkm_hooks_refresh">Refresh</string>
+    <string name="hymofs_lkm_hooks_empty">No hooks (expand and refresh to fetch)</string>
+    <string name="hymofs_lkm_kmi_selection_title">KMI Selection</string>
+    <string name="hymofs_lkm_kmi_selection_label">Select KMI</string>
+    <string name="hymofs_lkm_kmi_selection_placeholder">Select KMI (disabled by default)</string>
+    <string name="hymofs_lkm_kmi_selection_empty">No supported KMIs</string>
     <string name="hymofs_storage">Storage</string>
     <string name="hymofs_modules_count">Modules</string>
     <string name="hymofs_system_info">System Info</string>
@@ -659,12 +672,6 @@
     <string name="hymofs_mirror_preset_debug_ramdisk">debug_ramdisk</string>
     <string name="hymofs_mirror_preset_dev_mirror">hymo_mirror</string>
     <string name="hymofs_mirror_preset_custom">Custom</string>
-    <string name="hymofs_mount_stage">Mount stage</string>
-    <string name="hymofs_mount_stage_post_fs">post-fs-data</string>
-    <string name="hymofs_mount_stage_meta">metamount</string>
-    <string name="hymofs_mount_stage_services">services</string>
-    <string name="hymofs_create_image">Create modules.img in /data/adb</string>
-
     <!-- HymoFS user hide rules -->
     <string name="hymofs_user_hide_title">Custom hide rules</string>
     <string name="hymofs_user_hide_empty">No custom hide rules. Add absolute paths to hide them from all modules.</string>

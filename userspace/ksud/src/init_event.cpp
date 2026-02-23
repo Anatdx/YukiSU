@@ -30,45 +30,7 @@ namespace ksud {
 
 namespace {
 
-// Built-in HymoFS: try to perform an automount at a given init stage,
-// based purely on hymo's JSON config (mount_stage + hymofs_enabled).
-// This handles mount_stage = "post-fs-data" / "services".
-void try_hymofs_automount(const char* stage_name) {
-    using hymo::Config;
-
-    try {
-        const Config config = Config::load_default();
-
-        // Only proceed when HymoFS is enabled in config
-        if (!config.hymofs_enabled) {
-            LOGI("HymoFS automount(%s): hymofs_enabled=false, skip", stage_name);
-            return;
-        }
-
-        // Respect configured mount_stage strictly for regular stages
-        if (config.mount_stage != stage_name) {
-            return;
-        }
-
-        // Built-in hymo uses ksud log (stderr), no separate daemon.log to unlink
-
-        std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
-
-        LOGI("HymoFS automount(%s): invoking hymod mount", stage_name);
-        const int ret = hymo::run_hymo_main(2, argv.data());
-        if (ret != 0) {
-            LOGW("HymoFS automount(%s) failed, ret=%d", stage_name, ret);
-        } else {
-            LOGI("HymoFS automount(%s) succeeded", stage_name);
-        }
-    } catch (const std::exception& e) {
-        LOGW("HymoFS automount(%s) threw exception: %s", stage_name, e.what());
-    } catch (...) {
-        LOGW("HymoFS automount(%s) threw unknown exception", stage_name);
-    }
-}
-
-// Built-in HymoFS: special handling for legacy "metamount" stage.
+// Built-in HymoFS: mount at metamount stage only.
 void try_hymofs_metamount_mount() {
     using hymo::Config;
 
@@ -86,10 +48,6 @@ void try_hymofs_metamount_mount() {
 
         if (!config.hymofs_enabled) {
             LOGI("HymoFS metamount: hymofs_enabled=false, skip");
-            return;
-        }
-
-        if (config.mount_stage != "metamount") {
             return;
         }
 
@@ -276,17 +234,12 @@ int on_post_data_fs() {
     // When no external metamodule, this runs built-in hymo mount.
     metamodule_exec_mount_script();
 
-    // When external metamodule (e.g. meta-overlayfs) exists and mount_stage=metamount,
-    // run hymod after metamodule metamount; metamodule may not invoke hymo's metamount.sh.
+    // When external metamodule exists, run hymod after metamodule metamount;
+    // metamodule may not invoke hymo's metamount.sh. Mount only at metamount.
     try_hymofs_metamount_mount();
 
     umount_apply_config();
     run_stage("post-mount", true);
-
-    // Built-in HymoFS: optionally perform automount at post-fs-data.
-    // This replaces any legacy temp-file based stage signalling: we directly
-    // read hymo config.json and only mount when mount_stage == "post-fs-data".
-    try_hymofs_automount("post-fs-data");
 
     chdir("/");
 
@@ -302,10 +255,6 @@ void on_services() {
     hide_bootloader_status();
 
     run_stage("service", false);
-
-    // Built-in HymoFS: optionally perform automount at services stage
-    // when mount_stage == "services".
-    try_hymofs_automount("services");
 
     LOGI("services completed");
 }

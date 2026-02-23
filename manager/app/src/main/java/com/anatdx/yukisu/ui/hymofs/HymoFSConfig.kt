@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
 import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager.HymoFSStatus
+import com.anatdx.yukisu.ui.util.getSupportedKmis
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
 import com.ramcosta.composedestinations.annotation.Destination
@@ -676,6 +677,7 @@ private fun InfoRow(label: String, value: String) {
 }
 
 // ==================== LKM Tab ====================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LkmTab(
     hymofsStatus: HymoFSStatus,
@@ -773,7 +775,7 @@ private fun LkmTab(
             }
         }
 
-        // Loading / how LKM is loaded + autoload toggle
+        // Loading / how LKM is loaded + autoload toggle + Load/Unload buttons
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -810,11 +812,63 @@ private fun LkmTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Load/Unload buttons (when LKM mode applies)
+                if (!config.hymofsBuiltin) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (hymofsStatus != HymoFSStatus.AVAILABLE) {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (HymoFSManager.loadLkm()) {
+                                            onRefresh()
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_load_success)
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_load_failed)
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.hymofs_lkm_load))
+                            }
+                        }
+                        if (hymofsStatus == HymoFSStatus.AVAILABLE) {
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (HymoFSManager.unloadLkm()) {
+                                            onRefresh()
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_unload_success)
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.hymofs_lkm_unload_failed)
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.hymofs_lkm_unload))
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // KMI Override card (when hymofs available - for LKM load/autoload even in builtin mode)
+        // Current LKM Hooks (when HymoFS available)
         if (hymofsStatus == HymoFSStatus.AVAILABLE) {
+            var hooksExpanded by remember { mutableStateOf(false) }
+            var hooksText by remember { mutableStateOf<String?>(null) }
+            var hooksLoading by remember { mutableStateOf(false) }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -822,86 +876,172 @@ private fun LkmTab(
                 elevation = getCardElevation()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.hymofs_lkm_kmi_override_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.hymofs_lkm_kmi_override_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    var kmiInput by remember { mutableStateOf(config.lkmKmiOverride) }
-                    LaunchedEffect(config.lkmKmiOverride) {
-                        kmiInput = config.lkmKmiOverride
-                    }
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { hooksExpanded = !hooksExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = kmiInput,
-                            onValueChange = { kmiInput = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = {
-                                Text(stringResource(R.string.hymofs_lkm_kmi_override_placeholder))
-                            },
-                            singleLine = true
+                        Text(
+                            text = stringResource(R.string.hymofs_lkm_hooks_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    val kmi = kmiInput.trim()
-                                    if (kmi.isEmpty()) return@launch
-                                    if (HymoFSManager.setLkmKmiOverride(kmi)) {
-                                        onRefresh()
-                                        snackbarHostState.showSnackbar(
-                                            context.getString(R.string.hymofs_lkm_kmi_set_success)
-                                        )
-                                    } else {
-                                        snackbarHostState.showSnackbar(
-                                            context.getString(R.string.hymofs_lkm_kmi_failed)
-                                        )
+                        Icon(
+                            imageVector = if (hooksExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null
+                        )
+                    }
+                    if (hooksExpanded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LaunchedEffect(hooksExpanded) {
+                            if (hooksExpanded && hooksText == null && !hooksLoading) {
+                                hooksLoading = true
+                                hooksText = HymoFSManager.getLkmHooks()
+                                hooksLoading = false
+                            }
+                        }
+                        if (hooksLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            val text = hooksText ?: ""
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = text.ifEmpty { stringResource(R.string.hymofs_lkm_hooks_empty) },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            hooksLoading = true
+                                            hooksText = HymoFSManager.getLkmHooks()
+                                            hooksLoading = false
+                                        }
                                     }
+                                ) {
+                                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.hymofs_lkm_hooks_refresh))
                                 }
                             }
-                        ) {
-                            Text(stringResource(R.string.hymofs_lkm_kmi_override_set))
                         }
-                        if (config.lkmKmiOverride.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = {
+                    }
+                }
+            }
+        }
+
+        // KMI Selection card (when hymofs available - disabled by default)
+        if (hymofsStatus == HymoFSStatus.AVAILABLE) {
+            var kmiOverrideEnabled by remember { mutableStateOf(config.lkmKmiOverride.isNotEmpty()) }
+            var kmiDropdownExpanded by remember { mutableStateOf(false) }
+            val supportedKmis by produceState(initialValue = emptyList<String>()) {
+                value = getSupportedKmis()
+            }
+            LaunchedEffect(config.lkmKmiOverride) {
+                kmiOverrideEnabled = config.lkmKmiOverride.isNotEmpty()
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = getCardElevation()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.hymofs_lkm_kmi_selection_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.hymofs_lkm_kmi_override_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = kmiOverrideEnabled,
+                            onCheckedChange = { enabled ->
+                                kmiOverrideEnabled = enabled
+                                if (!enabled) {
                                     coroutineScope.launch {
                                         if (HymoFSManager.clearLkmKmiOverride()) {
-                                            kmiInput = ""
                                             onRefresh()
                                             snackbarHostState.showSnackbar(
                                                 context.getString(R.string.hymofs_lkm_kmi_cleared)
                                             )
-                                        } else {
-                                            snackbarHostState.showSnackbar(
-                                                context.getString(R.string.hymofs_lkm_kmi_failed)
-                                            )
                                         }
                                     }
                                 }
+                            }
+                        )
+                    }
+                    if (kmiOverrideEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = kmiDropdownExpanded,
+                            onExpandedChange = { kmiDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                                readOnly = true,
+                                label = { Text(stringResource(R.string.hymofs_lkm_kmi_selection_label)) },
+                                value = config.lkmKmiOverride.ifEmpty { stringResource(R.string.hymofs_lkm_kmi_selection_placeholder) },
+                                onValueChange = {},
+                                trailingIcon = {
+                                    Icon(
+                                        if (kmiDropdownExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                            ExposedDropdownMenu(
+                                expanded = kmiDropdownExpanded,
+                                onDismissRequest = { kmiDropdownExpanded = false }
                             ) {
-                                Text(stringResource(R.string.hymofs_lkm_kmi_override_clear))
+                                if (supportedKmis.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.hymofs_lkm_kmi_selection_empty)) },
+                                        onClick = { }
+                                    )
+                                } else {
+                                    supportedKmis.forEach { kmi ->
+                                        DropdownMenuItem(
+                                            text = { Text(kmi) },
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    if (HymoFSManager.setLkmKmiOverride(kmi)) {
+                                                        onRefresh()
+                                                        kmiDropdownExpanded = false
+                                                        snackbarHostState.showSnackbar(
+                                                            context.getString(R.string.hymofs_lkm_kmi_set_success)
+                                                        )
+                                                    } else {
+                                                        snackbarHostState.showSnackbar(
+                                                            context.getString(R.string.hymofs_lkm_kmi_failed)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                    if (config.lkmKmiOverride.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.hymofs_lkm_kmi_override_current, config.lkmKmiOverride),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontFamily = FontFamily.Monospace
-                        )
                     }
                 }
             }
@@ -1406,44 +1546,6 @@ private fun SettingsTab(
                     placeholder = "Auto"
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                // Simple mount stage selector via long buttons
-                Text(
-                    text = stringResource(R.string.hymofs_mount_stage),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(
-                        "post-fs-data" to R.string.hymofs_mount_stage_post_fs,
-                        "metamount" to R.string.hymofs_mount_stage_meta,
-                        "services" to R.string.hymofs_mount_stage_services
-                    ).forEach { (value, labelRes) ->
-                        val selected = config.mountStage == value
-                        FilledTonalButton(
-                            onClick = { updateAndSave(config.copy(mountStage = value)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = if (selected) {
-                                ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        ) {
-                            Text(stringResource(labelRes))
-                        }
-                    }
-                }
-
                 if (hymofsAvailable) {
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -1454,24 +1556,6 @@ private fun SettingsTab(
                         Icon(Icons.Filled.Build, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.hymofs_fix_mounts))
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                val ok = HymoFSManager.createModulesImage()
-                                snackbarHostState.showSnackbar(
-                                    if (ok) "modules.img created" else "Failed to create modules.img"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Filled.Save, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.hymofs_create_image))
                     }
                 }
             }

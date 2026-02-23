@@ -58,7 +58,6 @@ struct Config {
     std::string mirror_path;
     std::string uname_release;
     std::string uname_version;
-    std::string mount_stage = "metamount";  // "post-fs-data", "metamount", "services"
     std::vector<std::string> partitions;
     std::map<std::string, std::string> module_modes;
     std::map<std::string, std::vector<ModuleRuleConfig>> module_rules;
