@@ -613,6 +613,7 @@
     <string name="hymofs_mountsource_desc">Name to use for overlayfs mount source (default: KSU)</string>
     <string name="hymofs_logs_copy">Copy</string>
     <string name="hymofs_logs_copy_success">Log copied to clipboard</string>
+    <string name="hymofs_logs_filter">Filter</string>
     <string name="hymofs_logs_filter_all">All</string>
     <string name="hymofs_logs_filter_verbose">Verbose</string>
     <string name="hymofs_logs_filter_debug">Debug</string>

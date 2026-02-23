@@ -5,6 +5,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -81,7 +82,6 @@ fun HymoFSConfigScreen(
     var storageInfo by remember { mutableStateOf(HymoFSManager.StorageInfo("-", "-", "-", "0%", "unknown")) }
     var logContent by remember { mutableStateOf("") }
     var showKernelLog by remember { mutableStateOf(false) }
-    var builtinMountEnabled by remember { mutableStateOf(true) }
 
     // Load data
     fun loadData() {
@@ -94,7 +94,6 @@ fun HymoFSConfigScreen(
                 modules = HymoFSManager.getModules()
                 systemInfo = HymoFSManager.getSystemInfo()
                 storageInfo = HymoFSManager.getStorageInfo()
-                builtinMountEnabled = HymoFSManager.isBuiltinMountEnabled()
                 if (hymofsStatus == HymoFSStatus.AVAILABLE) {
                     activeRules = HymoFSManager.getActiveRules()
                 }
@@ -251,24 +250,6 @@ fun HymoFSConfigScreen(
                                 } else {
                                     snackbarHostState.showSnackbar(
                                         context.getString(R.string.hymofs_toast_mounts_failed)
-                                    )
-                                }
-                            }
-                        },
-                        builtinMountEnabled = builtinMountEnabled,
-                        onBuiltinMountChanged = { enable ->
-                            coroutineScope.launch {
-                                if (HymoFSManager.setBuiltinMountEnabled(enable)) {
-                                    builtinMountEnabled = enable
-                                    val msgRes = if (enable) {
-                                        R.string.hymofs_toast_builtin_enabled
-                                    } else {
-                                        R.string.hymofs_toast_builtin_disabled
-                                    }
-                                    snackbarHostState.showSnackbar(context.getString(msgRes))
-                                } else {
-                                    snackbarHostState.showSnackbar(
-                                        context.getString(R.string.hymofs_toast_builtin_failed)
                                     )
                                 }
                             }
@@ -1060,9 +1041,7 @@ private fun SettingsTab(
     onConfigChanged: (HymoFSManager.HymoConfig) -> Unit,
     onSetDebug: (Boolean) -> Unit,
     onSetStealth: (Boolean) -> Unit,
-    onFixMounts: () -> Unit,
-    builtinMountEnabled: Boolean,
-    onBuiltinMountChanged: (Boolean) -> Unit
+    onFixMounts: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1098,15 +1077,6 @@ private fun SettingsTab(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
-                
-                SettingSwitch(
-                    title = stringResource(R.string.hymofs_builtin_mount),
-                    subtitle = stringResource(R.string.hymofs_builtin_mount_desc),
-                    checked = builtinMountEnabled,
-                    onCheckedChange = onBuiltinMountChanged
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 SettingSwitch(
                     title = stringResource(R.string.hymofs_debug),
@@ -1853,7 +1823,6 @@ private fun RuleItem(rule: HymoFSManager.ActiveRule) {
 
 // Log level colors aligned with webui: V=purple, D=green, I=blue, W=orange, E=red, other=white
 enum class LogLevel(val displayNameRes: Int, val color: Color, val tag: String) {
-    ALL(R.string.hymofs_logs_filter_all, Color.Unspecified, ""),
     VERBOSE(R.string.hymofs_logs_filter_verbose, Color(0xFF9C27B0), "VERBOSE"),
     DEBUG(R.string.hymofs_logs_filter_debug, Color(0xFF4CAF50), "DEBUG"),
     INFO(R.string.hymofs_logs_filter_info, Color(0xFF2196F3), "INFO"),
@@ -1871,19 +1840,23 @@ private fun LogsTab(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    var selectedLogLevel by remember { mutableStateOf(LogLevel.ALL) }
+    // Default: show all. When non-empty, show only selected levels (unselected = hidden, e.g. no verbose if not selected)
+    var selectedLogLevels by remember { mutableStateOf(emptySet<LogLevel>()) }
+    var filterExpanded by remember { mutableStateOf(false) }
     
     LaunchedEffect(showKernelLog) {
         onRefreshLog()
     }
     
-    // Filter logs by level
-    val filteredLogContent = remember(logContent, selectedLogLevel) {
-        if (selectedLogLevel == LogLevel.ALL) {
+    // Filter logs: empty set = all; non-empty = only lines matching any selected level
+    val filteredLogContent = remember(logContent, selectedLogLevels) {
+        if (selectedLogLevels.isEmpty()) {
             logContent
         } else {
             logContent.lines()
-                .filter { line -> line.contains(selectedLogLevel.tag, ignoreCase = true) }
+                .filter { line ->
+                    selectedLogLevels.any { level -> line.contains(level.tag, ignoreCase = true) }
+                }
                 .joinToString("\n")
         }
     }
@@ -1949,35 +1922,64 @@ private fun LogsTab(
                 Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.hymofs_logs_copy))
             }
             
-            // Refresh button
+            // Filter icon (popup multi-select): default all, unselected levels hidden
+            Box {
+                IconButton(onClick = { filterExpanded = true }) {
+                    Icon(
+                        Icons.Filled.FilterList,
+                        contentDescription = stringResource(R.string.hymofs_logs_filter)
+                    )
+                }
+                DropdownMenu(
+                    expanded = filterExpanded,
+                    onDismissRequest = { filterExpanded = false },
+                    modifier = Modifier.widthIn(min = 180.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedLogLevels.isEmpty(),
+                            onClick = {
+                                selectedLogLevels = emptySet()
+                                filterExpanded = false
+                            },
+                            label = { Text(stringResource(R.string.hymofs_logs_filter_all)) },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        FlowRow(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            LogLevel.entries.forEach { level ->
+                                FilterChip(
+                                    selected = level in selectedLogLevels,
+                                    onClick = {
+                                        selectedLogLevels = if (level in selectedLogLevels) {
+                                            selectedLogLevels - level
+                                        } else {
+                                            selectedLogLevels + level
+                                        }
+                                    },
+                                    label = { Text(stringResource(level.displayNameRes)) },
+                                    leadingIcon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .background(level.color, shape = RoundedCornerShape(4.dp))
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             IconButton(onClick = onRefreshLog) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-            }
-        }
-        
-        // Log level filter chips
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(LogLevel.entries.size) { index ->
-                val level = LogLevel.entries[index]
-                FilterChip(
-                    selected = selectedLogLevel == level,
-                    onClick = { selectedLogLevel = level },
-                    label = { Text(stringResource(level.displayNameRes)) },
-                    leadingIcon = if (level != LogLevel.ALL) {
-                        {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(level.color, shape = RoundedCornerShape(4.dp))
-                            )
-                        }
-                    } else null
-                )
             }
         }
         
