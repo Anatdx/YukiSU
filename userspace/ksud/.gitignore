@@ -22,3 +22,5 @@ ksud
 
 # Auto-generated source files
 src/defs.cpp
+
+assets/*

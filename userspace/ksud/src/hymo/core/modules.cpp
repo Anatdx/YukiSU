@@ -135,7 +135,7 @@ void print_module_list(const Config& config) {
     }
 
     root["modules"] = mods_arr;
-    std::cerr << json::dump(root, 2) << "\n";
+    std::cout << json::dump(root, 2) << "\n";
 }
 
 }  // namespace hymo

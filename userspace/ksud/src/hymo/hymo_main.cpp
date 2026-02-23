@@ -911,7 +911,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 config.mirror_path = path;
 
                 const fs::path config_path = cli.config_file.empty()
-                                                 ? (fs::path(BASE_DIR) / "config.toml")
+                                                 ? (fs::path(BASE_DIR) / "config.json")
                                                  : fs::path(cli.config_file);
                 if (config.save_to_file(config_path)) {
                     std::cout << "Mirror path set to: " << path << "\n";
@@ -1079,7 +1079,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     config.uname_version = version;
 
                     const fs::path config_path = cli.config_file.empty()
-                                                     ? (fs::path(BASE_DIR) / "config.toml")
+                                                     ? (fs::path(BASE_DIR) / "config.json")
                                                      : fs::path(cli.config_file);
 
                     if (config.save_to_file(config_path)) {

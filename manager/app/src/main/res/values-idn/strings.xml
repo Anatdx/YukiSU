@@ -348,31 +348,4 @@ Tanamkan: Secara permanen memasang ke sistem</string>
     <string name="show_more_module_info_summary">Tampilkan informasi modul tambahan seperti URL perbarui JSON</string>
     <string name="kernel_simple_kernel">Mode Versi Kernel Sederhana</string>
     <string name="kernel_simple_kernel_summary">Aktifkan atau nonaktifkan tampilan versi kernel YukiSU sederhana</string>
-    <string name="susfs_android_data_path_set">Jalur Data Android diatur ke: %s</string>
-    <string name="susfs_sdcard_path_set">Jalur Kartu SD diatur ke: %s</string>
-    <string name="susfs_path_setup_warning">Pengaturan jalur mungkin tidak sepenuhnya berhasil, tetapi jalur SUS akan tetap ditambahkan</string>
-    <!-- 备份和还原相关字符串 -->
-    <string name="susfs_backup_title">Cadangan</string>
-    <string name="susfs_backup_description">Buat cadangan semua konfigurasi SuSFS. File cadangan akan menyertakan semua pengaturan, jalur, dan konfigurasi.</string>
-    <string name="susfs_backup_create">Buat Cadangan</string>
-    <string name="susfs_backup_success">Berhasil membuat cadangan: %s</string>
-    <string name="susfs_backup_failed">Gagal membuat cadangan: %s</string>
-    <string name="susfs_backup_file_not_found">File cadangan tidak ditemukan</string>
-    <string name="susfs_backup_invalid_format">Format file cadangan tidak valid</string>
-    <string name="susfs_backup_version_mismatch">Versi cadangan tidak cocok, tetapi akan dicoba untuk dipulihkan</string>
-    <string name="susfs_restore_title">Pulihkan</string>
-    <string name="susfs_restore_description">Pulihkan konfigurasi SuSFS dari file cadangan. Ini akan menimpa semua pengaturan saat ini.</string>
-    <string name="susfs_restore_select_file">Pilih File Cadangan</string>
-    <string name="susfs_restore_success" formatted="false">Konfigurasi berhasil dipulihkan dari cadangan yang dibuat %s pada perangkat: %s</string>
-    <string name="susfs_restore_failed">Gagal memulihkan: %s</string>
-    <string name="susfs_restore_confirm_title">Konfirmasi Pemulihan</string>
-    <string name="susfs_restore_confirm_description">Ini akan menimpa semua konfigurasi SuSFS saat ini. Apakah Anda yakin ingin melanjutkan?</string>
-    <string name="susfs_restore_confirm">Pulihkan</string>
-    <string name="susfs_backup_info_date">Tanggal Cadangan: %s</string>
-    <string name="susfs_backup_info_device">Perangkat: %s</string>
-    <string name="susfs_backup_info_version">Versi: %s</string>
-    <string name="hide_bl_script">Status Terkunci</string>
-    <string name="hide_bl_script_description">Timpa properti status bootloader dalam layanan late_start</string>
-    <string name="cleanup_residue">Bersihkan Sisa-sisa</string>
-    <string name="cleanup_residue_description">Bersihkan file dan direktori sisa dari berbagai modul dan alat (dapat menyebabkan penghapusan yang tidak disengaja, kehilangan data, dan gagal boot, gunakan dengan hati-hati)</string>
 </resources>

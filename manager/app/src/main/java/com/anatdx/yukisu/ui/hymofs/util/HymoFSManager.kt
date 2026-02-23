@@ -198,6 +198,20 @@ object HymoFSManager {
     }
     
     /**
+     * Read current kernel uname info from sysfs (/proc/sys/kernel/osrelease and version).
+     * Returns Pair(unameRelease, unameVersion).
+     */
+    suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
+        val release = runCatching {
+            File("/proc/sys/kernel/osrelease").readText().trim()
+        }.getOrElse { "" }
+        val version = runCatching {
+            File("/proc/sys/kernel/version").readText().trim()
+        }.getOrElse { "" }
+        Pair(release, version)
+    }
+    
+    /**
      * Get HymoFS status (check if kernel supports it)
      *
      * Uses `ksud hymo config show` JSON output, which includes:
@@ -286,6 +300,8 @@ object HymoFSManager {
                 if (config.partitions.isNotEmpty()) {
                     put("partitions", JSONArray(config.partitions))
                 }
+                if (config.unameRelease.isNotEmpty()) put("uname_release", config.unameRelease)
+                if (config.unameVersion.isNotEmpty()) put("uname_version", config.unameVersion)
             }
             val content = json.toString(2)
 
@@ -307,10 +323,10 @@ object HymoFSManager {
      */
     suspend fun getModules(): List<ModuleInfo> = withContext(Dispatchers.IO) {
         try {
-            // hymo: hymo module list -> JSON
             val result = Shell.cmd("${getKsud()} hymo module list").exec()
             if (result.isSuccess) {
-                val json = JSONObject(result.out.joinToString("\n"))
+                val output = (result.out + result.err).joinToString("\n")
+                val json = JSONObject(output)
                 val modulesArray = json.optJSONArray("modules") ?: return@withContext emptyList()
                 
                 (0 until modulesArray.length()).map { i ->
@@ -673,6 +689,22 @@ object HymoFSManager {
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set stealth mode", e)
+            false
+        }
+    }
+
+    /**
+     * Apply kernel uname spoofing immediately (hymo debug set-uname).
+     * Call after saveConfig for immediate effect.
+     */
+    suspend fun setUname(release: String, version: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val r = release.replace("'", "'\\''")
+            val v = version.replace("'", "'\\''")
+            val result = Shell.cmd("${getKsud()} hymo debug set-uname '$r' '$v'").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set uname", e)
             false
         }
     }

@@ -119,6 +119,7 @@
     <string name="hymofs_toast_mode_failed">Failed to update mode</string>
     <string name="hymofs_toast_settings_saved">Settings saved</string>
     <string name="hymofs_toast_settings_failed">Failed to save settings</string>
+    <string name="hymofs_saving">Saving…</string>
     <string name="hymofs_toast_kernel_debug_enabled">Kernel debug enabled</string>
     <string name="hymofs_toast_kernel_debug_disabled">Kernel debug disabled</string>
     <string name="hymofs_toast_stealth_enabled">Stealth mode enabled</string>
@@ -636,10 +637,11 @@
     <string name="hymofs_enable_desc">Control whether HymoFS is enabled on boot (takes effect after daemon restart)</string>
     <!-- HymoFS uname spoofing -->
     <string name="hymofs_uname_title">Kernel version spoofing</string>
-    <string name="hymofs_uname_release">uname -r override</string>
-    <string name="hymofs_uname_release_desc">Optional. When set, HymoFS will spoof this as kernel release</string>
-    <string name="hymofs_uname_version">uname -v override</string>
-    <string name="hymofs_uname_version_desc">Optional. When set, HymoFS will spoof this as kernel version string</string>
+    <string name="hymofs_uname_release">Version name</string>
+    <string name="hymofs_uname_release_desc">Kernel release (e.g. 5.15.0-generic). When set, HymoFS will spoof this.</string>
+    <string name="hymofs_uname_version">Build time</string>
+    <string name="hymofs_uname_version_desc">Kernel version/build timestamp. When set, HymoFS will spoof this.</string>
+    <string name="hymofs_uname_use_current">Use current kernel info</string>
     <string name="hymofs_fs_type_title">Storage filesystem</string>
     <string name="hymofs_fs_type_auto">Auto (let hymo choose)</string>
     <string name="hymofs_fs_type_ext4">EXT4 image</string>
@@ -675,6 +677,15 @@
     <string name="hymofs_module_rules_title">Custom rules for this module</string>
     <string name="hymofs_module_rules_empty">No custom rules. Add paths to override how this module mounts specific locations.</string>
     <string name="hymofs_module_rules_placeholder">/path/inside/system/or/vendor</string>
+    <string name="hymofs_mount_config">Mount config</string>
+    <string name="hymofs_mount_mode">Mount mode</string>
+    <string name="hymofs_mount_mode_auto">Auto</string>
+    <string name="hymofs_mount_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mount_mode_overlay">Overlay</string>
+    <string name="hymofs_mount_mode_magic">Magic</string>
+    <string name="hymofs_mount_mode_none">None</string>
+    <string name="hymofs_strategy_magic_mount">Magic Mount</string>
+    <string name="hymofs_strategy_not_mounted">Not mounted</string>
     <string name="hymofs_module_rules_add">Add</string>
     <string name="hymofs_module_rules_add_failed">Failed to add module rule</string>
     <string name="hymofs_module_rules_remove_failed">Failed to remove module rule</string>
@@ -719,7 +730,7 @@
     <string name="partition_dangerous_operation">Dangerous Operation</string>
     <string name="partition_dangerous_operation_warning">⚠️ Dangerous Operation Warning</string>
     <string name="partition_flash_warning">Flashing partition may cause device unable to boot!\n\nAre you sure you want to flash %s partition?</string>
-    <string name="partition_dangerous_flash_warning">⚠️ Warning: %s is a dangerous partition!\n\nFlashing this partition may cause:\n• Device unable to boot\n• Loss of important data\n• Network/Bluetooth malfunction\n\nPlease make sure you know what you are doing!\n\nAre you sure you want to flash %s partition?</string>
+    <string name="partition_dangerous_flash_warning">⚠️ Warning: %1$s is a dangerous partition!\n\nFlashing this partition may cause:\n• Device unable to boot\n• Loss of important data\n• Network/Bluetooth malfunction\n\nPlease make sure you know what you are doing!\n\nAre you sure you want to flash %2$s partition?</string>
     <string name="partition_confirm_flash">Confirm Flash</string>
     <string name="partition_backing_up">Backing up partition %s…</string>
     <string name="partition_backup_success">Backup successful: %s</string>
@@ -735,9 +746,9 @@
     <string name="partition_a_only_device">A-only Device</string>
     <string name="partition_unknown">Unknown</string>
     <string name="partition_batch_backup_start">Starting batch backup of %d partitions…</string>
-    <string name="partition_batch_backup_progress">Backing up (%d/%d): %s</string>
-    <string name="partition_batch_backup_complete">Batch backup complete! Total %d partitions\nSaved in: %s</string>
-    <string name="partition_batch_backup_partial">Backup complete: %d succeeded, %d failed\nFailed: %s</string>
+    <string name="partition_batch_backup_progress">Backing up (%1$d/%2$d): %3$s</string>
+    <string name="partition_batch_backup_complete">Batch backup complete! Total %1$d partitions\nSaved in: %2$s</string>
+    <string name="partition_batch_backup_partial">Backup complete: %1$d succeeded, %2$d failed\nFailed: %3$s</string>
     <string name="partition_no_selection">No partition selected</string>
     <string name="partition_back">Back</string>
     

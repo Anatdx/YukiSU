@@ -277,9 +277,6 @@
     <string name="back">返回</string>
     <string name="background_set_success">背景設定成功</string>
     <string name="background_removed">已移除自定義背景</string>
-    <string name="icon_switch_title">備選圖標</string>
-    <string name="icon_switch_summary">更換為 KernelSU 圖標</string>
-    <string name="icon_switched">已切換圖標</string>
     <!-- KPM display settings -->
     <!-- Webui X settings -->
     <string name="use_webuix">選擇使用嘅 WebUI 引擎</string>
@@ -398,8 +395,8 @@
     <string name="hymofs_module_rules_remove_failed">刪除模組規則失敗</string>
     <!-- HymoFS uname spoofing -->
     <string name="hymofs_uname_title">核心版本偽裝</string>
-    <string name="hymofs_uname_release">uname -r 覆寫值</string>
-    <string name="hymofs_uname_release_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本號</string>
-    <string name="hymofs_uname_version">uname -v 覆寫值</string>
-    <string name="hymofs_uname_version_desc">可選。設定後，HymoFS 會將此值偽裝為核心版本字串</string>
+    <string name="hymofs_uname_release">版本名稱</string>
+    <string name="hymofs_uname_release_desc">核心版本號（如 5.15.0-generic）。設定後 HymoFS 將偽裝此值</string>
+    <string name="hymofs_uname_version">編譯時間</string>
+    <string name="hymofs_uname_version_desc">核心版本/編譯時間戳。設定後 HymoFS 將偽裝此值</string>
 </resources>

@@ -318,9 +318,6 @@
     <string name="back">返回</string>
     <string name="background_set_success">背景设置成功</string>
     <string name="background_removed">已移除自定义背景</string>
-    <string name="icon_switch_title">备选图标</string>
-    <string name="icon_switch_summary">更换为 KernelSU 图标</string>
-    <string name="icon_switched">已切换图标</string>
     <!-- KPM display settings -->
     <string name="show_kpm_info">隐藏 KPM 功能</string>
     <string name="show_kpm_info_summary">在主页和底栏隐藏 KPM 相关功能和信息</string>
@@ -640,16 +637,18 @@
     <string name="hymofs_create_image">在 /data/adb 创建 modules.img</string>
     <!-- HymoFS uname spoofing -->
     <string name="hymofs_uname_title">内核版本伪装</string>
-    <string name="hymofs_uname_release">uname -r 覆盖值</string>
-    <string name="hymofs_uname_release_desc">可选。设置后，HymoFS 会将此值伪装为内核版本号</string>
-    <string name="hymofs_uname_version">uname -v 覆盖值</string>
-    <string name="hymofs_uname_version_desc">可选。设置后，HymoFS 会将此值伪装为内核版本字符串</string>
+    <string name="hymofs_uname_release">版本名称</string>
+    <string name="hymofs_uname_release_desc">内核版本号（如 5.15.0-generic）。设置后 HymoFS 将伪装此值</string>
+    <string name="hymofs_uname_version">编译时间</string>
+    <string name="hymofs_uname_version_desc">内核版本/编译时间戳。设置后 HymoFS 将伪装此值</string>
+    <string name="hymofs_uname_use_current">使用当前内核信息</string>
     <!-- HymoFS 内部提示 -->
     <string name="hymofs_toast_load_error">加载数据出错：%s</string>
     <string name="hymofs_toast_mode_updated">模式已更新，重启后生效</string>
     <string name="hymofs_toast_mode_failed">更新模式失败</string>
     <string name="hymofs_toast_settings_saved">设置已保存</string>
     <string name="hymofs_toast_settings_failed">保存设置失败</string>
+    <string name="hymofs_saving">保存中…</string>
     <string name="hymofs_toast_kernel_debug_enabled">内核调试已启用</string>
     <string name="hymofs_toast_kernel_debug_disabled">内核调试已禁用</string>
     <string name="hymofs_toast_stealth_enabled">隐身模式已启用</string>
@@ -676,6 +675,15 @@
     <string name="hymofs_module_rules_title">此模块的自定义规则</string>
     <string name="hymofs_module_rules_empty">当前没有针对该模块的自定义规则。可以为特定路径单独指定挂载模式。</string>
     <string name="hymofs_module_rules_placeholder">/system 或 /vendor 下的路径</string>
+    <string name="hymofs_mount_config">挂载配置</string>
+    <string name="hymofs_mount_mode">挂载方式</string>
+    <string name="hymofs_mount_mode_auto">自动</string>
+    <string name="hymofs_mount_mode_hymofs">HymoFS</string>
+    <string name="hymofs_mount_mode_overlay">Overlay</string>
+    <string name="hymofs_mount_mode_magic">Magic</string>
+    <string name="hymofs_mount_mode_none">无</string>
+    <string name="hymofs_strategy_magic_mount">Magic Mount</string>
+    <string name="hymofs_strategy_not_mounted">未挂载</string>
     <string name="hymofs_module_rules_add">添加</string>
     <string name="hymofs_module_rules_add_failed">添加模块规则失败</string>
     <string name="hymofs_module_rules_remove_failed">删除模块规则失败</string>
@@ -720,7 +728,7 @@
     <string name="partition_dangerous_operation">危险操作</string>
     <string name="partition_dangerous_operation_warning">⚠️ 危险操作警告</string>
     <string name="partition_flash_warning">刷写分区可能导致设备无法启动！\n\n确定要刷写 %s 分区吗？</string>
-    <string name="partition_dangerous_flash_warning">⚠️ 警告：%s 是危险分区！\n\n刷写此分区可能导致：\n• 设备无法启动\n• 丢失重要数据\n• 网络/蓝牙功能失效\n\n请确保您知道自己在做什么！\n\n确定要刷写 %s 分区吗？</string>
+    <string name="partition_dangerous_flash_warning">⚠️ 警告：%1$s 是危险分区！\n\n刷写此分区可能导致：\n• 设备无法启动\n• 丢失重要数据\n• 网络/蓝牙功能失效\n\n请确保您知道自己在做什么！\n\n确定要刷写 %2$s 分区吗？</string>
     <string name="partition_confirm_flash">确定刷写</string>
     <string name="partition_backing_up">正在备份分区 %s…</string>
     <string name="partition_backup_success">备份成功：%s</string>
@@ -736,9 +744,9 @@
     <string name="partition_a_only_device">A-only 设备</string>
     <string name="partition_unknown">未知</string>
     <string name="partition_batch_backup_start">开始批量备份 %d 个分区…</string>
-    <string name="partition_batch_backup_progress">备份中 (%d/%d)：%s</string>
-    <string name="partition_batch_backup_complete">批量备份完成！共 %d 个分区\n保存在：%s</string>
-    <string name="partition_batch_backup_partial">备份完成：成功 %d 个，失败 %d 个\n失败：%s</string>
+    <string name="partition_batch_backup_progress">备份中 (%1$d/%2$d)：%3$s</string>
+    <string name="partition_batch_backup_complete">批量备份完成！共 %1$d 个分区\n保存在：%2$s</string>
+    <string name="partition_batch_backup_partial">备份完成：成功 %1$d 个，失败 %2$d 个\n失败：%3$s</string>
     <string name="partition_no_selection">没有选择要备份的分区</string>
     <string name="partition_back">返回</string>
     

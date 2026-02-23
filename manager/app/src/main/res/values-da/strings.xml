@@ -272,9 +272,6 @@
     <string name="back">Comeback</string>
     <string name="background_set_success">Background set successfully</string>
     <string name="background_removed">Removed custom backgrounds</string>
-    <string name="icon_switch_title">Alternate icon</string>
-    <string name="icon_switch_summary">Change the launcher icon to KernelSU\'s icon.</string>
-    <string name="icon_switched">Icon switched</string>
     <!-- KPM display settings -->
     <string name="show_kpm_info">Display KPM Function</string>
     <string name="show_kpm_info_summary">Display KPM information and Function in home and bottom bar (Need to reopen the app)</string>

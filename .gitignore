@@ -12,3 +12,5 @@ local.properties
 # ksud build artifacts
 userspace/ksud/build-android/
 build_ksud/
+
+out/

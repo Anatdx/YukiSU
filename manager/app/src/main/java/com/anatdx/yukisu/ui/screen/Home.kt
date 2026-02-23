@@ -60,6 +60,8 @@ import com.anatdx.yukisu.ui.component.rememberSuperKeyDialog
 import com.anatdx.yukisu.ui.component.SuperKeyAuthResult
 import com.anatdx.yukisu.ui.util.KsuCli
 import com.anatdx.yukisu.ui.activity.util.AppData
+import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
+import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager.HymoFSStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -149,6 +151,10 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 val isSignatureOk by produceState(initialValue = false) {
                     value = withContext(Dispatchers.IO) { Natives.isSignatureOk() }
                 }
+                val hymofsStatus by produceState(initialValue = HymoFSStatus.NOT_PRESENT) {
+                    value = HymoFSManager.getStatus()
+                }
+                var showKernelSpoofDialog by remember { mutableStateOf(false) }
                 
                 // 保存 SuperKey 的 SharedPreferences
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
@@ -323,12 +329,23 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
                         lkmMode = viewModel.systemStatus.lkmMode,
+                        hymofsAvailable = hymofsStatus == HymoFSStatus.AVAILABLE,
+                        onKernelClick = { showKernelSpoofDialog = true },
                     )
 
                     // 链接卡片
                     if (!viewModel.isSimpleMode && !viewModel.isHideLinkCard) {
                         ContributionCard()
                         DonateCard()
+                    }
+
+                    if (showKernelSpoofDialog) {
+                        KernelSpoofDialog(
+                            onDismiss = { showKernelSpoofDialog = false },
+                            onSaved = {
+                                viewModel.refreshData(context, forceRefresh = true)
+                            }
+                        )
                     }
                 }
 
@@ -849,7 +866,9 @@ private fun InfoCard(
     isSimpleMode: Boolean,
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
-    lkmMode: Boolean?
+    lkmMode: Boolean?,
+    hymofsAvailable: Boolean = false,
+    onKernelClick: () -> Unit = {},
 ) {
     var showKsudDialog by remember { mutableStateOf(false) }
     var ksudApkVersion by remember { mutableStateOf<String?>(null) }
@@ -930,6 +949,7 @@ private fun InfoCard(
                 stringResource(R.string.home_kernel),
                 systemInfo.kernelRelease,
                 icon = Icons.Default.Memory,
+                onClick = if (hymofsAvailable) onKernelClick else null,
             )
 
             if (!isSimpleMode) {
@@ -1098,6 +1118,121 @@ private fun KsudVersionDialog(
                         stringResource(id = R.string.home_ksud_daemon_syncing)
                     else
                         stringResource(id = R.string.home_ksud_daemon_sync)
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun KernelSpoofDialog(
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit = {},
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var unameRelease by remember { mutableStateOf("") }
+    var unameVersion by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        val config = HymoFSManager.loadConfig()
+        unameRelease = config.unameRelease
+        unameVersion = config.unameVersion
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text(stringResource(R.string.hymofs_uname_title)) },
+        text = {
+            if (loading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = unameRelease,
+                        onValueChange = { unameRelease = it },
+                        label = { Text(stringResource(R.string.hymofs_uname_release)) },
+                        supportingText = { Text(stringResource(R.string.hymofs_uname_release_desc)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = unameVersion,
+                        onValueChange = { unameVersion = it },
+                        label = { Text(stringResource(R.string.hymofs_uname_version)) },
+                        supportingText = { Text(stringResource(R.string.hymofs_uname_version_desc)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            scope.launch {
+                                val (r, v) = HymoFSManager.readKernelUnameFromSysfs()
+                                withContext(Dispatchers.Main.immediate) {
+                                    unameRelease = r
+                                    unameVersion = v
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.hymofs_uname_use_current))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (!saving) onDismiss() }) {
+                Text(stringResource(R.string.close))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !loading && !saving,
+                onClick = {
+                    if (loading || saving) return@TextButton
+                    saving = true
+                    scope.launch {
+                        val config = HymoFSManager.loadConfig()
+                        val updated = config.copy(
+                            unameRelease = unameRelease.trim(),
+                            unameVersion = unameVersion.trim()
+                        )
+                        val ok = HymoFSManager.saveConfig(updated)
+                        if (ok && unameRelease.isNotBlank() && unameVersion.isNotBlank()) {
+                            HymoFSManager.setUname(unameRelease.trim(), unameVersion.trim())
+                        }
+                        saving = false
+                        if (ok) {
+                            onSaved()
+                            onDismiss()
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(R.string.hymofs_toast_settings_failed),
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            ) {
+                Text(
+                    text = if (saving) stringResource(R.string.hymofs_saving) else stringResource(R.string.app_profile_template_save)
                 )
             }
         }
