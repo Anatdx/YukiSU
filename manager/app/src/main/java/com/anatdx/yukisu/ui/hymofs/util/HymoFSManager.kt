@@ -197,23 +197,16 @@ object HymoFSManager {
     }
     
     /**
-     * Read current kernel uname info from sysfs (/proc/sys/kernel/osrelease and version).
-     * Falls back to uname -r / uname -v if file read fails (e.g. sandboxed).
+     * Read real kernel uname info from sysfs (/proc/sys/kernel/osrelease and version).
+     * Same approach as getSystemInfo() kernel field - uses cat to read raw sysfs,
+     * NOT uname (which returns spoofed values when HymoFS uname spoofing is active).
      * Returns Pair(unameRelease, unameVersion).
      */
     suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
-        var release = runCatching {
-            File("/proc/sys/kernel/osrelease").readText().trim()
-        }.getOrElse { "" }
-        var version = runCatching {
-            File("/proc/sys/kernel/version").readText().trim()
-        }.getOrElse { "" }
-        if (release.isEmpty() || version.isEmpty()) {
-            val unameR = Shell.cmd("uname -r").exec()
-            val unameV = Shell.cmd("uname -v").exec()
-            if (release.isEmpty() && unameR.isSuccess) release = unameR.out.joinToString("").trim()
-            if (version.isEmpty() && unameV.isSuccess) version = unameV.out.joinToString("").trim()
-        }
+        val releaseResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
+        val release = if (releaseResult.isSuccess) releaseResult.out.firstOrNull()?.trim() ?: "" else ""
+        val versionResult = Shell.cmd("cat /proc/sys/kernel/version 2>/dev/null").exec()
+        val version = if (versionResult.isSuccess) versionResult.out.firstOrNull()?.trim() ?: "" else ""
         Pair(release, version)
     }
     
