@@ -14,6 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
@@ -32,8 +35,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -130,7 +131,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
     val viewModel = viewModel<ModuleViewModel>()
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("settings", MODE_PRIVATE)
-    val snackBarHost = LocalSnackbarHost.current
+    val snackBarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val confirmDialog = rememberConfirmDialog()
     var lastClickTime by remember { mutableStateOf(0L) }
@@ -992,6 +993,7 @@ private fun ModuleList(
 
     val loadingDialog = rememberLoadingDialog()
     val confirmDialog = rememberConfirmDialog()
+    var lastRebootSnackbarTime by remember { mutableStateOf(0L) }
 
     suspend fun onModuleUpdate(
         module: ModuleViewModel.ModuleInfo,
@@ -1191,7 +1193,7 @@ private fun ModuleList(
                             navigator = navigator,
                             module = module,
                             updateUrl = updatedModule.first,
-                            hasHymoMountConfig = hymoBuiltinMountEnabled && module.dirId in hymoModuleIds,
+                            hasHymoMountConfig = hymoBuiltinMountEnabled && hymoModules[module.dirId] != null,
                             hymoModuleInfo = hymoModules[module.dirId],
                             onShowHymoMountDialog = onShowHymoMountDialog,
                             onUninstallClicked = {
@@ -1204,14 +1206,17 @@ private fun ModuleList(
                                     }
                                     if (success) {
                                         viewModel.fetchModuleList()
-
-                                        val result = snackBarHost.showSnackbar(
-                                            message = rebootToApply,
-                                            actionLabel = reboot,
-                                            duration = SnackbarDuration.Long
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            reboot()
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastRebootSnackbarTime > 1500) {
+                                            lastRebootSnackbarTime = now
+                                            val result = snackBarHost.showSnackbar(
+                                                message = rebootToApply,
+                                                actionLabel = reboot,
+                                                duration = SnackbarDuration.Long
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                reboot()
+                                            }
                                         }
                                     } else {
                                         val message = if (module.enabled) failedDisable else failedEnable
@@ -1281,6 +1286,7 @@ private fun HymoMountConfigDialog(
     }
     var newPath by remember { mutableStateOf("") }
     var newMode by remember { mutableStateOf("auto") }
+    var modeExpanded by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var rulesExpanded by remember { mutableStateOf(false) }
 
@@ -1358,15 +1364,18 @@ private fun HymoMountConfigDialog(
                         contentDescription = null
                     )
                 }
-                AnimatedVisibility(
-                    visible = rulesExpanded,
-                    enter = expandVertically(),
-                    exit = shrinkVertically()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = tween(280, easing = FastOutSlowInEasing)
+                        )
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                    if (rulesExpanded) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                         rules.forEach { rule: HymoFSManager.ModuleRule ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1399,7 +1408,6 @@ private fun HymoMountConfigDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            var modeExpanded by remember { mutableStateOf(false) }
                             Box {
                                 FilledTonalButton(
                                     onClick = { modeExpanded = true },
@@ -1434,6 +1442,7 @@ private fun HymoMountConfigDialog(
                             ) {
                                 Text(stringResource(R.string.hymofs_module_rules_add))
                             }
+                        }
                         }
                     }
                 }
@@ -1741,7 +1750,7 @@ fun ModuleItem(
                 if (hasHymoMountConfig) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
-                        enabled = !module.remove,
+                        enabled = !module.remove && module.enabled,
                         onClick = { onShowHymoMountDialog(module.dirId, module.name) },
                         contentPadding = ButtonDefaults.TextButtonContentPadding,
                     ) {

@@ -146,7 +146,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     var hasUpdateExecuted by rememberSaveable { mutableStateOf(false) }
     var hasUpdateCompleted by rememberSaveable { mutableStateOf(false) }
 
-    val snackBarHost = LocalSnackbarHost.current
+    val snackBarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -270,7 +270,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                 }
 
-                // 仅 shouldAutoExit 时自动退出；作为打开方式进入时停留在界面让用户查看结果
+                // 仅 shouldAutoExit 时自动退出；作为打开方弝进入时坜留在界面让用户查看结果
                 if (shouldAutoExit) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {

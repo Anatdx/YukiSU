@@ -1136,6 +1136,7 @@ private fun KernelSpoofDialog(
     var unameVersion by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    var loadFromSysfsTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         loading = true
@@ -1143,6 +1144,14 @@ private fun KernelSpoofDialog(
         unameRelease = config.unameRelease
         unameVersion = config.unameVersion
         loading = false
+    }
+
+    LaunchedEffect(loadFromSysfsTrigger) {
+        if (loadFromSysfsTrigger > 0) {
+            val (r, v) = HymoFSManager.readKernelUnameFromSysfs()
+            unameRelease = r
+            unameVersion = v
+        }
     }
 
     AlertDialog(
@@ -1180,15 +1189,7 @@ private fun KernelSpoofDialog(
                         singleLine = true,
                     )
                     FilledTonalButton(
-                        onClick = {
-                            scope.launch {
-                                val (r, v) = HymoFSManager.readKernelUnameFromSysfs()
-                                withContext(Dispatchers.Main.immediate) {
-                                    unameRelease = r
-                                    unameVersion = v
-                                }
-                            }
-                        },
+                        onClick = { loadFromSysfsTrigger++ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(stringResource(R.string.hymofs_uname_use_current))

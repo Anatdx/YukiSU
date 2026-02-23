@@ -74,7 +74,7 @@ private val SPACING_LARGE = 16.dp
 @Composable
 fun SettingScreen(navigator: DestinationsNavigator) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
-    val snackBarHost = LocalSnackbarHost.current
+    val snackBarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var isSuLogEnabled by remember { mutableStateOf(Natives.isSuLogEnabled()) }
