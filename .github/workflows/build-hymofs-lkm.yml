@@ -1,7 +1,19 @@
 name: Build LKM for HymoFS
 on:
   workflow_call:
+    inputs:
+      full_archs:
+        description: "Build all archs (armv7, x86_64) - for release"
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
+    inputs:
+      full_archs:
+        description: "Build all archs (armv7, x86_64) - for release"
+        required: false
+        default: false
+        type: boolean
 jobs:
   build-hymofs-lkm:
     strategy:
@@ -15,10 +27,7 @@ jobs:
           - android14-6.1
           - android15-6.6
           - android16-6.12
-        arch:
-          - arm64
-          - armv7
-          - x86_64
+        arch: ${{ (inputs.full_archs == true || github.event.inputs.full_archs == 'true') && fromJSON('["arm64","armv7","x86_64"]') || fromJSON('["arm64"]') }}
     uses: ./.github/workflows/hymofs-lkm.yml
     secrets: inherit
     with:

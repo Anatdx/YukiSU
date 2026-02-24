@@ -27,6 +27,12 @@ on:
       - 'kernel/**'
       - 'userspace/**'
   workflow_call:
+    inputs:
+      full_archs:
+        description: "Build all archs for hymofs (armv7, x86_64) - for release"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build-lkm:
@@ -35,6 +41,8 @@ jobs:
 
   build-hymofs-lkm:
     uses: ./.github/workflows/build-hymofs-lkm.yml
+    with:
+      full_archs: ${{ inputs.full_archs == true }}
 
   build-ksuinit:
     strategy:

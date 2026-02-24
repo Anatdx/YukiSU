@@ -9,6 +9,8 @@ jobs:
   build-manager:
     uses: ./.github/workflows/build-manager.yml
     secrets: inherit
+    with:
+      full_archs: true
   release:
     needs:
       - build-manager
@@ -101,13 +103,9 @@ jobs:
           files: |
             Manager/*.apk
             Manager/*.apk.asc
-            Spoofed-Manager/*.apk
-            Spoofed-Manager/*.apk.asc
             android*-lkm/*_kernelsu.ko
             android*-lkm/*_kernelsu.ko.sig
-            AnyKernel3-*.zip
-            boot-images-*/Image-*/*.img.gz
-            kernel-WSA*.zip
-            kernel-ARCVM*.zip
+            *-hymofs-lkm/*.ko
+            *-hymofs-lkm/*.asc
             ksud/ksud-*
             ksud/*.sig
