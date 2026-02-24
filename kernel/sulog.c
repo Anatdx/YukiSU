@@ -62,6 +62,8 @@ static void get_timestamp(char *buf, size_t len)
 
 static void ksu_get_cmdline(char *full_comm, const char *comm, size_t buf_len)
 {
+	int n, i;
+
 	if (!full_comm || buf_len <= 0)
 		return;
 
@@ -80,13 +82,13 @@ static void ksu_get_cmdline(char *full_comm, const char *comm, size_t buf_len)
 		return;
 	}
 
-	int n = get_cmdline(current, full_comm, buf_len);
+	n = get_cmdline(current, full_comm, buf_len);
 	if (n <= 0) {
 		KSU_STRSCPY(full_comm, current->comm, buf_len);
 		return;
 	}
 
-	for (int i = 0; i < n && i < buf_len - 1; i++) {
+	for (i = 0; i < n && i < buf_len - 1; i++) {
 		if (full_comm[i] == '\0')
 			full_comm[i] = ' ';
 	}
