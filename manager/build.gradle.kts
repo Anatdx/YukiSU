@@ -48,12 +48,17 @@ fun getGitCommitCount(): Int {
     }.standardOutput.asText.get().trim().toInt()
 }
 
-/** Manager version in same format as kernel: v1.3.0-8char_hash (8-char hash, not 9). */
+/** Manager version from latest tag: v1.4.0 or v1.4.0-8char_hash (git describe --tags). */
 fun computeManagerVersionName(): String {
-    val hash = providers.exec {
-        commandLine("git", "rev-parse", "--short=8", "HEAD")
+    val describe = providers.exec {
+        commandLine("git", "describe", "--tags", "--always", "--abbrev=8")
     }.standardOutput.asText.get().trim()
-    return "v1.3.0-$hash"
+    // "v1.4.0" or "v1.4.0-1-g56b0efb0" -> "v1.4.0-56b0efb0"
+    return if (describe.contains("-g")) {
+        describe.replace(Regex("-\\d+-g"), "-")
+    } else {
+        describe
+    }
 }
 
 subprojects {
