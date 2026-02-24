@@ -9,7 +9,7 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 
 > **⚠️ Önemli Duyuru**
 >
-> YukiSU **tamamen C++ ile yeniden yazılmıştır** (önceden Rust tabanlıydı). Bu nedenle YukiSU, diğer KernelSU fork’larından farklı davranabilir. Sorun yaşarsanız lütfen üst akış projelerine değil bize bildirin.
+> YukiSU **tamamen C++ ile yeniden yazılmıştır** (önceden Rust tabanlıydı). Bu nedenle YukiSU, diğer KernelSU fork'larından farklı davranabilir. Sorun yaşarsanız lütfen üst akış projelerine değil bize bildirin.
 >
 > Eski Rust sürümü [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) dalında durmaktadır.
 >
@@ -22,18 +22,14 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 ## Özellikler
 
 1. Çekirdek tabanlı `su` ve root erişim yönetimi
-2. [Magic Mount](https://github.com/5ec1cff/KernelSU) tabanlı modül sistemi
-   > **Not:** YukiSU artık tüm modül bağlama işlemlerini yüklü *metamodule*’e bırakmaktadır; çekirdek bağlama işlemlerini yapmaz.
+2. [hymo](https://github.com/Anatdx/hymo) tabanlı Hibrit Bağlama Modülü sistemi
+   > **Not:** Yerleşik hymo yerine başka metamodule'ler de kullanabilirsiniz.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Root yetkisini kafese alın
 4. Yönetici teması ayarları
 
 ## Uyumluluk
 
 - YukiSU, Android GKI 2.0 cihazlarını (çekirdek 5.10+) resmen destekler.
-
-- Eski çekirdekler (4.4+) de uyumludur; ancak çekirdeği sizin derlemeniz gerekir.
-
-- Daha fazla geri taşıma ile 3.x çekirdek (3.4–3.18) desteklenebilir.
 
 - Şu an yalnızca `arm64-v8a`, `armeabi-v7a (bare)` ve `X86_64` (bazıları) desteklenmektedir.
 
@@ -56,12 +52,13 @@ Yönetici için çeviri göndermek istiyorsanız [Crowdin](https://crowdin.com/p
 
 ## Sponsorlar
 
+- [Anatdx](https://afd.anatdx.com) (YukiSU bakımcısı)
 - [ShirkNeko](https://afdian.com/a/shirkneko) (SukiSU bakımcısı)
 - [weishu](https://github.com/sponsors/tiann) (KernelSU yazarı)
 
 ## Lisans
 
-- “kernel” dizinindeki dosyalar [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) lisanslıdır.
+- "kernel" dizinindeki dosyalar [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html) lisanslıdır.
 - Bunlar dışındaki tüm kısımlar [GPL-3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html) lisanslıdır.
 
 ## Katkıda Bulunanlar

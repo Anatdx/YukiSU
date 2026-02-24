@@ -22,18 +22,14 @@ Android デバイス向けのカーネルベース root ソリューション。
 ## 特徴
 
 1. カーネルベースの `su` と root アクセス管理
-2. [Magic Mount](https://github.com/5ec1cff/KernelSU) ベースのモジュールシステム
-   > **Note:** YukiSU はモジュールのマウントをすべてインストール済みの *metamodule* に委譲しています。コアではマウント処理を行いません。
+2. [hymo](https://github.com/Anatdx/hymo) ベースのハイブリッドマウントモジュールシステム
+   > **Note:** 組み込み hymo の代わりに他の metamodule も使用できます。
 3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html): root 権限をケージで管理
 4. マネージャーのテーマ調整
 
 ## 互換性
 
 - YukiSU は Android GKI 2.0 デバイス（カーネル 5.10+）を公式にサポートしています。
-
-- 旧カーネル（4.4+）も互換がありますが、カーネルは手動ビルドが必要です。
-
-- バックポートを増やすことで 3.x カーネル（3.4–3.18）にも対応可能です。
 
 - 現在サポートしているのは `arm64-v8a`、`armeabi-v7a (bare)`、`X86_64`（一部）のみです。
 
@@ -56,6 +52,7 @@ Android デバイス向けのカーネルベース root ソリューション。
 
 ## スポンサー
 
+- [Anatdx](https://afd.anatdx.com)（YukiSU メンテナー）
 - [ShirkNeko](https://afdian.com/a/shirkneko)（SukiSU メンテナー）
 - [weishu](https://github.com/sponsors/tiann)（KernelSU 作者）
 

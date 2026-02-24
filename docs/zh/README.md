@@ -21,18 +21,14 @@
 ## 特性
 
 1. 基于内核的 `su` 与 root 权限管理
-2. 基于 [Magic Mount](https://github.com/5ec1cff/KernelSU) 的模块系统
-   > **说明：** YukiSU 现已将全部模块挂载交由已安装的 *metamodule* 处理；核心不再负责挂载操作。
+2. 基于 [hymo](https://github.com/Anatdx/hymo) 的混合挂载模块系统
+   > **说明：** 你也可以使用其他元模块替代内置 hymo。
 3. [App Profile](https://kernelsu.org/zh_CN/guide/app-profile.html)：将 root 权限关进笼子
 4. 管理器主题微调
 
 ## 兼容状态
 
 - YukiSU 官方支持 Android GKI 2.0 设备（内核 5.10+）。
-
-- 旧内核（4.4+）也兼容，但需自行编译内核。
-
-- 通过更多反向移植，可支持 3.x 内核（3.4–3.18）。
 
 - 目前仅支持 `arm64-v8a`、`armeabi-v7a (bare)` 与 `X86_64`（部分）。
 
@@ -55,6 +51,7 @@
 
 ## 赞助
 
+- [Anatdx](https://afd.anatdx.com)（YukiSU 维护者）
 - [ShirkNeko](https://afdian.com/a/shirkneko)（SukiSU 维护者）
 - [weishu](https://github.com/sponsors/tiann)（KernelSU 作者）
 

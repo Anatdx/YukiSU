@@ -22,18 +22,14 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 ## Features
 
 1. Kernel-based `su` and root access management
-2. Module system based on [Magic Mount](https://github.com/5ec1cff/KernelSU)
-   > **Note:** YukiSU now delegates all module mounting to the installed *metamodule*; the core no longer handles mount operations.
+2. A Hybrid Mounting Module system based on [hymo](https://github.com/Anatdx/hymo)
+   > **Note:** You can also use other metamodules instead of built-in hymo.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
 4. Tweaks to the manager theme
 
 ## Compatibility Status
 
 - YukiSU officially supports Android GKI 2.0 devices (kernel 5.10+).
-
-- Older kernels (4.4+) are also compatible, but the kernel will have to be built manually.
-
-- With more backports, YukiSU can support 3.x kernel (3.4-3.18).
 
 - Currently, only `arm64-v8a`, `armeabi-v7a (bare)` and `X86_64`(some) are supported.
 
@@ -56,6 +52,7 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 
 ## Sponsor
 
+- [Anatdx](https://afd.anatdx.com) (maintainer of YukiSU)
 - [ShirkNeko](https://afdian.com/a/shirkneko) (maintainer of SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (author of KernelSU)
 
