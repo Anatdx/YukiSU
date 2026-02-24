@@ -1,27 +1,22 @@
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/mutex.h>
 #include <linux/pid.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/task_work.h>
 #include <linux/time.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/task.h>
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#include <linux/ktime.h>
-#include <linux/mm.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
+
+#include "klog.h"
 
 #include "feature.h"
-#include "kernel_compat.h"
-#include "klog.h"
 #include "ksu.h"
 #include "sulog.h"
 
@@ -67,8 +62,6 @@ static void get_timestamp(char *buf, size_t len)
 
 static void ksu_get_cmdline(char *full_comm, const char *comm, size_t buf_len)
 {
-	int i, n;
-
 	if (!full_comm || buf_len <= 0)
 		return;
 
@@ -87,13 +80,13 @@ static void ksu_get_cmdline(char *full_comm, const char *comm, size_t buf_len)
 		return;
 	}
 
-	n = get_cmdline(current, full_comm, buf_len);
+	int n = get_cmdline(current, full_comm, buf_len);
 	if (n <= 0) {
 		KSU_STRSCPY(full_comm, current->comm, buf_len);
 		return;
 	}
 
-	for (i = 0; i < n && i < buf_len - 1; i++) {
+	for (int i = 0; i < n && i < buf_len - 1; i++) {
 		if (full_comm[i] == '\0')
 			full_comm[i] = ' ';
 	}
@@ -136,7 +129,7 @@ static bool dedup_should_print(uid_t uid, u8 type, const char *content,
 	    .type = type,
 	};
 	u64 now = ktime_get_ns();
-	u64 delta_ns = (u64)DEDUP_SECS * (u64)NSEC_PER_SEC;
+	u64 delta_ns = DEDUP_SECS * NSEC_PER_SEC;
 
 	u32 idx = key.crc & (SULOG_COMM_LEN - 1);
 	spin_lock(&dedup_lock);
@@ -171,6 +164,7 @@ static void sulog_process_queue(void)
 		return;
 
 	old_cred = override_creds(ksu_cred);
+
 	fp = filp_open(SULOG_PATH, O_WRONLY | O_CREAT | O_APPEND, 0640);
 	if (IS_ERR(fp)) {
 		pr_err("sulog: failed to open log file: %ld\n", PTR_ERR(fp));

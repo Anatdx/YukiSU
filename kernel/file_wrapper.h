@@ -6,5 +6,5 @@
 
 int ksu_install_file_wrapper(int fd);
 void ksu_file_wrapper_init(void);
-void ksu_file_wrapper_exit(void);
+
 #endif // #ifndef KSU_FILE_WRAPPER_H

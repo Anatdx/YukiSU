@@ -10,37 +10,6 @@
 #include <linux/tty.h>
 #include <linux/version.h>
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-// Manual Hook modes use inline hooks, not tracepoint hooks
-// These functions are stubs in these modes
-
-static inline void ksu_syscall_hook_manager_init(void)
-{
-}
-static inline void ksu_syscall_hook_manager_exit(void)
-{
-}
-static inline void ksu_mark_all_process(void)
-{
-}
-static inline void ksu_unmark_all_process(void)
-{
-}
-static inline void ksu_mark_running_process(void)
-{
-}
-static inline int ksu_get_task_mark(pid_t pid)
-{
-	return 0;
-}
-static inline int ksu_set_task_mark(pid_t pid, bool mark)
-{
-	return 0;
-}
-
-#else
-// Tracepoint hook mode - use real implementations
-
 // Hook manager initialization and cleanup
 void ksu_syscall_hook_manager_init(void);
 void ksu_syscall_hook_manager_exit(void);
@@ -53,8 +22,6 @@ void ksu_mark_running_process(void);
 // Per-task mark operations
 int ksu_get_task_mark(pid_t pid);
 int ksu_set_task_mark(pid_t pid, bool mark);
-
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 static inline void ksu_set_task_tracepoint_flag(struct task_struct *t)
 {
@@ -74,13 +41,6 @@ static inline void ksu_clear_task_tracepoint_flag(struct task_struct *t)
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 }
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-static inline void
-ksu_clear_task_tracepoint_flag_if_needed(struct task_struct *t)
-{
-}
-#else
 void ksu_clear_task_tracepoint_flag_if_needed(struct task_struct *t);
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 #endif // #ifndef __KSU_H_HOOK_MANAGER

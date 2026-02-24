@@ -9,21 +9,13 @@
 #include <linux/slab.h>
 #include <linux/task_work.h>
 #include <linux/types.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-
-#ifndef KSU_HAS_PATH_UMOUNT
-#include <linux/syscalls.h>
-#endif // #ifndef KSU_HAS_PATH_UMOUNT
 
 #include "allowlist.h"
 #include "feature.h"
-#include "kernel_compat.h"
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "ksud.h"
-#include "manager.h"
 #include "selinux/selinux.h"
 
 #include "sulog.h"
@@ -51,40 +43,15 @@ static const struct ksu_feature_handler kernel_umount_handler = {
     .set_handler = kernel_umount_feature_set,
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) ||                           \
-    defined(KSU_HAS_PATH_UMOUNT)
 extern int path_umount(struct path *path, int flags);
-static void ksu_umount_mnt(const char *__never_use_mnt, struct path *path,
-			   int flags)
+
+static void ksu_umount_mnt(struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
 	if (err) {
 		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
 	}
 }
-#else
-static void ksu_sys_umount(const char *mnt, int flags)
-{
-	char __user *usermnt = (char __user *)mnt;
-	mm_segment_t old_fs;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-	ksys_umount(usermnt, flags);
-#else
-	sys_umount(usermnt, flags); // cuz asmlinkage long sys##name
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-	set_fs(old_fs);
-}
-
-#define ksu_umount_mnt(mnt, __unused, flags)                                   \
-	({                                                                     \
-		path_put(__unused);                                            \
-		ksu_sys_umount(mnt, flags);                                    \
-	})
-
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
 void try_umount(const char *mnt, int flags)
 {
@@ -100,7 +67,7 @@ void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-	ksu_umount_mnt(mnt, &path, flags);
+	ksu_umount_mnt(&path, flags);
 }
 
 struct umount_tw {
@@ -169,17 +136,11 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 			current->pid);
 		return 0;
 	}
-
-	// umount the target mnt
-	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
-
 #if __SULOG_GATE
-	{
-		char uid_str[16];
-		snprintf(uid_str, sizeof(uid_str), "%d", new_uid);
-		ksu_sulog_report_syscall(new_uid, NULL, "setuid", uid_str);
-	}
+	ksu_sulog_report_syscall(new_uid, NULL, "setuid", NULL);
 #endif // #if __SULOG_GATE
+       // umount the target mnt
+	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
 
 	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
 	if (!tw)

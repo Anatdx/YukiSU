@@ -5,12 +5,8 @@ kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
 
 # Tracepoint hook mode needs syscall_hook_manager and util
-# Only skip when MANUAL_HOOK is explicitly enabled
-ifneq ($(CONFIG_KSU_MANUAL_HOOK), y)
 kernelsu-objs += syscall_hook_manager.o
 kernelsu-objs += util.o
-endif
-
 kernelsu-objs += throne_tracker.o
 kernelsu-objs += pkg_observer.o
 kernelsu-objs += setuid_hook.o
@@ -22,9 +18,8 @@ kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o
 kernelsu-objs += sulog.o
 
-# LKM only: kernel_compat provides file/read compat used by allowlist etc.
+# kernel_compat.c removed; kernel_compat.h provides inline ksu_copy_from_user_retry only
 # Built-in (lsm_hooks, embed_ksud) is no longer supported.
-kernelsu-objs += kernel_compat.o
 
 ifeq ($(CONFIG_KSU_MANUAL_SU), y)
 ccflags-y += -DCONFIG_KSU_MANUAL_SU
@@ -45,13 +40,6 @@ ccflags-y += -DKSU_SUPERKEY=\"$(KSU_SUPERKEY)\"
 endif
 endif
 
-# Disable signature verification (SuperKey Only mode, GKI mode)
-# Usage: make ... KSU_SIGNATURE_BYPASS=1
-# When enabled, the manager can only be authenticated via SuperKey and APK signature verification is bypassed
-ifdef KSU_SIGNATURE_BYPASS
-ccflags-y += -DKSU_SIGNATURE_BYPASS
-endif
-
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable -Wno-missing-braces
 ccflags-y += -Wno-int-to-pointer-cast -Wno-declaration-after-statement
@@ -63,8 +51,8 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 REPO_OWNER := Anatdx
 REPO_NAME := YukiSU
-REPO_BRANCH := HEAD
-KSU_VERSION_API := 1.3.0
+REPO_BRANCH := main
+KSU_VERSION_API := 1.4.0
 
 GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
@@ -125,32 +113,7 @@ endif
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 ccflags-y += -DKSU_VERSION_FULL=\"$(KSU_VERSION_FULL)\"
 
-$(info -- Yukisu does NOT support other managers!)
-
-ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
-ccflags-y += -DKSU_MANUAL_HOOK
-$(info -- YukiSU: KSU_MANUAL_HOOK)
-
-# Manual hook integration detection (for integrity check).
-# We define KSU_HAS_MANUAL_HOOK_* macros only when the kernel source
-# actually contains the corresponding hook call-sites.
-ifeq ($(shell grep -q "ksu_handle_execveat" $(srctree)/fs/exec.c || grep -q "ksu_handle_execve_sucompat" $(srctree)/fs/exec.c; echo $$?),0)
-ccflags-y += -DKSU_HAS_MANUAL_HOOK_EXEC
-endif
-ifeq ($(shell grep -q "ksu_handle_faccessat" $(srctree)/fs/open.c; echo $$?),0)
-ccflags-y += -DKSU_HAS_MANUAL_HOOK_FACCESSAT
-endif
-ifeq ($(shell grep -q "ksu_handle_stat" $(srctree)/fs/stat.c; echo $$?),0)
-ccflags-y += -DKSU_HAS_MANUAL_HOOK_STAT
-endif
-ifeq ($(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c; echo $$?),0)
-ccflags-y += -DKSU_HAS_MANUAL_HOOK_REBOOT
-endif
-else
-ccflags-y += -DKSU_KPROBES_HOOK
-ccflags-y += -DKSU_TP_HOOK
-$(info -- YukiSU: KSU_TRACEPOINT_HOOK)
-endif
+$(info -- YukiSU: SuperKey allows the manager app to authenticate using a password instead of APK signature verification. Use Superkey instead of custom signature verification.)
 
 KERNEL_VERSION := $(VERSION).$(PATCHLEVEL)
 KERNEL_TYPE := Non-GKI
@@ -226,16 +189,6 @@ endif
 ifdef KSU_MANAGER_PACKAGE
 ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
 $(info -- YukiSU Manager package name: $(KSU_MANAGER_PACKAGE))
-endif
-
-## For hymofs stuff ##
-ifeq ($(shell test -e $(srctree)/fs/hymofs.c; echo $$?),0)
-$(eval HYMOFS_VERSION=$(shell cat $(srctree)/include/linux/hymofs.h | grep -E '^#define HYMOFS_VERSION' | cut -d' ' -f3 | sed 's/"//g'))
-$(info )
-$(info -- HYMOFS_VERSION: $(HYMOFS_VERSION))
-else
-$(info -- You have not integrated hymofs in your kernel yet.)
-$(info -- Read: https://github.com/Anatdx/HymoFS)
 endif
 
 # Keep a new line here!! Because someone may append config

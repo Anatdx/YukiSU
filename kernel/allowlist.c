@@ -10,17 +10,9 @@
 #include <linux/task_work.h>
 #include <linux/types.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/task.h>
-#else
-#include <linux/sched.h>
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler_types.h>
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
 #include "allowlist.h"
-#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "manager.h"
@@ -38,6 +30,8 @@ static DEFINE_MUTEX(allowlist_mutex);
 // default profiles, these may be used frequently, so we cache it
 static struct root_profile default_root_profile;
 static struct non_root_profile default_non_root_profile;
+
+void persistent_allow_list(void);
 
 static int allow_list_arr[PAGE_SIZE / sizeof(int)] __read_mostly
     __aligned(PAGE_SIZE);
@@ -82,7 +76,7 @@ static void init_default_profiles(void)
 	default_root_profile.groups[0] = 0;
 	memcpy(&default_root_profile.capabilities.effective, &full_cap,
 	       sizeof(default_root_profile.capabilities.effective));
-	default_root_profile.namespaces = 0;
+	default_root_profile.namespaces = KSU_NS_INHERITED;
 	strcpy(default_root_profile.selinux_domain, KSU_DEFAULT_SELINUX_DOMAIN);
 
 	// This means that we will umount modules by default!
@@ -100,8 +94,6 @@ static uint8_t allow_list_bitmap[PAGE_SIZE] __read_mostly __aligned(PAGE_SIZE);
 #define BITMAP_UID_MAX ((sizeof(allow_list_bitmap) * BITS_PER_BYTE) - 1)
 
 #define KERNEL_SU_ALLOWLIST "/data/adb/ksu/.allowlist"
-
-void persistent_allow_list(void);
 
 void ksu_show_allow_list(void)
 {
@@ -135,13 +127,10 @@ bool ksu_get_app_profile(struct app_profile *profile)
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
 	bool found = false;
-	bool uid_match = false;
 
 	list_for_each (pos, &allow_list) {
 		p = list_entry(pos, struct perm_data, list);
-		uid_match = profile->current_uid == p->profile.current_uid;
-		if (uid_match) {
-			// found it, override it with ours
+		if (profile->current_uid == p->profile.current_uid) {
 			memcpy(profile, &p->profile, sizeof(*profile));
 			found = true;
 			goto exit;
@@ -274,10 +263,8 @@ out:
 
 	if (persist) {
 		persistent_allow_list();
-#ifndef CONFIG_KSU_MANUAL_HOOK
 		// FIXME: use a new flag
 		ksu_mark_running_process();
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 	}
 
 	return result;
@@ -319,21 +306,17 @@ bool __ksu_is_allow_uid_for_current(uid_t uid)
 	}
 	return __ksu_is_allow_uid(uid);
 }
-#ifdef CONFIG_KSU_MANUAL_HOOK
-EXPORT_SYMBOL(__ksu_is_allow_uid_for_current);
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
 
 bool ksu_uid_should_umount(uid_t uid)
 {
 	struct app_profile profile = {.current_uid = uid};
-	bool found = false;
 
 	if (likely(ksu_is_manager_uid_valid()) &&
 	    unlikely(ksu_is_uid_manager(uid))) {
 		// we should not umount on manager (any signature slot)
 		return false;
 	}
-	found = ksu_get_app_profile(&profile);
+	bool found = ksu_get_app_profile(&profile);
 	if (!found) {
 		// no app profile found, it must be non root app
 		return default_non_root_profile.umount_modules;
@@ -351,7 +334,7 @@ bool ksu_uid_should_umount(uid_t uid)
 	}
 }
 
-struct root_profile *ksu_get_root_profile(uid_t uid)
+void ksu_get_root_profile(uid_t uid, struct root_profile *out)
 {
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
@@ -360,13 +343,16 @@ struct root_profile *ksu_get_root_profile(uid_t uid)
 		p = list_entry(pos, struct perm_data, list);
 		if (uid == p->profile.current_uid && p->profile.allow_su) {
 			if (!p->profile.rp_config.use_default) {
-				return &p->profile.rp_config.profile;
+				memcpy(out, &p->profile.rp_config.profile,
+				       sizeof(*out));
+				return;
 			}
+			break;
 		}
 	}
 
 	// use default profile
-	return &default_root_profile;
+	memcpy(out, &default_root_profile, sizeof(*out));
 }
 
 bool ksu_get_allow_list(int *array, int *length, bool allow)
@@ -374,10 +360,9 @@ bool ksu_get_allow_list(int *array, int *length, bool allow)
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
 	int i = 0;
+
 	list_for_each (pos, &allow_list) {
 		p = list_entry(pos, struct perm_data, list);
-		// pr_info("get_allow_list uid: %d allow: %d\n", p->uid,
-		// p->allow);
 		if (p->profile.allow_su == allow) {
 			array[i++] = p->profile.current_uid;
 		}
@@ -393,12 +378,11 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 	u32 version = FILE_FORMAT_VERSION;
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
-	struct file *fp = NULL;
 	loff_t off = 0;
 
 	mutex_lock(&allowlist_mutex);
-	fp = ksu_filp_open_compat(KERNEL_SU_ALLOWLIST,
-				  O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	struct file *fp =
+	    filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(fp)) {
 		pr_err("save_allow_list create file failed: %ld\n",
 		       PTR_ERR(fp));
@@ -406,13 +390,12 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 	}
 
 	// store magic and version
-	if (ksu_kernel_write_compat(fp, &magic, sizeof(magic), &off) !=
-	    sizeof(magic)) {
+	if (kernel_write(fp, &magic, sizeof(magic), &off) != sizeof(magic)) {
 		pr_err("save_allow_list write magic failed.\n");
 		goto close_file;
 	}
 
-	if (ksu_kernel_write_compat(fp, &version, sizeof(version), &off) !=
+	if (kernel_write(fp, &version, sizeof(version), &off) !=
 	    sizeof(version)) {
 		pr_err("save_allow_list write version failed.\n");
 		goto close_file;
@@ -424,8 +407,7 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 			p->profile.key, p->profile.current_uid,
 			p->profile.allow_su);
 
-		ksu_kernel_write_compat(fp, &p->profile, sizeof(p->profile),
-					&off);
+		kernel_write(fp, &p->profile, sizeof(p->profile), &off);
 	}
 
 close_file:
@@ -475,21 +457,20 @@ void ksu_load_allow_list(void)
 #endif // #ifdef CONFIG_KSU_DEBUG
 
 	// load allowlist now!
-	fp = ksu_filp_open_compat(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
+	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
 		return;
 	}
 
 	// verify magic
-	if (ksu_kernel_read_compat(fp, &magic, sizeof(magic), &off) !=
-		sizeof(magic) ||
+	if (kernel_read(fp, &magic, sizeof(magic), &off) != sizeof(magic) ||
 	    magic != FILE_MAGIC) {
 		pr_err("allowlist file invalid: %d!\n", magic);
 		goto exit;
 	}
 
-	if (ksu_kernel_read_compat(fp, &version, sizeof(version), &off) !=
+	if (kernel_read(fp, &version, sizeof(version), &off) !=
 	    sizeof(version)) {
 		pr_err("allowlist read version: %d failed\n", version);
 		goto exit;
@@ -500,8 +481,7 @@ void ksu_load_allow_list(void)
 	while (true) {
 		struct app_profile profile;
 
-		ret =
-		    ksu_kernel_read_compat(fp, &profile, sizeof(profile), &off);
+		ret = kernel_read(fp, &profile, sizeof(profile), &off);
 
 		if (ret <= 0) {
 			pr_info("load_allow_list read err: %zd\n", ret);
@@ -530,7 +510,6 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 		return;
 	}
 
-	// TODO: use RCU!
 	mutex_lock(&allowlist_mutex);
 	list_for_each_entry_safe (np, n, &allow_list, list) {
 		uid_t uid = np->profile.current_uid;
@@ -600,7 +579,6 @@ bool ksu_temp_grant_root_once(uid_t uid)
 	struct perm_data *p = NULL;
 	struct list_head *pos = NULL;
 	bool found = false;
-	bool ok = false;
 
 	list_for_each (pos, &allow_list) {
 		p = list_entry(pos, struct perm_data, list);
@@ -628,7 +606,7 @@ bool ksu_temp_grant_root_once(uid_t uid)
 	strcpy(profile.rp_config.profile.selinux_domain,
 	       default_root_profile.selinux_domain);
 
-	ok = ksu_set_app_profile(&profile, false);
+	bool ok = ksu_set_app_profile(&profile, false);
 	if (ok)
 		pr_info("pending_root: UID=%d granted and persisted\n", uid);
 	return ok;

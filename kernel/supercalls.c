@@ -14,28 +14,20 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
-#include "syscall_hook_manager.h"
-
 #include "allowlist.h"
 #include "arch.h"
 #include "feature.h"
 #include "file_wrapper.h"
-
-#include "kernel_compat.h"
-#include "objsec.h"
-
-#ifdef CONFIG_KSU_SUPERKEY
-#include "superkey.h"
-#endif // #ifdef CONFIG_KSU_SUPERKEY
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "manager.h"
 #include "seccomp_cache.h"
 #include "selinux/selinux.h"
-#include "sulog.h"
 #include "supercalls.h"
+#include "syscall_hook_manager.h"
 
+#include "sulog.h"
 #ifdef CONFIG_KSU_MANUAL_SU
 #include "manual_su.h"
 #endif // #ifdef CONFIG_KSU_MANUAL_SU
@@ -392,7 +384,6 @@ static int do_manage_mark(void __user *arg)
 
 	switch (cmd.operation) {
 	case KSU_MARK_GET: {
-#ifndef CONFIG_KSU_MANUAL_HOOK
 		// Get task mark status
 		ret = ksu_get_task_mark(cmd.pid);
 		if (ret < 0) {
@@ -402,13 +393,8 @@ static int do_manage_mark(void __user *arg)
 		}
 		cmd.result = (u32)ret;
 		break;
-#else
-		cmd.result = 0;
-		break;
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 	}
 	case KSU_MARK_MARK: {
-#ifndef CONFIG_KSU_MANUAL_HOOK
 		if (cmd.pid == 0) {
 			ksu_mark_all_process();
 		} else {
@@ -420,15 +406,9 @@ static int do_manage_mark(void __user *arg)
 				return ret;
 			}
 		}
-#else
-		if (cmd.pid != 0) {
-			return 0;
-		}
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	case KSU_MARK_UNMARK: {
-#ifndef CONFIG_KSU_MANUAL_HOOK
 		if (cmd.pid == 0) {
 			ksu_unmark_all_process();
 		} else {
@@ -440,20 +420,11 @@ static int do_manage_mark(void __user *arg)
 				return ret;
 			}
 		}
-#else
-		if (cmd.pid != 0) {
-			return 0;
-		}
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	case KSU_MARK_REFRESH: {
-#ifndef CONFIG_KSU_MANUAL_HOOK
 		ksu_mark_running_process();
 		pr_info("manage_mark: refreshed running processes\n");
-#else
-		pr_info("manual_hook: cmd: KSU_MARK_REFRESH: do nothing\n");
-#endif // #ifndef CONFIG_KSU_MANUAL_HOOK
 		break;
 	}
 	default: {
@@ -483,20 +454,18 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 
 	memset(mnt, 0, sizeof(mnt));
 
-	const char __user *mnt_user =
-	    (const char __user *)(unsigned long)cmd.arg;
-
 	/*
 	 * Hardening: validate user pointer before copying.
 	 * This is adapted from upstream KernelSU's nuke_ext4_sysfs safety
 	 * fixes to avoid panics on bad userspace pointers.
 	 */
-	if (!access_ok(mnt_user, sizeof(mnt))) {
+	if (!access_ok((const void __user *)(uintptr_t)cmd.arg, sizeof(mnt))) {
 		pr_err("nuke ext4: invalid userspace pointer\n");
 		return -EFAULT;
 	}
 
-	ret = strncpy_from_user(mnt, mnt_user, sizeof(mnt));
+	ret = strncpy_from_user(mnt, (const char __user *)(uintptr_t)cmd.arg,
+				sizeof(mnt));
 	if (ret < 0) {
 		pr_err("nuke ext4 copy mnt failed: %ld\\n", ret);
 		return -EFAULT; // 或者 return ret;
@@ -541,15 +510,12 @@ static int add_try_umount(void __user *arg)
 	}
 
 	case KSU_UMOUNT_ADD: {
-		const char __user *path_user =
-		    (const char __user *)(unsigned long)cmd.arg;
-		long len;
-
 		/* Hardening: validate userspace pointer before copy */
-		if (!access_ok(path_user, sizeof(buf)))
+		if (!access_ok((const char __user *)cmd.arg, sizeof(buf)))
 			return -EFAULT;
 
-		len = strncpy_from_user(buf, path_user, sizeof(buf));
+		long len =
+		    strncpy_from_user(buf, (const char __user *)cmd.arg, 256);
 		if (len <= 0)
 			return -EFAULT;
 
@@ -599,15 +565,12 @@ static int add_try_umount(void __user *arg)
 
 	// this is just strcmp'd wipe anyway
 	case KSU_UMOUNT_DEL: {
-		const char __user *path_user =
-		    (const char __user *)(unsigned long)cmd.arg;
-		long len;
-
 		/* Hardening: validate userspace pointer before copy */
-		if (!access_ok(path_user, sizeof(buf)))
+		if (!access_ok((const char __user *)cmd.arg, 255))
 			return -EFAULT;
 
-		len = strncpy_from_user(buf, path_user, sizeof(buf) - 1);
+		long len =
+		    strncpy_from_user(buf, (const char __user *)cmd.arg, 255);
 		if (len <= 0)
 			return -EFAULT;
 
@@ -715,10 +678,6 @@ static int do_get_hook_type(void __user *arg)
 {
 	struct ksu_hook_type_cmd cmd = {0};
 	const char *type = "Tracepoint";
-
-#if defined(KSU_MANUAL_HOOK)
-	type = "Manual";
-#endif // #if defined(KSU_MANUAL_HOOK)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 	strscpy(cmd.hook_type, type, sizeof(cmd.hook_type));
@@ -953,7 +912,7 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
 		close_fd(fd);
 #else
 		ksys_close(fd);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 	}
 
 	kfree(tw);
@@ -1018,7 +977,7 @@ static void ksu_superkey_auth_tw_func(struct callback_head *cb)
 			close_fd(fd);
 #else
 			ksys_close(fd);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 		}
 	}
 
@@ -1083,11 +1042,6 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 	return 0;
 }
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-EXPORT_SYMBOL(ksu_handle_sys_reboot);
-#endif // #ifdef CONFIG_KSU_MANUAL_HOOK
-
-#ifdef KSU_KPROBES_HOOK
 // Reboot hook for installing fd
 static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
@@ -1104,7 +1058,6 @@ static struct kprobe reboot_kp = {
     .symbol_name = REBOOT_SYMBOL,
     .pre_handler = reboot_handler_pre,
 };
-#endif // #ifdef KSU_KPROBES_HOOK
 
 // SuperKey prctl authentication
 #ifdef CONFIG_KSU_SUPERKEY
@@ -1175,7 +1128,7 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 			close_fd(fd);
 #else
 			ksys_close(fd);
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 		}
 	}
 
@@ -1209,14 +1162,21 @@ static int ksu_handle_prctl_superkey(int option, unsigned long arg2)
 		cmd.fd = ksu_install_fd();
 		if (cmd.fd >= 0) {
 			cmd.result = 0;
+			pr_info("prctl get_fd: success, fd=%d for uid=%d\n",
+				cmd.fd, current_uid().val);
 		} else {
 			cmd.result = cmd.fd;
 			cmd.fd = -1;
+			pr_err("prctl get_fd: failed to open fd for uid=%d\n",
+			       current_uid().val);
 		}
 
 		if (copy_to_user(cmd_user, &cmd, sizeof(cmd))) {
 			// Failed to copy, must close the fd we just opened
 			if (cmd.fd >= 0) {
+				pr_err("prctl get_fd: copy_to_user failed, "
+				       "closing fd=%d\n",
+				       cmd.fd);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 				close_fd(cmd.fd);
 #else
@@ -1231,6 +1191,9 @@ static int ksu_handle_prctl_superkey(int option, unsigned long arg2)
 
 	if (option != KSU_PRCTL_SUPERKEY_AUTH)
 		return 0;
+
+	pr_info("prctl superkey auth request from uid %d, pid %d\n",
+		current_uid().val, current->pid);
 
 	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
 	if (!tw)
@@ -1261,24 +1224,20 @@ static struct kprobe prctl_kp = {
 };
 
 static bool prctl_kprobe_registered = false;
-static DEFINE_MUTEX(prctl_kprobe_lock);
 
 void ksu_superkey_unregister_prctl_kprobe(void)
 {
-	mutex_lock(&prctl_kprobe_lock);
 	if (prctl_kprobe_registered) {
 		unregister_kprobe(&prctl_kp);
 		prctl_kprobe_registered = false;
 		pr_info("SuperKey: prctl kprobe unregistered after "
 			"authentication\n");
 	}
-	mutex_unlock(&prctl_kprobe_lock);
 }
 
 void ksu_superkey_register_prctl_kprobe(void)
 {
 	int rc;
-	mutex_lock(&prctl_kprobe_lock);
 	if (!prctl_kprobe_registered) {
 		rc = register_kprobe(&prctl_kp);
 		if (rc) {
@@ -1290,7 +1249,6 @@ void ksu_superkey_register_prctl_kprobe(void)
 			pr_info("SuperKey: prctl kprobe re-registered\n");
 		}
 	}
-	mutex_unlock(&prctl_kprobe_lock);
 }
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
@@ -1304,15 +1262,12 @@ void ksu_supercalls_init(void)
 		pr_info("  %-18s = 0x%08x\n", ksu_ioctl_handlers[i].name,
 			ksu_ioctl_handlers[i].cmd);
 	}
-
-#ifdef KSU_KPROBES_HOOK
 	rc = register_kprobe(&reboot_kp);
 	if (rc) {
 		pr_err("reboot kprobe failed: %d\n", rc);
 	} else {
 		pr_info("reboot kprobe registered successfully\n");
 	}
-#endif // #ifdef KSU_KPROBES_HOOK
 
 	// SuperKey prctl kprobe - only register when SuperKey is configured.
 #ifdef CONFIG_KSU_SUPERKEY
@@ -1334,18 +1289,12 @@ void ksu_supercalls_init(void)
 
 void ksu_supercalls_exit(void)
 {
-#ifdef KSU_KPROBES_HOOK
 	unregister_kprobe(&reboot_kp);
-#endif // #ifdef KSU_KPROBES_HOOK
-
-	// SuperKey prctl kprobe - always unregister regardless of HymoFS
 #ifdef CONFIG_KSU_SUPERKEY
-	mutex_lock(&prctl_kprobe_lock);
 	if (prctl_kprobe_registered) {
 		unregister_kprobe(&prctl_kp);
 		prctl_kprobe_registered = false;
 	}
-	mutex_unlock(&prctl_kprobe_lock);
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 

@@ -51,20 +51,6 @@ static atomic_t superkey_total_fail_count = ATOMIC_INIT(0);
 
 void superkey_init(void)
 {
-	const char *compile_key = COMPILE_TIME_SUPERKEY;
-
-#ifdef KSU_SIGNATURE_BYPASS
-	ksu_signature_bypass = true;
-	pr_info("superkey: signature bypass enabled (compile-time)\n");
-#endif // #ifdef KSU_SIGNATURE_BYPASS
-
-	if (compile_key && compile_key[0]) {
-		ksu_superkey_hash = hash_superkey(compile_key);
-		pr_info("superkey: using compile-time key, hash: 0x%llx\n",
-			ksu_superkey_hash);
-		return;
-	}
-
 	if (superkey_store.magic == SUPERKEY_MAGIC) {
 		/*
 		 * flags encoding (must match userspace):

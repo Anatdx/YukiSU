@@ -315,8 +315,7 @@ static bool is_current_verified(void)
 
 bool is_pending_root(uid_t uid)
 {
-	int i;
-	for (i = 0; i < pending_cnt; i++) {
+	for (int i = 0; i < pending_cnt; i++) {
 		if (pending_uids[i].uid == uid) {
 			pending_uids[i].use_count++;
 			pending_uids[i].remove_calls++;
@@ -328,8 +327,7 @@ bool is_pending_root(uid_t uid)
 
 void remove_pending_root(uid_t uid)
 {
-	int i;
-	for (i = 0; i < pending_cnt; i++) {
+	for (int i = 0; i < pending_cnt; i++) {
 		if (pending_uids[i].uid == uid) {
 			pending_uids[i].remove_calls++;
 
@@ -353,12 +351,11 @@ void remove_pending_root(uid_t uid)
 
 static void add_pending_root(uid_t uid)
 {
-	int i;
 	if (pending_cnt >= MAX_PENDING) {
 		pr_warn("pending_root: cache full\n");
 		return;
 	}
-	for (i = 0; i < pending_cnt; i++) {
+	for (int i = 0; i < pending_cnt; i++) {
 		if (pending_uids[i].uid == uid) {
 			pending_uids[i].use_count = 0;
 			pending_uids[i].remove_calls = 0;

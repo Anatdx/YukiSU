@@ -51,29 +51,6 @@ static int transive_to_domain(const char *domain, struct cred *cred)
 	return error;
 }
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 19, 0)
-bool __maybe_unused
-is_ksu_transition(const struct task_security_struct *old_tsec,
-		  const struct task_security_struct *new_tsec)
-{
-	static u32 ksu_sid;
-	char *secdata;
-	u32 seclen;
-	bool allowed = false;
-
-	if (!ksu_sid)
-		security_secctx_to_secid(KERNEL_SU_DOMAIN,
-					 strlen(KERNEL_SU_DOMAIN), &ksu_sid);
-
-	if (security_secid_to_secctx(old_tsec->sid, &secdata, &seclen))
-		return false;
-
-	allowed = (!strcmp("u:r:init:s0", secdata) && new_tsec->sid == ksu_sid);
-	security_release_secctx(secdata, seclen);
-	return allowed;
-}
-#endif // #if LINUX_VERSION_CODE <= KERNEL_VERSIO...
-
 void setup_selinux(const char *domain)
 {
 	if (transive_to_domain(domain, (struct cred *)__task_cred(current))) {
@@ -110,20 +87,6 @@ bool getenforce(void)
 	return true;
 #endif // #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 }
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \
-    !defined(KSU_COMPAT_HAS_CURRENT_SID)
-/*
- * get the subjective security ID of the current task
- */
-static inline u32 current_sid(void)
-{
-	const struct task_security_struct *tsec = current_security();
-
-	return tsec->sid;
-}
-#endif // #if (LINUX_VERSION_CODE < KERNEL_VERSIO...
-       // !defined(KSU_COMPAT_HAS_CURRENT_SID)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
 struct lsm_context {

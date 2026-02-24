@@ -1,33 +1,21 @@
+#include "objsec.h"
 #include <linux/capability.h>
 #include <linux/cred.h>
-#include <linux/err.h>
-#include <linux/fdtable.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/pid.h>
-#include <linux/proc_ns.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/signal.h> // signal_struct
-#include <linux/sched/task.h>
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#include "objsec.h"
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/seccomp.h>
-#include <linux/security.h>
-#include <linux/spinlock.h>
-#include <linux/syscalls.h>
+#include <linux/slab.h>
 #include <linux/thread_info.h>
-#include <linux/tty.h>
 #include <linux/uidgid.h>
+#include <linux/version.h>
 
 #include "allowlist.h"
 #include "app_profile.h"
-#include "arch.h"
-#include "kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 #include "selinux/selinux.h"
+#include "sucompat.h"
 #include "syscall_hook_manager.h"
+
 #include "sulog.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
@@ -70,11 +58,7 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 			put_group_info(group_info);
 			return;
 		}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 		group_info->gid[i] = kgid;
-#else
-		GROUP_AT(group_info, i) = kgid;
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 	}
 
 	groups_sort(group_info);
@@ -82,67 +66,20 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
+void seccomp_filter_release(struct task_struct *tsk);
+
+static void disable_seccomp_for_task(struct task_struct *tsk);
+
 void disable_seccomp(struct task_struct *tsk)
 {
-	if (unlikely(!tsk))
-		return;
-
-	assert_spin_locked(&tsk->sighand->siglock);
-
-	// disable seccomp
-#if defined(CONFIG_GENERIC_ENTRY) &&                                           \
-    LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-	clear_syscall_work(SECCOMP);
-#else
-	clear_thread_flag(TIF_SECCOMP);
-#endif // #if defined(CONFIG_GENERIC_ENTRY) &&
-       // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-
-#ifdef CONFIG_SECCOMP
-	tsk->seccomp.mode = 0;
-	if (tsk->seccomp.filter) {
-		// 5.9+ have filter_count, but optional.
-#ifdef KSU_OPTIONAL_SECCOMP_FILTER_CNT
-		atomic_set(&tsk->seccomp.filter_count, 0);
-#endif // #ifdef KSU_OPTIONAL_SECCOMP_FILTER_CNT
-
-		// some old kernel backport seccomp_filter_release..
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) &&                            \
-    defined(KSU_OPTIONAL_SECCOMP_FILTER_RELEASE)
-		seccomp_filter_release(tsk);
-#else
-		// never, ever call seccomp_filter_release on 6.10+ (no effect)
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) &&                          \
-     LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
-		seccomp_filter_release(tsk);
-#else
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-		put_seccomp_filter(tsk);
-#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
-		tsk->seccomp.filter = NULL;
-#endif // #if (LINUX_VERSION_CODE >= KERNEL_VERSI...
-       // LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
-
-#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
-       // defined(KSU_OPTIONAL_SECCOMP_FILTER_RELEASE)
-	}
-#endif // #ifdef CONFIG_SECCOMP
+	disable_seccomp_for_task(tsk);
 }
 
 void escape_with_root_profile(void)
 {
 	struct cred *cred;
-	// a bit useless, but we just want less ifdefs
 	struct task_struct *p = current;
-
-	if (current_euid().val == 0) {
-		pr_warn("Already root, don't escape!\n");
-#if __SULOG_GATE
-		ksu_sulog_report_su_grant(current_euid().val, NULL,
-					  "escape_to_root_failed");
-#endif // #if __SULOG_GATE
-		return;
-	}
+	struct task_struct *t;
 
 	cred = prepare_creds();
 	if (!cred) {
@@ -150,52 +87,56 @@ void escape_with_root_profile(void)
 		return;
 	}
 
-	struct root_profile *profile = ksu_get_root_profile(cred->uid.val);
+	if (cred->euid.val == 0) {
+		pr_warn("Already root, don't escape!\n");
+#if __SULOG_GATE
+		ksu_sulog_report_su_grant(current_euid().val, NULL,
+					  "escape_to_root_failed");
+#endif // #if __SULOG_GATE
+		abort_creds(cred);
+		return;
+	}
 
-	cred->uid.val = profile->uid;
-	cred->suid.val = profile->uid;
-	cred->euid.val = profile->uid;
-	cred->fsuid.val = profile->uid;
+	struct root_profile profile;
+	ksu_get_root_profile(cred->uid.val, &profile);
 
-	cred->gid.val = profile->gid;
-	cred->fsgid.val = profile->gid;
-	cred->sgid.val = profile->gid;
-	cred->egid.val = profile->gid;
+	cred->uid.val = profile.uid;
+	cred->suid.val = profile.uid;
+	cred->euid.val = profile.uid;
+	cred->fsuid.val = profile.uid;
+
+	cred->gid.val = profile.gid;
+	cred->fsgid.val = profile.gid;
+	cred->sgid.val = profile.gid;
+	cred->egid.val = profile.gid;
 	cred->securebits = 0;
 
-	BUILD_BUG_ON(sizeof(profile->capabilities.effective) !=
+	BUILD_BUG_ON(sizeof(profile.capabilities.effective) !=
 		     sizeof(kernel_cap_t));
 
 	// setup capabilities
 	// we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not
 	// accessible for non root process we add it here but don't add it to
 	// cap_inhertiable, it would be dropped automaticly after exec!
-	u64 cap_for_ksud =
-	    profile->capabilities.effective | CAP_DAC_READ_SEARCH;
+	u64 cap_for_ksud = profile.capabilities.effective | CAP_DAC_READ_SEARCH;
 	memcpy(&cred->cap_effective, &cap_for_ksud,
 	       sizeof(cred->cap_effective));
-	memcpy(&cred->cap_permitted, &profile->capabilities.effective,
+	memcpy(&cred->cap_permitted, &profile.capabilities.effective,
 	       sizeof(cred->cap_permitted));
-	memcpy(&cred->cap_bset, &profile->capabilities.effective,
+	memcpy(&cred->cap_bset, &profile.capabilities.effective,
 	       sizeof(cred->cap_bset));
 
-	setup_groups(profile, cred);
+	setup_groups(&profile, cred);
 
 	commit_creds(cred);
 
-	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that current->sighand->siglock is held
-	// during the operation.
-	spin_lock_irq(&p->sighand->siglock);
-	disable_seccomp(p);
-	spin_unlock_irq(&p->sighand->siglock);
+	disable_seccomp(current);
 
-	setup_selinux(profile->selinux_domain);
+	setup_selinux(profile.selinux_domain);
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(current_euid().val, NULL, "escape_to_root");
 #endif // #if __SULOG_GATE
 
-	struct task_struct *t;
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);
@@ -243,11 +184,54 @@ static int __manual_su_handle_devpts(struct inode *inode)
 	return 0;
 }
 
+static void disable_seccomp_for_task(struct task_struct *tsk)
+{
+	struct task_struct *fake;
+
+	fake = kmalloc(sizeof(*fake), GFP_ATOMIC);
+	if (!fake) {
+		pr_warn("failed to alloc fake task_struct\n");
+		return;
+	}
+
+	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
+	// When disabling Seccomp, ensure that tsk->sighand->siglock is held
+	// during the operation.
+	spin_lock_irq(&tsk->sighand->siglock);
+	// disable seccomp
+#if defined(CONFIG_GENERIC_ENTRY) &&                                           \
+    LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+	// clear_syscall_work is only for tsk, use clear_tsk_thread_flag for
+	// other tasks
+	clear_tsk_thread_flag(tsk, TIF_SECCOMP);
+#else
+	clear_tsk_thread_flag(tsk, TIF_SECCOMP);
+#endif // #if defined(CONFIG_GENERIC_ENTRY) &&
+
+	memcpy(fake, tsk, sizeof(*fake));
+	tsk->seccomp.mode = SECCOMP_MODE_DISABLED;
+	tsk->seccomp.filter = NULL;
+	atomic_set(&tsk->seccomp.filter_count, 0);
+	spin_unlock_irq(&tsk->sighand->siglock);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	// https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
+	fake->flags |= PF_EXITING;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+	// https://github.com/torvalds/linux/commit/0d8315dddd2899f519fe1ca3d4d5cdaf44ea421e#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R556-R558
+	fake->sighand = NULL;
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
+
+	seccomp_filter_release(fake);
+	kfree(fake);
+}
+
 void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 {
 	struct cred *newcreds;
 	struct task_struct *target_task;
-	unsigned long flags;
+	struct task_struct *p = current;
+	struct task_struct *t;
 
 	pr_info(
 	    "cmd_su: escape_to_root_for_cmd_su called for UID: %d, PID: %d\n",
@@ -288,29 +272,30 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 		return;
 	}
 
-	struct root_profile *profile = ksu_get_root_profile(target_uid);
+	struct root_profile profile;
+	ksu_get_root_profile(target_uid, &profile);
 
-	newcreds->uid.val = profile->uid;
-	newcreds->suid.val = profile->uid;
-	newcreds->euid.val = profile->uid;
-	newcreds->fsuid.val = profile->uid;
+	newcreds->uid.val = profile.uid;
+	newcreds->suid.val = profile.uid;
+	newcreds->euid.val = profile.uid;
+	newcreds->fsuid.val = profile.uid;
 
-	newcreds->gid.val = profile->gid;
-	newcreds->fsgid.val = profile->gid;
-	newcreds->sgid.val = profile->gid;
-	newcreds->egid.val = profile->gid;
+	newcreds->gid.val = profile.gid;
+	newcreds->fsgid.val = profile.gid;
+	newcreds->sgid.val = profile.gid;
+	newcreds->egid.val = profile.gid;
 	newcreds->securebits = 0;
 
-	u64 cap_for_cmd_su = profile->capabilities.effective |
+	u64 cap_for_cmd_su = profile.capabilities.effective |
 			     CAP_DAC_READ_SEARCH | CAP_SETUID | CAP_SETGID;
 	memcpy(&newcreds->cap_effective, &cap_for_cmd_su,
 	       sizeof(newcreds->cap_effective));
-	memcpy(&newcreds->cap_permitted, &profile->capabilities.effective,
+	memcpy(&newcreds->cap_permitted, &profile.capabilities.effective,
 	       sizeof(newcreds->cap_permitted));
-	memcpy(&newcreds->cap_bset, &profile->capabilities.effective,
+	memcpy(&newcreds->cap_bset, &profile.capabilities.effective,
 	       sizeof(newcreds->cap_bset));
 
-	setup_groups(profile, newcreds);
+	setup_groups(&profile, newcreds);
 	task_lock(target_task);
 
 	const struct cred *old_creds = get_task_cred(target_task);
@@ -320,12 +305,10 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	task_unlock(target_task);
 
 	if (target_task->sighand) {
-		spin_lock_irqsave(&target_task->sighand->siglock, flags);
-		disable_seccomp(target_task);
-		spin_unlock_irqrestore(&target_task->sighand->siglock, flags);
+		disable_seccomp_for_task(target_task);
 	}
 
-	setup_selinux(profile->selinux_domain);
+	setup_selinux(profile.selinux_domain);
 	put_cred(old_creds);
 	wake_up_process(target_task);
 
@@ -340,8 +323,6 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 #if __SULOG_GATE
 	ksu_sulog_report_su_grant(target_uid, "cmd_su", "manual_escalation");
 #endif // #if __SULOG_GATE
-	struct task_struct *p = current;
-	struct task_struct *t;
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);

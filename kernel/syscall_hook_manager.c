@@ -21,14 +21,6 @@
 #include "syscall_hook_manager.h"
 #include "util.h"
 
-#ifdef CONFIG_KSU_MANUAL_SU
-#include "manual_su.h"
-static inline void ksu_handle_task_alloc(struct pt_regs *regs)
-{
-	ksu_try_escalate_for_uid(current_uid().val);
-}
-#endif // #ifdef CONFIG_KSU_MANUAL_SU
-
 // Tracepoint registration count management
 // == 1: just us
 // >  1: someone else is also using syscall tracepoint e.g. ftrace
@@ -255,9 +247,7 @@ static inline bool check_syscall_fastpath(int nr)
 	case __NR_execve:
 	case __NR_setresuid:
 	case __NR_clone:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
 	case __NR_clone3:
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 		return true;
 	default:
 		return false;
@@ -265,11 +255,8 @@ static inline bool check_syscall_fastpath(int nr)
 }
 
 // Unmark init's child that are not zygote, adbd or ksud
-// For LKM mode: also detect app_process to trigger on_post_fs_data
 int ksu_handle_init_mark_tracker(const char __user **filename_user)
 {
-	static const char app_process[] = "/system/bin/app_process";
-	static bool first_app_process = true;
 	char path[64];
 	unsigned long addr;
 	const char __user *fn;
@@ -293,13 +280,6 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
 			"%d\n",
 			current->pid);
 		escape_to_root_for_init();
-	} else if (unlikely(first_app_process &&
-			    strstr(path, "/app_process") != NULL)) {
-		// LKM mode: detect app_process to trigger on_post_fs_data
-		first_app_process = false;
-		pr_info("hook_manager: exec app_process detected, triggering "
-			"on_post_fs_data\n");
-		on_post_fs_data();
 	} else if (likely(strstr(path, "/app_process") == NULL &&
 			  strstr(path, "/adbd") == NULL)) {
 		pr_info("hook_manager: unmark %d exec %s\n", current->pid,
@@ -309,13 +289,19 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
 
 	return 0;
 }
+#ifdef CONFIG_KSU_MANUAL_SU
+#include "manual_su.h"
+static inline void ksu_handle_task_alloc(struct pt_regs *regs)
+{
+	ksu_try_escalate_for_uid(current_uid().val);
+}
+#endif // #ifdef CONFIG_KSU_MANUAL_SU
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 // Generic sys_enter handler that dispatches to specific handlers
 static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 {
 	if (unlikely(check_syscall_fastpath(id))) {
-#ifdef KSU_TP_HOOK
 		if (ksu_su_compat_enabled) {
 			// Handle newfstatat
 			if (id == __NR_newfstatat) {
@@ -343,18 +329,13 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 			if (id == __NR_execve) {
 				const char __user **filename_user =
 				    (const char __user **)&PT_REGS_PARM1(regs);
-				// For LKM mode, use tracepoint hook to detect
-				// init events because kprobe hook cannot
-				// reliably read user addresses on kernels with
-				// MTE/PAC enabled
 				if (current->pid != 1 &&
 				    is_init(get_current_cred())) {
 					ksu_handle_init_mark_tracker(
 					    filename_user);
 				} else {
 					ksu_handle_execve_sucompat(
-					    NULL, filename_user, NULL, NULL,
-					    NULL);
+					    filename_user, NULL, NULL, NULL);
 				}
 				return;
 			}
@@ -373,7 +354,6 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 		if (id == __NR_clone || id == __NR_clone3)
 			return ksu_handle_task_alloc(regs);
 #endif // #ifdef CONFIG_KSU_MANUAL_SU
-#endif // #ifdef KSU_TP_HOOK
 	}
 }
 #endif // #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS

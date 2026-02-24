@@ -42,13 +42,6 @@ static const struct fsnotify_ops ksu_ops = {
     .handle_inode_event = ksu_handle_inode_event,
 };
 
-static void __maybe_unused m_free(struct fsnotify_mark *m)
-{
-	if (m) {
-		kfree(m);
-	}
-}
-
 static int add_mark_on_inode(struct inode *inode, u32 mask,
 			     struct fsnotify_mark **out)
 {
@@ -123,18 +116,13 @@ int ksu_observer_init(void)
 		return PTR_ERR(g);
 
 	ret = watch_one_dir(&g_watch);
-	pr_info("%s done.\n", __func__);
+	pr_info("observer init done\n");
 	return 0;
 }
 
 void ksu_observer_exit(void)
 {
-	if (!g) {
-		pr_info("%s: not initialized, skipping\n", __func__);
-		return;
-	}
 	unwatch_one_dir(&g_watch);
 	fsnotify_put_group(g);
-	g = NULL;
-	pr_info("%s: done.\n", __func__);
+	pr_info("observer exit done\n");
 }
