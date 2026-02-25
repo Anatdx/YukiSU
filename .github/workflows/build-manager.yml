@@ -96,6 +96,15 @@ jobs:
           echo "title=Manager" >> $GITHUB_OUTPUT
           echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> $GITHUB_OUTPUT
 
+      - name: Check GPG available
+        id: gpg_check
+        run: |
+          if [ -n "${{ secrets.GPG_PRIVATE_KEY }}" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Write key
         run: |
           if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
@@ -136,7 +145,7 @@ jobs:
         run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=${{ matrix.abi }}
 
       - name: Import GPG key
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        if: steps.gpg_check.outputs.available == 'true'
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -147,7 +156,7 @@ jobs:
           rm -f key.asc
 
       - name: Sign APK with GPG
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        if: steps.gpg_check.outputs.available == 'true'
         run: |
           cd app/build/outputs/apk/release
           for apk in *.apk; do
