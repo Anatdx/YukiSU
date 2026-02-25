@@ -97,7 +97,6 @@ jobs:
           echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> $GITHUB_OUTPUT
 
       - name: Write key
-        if: ${{ github.event_name != 'pull_request' }}
         run: |
           if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
             {
@@ -137,7 +136,7 @@ jobs:
         run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=${{ matrix.abi }}
 
       - name: Import GPG key
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -148,7 +147,7 @@ jobs:
           rm -f key.asc
 
       - name: Sign APK with GPG
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         run: |
           cd app/build/outputs/apk/release
           for apk in *.apk; do
@@ -163,23 +162,19 @@ jobs:
           ls -lh *.sig || true
 
       - name: Upload build artifact
-        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: Manager-${{ matrix.abi }}
-          path: |
-            manager/app/build/outputs/apk/release/*.apk
-            manager/app/build/outputs/apk/release/*.apk.sig
+          path: manager/app/build/outputs/apk/release/
 
       - name: Upload mappings
-        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: "${{ steps.determine.outputs.title }}-mappings-${{ matrix.abi }}"
           path: "manager/app/build/outputs/mapping/release/"
 
       - name: Upload to telegram
-        if: matrix.abi == 'arm64-v8a' && github.event_name != 'pull_request' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
+        if: matrix.abi == 'arm64-v8a' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
         env:
           CHAT_ID: ${{ vars.CHAT_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
