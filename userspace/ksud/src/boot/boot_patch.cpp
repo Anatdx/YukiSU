@@ -1126,15 +1126,26 @@ int boot_restore(const std::vector<std::string>& args) {
     return 0;
 }
 
-std::string get_current_kmi() {
-    // Use uname() syscall - works without root permission
-    struct utsname uts{};
-    if (uname(&uts) != 0) {
-        LOGE("Failed to get uname");
-        return "";
-    }
+// Read real kernel release from sysfs. Not spoofed by HymoFS uname hiding (uname(2) is).
+// Prefer this for KMI so LKM selection uses the actual kernel, not spoofed version.
+static std::string read_kernel_release_from_sysfs() {
+    std::ifstream f("/proc/sys/kernel/osrelease");
+    std::string line;
+    if (std::getline(f, line))
+        return line;
+    return "";
+}
 
-    const std::string full_version = uts.release;  // e.g. "6.6.66-android15-8-g29d86c5fc9dd"
+std::string get_current_kmi() {
+    std::string full_version = read_kernel_release_from_sysfs();
+    if (full_version.empty()) {
+        struct utsname uts{};
+        if (uname(&uts) != 0) {
+            LOGE("Failed to get uname");
+            return "";
+        }
+        full_version = uts.release;  // e.g. "6.6.66-android15-8-g29d86c5fc9dd"
+    }
 
     // Extract major.minor (e.g. "6.6")
     const size_t dot1 = full_version.find('.');

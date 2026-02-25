@@ -171,14 +171,22 @@ static bool ensure_base_dir() {
 
 #include <sys/utsname.h>
 
-static std::string get_current_kmi() {
-    struct utsname uts{};
-    if (uname(&uts) != 0) {
-        LOG_ERROR("Failed to get uname");
-        return "";
-    }
+// Read real kernel release from sysfs. Not spoofed by HymoFS uname hiding (uname(2) is).
+// Use this for KMI matching so LKM installation picks the correct module for the real kernel.
+static std::string read_kernel_release_from_sysfs() {
+    return read_file_first_line("/proc/sys/kernel/osrelease");
+}
 
-    const std::string full_version = uts.release;
+static std::string get_current_kmi() {
+    std::string full_version = read_kernel_release_from_sysfs();
+    if (full_version.empty()) {
+        struct utsname uts{};
+        if (uname(&uts) != 0) {
+            LOG_ERROR("Failed to get uname");
+            return "";
+        }
+        full_version = uts.release;
+    }
 
     const size_t dot1 = full_version.find('.');
     if (dot1 == std::string::npos)
