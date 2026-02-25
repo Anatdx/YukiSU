@@ -152,6 +152,49 @@ object HymoFSManager {
         val target: String? = null,
         val extra: Int? = null
     )
+
+    private fun extractJsonObject(text: String): JSONObject? {
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
+        return runCatching { JSONObject(text.substring(start, end + 1)) }.getOrNull()
+    }
+
+    private fun extractJsonArray(text: String): JSONArray? {
+        val start = text.indexOf('[')
+        val end = text.lastIndexOf(']')
+        if (start < 0 || end <= start) return null
+        return runCatching { JSONArray(text.substring(start, end + 1)) }.getOrNull()
+    }
+
+    private fun parseMountStats(ms: JSONObject?): MountStats? {
+        if (ms == null) return null
+        return MountStats(
+            totalMounts = ms.optInt("total_mounts", 0),
+            successfulMounts = ms.optInt("successful_mounts", 0),
+            failedMounts = ms.optInt("failed_mounts", 0),
+            tmpfsCreated = ms.optInt("tmpfs_created", 0),
+            filesMounted = ms.optInt("files_mounted", 0),
+            dirsMounted = ms.optInt("dirs_mounted", 0),
+            symlinksCreated = ms.optInt("symlinks_created", 0),
+            overlayfsMounts = ms.optInt("overlayfs_mounts", 0),
+            successRate = if (ms.has("success_rate")) ms.optDouble("success_rate") else null
+        )
+    }
+
+    private fun parsePartitions(parts: JSONArray?): List<PartitionInfo> {
+        if (parts == null) return emptyList()
+        return (0 until parts.length()).mapNotNull { i ->
+            val p = parts.optJSONObject(i) ?: return@mapNotNull null
+            PartitionInfo(
+                name = p.optString("name", ""),
+                mountPoint = p.optString("mount_point", ""),
+                fsType = p.optString("fs_type", ""),
+                isReadOnly = p.optBoolean("is_read_only", false),
+                existsAsSymlink = p.optBoolean("exists_as_symlink", false)
+            )
+        }
+    }
     
     // ==================== Commands ====================
     
@@ -498,37 +541,29 @@ object HymoFSManager {
             val apiSystemResult = Shell.cmd("${getKsud()} hymo api system").exec()
             if (apiSystemResult.isSuccess && apiSystemResult.out.isNotEmpty()) {
                 try {
-                    val sys = JSONObject(apiSystemResult.out.joinToString("\n"))
+                    val sysText = (apiSystemResult.out + apiSystemResult.err).joinToString("\n")
+                    val sys = extractJsonObject(sysText) ?: throw IllegalStateException("api system json parse failed")
                     mountBase = sys.optString("mount_base", mountBase)
-                    val ms = sys.optJSONObject("mountStats")
-                    if (ms != null) {
-                        mountStats = MountStats(
-                            totalMounts = ms.optInt("total_mounts", 0),
-                            successfulMounts = ms.optInt("successful_mounts", 0),
-                            failedMounts = ms.optInt("failed_mounts", 0),
-                            tmpfsCreated = ms.optInt("tmpfs_created", 0),
-                            filesMounted = ms.optInt("files_mounted", 0),
-                            dirsMounted = ms.optInt("dirs_mounted", 0),
-                            symlinksCreated = ms.optInt("symlinks_created", 0),
-                            overlayfsMounts = ms.optInt("overlayfs_mounts", 0),
-                            successRate = if (ms.has("success_rate")) ms.optDouble("success_rate") else null
-                        )
-                    }
-                    val parts = sys.optJSONArray("detectedPartitions")
-                    if (parts != null) {
-                        detectedPartitions = (0 until parts.length()).mapNotNull { i ->
-                            val p = parts.optJSONObject(i) ?: return@mapNotNull null
-                            PartitionInfo(
-                                name = p.optString("name", ""),
-                                mountPoint = p.optString("mount_point", ""),
-                                fsType = p.optString("fs_type", ""),
-                                isReadOnly = p.optBoolean("is_read_only", false),
-                                existsAsSymlink = p.optBoolean("exists_as_symlink", false)
-                            )
-                        }
-                    }
+                    mountStats = parseMountStats(sys.optJSONObject("mountStats"))
+                    detectedPartitions = parsePartitions(sys.optJSONArray("detectedPartitions"))
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to parse api system", e)
+                }
+            }
+
+            // WebUI-compatible fallback path: pull dedicated endpoints if system payload is partial.
+            if (mountStats == null) {
+                val mountStatsResult = Shell.cmd("${getKsud()} hymo api mount-stats").exec()
+                if (mountStatsResult.isSuccess) {
+                    val msText = (mountStatsResult.out + mountStatsResult.err).joinToString("\n")
+                    mountStats = parseMountStats(extractJsonObject(msText))
+                }
+            }
+            if (detectedPartitions.isEmpty()) {
+                val partitionsResult = Shell.cmd("${getKsud()} hymo api partitions").exec()
+                if (partitionsResult.isSuccess) {
+                    val partsText = (partitionsResult.out + partitionsResult.err).joinToString("\n")
+                    detectedPartitions = parsePartitions(extractJsonArray(partsText))
                 }
             }
             
@@ -536,36 +571,40 @@ object HymoFSManager {
             val hymofsVersionResult = Shell.cmd("${getKsud()} hymo hymofs version").exec()
             if (hymofsVersionResult.isSuccess && hymofsVersionResult.out.isNotEmpty()) {
                 try {
-                    val ver = JSONObject(hymofsVersionResult.out.joinToString("\n"))
+                    val verText = (hymofsVersionResult.out + hymofsVersionResult.err).joinToString("\n")
+                    val ver = extractJsonObject(verText) ?: throw IllegalStateException("hymofs version json parse failed")
                     hymofsModuleIds = ver.optJSONArray("active_modules")?.let { arr ->
                         (0 until arr.length()).map { arr.getString(it) }
                     } ?: hymofsModuleIds
                     hymofsMismatch = ver.optBoolean("protocol_mismatch", hymofsMismatch)
-                    mismatchMessage = ver.optString("mismatch_message", null) ?: mismatchMessage
+                    val mm = ver.optString("mismatch_message", "")
+                    if (mm.isNotBlank()) mismatchMessage = mm
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to parse hymofs version", e)
                 }
             }
             
-            // Fallback: daemon state file
-            if (hymofsModuleIds.isEmpty() || mountBase == "Unknown") {
+            // Fallback: daemon state file (also used to populate active_mounts for status page).
+            run {
                 val stateResult = Shell.cmd("cat '$HYMO_STATE_FILE' 2>/dev/null").exec()
                 if (stateResult.isSuccess && stateResult.out.isNotEmpty()) {
                     try {
-                        val state = JSONObject(stateResult.out.joinToString("\n"))
+                        val stateText = (stateResult.out + stateResult.err).joinToString("\n")
+                        val state = extractJsonObject(stateText) ?: throw IllegalStateException("state json parse failed")
                         if (mountBase == "Unknown") mountBase = state.optString("mount_point", "Unknown")
-                        if (activeMounts.isEmpty()) {
-                            activeMounts = state.optJSONArray("active_mounts")?.let { arr ->
-                                (0 until arr.length()).map { arr.getString(it) }
-                            } ?: emptyList()
-                        }
+                        activeMounts = state.optJSONArray("active_mounts")?.let { arr ->
+                            (0 until arr.length()).map { arr.getString(it) }
+                        } ?: activeMounts
                         if (hymofsModuleIds.isEmpty()) {
                             hymofsModuleIds = state.optJSONArray("hymofs_module_ids")?.let { arr ->
                                 (0 until arr.length()).map { arr.getString(it) }
                             } ?: emptyList()
                         }
                         hymofsMismatch = state.optBoolean("hymofs_mismatch", hymofsMismatch)
-                        if (mismatchMessage == null) mismatchMessage = state.optString("mismatch_message", null)
+                        if (mismatchMessage.isNullOrBlank()) {
+                            val mm = state.optString("mismatch_message", "")
+                            if (mm.isNotBlank()) mismatchMessage = mm
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to parse daemon state", e)
                     }

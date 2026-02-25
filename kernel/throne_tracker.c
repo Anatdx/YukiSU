@@ -178,7 +178,8 @@ static int get_pkg_from_apk_path(char *pkg, const char *path)
 	return 0;
 }
 
-static void crown_manager(const char *apk, struct list_head *uid_data)
+static void crown_manager(const char *apk, struct list_head *uid_data,
+			  int signature_index)
 {
 	char pkg[KSU_MAX_PACKAGE_NAME];
 	if (get_pkg_from_apk_path(pkg, apk) < 0) {
@@ -204,7 +205,13 @@ static void crown_manager(const char *apk, struct list_head *uid_data)
 		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
 			pr_info("Crowning manager: %s(appid=%d)\n", pkg,
 				np->appid);
-			ksu_set_manager_appid(np->appid);
+			if (signature_index >= 0 &&
+			    signature_index < KSU_MAX_MANAGER_KEYS) {
+				ksu_set_manager_appid_for_index(
+				    np->appid, signature_index);
+			} else {
+				ksu_set_manager_appid(np->appid);
+			}
 			break;
 		}
 	}
@@ -315,7 +322,8 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 			if (is_manager_apk_ex(dirpath, &signature_index)) {
 				pr_info("Found manager base.apk at path: %s\n",
 					dirpath);
-				crown_manager(dirpath, my_ctx->private_data);
+				crown_manager(dirpath, my_ctx->private_data,
+					      signature_index);
 				/* Do not stop: continue scanning so all manager
 				 * APKs (e.g. Rei + YukiSU) get crowned */
 			}

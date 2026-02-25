@@ -58,10 +58,47 @@ static int open_tree(int dfd, const char* filename, unsigned int flags) {
     return syscall(__NR_open_tree, dfd, filename, flags);
 }
 
+static bool is_overlay_mountpoint(const std::string& mount_point) {
+    std::ifstream mountinfo("/proc/self/mountinfo");
+    if (!mountinfo.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(mountinfo, line)) {
+        const size_t sep = line.find(" - ");
+        if (sep == std::string::npos) {
+            continue;
+        }
+
+        const std::string lhs = line.substr(0, sep);
+        const std::string rhs = line.substr(sep + 3);
+
+        std::istringstream lss(lhs);
+        std::string mount_id, parent_id, dev, root, mp;
+        if (!(lss >> mount_id >> parent_id >> dev >> root >> mp)) {
+            continue;
+        }
+        if (mp != mount_point) {
+            continue;
+        }
+
+        std::istringstream rss(rhs);
+        std::string fs_type;
+        if (!(rss >> fs_type)) {
+            continue;
+        }
+        return fs_type == "overlay";
+    }
+
+    return false;
+}
+
 static bool mount_overlayfs_modern(const std::string& lowerdir_config,
                                    const std::optional<std::string>& upperdir,
                                    const std::optional<std::string>& workdir,
-                                   const std::string& dest, const std::string& mount_source) {
+                                   const std::string& dest, const std::string& mount_source,
+                                   bool hide_overlay_xattrs) {
     int fs_fd = fsopen("overlay", FSOPEN_CLOEXEC);
     if (fs_fd < 0) {
         return false;
@@ -102,8 +139,12 @@ static bool mount_overlayfs_modern(const std::string& lowerdir_config,
         if (move_mount(mnt_fd, "", AT_FDCWD, dest.c_str(), MOVE_MOUNT_F_EMPTY_PATH) < 0) {
             success = false;
         } else {
-            // HymoFS: Hide overlay xattrs for this mount
-            HymoFS::hide_overlay_xattrs(dest);
+            if (hide_overlay_xattrs) {
+                // Hide overlay xattrs only for mounts we create ourselves.
+                HymoFS::hide_overlay_xattrs(dest);
+            } else {
+                LOG_DEBUG("Skip hide_overlay_xattrs for existing overlay mount: " + dest);
+            }
         }
     }
 
@@ -131,7 +172,8 @@ static std::string escape_overlay_path(const std::string& path) {
 static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
                                    const std::optional<std::string>& upperdir,
                                    const std::optional<std::string>& workdir,
-                                   const std::string& dest, const std::string& mount_source) {
+                                   const std::string& dest, const std::string& mount_source,
+                                   bool hide_overlay_xattrs) {
     // Escape commas in all paths
     std::string safe_lowerdir = escape_overlay_path(lowerdir_config);
     std::string data = "lowerdir=" + safe_lowerdir;
@@ -147,8 +189,12 @@ static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
         return false;
     }
 
-    // HymoFS: Hide overlay xattrs for this mount
-    HymoFS::hide_overlay_xattrs(dest);
+    if (hide_overlay_xattrs) {
+        // Hide overlay xattrs only for mounts we create ourselves.
+        HymoFS::hide_overlay_xattrs(dest);
+    } else {
+        LOG_DEBUG("Skip hide_overlay_xattrs for existing overlay mount: " + dest);
+    }
 
     return true;
 }
@@ -232,11 +278,16 @@ bool bind_mount(const fs::path& from, const fs::path& to, bool disable_umount) {
     return success;
 }
 
-// FIX 2: Fix child mount restoration logic
+// FIX 2: Fix child mount restoration logic.
+// child_was_overlay_before must be recorded BEFORE mounting the root overlay, because
+// after the root overlay the child path is no longer a mount point in mountinfo.
 static bool mount_overlay_child(const std::string& mount_point, const std::string& relative,
                                 const std::vector<std::string>& module_roots,
                                 const std::string& stock_root, const std::string& mount_source,
-                                bool disable_umount, const std::vector<std::string>& partitions) {
+                                bool disable_umount, const std::vector<std::string>& partitions,
+                                bool child_was_overlay_before) {
+    const bool hide_child_overlay_xattrs = !child_was_overlay_before;
+
     // Check if any module modified this subpath
     bool has_modification = false;
     for (const auto& lower : module_roots) {
@@ -290,10 +341,10 @@ static bool mount_overlay_child(const std::string& mount_point, const std::strin
 
     // Try modern API
     if (!mount_overlayfs_modern(lowerdir_config, std::nullopt, std::nullopt, mount_point,
-                                mount_source)) {
+                                mount_source, hide_child_overlay_xattrs)) {
         // Fallback to legacy method
         if (!mount_overlayfs_legacy(lowerdir_config, std::nullopt, std::nullopt, mount_point,
-                                    mount_source)) {
+                                    mount_source, hide_child_overlay_xattrs)) {
             LOG_WARN("failed to overlay child " + mount_point + ", fallback to bind mount");
             return bind_mount(stock_root, mount_point, disable_umount);
         }
@@ -323,6 +374,12 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
     }
 
     LOG_INFO("Starting robust overlay mount for " + target_root);
+    const bool root_was_overlay_before = is_overlay_mountpoint(target_root);
+    const bool hide_root_overlay_xattrs = !root_was_overlay_before;
+    if (root_was_overlay_before) {
+        LOG_INFO("Safety mode: " + target_root +
+                 " is already overlay before mount, skip hide_overlay_xattrs");
+    }
 
     // STRATEGY: Mirror Mount
     // 1. Bind mount target_root (recursively) to a private mirror location.
@@ -360,6 +417,17 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
                   target_root);
     }
 
+    // Record which child mount points were overlay BEFORE we mount the root overlay.
+    // After the root overlay, those paths are no longer mount points in mountinfo,
+    // so is_overlay_mountpoint() would always return false and we would wrongly
+    // call hide_overlay_xattrs for every restored child (including system overlays).
+    std::set<std::string> child_overlay_before;
+    for (const auto& mp : mount_seq) {
+        if (is_overlay_mountpoint(mp)) {
+            child_overlay_before.insert(mp);
+        }
+    }
+
     // Build lowerdir config using MIRROR as the base
     std::string lowerdir_config;
     for (size_t i = 0; i < module_roots.size(); ++i) {
@@ -382,11 +450,11 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
 
     // Mount root overlay
     bool success = mount_overlayfs_modern(lowerdir_config, upperdir_str, workdir_str, target_root,
-                                          mount_source);
+                                          mount_source, hide_root_overlay_xattrs);
     if (!success) {
         LOG_WARN("fsopen mount failed, fallback to legacy mount");
         success = mount_overlayfs_legacy(lowerdir_config, upperdir_str, workdir_str, target_root,
-                                         mount_source);
+                                         mount_source, hide_root_overlay_xattrs);
     }
 
     if (!success) {
@@ -417,8 +485,9 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
 
         LOG_DEBUG("Restoring child mount: " + mount_point + " from " + source_path);
 
+        const bool child_was_overlay = (child_overlay_before.count(mount_point) != 0);
         if (!mount_overlay_child(mount_point, relative, module_roots, source_path, mount_source,
-                                 disable_umount, partitions)) {
+                                 disable_umount, partitions, child_was_overlay)) {
             LOG_ERROR("Failed to restore child mount " + mount_point + ", reverting overlay");
             child_mount_failed = true;
             failed_mount_point = mount_point;
