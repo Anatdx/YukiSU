@@ -23,6 +23,9 @@
 #ifndef TMPFS_MAGIC
 #define TMPFS_MAGIC 0x01021994
 #endif  // #ifndef TMPFS_MAGIC
+#ifndef MS_SLAVE
+#define MS_SLAVE (1 << 19)
+#endif  // #ifndef MS_SLAVE
 
 namespace hymo {
 
@@ -574,7 +577,9 @@ static bool finalize_tmpfs_overlay(const fs::path& path, const fs::path& work_di
                                    bool disable_umount) {
     mount(nullptr, work_dir_path.c_str(), nullptr, MS_REMOUNT | MS_RDONLY | MS_BIND, nullptr);
     mount(work_dir_path.c_str(), path.c_str(), nullptr, MS_MOVE, nullptr);
-    mount(nullptr, path.c_str(), nullptr, MS_PRIVATE, nullptr);
+    // MS_SLAVE to avoid MOUNT_PROPAGATION detection (private = Magisk Hide indicator). Source
+    // "none" for propagation-only.
+    mount("none", path.c_str(), nullptr, MS_SLAVE, nullptr);
 
     if (!disable_umount) {
         send_unmountable(path);
@@ -650,6 +655,10 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
 bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& module_paths,
                       const std::string& mount_source,
                       const std::vector<std::string>& extra_partitions, bool disable_umount) {
+    // KernelSU CRITICAL: use configured mount source (e.g. "KSU") so KernelSU can identify and
+    // manage mounts.
+    const std::string effective_source = mount_source.empty() ? "KSU" : mount_source;
+
     Node* root = collect_all_modules(module_paths, extra_partitions);
     if (!root) {
         LOG_INFO("No files to magic mount");
@@ -658,13 +667,15 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
 
     fs::path work_dir = tmp_path / "workdir";
 
-    if (!mount_tmpfs(work_dir, mount_source.c_str())) {
+    if (!mount_tmpfs(work_dir, effective_source.c_str())) {
         LOG_ERROR("Failed to create workdir tmpfs at " + work_dir.string());
         delete root;
         return false;
     }
 
-    mount(nullptr, work_dir.c_str(), nullptr, MS_PRIVATE, nullptr);
+    // MS_SLAVE to avoid MOUNT_PROPAGATION detection (private = Magisk Hide indicator). Source
+    // "none" for propagation-only.
+    mount("none", work_dir.c_str(), nullptr, MS_SLAVE, nullptr);
 
     bool result = false;
     try {

@@ -36,6 +36,9 @@ namespace hymo {
 #ifndef OPEN_TREE_CLOEXEC
 #define OPEN_TREE_CLOEXEC 0x1
 #endif  // #ifndef OPEN_TREE_CLOEXEC
+#ifndef MS_SLAVE
+#define MS_SLAVE (1 << 19)
+#endif  // #ifndef MS_SLAVE
 
 static int fsopen(const char* fsname, unsigned int flags) {
     return syscall(__NR_fsopen, fsname, flags);
@@ -361,6 +364,10 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
                    const std::string& mount_source, std::optional<fs::path> upperdir,
                    std::optional<fs::path> workdir, bool disable_umount,
                    const std::vector<std::string>& partitions) {
+    // KernelSU CRITICAL: source/device name must be "KSU" (or config mountsource) so KernelSU can
+    // identify and manage mounts.
+    const std::string effective_source = mount_source.empty() ? "KSU" : mount_source;
+
     std::string target_root = target_root_raw;
     try {
         if (fs::exists(target_root_raw)) {
@@ -402,8 +409,9 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
         LOG_ERROR("Failed to create mirror for " + target_root + ": " + strerror(errno));
         return false;
     }
-    // Make mirror private so our changes don't propagate back
-    mount(nullptr, mirror_path.c_str(), nullptr, MS_PRIVATE, nullptr);
+    // Use MS_SLAVE so mirror does not propagate back to target_root; avoid MS_PRIVATE
+    // (detectors flag root/private as Magisk Hide indicator). Source "none" for propagation-only.
+    mount("none", mirror_path.c_str(), nullptr, MS_SLAVE, nullptr);
 
     LOG_DEBUG("Created mirror at " + mirror_path);
 
@@ -450,11 +458,11 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
 
     // Mount root overlay
     bool success = mount_overlayfs_modern(lowerdir_config, upperdir_str, workdir_str, target_root,
-                                          mount_source, hide_root_overlay_xattrs);
+                                          effective_source, hide_root_overlay_xattrs);
     if (!success) {
         LOG_WARN("fsopen mount failed, fallback to legacy mount");
         success = mount_overlayfs_legacy(lowerdir_config, upperdir_str, workdir_str, target_root,
-                                         mount_source, hide_root_overlay_xattrs);
+                                         effective_source, hide_root_overlay_xattrs);
     }
 
     if (!success) {
@@ -486,7 +494,7 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
         LOG_DEBUG("Restoring child mount: " + mount_point + " from " + source_path);
 
         const bool child_was_overlay = (child_overlay_before.count(mount_point) != 0);
-        if (!mount_overlay_child(mount_point, relative, module_roots, source_path, mount_source,
+        if (!mount_overlay_child(mount_point, relative, module_roots, source_path, effective_source,
                                  disable_umount, partitions, child_was_overlay)) {
             LOG_ERROR("Failed to restore child mount " + mount_point + ", reverting overlay");
             child_mount_failed = true;

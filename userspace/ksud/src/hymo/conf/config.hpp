@@ -45,7 +45,8 @@ inline std::string filesystem_type_to_string(FilesystemType type) {
 struct Config {
     fs::path moduledir = "/data/adb/modules";
     fs::path tempdir;
-    std::string mountsource = "KSU";
+    std::string mountsource = "KSU";  // KernelSU CRITICAL: mount source/device name for overlay &
+                                      // tmpfs so KernelSU can identify/manage mounts
     bool debug = false;
     bool verbose = false;
     FilesystemType fs_type = FilesystemType::AUTO;
