@@ -83,9 +83,10 @@ endef
 
 ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
   ifeq ($(LOCAL_GIT_EXISTS),1)
-    $(shell cd $(KSU_SRC); [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow)
-    KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC); $(GIT_BIN) rev-list --count $(REPO_BRANCH))
-    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 1135)
+    $(shell cd $(KSU_SRC) 2>/dev/null; [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow 2>/dev/null)
+    KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC) 2>/dev/null && ($(GIT_BIN) rev-list --count $(REPO_BRANCH) 2>/dev/null || $(GIT_BIN) rev-list --count HEAD 2>/dev/null))
+    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 1135 2>/dev/null || true)
+    KSU_VERSION := $(if $(KSU_VERSION),$(KSU_VERSION),12000)
     $(info -- $(REPO_NAME) version (local .git): $(KSU_VERSION))
   else
     KSU_VERSION := 12000
