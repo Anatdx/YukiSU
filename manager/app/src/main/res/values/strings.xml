@@ -131,6 +131,12 @@
     <string name="hymofs_toast_builtin_failed">Failed to update built-in mount setting</string>
     <string name="hymofs_features_title">Kernel features</string>
     <string name="hymofs_features_none">None reported</string>
+    <string name="hymofs_feature_mount_hide">Mount hide</string>
+    <string name="hymofs_feature_mount_hide_desc">Hide overlay from /proc/mounts and mountinfo</string>
+    <string name="hymofs_feature_maps_spoof">Maps spoof</string>
+    <string name="hymofs_feature_maps_spoof_desc">Spoof ino/dev/path in /proc/pid/maps. Add rules below.</string>
+    <string name="hymofs_feature_statfs_spoof">Statfs spoof</string>
+    <string name="hymofs_feature_statfs_spoof_desc">Auto with mount hide; makes statfs() match mountinfo (avoids INCONSISTENT_MOUNT)</string>
     <string name="hymofs_maps_title">Maps spoof (/proc/pid/maps)</string>
     <string name="hymofs_maps_desc">Spoof inode/device/path in process maps. Rules can be added by overlay mount; clear all rules here if needed.</string>
     <string name="hymofs_maps_clear">Clear maps rules</string>

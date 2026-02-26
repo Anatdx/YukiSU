@@ -948,16 +948,20 @@ object HymoFSManager {
     }
     
     /**
-     * Read daemon log
+     * Read daemon log. If daemon.log is missing or empty (built-in hymo uses ksud log),
+     * fall back to logcat filtered for ksud/hymo.
      */
     suspend fun readLog(lines: Int = 500): String = withContext(Dispatchers.IO) {
         try {
             val result = Shell.cmd("tail -n $lines '$HYMO_LOG_FILE' 2>/dev/null").exec()
-            if (result.isSuccess) {
-                result.out.joinToString("\n")
-            } else {
-                ""
-            }
+            val fromFile = (result.out + result.err).joinToString("\n").trim()
+            if (fromFile.isNotEmpty()) return@withContext fromFile
+            val logcatResult = Shell.cmd("logcat -d -t ${lines * 2} 2>/dev/null | grep -iE 'ksud|hymo' | tail -n $lines").exec()
+            val fromLogcat = (logcatResult.out + logcatResult.err).joinToString("\n").trim()
+            if (fromLogcat.isNotEmpty())
+                "[Daemon log not found; showing logcat (ksud/hymo)]\n\n$fromLogcat"
+            else
+                "[No daemon.log and no ksud/hymo logcat. Built-in HymoFS logs to ksud stderr/logcat.]"
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read log", e)
             ""

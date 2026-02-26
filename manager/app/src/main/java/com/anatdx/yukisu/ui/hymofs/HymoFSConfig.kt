@@ -387,7 +387,7 @@ private fun StatusTab(
             }
         }
 
-        // Kernel features (when available)
+        // Kernel features (when available): list each with short description so Maps/Statfs are visible
         if (hymofsStatus == HymoFSStatus.AVAILABLE) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -399,16 +399,44 @@ private fun StatusTab(
                     Text(
                         text = stringResource(R.string.hymofs_features_title),
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
-                    Text(
-                        text = if (!features?.names.isNullOrEmpty())
-                            features!!.names.joinToString(", ")
-                        else
-                            stringResource(R.string.hymofs_features_none),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val names = features?.names?.toSet() ?: emptySet()
+                    if (names.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.hymofs_features_none),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        if (names.contains("mount_hide")) {
+                            FeatureRow(
+                                title = stringResource(R.string.hymofs_feature_mount_hide),
+                                desc = stringResource(R.string.hymofs_feature_mount_hide_desc)
+                            )
+                        }
+                        if (names.contains("maps_spoof")) {
+                            FeatureRow(
+                                title = stringResource(R.string.hymofs_feature_maps_spoof),
+                                desc = stringResource(R.string.hymofs_feature_maps_spoof_desc)
+                            )
+                        }
+                        if (names.contains("statfs_spoof")) {
+                            FeatureRow(
+                                title = stringResource(R.string.hymofs_feature_statfs_spoof),
+                                desc = stringResource(R.string.hymofs_feature_statfs_spoof_desc)
+                            )
+                        }
+                        val other = names - setOf("mount_hide", "maps_spoof", "statfs_spoof")
+                        if (other.isNotEmpty()) {
+                            Text(
+                                text = other.sorted().joinToString(", "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -686,6 +714,26 @@ private fun InfoRow(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+@Composable
+private fun FeatureRow(title: String, desc: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = desc,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

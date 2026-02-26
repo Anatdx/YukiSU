@@ -58,65 +58,45 @@ static const std::array<PropDef, 24> PROPS_TO_HIDE = {{
 
 namespace {
 
-/**
- * Get property value using getprop
- */
-std::string get_prop(const char* name) {
-    std::array<char, 256> cmd{};
-    (void)snprintf(cmd.data(), cmd.size(), "getprop %s 2>/dev/null", name);
-
-    FILE* fp = popen(cmd.data(), "r");
-    if (!fp)
-        return "";
-
-    std::array<char, 256> buf{};
-    if (fgets(buf.data(), buf.size(), fp)) {
-        // Remove trailing newline
-        const size_t len = strlen(buf.data());
-        if (len > 0 && buf[len - 1] == '\n') {
-            buf[len - 1] = '\0';
-        }
-    }
-    (void)pclose(fp);
-    return {buf.data()};
-}
-
-// Embedded resetprop entry (from resetpropAlone) when available.
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 
+/** Get property value in-process (no popen). */
+std::string get_prop(const char* name) {
+    const auto v = getprop(name);
+    return v.value_or("");
+}
+
 /**
- * Set property value using resetprop
- * Uses -n to skip init trigger (like Shamiko)
+ * Set property using resetprop.
+ * When RESETPROP_ALONE_AVAILABLE, calls resetprop_main in-process (no fork).
+ * Uses -n to skip init trigger (like Shamiko).
  */
 bool reset_prop(const char* name, const char* value) {
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+    std::array<char*, 5> argv_c = {
+        const_cast<char*>("resetprop"),
+        const_cast<char*>("-n"),
+        const_cast<char*>(name),
+        const_cast<char*>(value),
+        nullptr,
+    };
+    return resetprop_main(4, argv_c.data()) == 0;
+#else
     const pid_t pid = fork();
     if (pid < 0) {
         LOGW("hide_bl: fork failed: %s", strerror(errno));
         return false;
     }
-
     if (pid == 0) {
-#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-        std::array<char*, 5> argv_c = {
-            const_cast<char*>("resetprop"),
-            const_cast<char*>("-n"),
-            const_cast<char*>(name),
-            const_cast<char*>(value),
-            nullptr,
-        };
-        const int rc = resetprop_main(4, argv_c.data());
-        _exit(rc);
-#else
         execl(RESETPROP_PATH, "resetprop", "-n", name, value, nullptr);
         _exit(127);
-#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
-
     int status;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 }
 
 /**
@@ -169,73 +149,52 @@ void set_bl_hiding_enabled(bool enabled) {
 namespace {
 
 /**
- * Internal function that does the actual hiding work
- * Called in a forked child process
+ * Do bootloader hiding in the current process.
+ * Runs when service stage runs; uses built-in resetprop (no extra process).
  */
 void do_hide_bootloader() {
-    // Wait for boot_completed like Shamiko does
-    // resetprop -w blocks until property exists with given value
     LOGI("hide_bl: waiting for sys.boot_completed=0");
-
-    const pid_t wait_pid = fork();
-    if (wait_pid == 0) {
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
-        std::array<char*, 5> argv_c = {
+    {
+        std::array<char*, 5> argv_w = {
             const_cast<char*>("resetprop"),
             const_cast<char*>("-w"),
             const_cast<char*>("sys.boot_completed"),
             const_cast<char*>("0"),
             nullptr,
         };
-        const int rc = resetprop_main(4, argv_c.data());
-        _exit(rc);
+        (void)resetprop_main(4, argv_w.data());
+    }
 #else
+    const pid_t wait_pid = fork();
+    if (wait_pid == 0) {
         execl(RESETPROP_PATH, "resetprop", "-w", "sys.boot_completed", "0", nullptr);
         _exit(127);
-#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
     }
     if (wait_pid > 0) {
         int status;
         waitpid(wait_pid, &status, 0);
     }
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
 
     LOGI("hide_bl: starting bootloader status hiding...");
-
-    // Reset standard properties
     for (const auto& prop : PROPS_TO_HIDE) {
         if (prop.expected != nullptr) {
             check_reset_prop(prop.name, prop.expected);
         }
     }
-
     LOGI("hide_bl: bootloader status hiding completed");
 }
 
 }  // namespace
 
 void hide_bootloader_status() {
-    // Check if enabled
     if (!is_bl_hiding_enabled()) {
         LOGI("hide_bl: disabled, skipping");
         return;
     }
-
-    // Fork to background so we don't block boot
-    const pid_t pid = fork();
-    if (pid < 0) {
-        LOGW("hide_bl: fork failed: %s", strerror(errno));
-        return;
-    }
-
-    if (pid == 0) {
-        // Child process - run in background
-        setsid();  // Detach from parent
-        do_hide_bootloader();
-        _exit(0);
-    }
-
-    // Parent returns immediately, doesn't block boot
-    LOGI("hide_bl: started background process (pid %d)", pid);
+    // Run in-process during service stage; no fork, uses built-in resetprop_main
+    do_hide_bootloader();
 }
 
 }  // namespace ksud
