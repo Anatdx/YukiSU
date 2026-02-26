@@ -4,12 +4,14 @@
 #include <unistd.h>
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <set>
 #include <sstream>
+#include <thread>
 #include "conf/config.hpp"
 #include "core/executor.hpp"
 #include "core/inventory.hpp"
@@ -1372,12 +1374,27 @@ int hymo::run_hymo_main(int argc, char** argv) {
         // Ensure runtime directory exists
         ensure_dir_exists(RUN_DIR);
 
+        // Load HymoFS LKM before check_status so we can use HymoFS mount when autoload is on
+        if (lkm_get_autoload() && !lkm_is_loaded()) {
+            if (lkm_load()) {
+                LOG_INFO("HymoFS LKM loaded (autoload) before mount");
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            } else {
+                LOG_WARN("HymoFS LKM autoload failed: " + lkm_get_last_error());
+            }
+        }
+
         StorageHandle storage;
         MountPlan plan;
         ExecutionResult exec_result;
         std::vector<Module> module_list;
 
         const HymoFSStatus hymofs_status = HymoFS::check_status();
+        if (hymofs_status != HymoFSStatus::Available) {
+            LOG_INFO("HymoFS status: " + std::to_string(static_cast<int>(hymofs_status)) +
+                     " (0=Available, 1=NotPresent, 2=KernelTooOld, 3=ModuleTooOld); using "
+                     "overlay/mirror if needed");
+        }
         std::string warning_msg;
         bool hymofs_active = false;
 
