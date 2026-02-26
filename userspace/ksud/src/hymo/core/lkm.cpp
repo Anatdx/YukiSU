@@ -88,6 +88,10 @@ static bool load_module_via_init(const char* ko_path, const char* params) {
     free(image);
 
     if (ret != 0) {
+        if (errno == EEXIST) {
+            LOG_VERBOSE("lkm: init_module skipped (module already loaded)");
+            return true;
+        }
         LOG_ERROR(std::string("lkm: init_module ") + ko_path + " failed: " + strerror(errno));
         return false;
     }
@@ -106,6 +110,10 @@ static bool load_module_via_finit(const char* ko_path, const char* params) {
         if (errno == ENOSYS) {
             LOG_WARN("finit_module not implemented, falling back to init_module");
             return load_module_via_init(ko_path, params);
+        }
+        if (errno == EEXIST) {
+            LOG_VERBOSE("lkm: finit_module skipped (module already loaded)");
+            return true;
         }
         LOG_ERROR(std::string("lkm: finit_module ") + ko_path + " failed: " + strerror(errno));
         return false;

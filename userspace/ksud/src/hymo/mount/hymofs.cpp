@@ -443,4 +443,8 @@ void HymoFS::release_connection() {
     s_cached_status = HymoFSStatus::NotPresent;
 }
 
+void HymoFS::invalidate_status_cache() {
+    s_status_checked = false;
+}
+
 }  // namespace hymo

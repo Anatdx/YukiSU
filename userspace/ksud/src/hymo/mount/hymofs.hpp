@@ -49,6 +49,9 @@ public:
 
     // Release cached anon-fd/session so module refs can drain before unload.
     static void release_connection();
+
+    // Invalidate status cache so next check_status() re-queries (e.g. after LKM load).
+    static void invalidate_status_cache();
 };
 
 }  // namespace hymo

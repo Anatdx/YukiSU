@@ -1378,6 +1378,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
         if (lkm_get_autoload() && !lkm_is_loaded()) {
             if (lkm_load()) {
                 LOG_INFO("HymoFS LKM loaded (autoload) before mount");
+                HymoFS::invalidate_status_cache();
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
             } else {
                 LOG_WARN("HymoFS LKM autoload failed: " + lkm_get_last_error());
