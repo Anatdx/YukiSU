@@ -193,8 +193,18 @@ void hide_bootloader_status() {
         LOGI("hide_bl: disabled, skipping");
         return;
     }
-    // Run in-process during service stage; no fork, uses built-in resetprop_main
-    do_hide_bootloader();
+    // Run in a single forked child so we don't block service stage (resetprop -w can block).
+    // Child uses built-in resetprop_main/getprop only — no extra processes.
+    const pid_t pid = fork();
+    if (pid < 0) {
+        LOGW("hide_bl: fork failed: %s", strerror(errno));
+        return;
+    }
+    if (pid == 0) {
+        do_hide_bootloader();
+        _exit(0);
+    }
+    LOGI("hide_bl: started (pid %d), not blocking service stage", pid);
 }
 
 }  // namespace ksud
