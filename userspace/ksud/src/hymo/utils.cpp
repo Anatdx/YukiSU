@@ -41,7 +41,11 @@ void Logger::init(bool debug, bool verbose, const char* log_path) {
         fs::path p(log_path);
         if (!p.parent_path().empty())
             fs::create_directories(p.parent_path());
-        log_file_ = std::make_unique<std::ofstream>(log_path, std::ios::app);
+        // Truncate on first open per process (fresh log on each daemon start/reboot)
+        static bool s_truncated = false;
+        auto mode = s_truncated ? std::ios::app : std::ios::trunc;
+        s_truncated = true;
+        log_file_ = std::make_unique<std::ofstream>(log_path, mode);
     }
 }
 

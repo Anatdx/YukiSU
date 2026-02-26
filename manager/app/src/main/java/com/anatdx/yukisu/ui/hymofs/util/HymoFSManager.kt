@@ -213,12 +213,19 @@ object HymoFSManager {
      */
     suspend fun getFeatures(): FeaturesResult? = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo hymofs features").exec()
-            if (!result.isSuccess || result.out.isEmpty()) return@withContext null
+            val shell = getRootShell()
+            val result = shell.newJob().add("${getKsud()} hymo hymofs features").exec()
             val line = (result.out + result.err).joinToString(" ").trim()
+            if (line.isEmpty()) {
+                Log.w(TAG, "getFeatures: empty output, isSuccess=${result.isSuccess}")
+                return@withContext null
+            }
             // "features: 0x80 mount_hide maps_spoof" or "features: 0x80"
             val regex = Regex("""features:\s*0x([0-9a-fA-F]+)\s*(.*)?""")
-            val match = regex.find(line) ?: return@withContext null
+            val match = regex.find(line) ?: run {
+                Log.w(TAG, "getFeatures: no match in line='$line'")
+                return@withContext null
+            }
             val bitmask = match.groupValues[1].toIntOrNull(16) ?: return@withContext null
             val names = match.groupValues[2]
                 .trim()

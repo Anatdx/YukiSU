@@ -398,6 +398,36 @@ int HymoFS::get_features() {
     return features;
 }
 
+bool HymoFS::set_mount_hide(bool enable) {
+    struct hymo_mount_hide_arg arg = {};
+    arg.enable = enable ? 1 : 0;
+    bool ret = hymo_execute_cmd(HYMO_IOC_SET_MOUNT_HIDE, &arg) == 0;
+    if (!ret) {
+        LOG_ERROR("HymoFS: set_mount_hide failed: " + std::string(strerror(errno)));
+    }
+    return ret;
+}
+
+bool HymoFS::set_maps_spoof(bool enable) {
+    struct hymo_maps_spoof_arg arg = {};
+    arg.enable = enable ? 1 : 0;
+    bool ret = hymo_execute_cmd(HYMO_IOC_SET_MAPS_SPOOF, &arg) == 0;
+    if (!ret) {
+        LOG_ERROR("HymoFS: set_maps_spoof failed: " + std::string(strerror(errno)));
+    }
+    return ret;
+}
+
+bool HymoFS::set_statfs_spoof(bool enable) {
+    struct hymo_statfs_spoof_arg arg = {};
+    arg.enable = enable ? 1 : 0;
+    bool ret = hymo_execute_cmd(HYMO_IOC_SET_STATFS_SPOOF, &arg) == 0;
+    if (!ret) {
+        LOG_ERROR("HymoFS: set_statfs_spoof failed: " + std::string(strerror(errno)));
+    }
+    return ret;
+}
+
 bool HymoFS::add_maps_rule(unsigned long target_ino, unsigned long target_dev,
                            unsigned long spoofed_ino, unsigned long spoofed_dev,
                            const std::string& spoofed_pathname) {

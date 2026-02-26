@@ -77,6 +77,9 @@ void print_help() {
     std::cout << "  hymofs version     Show HymoFS protocol version\n";
     std::cout
         << "  hymofs features    Show HymoFS feature bitmask (mount_hide, maps_spoof, etc.)\n";
+    std::cout << "  hymofs mount-hide on|off   Enable/disable overlay mount hiding\n";
+    std::cout << "  hymofs maps-spoof on|off  Enable/disable /proc/pid/maps spoofing\n";
+    std::cout << "  hymofs statfs-spoof on|off  Enable/disable statfs f_type spoofing\n";
     std::cout << "  hymofs set-mirror <path>  Set custom mirror path\n";
     std::cout << "  hymofs maps clear  Clear all /proc/pid/maps spoof rules\n";
     std::cout << "  hymofs maps add <t_ino> <t_dev> <s_ino> <s_dev> <path>  Add maps spoof rule\n";
@@ -780,12 +783,44 @@ int hymo::run_hymo_main(int argc, char** argv) {
         case Command::HYMOFS: {
             if (cli.args.empty()) {
                 std::cerr << "Usage: ksud hymo hymofs <enable|disable|list|version|features|"
-                             "set-mirror|maps|raw>\n";
+                             "mount-hide|maps-spoof|statfs-spoof|set-mirror|maps|raw>\n";
                 return 1;
             }
             const std::string subcmd = cli.args[0];
 
-            if (subcmd == "features") {
+            if (subcmd == "mount-hide" || subcmd == "maps-spoof" || subcmd == "statfs-spoof") {
+                if (cli.args.size() < 2) {
+                    std::cerr << "Usage: ksud hymo hymofs " << subcmd << " <on|off>\n";
+                    return 1;
+                }
+                const std::string& val = cli.args[1];
+                bool enable;
+                if (val == "on" || val == "1" || val == "true") {
+                    enable = true;
+                } else if (val == "off" || val == "0" || val == "false") {
+                    enable = false;
+                } else {
+                    std::cerr << "Usage: ksud hymo hymofs " << subcmd << " <on|off>\n";
+                    return 1;
+                }
+                if (!HymoFS::is_available()) {
+                    std::cerr << "HymoFS not available.\n";
+                    return 1;
+                }
+                bool ok = false;
+                if (subcmd == "mount-hide")
+                    ok = HymoFS::set_mount_hide(enable);
+                else if (subcmd == "maps-spoof")
+                    ok = HymoFS::set_maps_spoof(enable);
+                else
+                    ok = HymoFS::set_statfs_spoof(enable);
+                if (ok) {
+                    std::cout << subcmd << " " << (enable ? "on" : "off") << "\n";
+                    return 0;
+                }
+                std::cerr << "Failed to set " << subcmd << ".\n";
+                return 1;
+            } else if (subcmd == "features") {
                 const int f = HymoFS::get_features();
                 if (f < 0) {
                     std::cerr << "HymoFS not available or get_features failed.\n";
@@ -806,6 +841,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     std::cout << " kstat_spoof";
                 if (f & HYMO_FEATURE_MERGE_DIR)
                     std::cout << " merge_dir";
+                if (f & HYMO_FEATURE_SELINUX_BYPASS)
+                    std::cout << " selinux_bypass";
                 std::cout << "\n";
                 return 0;
             } else if (subcmd == "maps") {
