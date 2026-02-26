@@ -259,6 +259,9 @@ int hymo::run_hymo_main(int argc, char** argv) {
     try {
         CliOptions cli = parse_args(argc, argv);
 
+        // Ensure hymo base dir exists before logger (needed for daemon.log)
+        ensure_dir_exists(HYMO_DATA_DIR);
+
         // Initialize logger: write to daemon.log so Manager can show Hymo logs
         Logger::getInstance().init(cli.verbose, cli.verbose, DAEMON_LOG_FILE);
 

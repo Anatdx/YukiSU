@@ -38,14 +38,23 @@ void Logger::init(bool debug, bool verbose, const char* log_path) {
     debug_ = debug;
     verbose_ = verbose;
     if (log_path && *log_path) {
-        fs::path p(log_path);
-        if (!p.parent_path().empty())
-            fs::create_directories(p.parent_path());
-        // Truncate on first open per process (fresh log on each daemon start/reboot)
-        static bool s_truncated = false;
-        auto mode = s_truncated ? std::ios::app : std::ios::trunc;
-        s_truncated = true;
-        log_file_ = std::make_unique<std::ofstream>(log_path, mode);
+        try {
+            fs::path p(log_path);
+            const fs::path parent = p.parent_path();
+            if (!parent.empty()) {
+                ensure_dir_exists(parent);
+            }
+            // Truncate on first open per process (fresh log on each daemon start/reboot)
+            static bool s_truncated = false;
+            auto mode = s_truncated ? std::ios::app : std::ios::trunc;
+            s_truncated = true;
+            log_file_ = std::make_unique<std::ofstream>(log_path, mode);
+            if (!log_file_->is_open()) {
+                log_file_.reset();
+            }
+        } catch (...) {
+            log_file_.reset();
+        }
     }
 }
 

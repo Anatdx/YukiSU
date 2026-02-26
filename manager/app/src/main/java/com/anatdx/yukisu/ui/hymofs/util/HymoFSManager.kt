@@ -214,7 +214,10 @@ object HymoFSManager {
     suspend fun getFeatures(): FeaturesResult? = withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
-            val result = shell.newJob().add("${getKsud()} hymo hymofs features").exec()
+            val result = shell.newJob()
+                .add("${getKsud()} hymo hymofs features")
+                .to(ArrayList<String>(), null)
+                .exec()
             val line = (result.out + result.err).joinToString(" ").trim()
             if (line.isEmpty()) {
                 Log.w(TAG, "getFeatures: empty output, isSuccess=${result.isSuccess}")
