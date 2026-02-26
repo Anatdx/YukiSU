@@ -385,6 +385,55 @@ bool HymoFS::hide_overlay_xattrs(const std::string& path) {
     return ret;
 }
 
+int HymoFS::get_features() {
+    int fd = get_anon_fd();
+    if (fd < 0) {
+        return -1;
+    }
+    int features = 0;
+    if (ioctl(fd, HYMO_IOC_GET_FEATURES, &features) != 0) {
+        LOG_VERBOSE("HymoFS: get_features failed: " + std::string(strerror(errno)));
+        return -1;
+    }
+    return features;
+}
+
+bool HymoFS::add_maps_rule(unsigned long target_ino, unsigned long target_dev,
+                           unsigned long spoofed_ino, unsigned long spoofed_dev,
+                           const std::string& spoofed_pathname) {
+    struct hymo_maps_rule rule;
+    memset(&rule, 0, sizeof(rule));
+    rule.target_ino = target_ino;
+    rule.target_dev = target_dev;
+    rule.spoofed_ino = spoofed_ino;
+    rule.spoofed_dev = spoofed_dev;
+    strncpy(rule.spoofed_pathname, spoofed_pathname.c_str(), HYMO_MAX_LEN_PATHNAME - 1);
+    rule.spoofed_pathname[HYMO_MAX_LEN_PATHNAME - 1] = '\0';
+    rule.err = 0;
+
+    LOG_VERBOSE("HymoFS: Adding maps rule ino " + std::to_string(target_ino) + " -> " +
+                spoofed_pathname);
+    int ret = hymo_execute_cmd(HYMO_IOC_ADD_MAPS_RULE, &rule);
+    if (ret != 0) {
+        LOG_ERROR("HymoFS: add_maps_rule failed: " + std::string(strerror(errno)));
+        return false;
+    }
+    if (rule.err != 0) {
+        LOG_ERROR("HymoFS: add_maps_rule kernel err=" + std::to_string(rule.err));
+        return false;
+    }
+    return true;
+}
+
+bool HymoFS::clear_maps_rules() {
+    LOG_VERBOSE("HymoFS: Clearing maps rules");
+    bool ret = hymo_execute_cmd(HYMO_IOC_CLEAR_MAPS_RULES, nullptr) == 0;
+    if (!ret) {
+        LOG_ERROR("HymoFS: clear_maps_rules failed: " + std::string(strerror(errno)));
+    }
+    return ret;
+}
+
 void HymoFS::release_connection() {
     if (s_hymo_fd >= 0) {
         close(s_hymo_fd);

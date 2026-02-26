@@ -199,6 +199,75 @@ object HymoFSManager {
     // ==================== Commands ====================
     
     /**
+     * HymoFS feature bitmask and human-readable names.
+     * Parsed from `ksud hymo hymofs features` output: "features: 0xNN name1 name2 ..."
+     */
+    data class FeaturesResult(
+        val bitmask: Int,
+        val names: List<String>
+    )
+
+    /**
+     * Get HymoFS feature bitmask and feature names (mount_hide, maps_spoof, etc.).
+     * Returns null when HymoFS is not available or command fails.
+     */
+    suspend fun getFeatures(): FeaturesResult? = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hymofs features").exec()
+            if (!result.isSuccess || result.out.isEmpty()) return@withContext null
+            val line = (result.out + result.err).joinToString(" ").trim()
+            // "features: 0x80 mount_hide maps_spoof" or "features: 0x80"
+            val regex = Regex("""features:\s*0x([0-9a-fA-F]+)\s*(.*)?""")
+            val match = regex.find(line) ?: return@withContext null
+            val bitmask = match.groupValues[1].toIntOrNull(16) ?: return@withContext null
+            val names = match.groupValues[2]
+                .trim()
+                .split(Regex("\\s+"))
+                .filter { it.isNotEmpty() }
+            FeaturesResult(bitmask, names)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get features", e)
+            null
+        }
+    }
+
+    /**
+     * Clear all /proc/pid/maps spoof rules in the kernel.
+     */
+    suspend fun clearMapsRules(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = Shell.cmd("${getKsud()} hymo hymofs maps clear").exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear maps rules", e)
+            false
+        }
+    }
+
+    /**
+     * Add a single maps spoof rule: when a maps line has (target_ino[, target_dev]),
+     * replace with spoofed ino/dev/pathname. target_dev 0 = match any device.
+     */
+    suspend fun addMapsRule(
+        targetIno: Long,
+        targetDev: Long,
+        spoofedIno: Long,
+        spoofedDev: Long,
+        spoofedPathname: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val path = spoofedPathname.replace("'", "'\\''")
+            val result = Shell.cmd(
+                "${getKsud()} hymo hymofs maps add $targetIno $targetDev $spoofedIno $spoofedDev '$path'"
+            ).exec()
+            result.isSuccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add maps rule", e)
+            false
+        }
+    }
+
+    /**
      * Get HymoFS version from ksud
      */
     suspend fun getVersion(): String = withContext(Dispatchers.IO) {

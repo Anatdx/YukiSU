@@ -80,6 +80,7 @@ fun HymoFSConfigScreen(
     var activeRules by remember { mutableStateOf(emptyList<HymoFSManager.ActiveRule>()) }
     var systemInfo by remember { mutableStateOf(HymoFSManager.SystemInfo("", "", "", emptyList(), emptyList(), false, null)) }
     var storageInfo by remember { mutableStateOf(HymoFSManager.StorageInfo("-", "-", "-", "0%", "unknown")) }
+    var features by remember { mutableStateOf<HymoFSManager.FeaturesResult?>(null) }
     var logContent by remember { mutableStateOf("") }
     var showKernelLog by remember { mutableStateOf(false) }
 
@@ -96,6 +97,9 @@ fun HymoFSConfigScreen(
                 storageInfo = HymoFSManager.getStorageInfo()
                 if (hymofsStatus == HymoFSStatus.AVAILABLE) {
                     activeRules = HymoFSManager.getActiveRules()
+                    features = HymoFSManager.getFeatures()
+                } else {
+                    features = null
                 }
             } catch (e: Exception) {
                 val msg = context.getString(
@@ -172,6 +176,7 @@ fun HymoFSConfigScreen(
                         systemInfo = systemInfo,
                         storageInfo = storageInfo,
                         modules = modules,
+                        features = features,
                         onRefresh = { loadData() }
                     )
                     HymoFSTab.LKM -> LkmTab(
@@ -202,6 +207,7 @@ fun HymoFSConfigScreen(
                     HymoFSTab.SETTINGS -> SettingsTab(
                         config = config,
                         hymofsStatus = hymofsStatus,
+                        features = features,
                         snackbarHostState = snackbarHostState,
                         onConfigChanged = { newConfig ->
                             coroutineScope.launch {
@@ -303,6 +309,7 @@ private fun StatusTab(
     systemInfo: HymoFSManager.SystemInfo,
     storageInfo: HymoFSManager.StorageInfo,
     modules: List<HymoFSManager.ModuleInfo>,
+    features: HymoFSManager.FeaturesResult?,
     onRefresh: () -> Unit
 ) {
     Column(
@@ -374,6 +381,32 @@ private fun StatusTab(
                     Text(
                         text = stringResource(R.string.hymofs_version_label, version),
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Kernel features (when available)
+        if (hymofsStatus == HymoFSStatus.AVAILABLE) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = getCardElevation()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.hymofs_features_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        text = if (!features?.names.isNullOrEmpty())
+                            features!!.names.joinToString(", ")
+                        else
+                            stringResource(R.string.hymofs_features_none),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -1037,6 +1070,7 @@ private fun LkmTab(
 private fun SettingsTab(
     config: HymoFSManager.HymoConfig,
     hymofsStatus: HymoFSStatus,
+    features: HymoFSManager.FeaturesResult?,
     snackbarHostState: SnackbarHostState,
     onConfigChanged: (HymoFSManager.HymoConfig) -> Unit,
     onSetDebug: (Boolean) -> Unit,
@@ -1292,6 +1326,13 @@ private fun SettingsTab(
                     }
                 )
             }
+        }
+
+        // Maps spoof card (when kernel supports maps_spoof)
+        if (hymofsStatus == HymoFSStatus.AVAILABLE && features?.names?.contains("maps_spoof") == true) {
+            MapsSpoofCard(
+                snackbarHostState = snackbarHostState
+            )
         }
         
         // Advanced Settings
@@ -1612,6 +1653,171 @@ private fun SettingTextField(
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.primary
             )
+        }
+    }
+}
+
+// ==================== Maps spoof card (Settings) ====================
+@Composable
+private fun MapsSpoofCard(
+    snackbarHostState: SnackbarHostState
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var showClearConfirm by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text(stringResource(R.string.hymofs_maps_clear)) },
+            text = { Text(stringResource(R.string.hymofs_maps_clear_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearConfirm = false
+                        coroutineScope.launch {
+                            if (HymoFSManager.clearMapsRules()) {
+                                snackbarHostState.showSnackbar(context.getString(R.string.hymofs_maps_cleared))
+                            } else {
+                                snackbarHostState.showSnackbar(context.getString(R.string.hymofs_maps_clear_failed))
+                            }
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.hymofs_rules_clear), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text(stringResource(R.string.hymofs_rules_cancel))
+                }
+            }
+        )
+    }
+
+    if (showAddDialog) {
+        var tIno by remember { mutableStateOf("") }
+        var tDev by remember { mutableStateOf("0") }
+        var sIno by remember { mutableStateOf("") }
+        var sDev by remember { mutableStateOf("0") }
+        var path by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text(stringResource(R.string.hymofs_maps_add_rule)) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = tIno,
+                        onValueChange = { tIno = it },
+                        label = { Text(stringResource(R.string.hymofs_maps_target_ino)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = tDev,
+                        onValueChange = { tDev = it },
+                        label = { Text(stringResource(R.string.hymofs_maps_target_dev)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = sIno,
+                        onValueChange = { sIno = it },
+                        label = { Text(stringResource(R.string.hymofs_maps_spoof_ino)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = sDev,
+                        onValueChange = { sDev = it },
+                        label = { Text(stringResource(R.string.hymofs_maps_spoof_dev)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = path,
+                        onValueChange = { path = it },
+                        label = { Text(stringResource(R.string.hymofs_maps_spoof_path)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val ti = tIno.trim().toLongOrNull()
+                        val td = tDev.trim().toLongOrNull() ?: 0L
+                        val si = sIno.trim().toLongOrNull()
+                        val sd = sDev.trim().toLongOrNull() ?: 0L
+                        val p = path.trim()
+                        if (ti != null && si != null && p.isNotEmpty()) {
+                            showAddDialog = false
+                            coroutineScope.launch {
+                                if (HymoFSManager.addMapsRule(ti, td, si, sd, p)) {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.hymofs_maps_add_success))
+                                } else {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.hymofs_maps_add_failed))
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.hymofs_maps_add_rule))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text(stringResource(R.string.hymofs_rules_cancel))
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = getCardElevation()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.hymofs_maps_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                text = stringResource(R.string.hymofs_maps_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showClearConfirm = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.hymofs_maps_clear))
+                }
+                FilledTonalButton(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.hymofs_maps_add_rule))
+                }
+            }
         }
     }
 }

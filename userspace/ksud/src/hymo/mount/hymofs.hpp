@@ -39,6 +39,14 @@ public:
     static bool set_uname(const std::string& release, const std::string& version);
     static bool fix_mounts();
     static bool hide_overlay_xattrs(const std::string& path);
+
+    // /proc/pid/maps spoof (hymo_maps): add rule or clear all
+    static int get_features();  // bitmask (HYMO_FEATURE_*) or -1 on error
+    static bool add_maps_rule(unsigned long target_ino, unsigned long target_dev,
+                              unsigned long spoofed_ino, unsigned long spoofed_dev,
+                              const std::string& spoofed_pathname);
+    static bool clear_maps_rules();
+
     // Release cached anon-fd/session so module refs can drain before unload.
     static void release_connection();
 };

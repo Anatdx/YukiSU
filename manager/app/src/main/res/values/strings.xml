@@ -129,6 +129,22 @@
     <string name="hymofs_toast_builtin_enabled">Built-in mount enabled. Reboot to apply.</string>
     <string name="hymofs_toast_builtin_disabled">Built-in mount disabled. Reboot to apply.</string>
     <string name="hymofs_toast_builtin_failed">Failed to update built-in mount setting</string>
+    <string name="hymofs_features_title">Kernel features</string>
+    <string name="hymofs_features_none">None reported</string>
+    <string name="hymofs_maps_title">Maps spoof (/proc/pid/maps)</string>
+    <string name="hymofs_maps_desc">Spoof inode/device/path in process maps. Rules can be added by overlay mount; clear all rules here if needed.</string>
+    <string name="hymofs_maps_clear">Clear maps rules</string>
+    <string name="hymofs_maps_clear_confirm">Clear all maps spoof rules?</string>
+    <string name="hymofs_maps_cleared">Maps rules cleared</string>
+    <string name="hymofs_maps_clear_failed">Failed to clear maps rules</string>
+    <string name="hymofs_maps_add_rule">Add rule</string>
+    <string name="hymofs_maps_add_success">Maps rule added</string>
+    <string name="hymofs_maps_add_failed">Failed to add maps rule</string>
+    <string name="hymofs_maps_target_ino">Target inode</string>
+    <string name="hymofs_maps_target_dev">Target dev (0=any)</string>
+    <string name="hymofs_maps_spoof_ino">Spoof inode</string>
+    <string name="hymofs_maps_spoof_dev">Spoof dev</string>
+    <string name="hymofs_maps_spoof_path">Spoof path</string>
     <string name="direct_install">Direct install (Recommended)</string>
     <string name="select_file">Select a image that needs to be patched</string>
     <string name="install_inactive_slot">Install to inactive slot (After OTA)</string>

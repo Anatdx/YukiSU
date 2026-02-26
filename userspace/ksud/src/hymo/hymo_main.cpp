@@ -73,7 +73,11 @@ void print_help() {
     std::cout << "  hymofs disable     Disable HymoFS\n";
     std::cout << "  hymofs list        List all active HymoFS rules\n";
     std::cout << "  hymofs version     Show HymoFS protocol version\n";
+    std::cout
+        << "  hymofs features    Show HymoFS feature bitmask (mount_hide, maps_spoof, etc.)\n";
     std::cout << "  hymofs set-mirror <path>  Set custom mirror path\n";
+    std::cout << "  hymofs maps clear  Clear all /proc/pid/maps spoof rules\n";
+    std::cout << "  hymofs maps add <t_ino> <t_dev> <s_ino> <s_dev> <path>  Add maps spoof rule\n";
     std::cout << "  hymofs raw <cmd> ...  Execute raw HymoFS command\n\n";
 
     std::cout << "API Commands (api <subcommand>) - JSON output for WebUI:\n";
@@ -773,13 +777,77 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
         case Command::HYMOFS: {
             if (cli.args.empty()) {
-                std::cerr
-                    << "Usage: ksud hymo hymofs <enable|disable|list|version|set-mirror|raw>\n";
+                std::cerr << "Usage: ksud hymo hymofs <enable|disable|list|version|features|"
+                             "set-mirror|maps|raw>\n";
                 return 1;
             }
             const std::string subcmd = cli.args[0];
 
-            if (subcmd == "enable" || subcmd == "disable") {
+            if (subcmd == "features") {
+                const int f = HymoFS::get_features();
+                if (f < 0) {
+                    std::cerr << "HymoFS not available or get_features failed.\n";
+                    return 1;
+                }
+                std::cout << "features: 0x" << std::hex << f << std::dec;
+                if (f & HYMO_FEATURE_MOUNT_HIDE)
+                    std::cout << " mount_hide";
+                if (f & HYMO_FEATURE_MAPS_SPOOF)
+                    std::cout << " maps_spoof";
+                if (f & HYMO_FEATURE_CMDLINE_SPOOF)
+                    std::cout << " cmdline_spoof";
+                if (f & HYMO_FEATURE_UNAME_SPOOF)
+                    std::cout << " uname_spoof";
+                if (f & HYMO_FEATURE_KSTAT_SPOOF)
+                    std::cout << " kstat_spoof";
+                if (f & HYMO_FEATURE_MERGE_DIR)
+                    std::cout << " merge_dir";
+                std::cout << "\n";
+                return 0;
+            } else if (subcmd == "maps") {
+                if (cli.args.size() < 2) {
+                    std::cerr << "Usage: ksud hymo hymofs maps <clear|add <t_ino> <t_dev> <s_ino> "
+                                 "<s_dev> <path>>\n";
+                    return 1;
+                }
+                const std::string maps_sub = cli.args[1];
+                if (maps_sub == "clear") {
+                    if (!HymoFS::is_available()) {
+                        std::cerr << "HymoFS not available.\n";
+                        return 1;
+                    }
+                    if (HymoFS::clear_maps_rules()) {
+                        std::cout << "Maps spoof rules cleared.\n";
+                        return 0;
+                    }
+                    std::cerr << "clear_maps_rules failed.\n";
+                    return 1;
+                } else if (maps_sub == "add") {
+                    if (cli.args.size() < 7) {
+                        std::cerr << "Usage: ksud hymo hymofs maps add <target_ino> <target_dev> "
+                                     "<spoofed_ino> <spoofed_dev> <spoofed_path>\n";
+                        return 1;
+                    }
+                    unsigned long t_ino = std::stoul(cli.args[2]);
+                    unsigned long t_dev = std::stoul(cli.args[3]);
+                    unsigned long s_ino = std::stoul(cli.args[4]);
+                    unsigned long s_dev = std::stoul(cli.args[5]);
+                    const std::string path = cli.args[6];
+                    if (!HymoFS::is_available()) {
+                        std::cerr << "HymoFS not available.\n";
+                        return 1;
+                    }
+                    if (HymoFS::add_maps_rule(t_ino, t_dev, s_ino, s_dev, path)) {
+                        std::cout << "Maps rule added.\n";
+                        return 0;
+                    }
+                    std::cerr << "add_maps_rule failed.\n";
+                    return 1;
+                } else {
+                    std::cerr << "Unknown hymofs maps subcommand: " << maps_sub << "\n";
+                    return 1;
+                }
+            } else if (subcmd == "enable" || subcmd == "disable") {
                 const bool enable = (subcmd == "enable");
                 if (HymoFS::is_available()) {
                     if (HymoFS::set_enabled(enable)) {
