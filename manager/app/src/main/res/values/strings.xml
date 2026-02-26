@@ -622,6 +622,8 @@
     <string name="hymofs_kernel_debug_desc">Enable HymoFS kernel debug logging</string>
     <string name="hymofs_stealth">Stealth Mode</string>
     <string name="hymofs_stealth_desc">Hide mount traces and reorder mount IDs</string>
+    <string name="hymofs_hidexattr">Hide Extended Attributes</string>
+    <string name="hymofs_hidexattr_desc">Enable mount_hide, maps_spoof, statfs_spoof and stealth to hide traces from detection</string>
     <string name="hymofs_avc_spoof">AVC Log Spoofing</string>
     <string name="hymofs_avc_spoof_desc">Spoof SELinux AVC deny logs</string>
     <string name="hymofs_enable_nuke">Enable Nuke</string>

@@ -346,6 +346,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                           << (config.enable_kernel_debug ? "true" : "false") << ",\n";
                 std::cout << "  \"enable_stealth\": " << (config.enable_stealth ? "true" : "false")
                           << ",\n";
+                std::cout << "  \"enable_hidexattr\": "
+                          << (config.enable_hidexattr ? "true" : "false") << ",\n";
                 std::cout << "  \"hymofs_enabled\": " << (config.hymofs_enabled ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"uname_release\": \"" << config.uname_release << "\",\n";
@@ -1535,6 +1537,30 @@ int hymo::run_hymo_main(int argc, char** argv) {
                                 std::string(config.enable_stealth ? "true" : "false"));
                 } else {
                     LOG_WARN("Failed to set stealth mode.");
+                }
+            }
+
+            // Apply Hidexattr: mount_hide, maps_spoof, statfs_spoof (with stealth)
+            if (config.enable_hidexattr && HymoFS::is_available()) {
+                if (HymoFS::set_mount_hide(true)) {
+                    LOG_VERBOSE("mount_hide enabled (hidexattr)");
+                } else {
+                    LOG_WARN("Failed to enable mount_hide");
+                }
+                if (HymoFS::set_maps_spoof(true)) {
+                    LOG_VERBOSE("maps_spoof enabled (hidexattr)");
+                } else {
+                    LOG_WARN("Failed to enable maps_spoof");
+                }
+                if (HymoFS::set_statfs_spoof(true)) {
+                    LOG_VERBOSE("statfs_spoof enabled (hidexattr)");
+                } else {
+                    LOG_WARN("Failed to enable statfs_spoof");
+                }
+                if (HymoFS::set_stealth(true)) {
+                    LOG_VERBOSE("stealth enabled (hidexattr)");
+                } else {
+                    LOG_WARN("Failed to enable stealth for hidexattr");
                 }
             }
 

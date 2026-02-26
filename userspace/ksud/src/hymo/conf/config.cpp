@@ -61,6 +61,8 @@ Config Config::from_file(const fs::path& path) {
                 config.enable_kernel_debug = o.at("enable_kernel_debug").as_bool();
             if (o.count("enable_stealth"))
                 config.enable_stealth = o.at("enable_stealth").as_bool();
+            if (o.count("enable_hidexattr"))
+                config.enable_hidexattr = o.at("enable_hidexattr").as_bool();
             if (o.count("hymofs_enabled"))
                 config.hymofs_enabled = o.at("hymofs_enabled").as_bool();
             if (o.count("mirror_path")) {
@@ -113,6 +115,7 @@ bool Config::save_to_file(const fs::path& path) const {
     root["ignore_protocol_mismatch"] = json::Value(ignore_protocol_mismatch);
     root["enable_kernel_debug"] = json::Value(enable_kernel_debug);
     root["enable_stealth"] = json::Value(enable_stealth);
+    root["enable_hidexattr"] = json::Value(enable_hidexattr);
     root["hymofs_enabled"] = json::Value(hymofs_enabled);
     if (!mirror_path.empty())
         root["mirror_path"] = json::Value(mirror_path);

@@ -133,6 +133,7 @@ object HymoFSManager {
         val ignoreProtocolMismatch: Boolean = false,
         val enableKernelDebug: Boolean = false,
         val enableStealth: Boolean = true,
+        val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, stealth
         val hymofsEnabled: Boolean = true,
         val mirrorPath: String = "",
         val partitions: List<String> = emptyList(),
@@ -373,6 +374,7 @@ object HymoFSManager {
                     ignoreProtocolMismatch = json.optBoolean("ignore_protocol_mismatch", false),
                     enableKernelDebug = json.optBoolean("enable_kernel_debug", false),
                     enableStealth = json.optBoolean("enable_stealth", true),
+                    enableHidexattr = json.optBoolean("enable_hidexattr", false),
                     hymofsEnabled = json.optBoolean("hymofs_enabled", true),
                     mirrorPath = run {
                         val raw = json.optString("mirror_path", "")
@@ -413,6 +415,7 @@ object HymoFSManager {
                 put("ignore_protocol_mismatch", config.ignoreProtocolMismatch)
                 put("enable_kernel_debug", config.enableKernelDebug)
                 put("enable_stealth", config.enableStealth)
+                put("enable_hidexattr", config.enableHidexattr)
                 put("hymofs_enabled", config.hymofsEnabled)
                 if (config.mirrorPath.isNotEmpty()) {
                     put("mirror_path", config.mirrorPath)

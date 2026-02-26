@@ -55,6 +55,7 @@ struct Config {
     bool ignore_protocol_mismatch = false;
     bool enable_kernel_debug = false;
     bool enable_stealth = true;
+    bool enable_hidexattr = false;  // When true: mount_hide, maps_spoof, statfs_spoof, stealth
     bool hymofs_enabled = true;
     std::string mirror_path;
     std::string uname_release;
