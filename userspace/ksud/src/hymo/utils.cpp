@@ -44,11 +44,9 @@ void Logger::init(bool debug, bool verbose, const char* log_path) {
             if (!parent.empty()) {
                 ensure_dir_exists(parent);
             }
-            // Truncate on first open per process (fresh log on each daemon start/reboot)
-            static bool s_truncated = false;
-            auto mode = s_truncated ? std::ios::app : std::ios::trunc;
-            s_truncated = true;
-            log_file_ = std::make_unique<std::ofstream>(log_path, mode);
+            // Always append: short-lived commands (getFeatures, getStatus, etc.) run in separate
+            // processes; trunc would clear the log every time the Manager refreshes.
+            log_file_ = std::make_unique<std::ofstream>(log_path, std::ios::app);
             if (!log_file_->is_open()) {
                 log_file_.reset();
             }
