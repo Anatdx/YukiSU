@@ -327,6 +327,7 @@ bool __ksu_is_allow_uid_for_current(uid_t uid)
 	}
 	return __ksu_is_allow_uid(uid);
 }
+EXPORT_SYMBOL(__ksu_is_allow_uid_for_current);
 
 bool ksu_uid_should_umount(uid_t uid)
 {
