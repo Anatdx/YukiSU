@@ -103,8 +103,9 @@ struct hymo_spoof_cmdline {
 #define HYMO_FEATURE_CMDLINE_SPOOF (1 << 2)
 #define HYMO_FEATURE_SELINUX_BYPASS (1 << 4)
 #define HYMO_FEATURE_MERGE_DIR (1 << 5)
-#define HYMO_FEATURE_MOUNT_HIDE (1 << 6) /* hide overlay from /proc/mounts and mountinfo */
-#define HYMO_FEATURE_MAPS_SPOOF (1 << 7) /* spoof ino/dev/pathname in /proc/pid/maps */
+#define HYMO_FEATURE_MOUNT_HIDE (1 << 6)   /* hide overlay from /proc/mounts and mountinfo */
+#define HYMO_FEATURE_MAPS_SPOOF (1 << 7)   /* spoof ino/dev/pathname in /proc/pid/maps */
+#define HYMO_FEATURE_STATFS_SPOOF (1 << 8) /* spoof statfs f_type so direct matches resolved */
 
 /*
  * Maps spoof rule: when a /proc/pid/maps line has (target_ino[, target_dev]),

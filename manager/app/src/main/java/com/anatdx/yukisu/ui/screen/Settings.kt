@@ -45,6 +45,7 @@ import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestin
 import com.ramcosta.composedestinations.generated.destinations.LogViewerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.UmountManagerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MoreSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
@@ -133,6 +134,16 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             summary = stringResource(R.string.settings_profile_template_summary),
                             onClick = {
                                 navigator.navigate(AppProfileTemplateScreenDestination)
+                            }
+                        )
+
+                        // HymoFS 配置（模块挂载、Maps 伪装等）
+                        SettingItem(
+                            icon = Icons.Filled.Tune,
+                            title = stringResource(R.string.hymofs_title),
+                            summary = stringResource(R.string.hymofs_settings_summary),
+                            onClick = {
+                                navigator.navigate(HymoFSConfigScreenDestination)
                             }
                         )
 

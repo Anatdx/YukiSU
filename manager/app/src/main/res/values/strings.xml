@@ -561,6 +561,7 @@
 
     <!-- HymoFS Configuration -->
     <string name="hymofs_title">HymoFS Configuration</string>
+    <string name="hymofs_settings_summary">Module mount, Maps spoof, LKM, rules</string>
     <string name="hymofs_tab_status">Status</string>
     <string name="hymofs_tab_modules">Modules</string>
     <string name="hymofs_tab_settings">Settings</string>

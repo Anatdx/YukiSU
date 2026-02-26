@@ -794,6 +794,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     std::cout << " mount_hide";
                 if (f & HYMO_FEATURE_MAPS_SPOOF)
                     std::cout << " maps_spoof";
+                if (f & HYMO_FEATURE_STATFS_SPOOF)
+                    std::cout << " statfs_spoof";
                 if (f & HYMO_FEATURE_CMDLINE_SPOOF)
                     std::cout << " cmdline_spoof";
                 if (f & HYMO_FEATURE_UNAME_SPOOF)

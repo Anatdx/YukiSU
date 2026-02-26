@@ -529,6 +529,7 @@
 
     <!-- HymoFS Configuration -->
     <string name="hymofs_title">HymoFS 配置</string>
+    <string name="hymofs_settings_summary">模块挂载、Maps 伪装、LKM、规则</string>
     <string name="hymofs_tab_status">状态</string>
     <string name="hymofs_tab_modules">模块</string>
     <string name="hymofs_tab_settings">设置</string>
