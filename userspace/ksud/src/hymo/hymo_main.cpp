@@ -1401,15 +1401,17 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
         bool can_use_hymofs = (hymofs_status == HymoFSStatus::Available);
 
-        // Auto-select default tempdir if not set by user
-        if (config.tempdir.empty()) {
+        // Auto-select tempdir: treat empty or legacy /data path as "auto" so we upgrade to
+        // /dev/hymo_mirror when HymoFS becomes available (config may have saved /data from
+        // when HymoFS was not present).
+        const fs::path legacy_data_path = fs::path(HYMO_DATA_DIR) / "img_mnt";
+        const bool tempdir_is_auto = config.tempdir.empty() || config.tempdir == legacy_data_path;
+        if (tempdir_is_auto) {
             if (can_use_hymofs && config.hymofs_enabled) {
-                // Use /dev/hymo_mirror when HymoFS is available and enabled
-                config.tempdir = "/dev/hymo_mirror";
+                config.tempdir = hymo::HYMO_MIRROR_DEV;
                 LOG_INFO("Auto-selected tempdir: /dev/hymo_mirror (HymoFS mode)");
             } else {
-                // Use /data/adb/hymo/img_mnt when HymoFS is not available or disabled
-                config.tempdir = "/data/adb/hymo/img_mnt";
+                config.tempdir = legacy_data_path;
                 LOG_INFO("Auto-selected tempdir: /data/adb/hymo/img_mnt (default mode)");
             }
         }
