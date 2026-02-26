@@ -2023,11 +2023,21 @@ private fun RuleItem(rule: HymoFSManager.ActiveRule) {
                     "hide" -> Color(0xFFB71C1C).copy(alpha = 0.3f)
                     "inject" -> Color(0xFF1565C0).copy(alpha = 0.3f)
                     "merge" -> Color(0xFF4A148C).copy(alpha = 0.3f)
+                    "mount_hide" -> Color(0xFF0D47A1).copy(alpha = 0.3f)
+                    "maps_spoof" -> Color(0xFF1A237E).copy(alpha = 0.3f)
+                    "statfs_spoof" -> Color(0xFF311B92).copy(alpha = 0.3f)
+                    "stealth" -> Color(0xFF37474F).copy(alpha = 0.3f)
                     else -> MaterialTheme.colorScheme.secondaryContainer
                 }
             ) {
                 Text(
-                    text = rule.type.uppercase(),
+                    text = when (rule.type) {
+                        "mount_hide" -> "MOUNT_HIDE"
+                        "maps_spoof" -> "MAPS_SPOOF"
+                        "statfs_spoof" -> "STATFS_SPOOF"
+                        "stealth" -> "STEALTH"
+                        else -> rule.type.uppercase()
+                    },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
@@ -2035,10 +2045,18 @@ private fun RuleItem(rule: HymoFSManager.ActiveRule) {
             }
             
             Column(modifier = Modifier.weight(1f)) {
+                val displayText = when (rule.type) {
+                    "mount_hide" -> stringResource(R.string.hymofs_rule_mount_hide)
+                    "maps_spoof" -> stringResource(R.string.hymofs_rule_maps_spoof)
+                    "statfs_spoof" -> stringResource(R.string.hymofs_rule_statfs_spoof)
+                    "stealth" -> stringResource(R.string.hymofs_rule_stealth)
+                    else -> rule.src
+                }
                 Text(
-                    text = rule.src,
+                    text = displayText,
                     style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = if (rule.type in listOf("mount_hide", "maps_spoof", "statfs_spoof", "stealth"))
+                        FontFamily.Default else FontFamily.Monospace,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

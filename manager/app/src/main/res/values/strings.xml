@@ -661,6 +661,10 @@
     <string name="hymofs_rules_refresh">Refresh</string>
     <string name="hymofs_rules_count">%d active rules</string>
     <string name="hymofs_rules_empty">No active rules</string>
+    <string name="hymofs_rule_mount_hide">Hide overlay mounts from /proc/mounts</string>
+    <string name="hymofs_rule_maps_spoof">Spoof /proc/pid/maps ino/dev/pathname</string>
+    <string name="hymofs_rule_statfs_spoof">Spoof statfs f_type for detection bypass</string>
+    <string name="hymofs_rule_stealth">Stealth mode: hide mount traces, reorder mnt_id</string>
     <string name="hymofs_logs_daemon">Daemon Log</string>
     <string name="hymofs_logs_kernel">Kernel Log</string>
     <string name="hymofs_kernel_title">HymoFS Kernel</string>

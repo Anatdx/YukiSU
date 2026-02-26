@@ -511,9 +511,13 @@ object HymoFSManager {
                             val path = obj.optString("path", "")
                             rules.add(ActiveRule("hide", path, null, null))
                         }
+                        "MOUNT_HIDE", "MAPS_SPOOF", "STATFS_SPOOF", "STEALTH" -> {
+                            val args = obj.optString("args", "enabled")
+                            rules.add(ActiveRule(typeUpper.lowercase(), args, null, null))
+                        }
                         else -> {
                             val args = obj.optString("args", "")
-                            if (args.isNotEmpty()) {
+                            if (args.isNotEmpty() && typeUpper != "HYMOFS" && !typeUpper.startsWith("ERROR")) {
                                 rules.add(ActiveRule(typeUpper.lowercase(), args, null, null))
                             }
                         }

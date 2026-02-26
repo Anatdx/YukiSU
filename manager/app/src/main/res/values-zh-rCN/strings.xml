@@ -623,6 +623,10 @@
     <string name="hymofs_rules_refresh">刷新</string>
     <string name="hymofs_rules_count">%d 条活动规则</string>
     <string name="hymofs_rules_empty">没有活动规则</string>
+    <string name="hymofs_rule_mount_hide">从 /proc/mounts 隐藏 overlay 挂载</string>
+    <string name="hymofs_rule_maps_spoof">伪装 /proc/pid/maps 的 ino/dev/pathname</string>
+    <string name="hymofs_rule_statfs_spoof">伪装 statfs f_type 以绕过检测</string>
+    <string name="hymofs_rule_stealth">隐身模式：隐藏挂载痕迹、重排 mnt_id</string>
     <string name="hymofs_logs_daemon">守护进程日志</string>
     <string name="hymofs_logs_kernel">内核日志</string>
     <string name="hymofs_kernel_title">HymoFS 内核</string>
