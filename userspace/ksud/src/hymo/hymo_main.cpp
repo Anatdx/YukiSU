@@ -252,8 +252,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
     try {
         CliOptions cli = parse_args(argc, argv);
 
-        // Initialize logger: built-in hymo reuses ksud log (stderr/logcat), no separate daemon.log
-        Logger::getInstance().init(cli.verbose, cli.verbose, nullptr);
+        // Initialize logger: write to daemon.log so Manager can show Hymo logs
+        Logger::getInstance().init(cli.verbose, cli.verbose, DAEMON_LOG_FILE);
 
         if (cli.command.empty()) {
             print_help();
@@ -1352,8 +1352,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
         config.merge_with_cli(cli.moduledir, cli.tempdir, cli.mountsource, cli.verbose,
                               cli.partitions);
 
-        // Re-initialize logger with merged config (built-in: reuse ksud log)
-        Logger::getInstance().init(config.debug, config.verbose, nullptr);
+        // Re-initialize logger with merged config; keep writing to daemon.log
+        Logger::getInstance().init(config.debug, config.verbose, DAEMON_LOG_FILE);
 
         // Camouflage process
         if (!camouflage_process("kworker/u9:1")) {
