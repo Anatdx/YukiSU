@@ -23,6 +23,8 @@ object HymoFSManager {
     const val HYMO_LOG_FILE = "/data/adb/hymo/daemon.log"
     const val MODULE_DIR = "/data/adb/modules"
     const val DISABLE_BUILTIN_MOUNT_FILE = "/data/adb/ksu/.disable_builtin_mount"
+    /** KSU saves dmesg to this path at boot */
+    private const val KSU_DMESG_LOG = "/data/adb/ksu/log/dmesg.log"
     
     /**
      * Get ksud path
@@ -987,11 +989,20 @@ object HymoFSManager {
     }
     
     /**
-     * Read kernel log (dmesg) for HymoFS
+     * Read kernel log for HymoFS.
+     * Reads from KSU's saved dmesg (/data/adb/ksu/log/dmesg.log) and filters lines
+     * that start with HymoFS: (standardized kernel log prefix). Falls back to
+     * live dmesg if the file is missing.
      */
     suspend fun readKernelLog(lines: Int = 200): String = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("dmesg | grep -i 'hymofs\\|hymo' | tail -n $lines").exec()
+            val result = Shell.cmd(
+                "if [ -r '$KSU_DMESG_LOG' ]; then " +
+                "grep 'HymoFS:' '$KSU_DMESG_LOG' | tail -n $lines; " +
+                "else " +
+                "dmesg | grep 'HymoFS:' | tail -n $lines; " +
+                "fi"
+            ).exec()
             if (result.isSuccess) {
                 result.out.joinToString("\n")
             } else {
