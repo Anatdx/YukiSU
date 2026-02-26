@@ -4,8 +4,10 @@
 #include <unistd.h>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -821,9 +823,13 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 std::cerr << "Failed to set " << subcmd << ".\n";
                 return 1;
             } else if (subcmd == "features") {
+                if (!HymoFS::is_available()) {
+                    std::cerr << "HymoFS not available.\n";
+                    return 1;
+                }
                 const int f = HymoFS::get_features();
                 if (f < 0) {
-                    std::cerr << "HymoFS not available or get_features failed.\n";
+                    std::cerr << "get_features failed: " << strerror(errno) << "\n";
                     return 1;
                 }
                 std::cout << "features: 0x" << std::hex << f << std::dec;

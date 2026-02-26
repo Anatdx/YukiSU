@@ -572,10 +572,11 @@ object HymoFSManager {
      */
     suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.IO) {
         try {
-            // hymo: hymo api storage -> JSON
-            val result = Shell.cmd("${getKsud()} hymo api storage").exec()
-            if (result.isSuccess) {
-                val json = JSONObject(result.out.joinToString("\n"))
+            // hymo: hymo api storage -> JSON (needs root)
+            val result = getRootShell().newJob().add("${getKsud()} hymo api storage").exec()
+            val text = (result.out + result.err).joinToString("\n").trim()
+            if (result.isSuccess && text.isNotEmpty()) {
+                val json = JSONObject(text)
                 val percentValue = json.optDouble("percent", 0.0)
                 StorageInfo(
                     size = json.optString("size", "-"),

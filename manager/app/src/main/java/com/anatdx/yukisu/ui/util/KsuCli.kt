@@ -19,6 +19,7 @@ import kotlinx.parcelize.Parcelize
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.ksuApp
+import com.anatdx.yukisu.utils.AssetsUtil
 import com.topjohnwu.superuser.io.SuFile
 import org.json.JSONArray
 import java.io.File
@@ -516,6 +517,18 @@ fun installBoot(
 
     val ksudPath = getKsuDaemonPath()
     var cmd = "boot-patch --magiskboot $ksudPath"
+
+    // Extract kernel-version-specific mkbootfs tools for 5.10/5.15+ ramdisk format compatibility
+    val mkbootfsDir = File(ksuApp.cacheDir, "mkbootfs").apply { mkdirs() }
+    try {
+        AssetsUtil.exportFiles(ksuApp, "5_10-mkbootfs", File(mkbootfsDir, "5_10-mkbootfs").absolutePath)
+        AssetsUtil.exportFiles(ksuApp, "5_15+-mkbootfs", File(mkbootfsDir, "5_15+-mkbootfs").absolutePath)
+        File(mkbootfsDir, "5_10-mkbootfs").setExecutable(true, false)
+        File(mkbootfsDir, "5_15+-mkbootfs").setExecutable(true, false)
+        cmd += " --mkbootfs-dir ${mkbootfsDir.absolutePath}"
+    } catch (e: Exception) {
+        Log.w(TAG, "Failed to extract mkbootfs assets, using built-in magiskboot only", e)
+    }
 
     cmd += if (bootFile == null) {
         // no boot.img, use -f to force install

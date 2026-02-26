@@ -11,6 +11,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <array>
+#include <cerrno>
 #include <climits>
 #include <cstdio>
 #include <cstring>
@@ -215,6 +216,67 @@ bool is_kernelsu_patched(const std::string& magiskboot, const std::string& workd
     return result.exit_code == 0;
 }
 
+// Repack ramdisk using kernel-version-specific mkbootfs (fixes 5.15+ boot on some devices)
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+bool repack_ramdisk_with_mkbootfs(const std::string& magiskboot, const std::string& mkbootfs_dir,
+                                  const std::string& workdir, const std::string& ramdisk_path) {
+    struct utsname uts{};
+    if (uname(&uts) != 0) {
+        LOGW("uname failed, skip mkbootfs repack");
+        return false;
+    }
+    int major = 0;
+    int minor = 0;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) < 2) {
+        LOGW("Cannot parse kernel version from %s", uts.release);
+        return false;
+    }
+    const bool use_5_15 = (major > 5) || (major == 5 && minor >= 15);
+    const std::string mkbootfs_name = use_5_15 ? "5_15+-mkbootfs" : "5_10-mkbootfs";
+    const std::string mkbootfs_path = mkbootfs_dir + "/" + mkbootfs_name;
+    if (access(mkbootfs_path.c_str(), X_OK) != 0) {
+        LOGW("mkbootfs not found or not executable: %s", mkbootfs_path.c_str());
+        return false;
+    }
+
+    const std::string extract_dir = workdir + "/ramdisk_mkbootfs_extract";
+    if (!ensure_clean_dir(extract_dir)) {
+        LOGE("Failed to create mkbootfs extract dir");
+        return false;
+    }
+
+    const std::string ramdisk_rel = (ramdisk_path.size() > workdir.size() &&
+                                     ramdisk_path.compare(0, workdir.size(), workdir) == 0 &&
+                                     ramdisk_path[workdir.size()] == '/')
+                                        ? ramdisk_path.substr(workdir.size() + 1)
+                                        : ramdisk_path;
+    const std::string ramdisk_for_extract = std::string("../") + ramdisk_rel;
+    auto extract_result =
+        exec_command_magiskboot(magiskboot, {"cpio", ramdisk_for_extract, "extract"}, extract_dir);
+    if (extract_result.exit_code != 0) {
+        LOGE("magiskboot cpio extract failed");
+        return false;
+    }
+
+    auto mkbootfs_result = exec_command({mkbootfs_path, "."}, extract_dir);
+    if (mkbootfs_result.exit_code != 0) {
+        LOGE("mkbootfs failed (exit %d)", mkbootfs_result.exit_code);
+        return false;
+    }
+
+    const std::string ramdisk_new = ramdisk_path + ".mkbootfs_new";
+    if (!write_file(ramdisk_new, mkbootfs_result.stdout_str)) {
+        LOGE("Failed to write mkbootfs output");
+        return false;
+    }
+    if (rename(ramdisk_new.c_str(), ramdisk_path.c_str()) != 0) {
+        LOGE("Failed to replace ramdisk: %s", strerror(errno));
+        return false;
+    }
+    printf("- Repacked ramdisk with %s (kernel %s)\n", mkbootfs_name.c_str(), uts.release);
+    return true;
+}
+
 // Flash boot image
 bool flash_boot(const std::string& bootdevice, const std::string& new_boot) {
     if (bootdevice.empty()) {
@@ -337,6 +399,7 @@ struct BootPatchArgs {
     bool flash = false;             // -f, --flash
     std::string out;                // -o, --out
     std::string magiskboot;         // --magiskboot
+    std::string mkbootfs_dir;       // --mkbootfs-dir (5_10/5_15+ tools for ramdisk format)
     std::string kmi;                // --kmi
     std::string partition;          // --partition
     std::string out_name;           // --out-name
@@ -384,6 +447,9 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
         } else if (arg == "--magiskboot") {
             if (i + 1 < args.size())
                 result.magiskboot = args[++i];
+        } else if (arg == "--mkbootfs-dir") {
+            if (i + 1 < args.size())
+                result.mkbootfs_dir = args[++i];
         } else if (arg == "--kmi") {
             if (i + 1 < args.size())
                 result.kmi = args[++i];
@@ -779,6 +845,15 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     if (!already_patched && parsed.flash) {
         if (!do_backup(magiskboot, workdir, ramdisk, bootimage)) {
             printf("- Warning: Backup stock image failed\n");
+        }
+    }
+
+    // Repack ramdisk with kernel-version-specific mkbootfs (fixes 5.15+ boot on some devices)
+    if (!parsed.mkbootfs_dir.empty()) {
+        if (repack_ramdisk_with_mkbootfs(magiskboot, parsed.mkbootfs_dir, workdir, ramdisk)) {
+            // Success
+        } else {
+            LOGW("mkbootfs repack failed, continuing with magiskboot cpio format");
         }
     }
 
