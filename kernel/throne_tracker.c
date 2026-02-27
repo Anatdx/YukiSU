@@ -36,8 +36,47 @@ static void update_primary_manager(void)
 
 void ksu_set_manager_appid_for_index(uid_t appid, int signature_index)
 {
+	int i;
+
 	if (signature_index < 0 || signature_index >= KSU_MAX_MANAGER_KEYS)
 		return;
+
+	/*
+	 * Keep multi-manager coexistence stable:
+	 * - If this appid is already present in any slot, reuse that slot.
+	 * - If target signature slot is occupied by another app, place this app
+	 *   into an empty slot instead of overwriting.
+	 */
+	for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++) {
+		if (ksu_manager_appids[i] == appid) {
+			ksu_manager_appids[i] = appid;
+			locked_manager_appids[i] = appid;
+			update_primary_manager();
+			return;
+		}
+	}
+
+	if (ksu_manager_appids[signature_index] == KSU_INVALID_UID ||
+	    ksu_manager_appids[signature_index] == appid) {
+		ksu_manager_appids[signature_index] = appid;
+		locked_manager_appids[signature_index] = appid;
+		update_primary_manager();
+		return;
+	}
+
+	for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++) {
+		if (ksu_manager_appids[i] == KSU_INVALID_UID) {
+			ksu_manager_appids[i] = appid;
+			locked_manager_appids[i] = appid;
+			pr_info("Manager slot collision on signature_index=%d, "
+				"placed appid=%u into slot=%d\n",
+				signature_index, appid, i);
+			update_primary_manager();
+			return;
+		}
+	}
+
+	/* No empty slot left (current max is 2), keep historical behavior. */
 	ksu_manager_appids[signature_index] = appid;
 	locked_manager_appids[signature_index] = appid;
 	update_primary_manager();
