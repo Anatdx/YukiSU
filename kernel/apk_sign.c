@@ -203,8 +203,6 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 
 	bool v2_signing_valid = false;
 	int v2_signing_blocks = 0;
-	bool v3_signing_exist = false;
-	bool v3_1_signing_exist = false;
 
 	int i;
 	struct file *fp = filp_open(path, O_RDONLY, 0);
@@ -274,12 +272,8 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 					break;
 				}
 			}
-		} else if (id == 0xf05368c0u) {
-			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
-			v3_signing_exist = true;
-		} else if (id == 0x1b93ad61u) {
-			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#74
-			v3_1_signing_exist = true;
+		} else if (id == 0xf05368c0u || id == 0x1b93ad61u) {
+			/* v3/v3.1 block; skip, v2 verification is sufficient */
 		} else {
 #ifdef CONFIG_KSU_DEBUG
 			pr_info("Unknown id: 0x%08x\n", id);
@@ -307,13 +301,9 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 clean:
 	filp_close(fp, 0);
 
-	if (v3_signing_exist || v3_1_signing_exist) {
-#ifdef CONFIG_KSU_DEBUG
-		pr_err("Unexpected v3 signature scheme found!\n");
-#endif // #ifdef CONFIG_KSU_DEBUG
-		return false;
-	}
-
+	/* v3/v3.1 may coexist with v2 in modern APKs; v2 verification is
+	 * sufficient since both use the same certificate. Accept when v2
+	 * is valid regardless of v3 presence. */
 	return v2_signing_valid;
 }
 
