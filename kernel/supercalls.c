@@ -82,6 +82,8 @@ static int do_get_info(void __user *arg)
 {
 	struct ksu_get_info_cmd cmd = {.version = KERNEL_SU_VERSION,
 				       .flags = 0};
+	uid_t cur_uid = current_uid().val;
+	uid_t cur_appid = cur_uid % PER_USER_RANGE;
 
 #ifdef MODULE
 	cmd.flags |= 0x1;
@@ -90,6 +92,10 @@ static int do_get_info(void __user *arg)
 		cmd.flags |= 0x2;
 	}
 	cmd.features = KSU_FEATURE_MAX;
+	pr_info("get_info: uid=%u appid=%u is_manager=%d flags=0x%x mgr0=%u "
+		"mgr1=%u\n",
+		cur_uid, cur_appid, is_manager() ? 1 : 0, cmd.flags,
+		ksu_manager_appids[0], ksu_manager_appids[1]);
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("get_version: copy_to_user failed\n");

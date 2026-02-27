@@ -134,8 +134,10 @@ bool is_lkm_mode() {
 }
 
 bool is_manager() {
-  auto info = get_info();
-  if (info.version > 0) {
+  // Do a fresh query to avoid stale cached flags after kernel crowns manager.
+  struct ksu_get_info_cmd info = {};
+  if (ksuctl(KSU_IOCTL_GET_INFO, &info) == 0 && info.version > 0) {
+    g_version = info; // keep cache coherent for subsequent calls
     return (info.flags & 0x2) != 0;
   }
   // Legacy Compatible
