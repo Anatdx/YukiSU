@@ -187,14 +187,14 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 		return;
 	}
 
-	pr_info("manager pkg: %s\n", pkg);
+	pr_info("manager pkg: %s, signature_index: %d\n", pkg, signature_index);
 
 #ifdef KSU_MANAGER_PACKAGE
 	// pkg is `/<real package>`
 	if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {
-		pr_info(
-		    "manager package is inconsistent with kernel build: %s\n",
-		    KSU_MANAGER_PACKAGE);
+		pr_info("manager package is inconsistent with kernel build: %s "
+			"vs %s\n",
+			pkg, KSU_MANAGER_PACKAGE);
 		return;
 	}
 #endif // #ifdef KSU_MANAGER_PACKAGE
@@ -203,8 +203,10 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 
 	list_for_each_entry (np, list, list) {
 		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
-			pr_info("Crowning manager: %s(appid=%d)\n", pkg,
-				np->appid);
+			pr_info("Crowning manager: %s (appid=%d) "
+				"signature_index=%d\n",
+				pkg, np->appid, signature_index);
+
 			if (signature_index >= 0 &&
 			    signature_index < KSU_MAX_MANAGER_KEYS) {
 				ksu_set_manager_appid_for_index(
