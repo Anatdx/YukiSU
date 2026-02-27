@@ -262,6 +262,11 @@ int hymo::run_hymo_main(int argc, char** argv) {
         // Ensure hymo base dir exists before logger (needed for daemon.log)
         ensure_dir_exists(HYMO_DATA_DIR);
 
+        // Clear daemon.log on each boot (mount is invoked at post-fs-data)
+        if (cli.command == "mount") {
+            std::ofstream(DAEMON_LOG_FILE, std::ios::trunc);
+        }
+
         // Initialize logger: write to daemon.log so Manager can show Hymo logs
         Logger::getInstance().init(cli.verbose, cli.verbose, DAEMON_LOG_FILE);
 
