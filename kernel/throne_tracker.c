@@ -575,12 +575,27 @@ out:
 	}
 }
 
+/*
+ * LKM: Delayed manager search when loaded after boot (packages.list may
+ * already exist and won't trigger fsnotify). Schedule a delayed search.
+ */
+static struct delayed_work throne_search_work;
+
+static void do_throne_search(struct work_struct *work)
+{
+	pr_info("throne_tracker: delayed search for manager...\n");
+	track_throne(false);
+}
+
 void ksu_throne_tracker_init()
 {
-	// nothing to do
+	INIT_DELAYED_WORK(&throne_search_work, do_throne_search);
+	schedule_delayed_work(&throne_search_work, msecs_to_jiffies(3000));
+	pr_info("throne_tracker: init, scheduled manager search in 3s\n");
 }
 
 void ksu_throne_tracker_exit(void)
 {
-	// nothing to do
+	cancel_delayed_work_sync(&throne_search_work);
+	pr_info("throne_tracker: exit\n");
 }
