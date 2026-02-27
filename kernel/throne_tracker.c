@@ -482,7 +482,15 @@ void track_throne(bool prune_only)
 		if (chr != '\n')
 			continue;
 
-		count = kernel_read(fp, buf, sizeof(buf), &line_start);
+		size_t line_len = pos - line_start - 1; // Exclude '\n'
+		if (line_len >= sizeof(buf)) {
+			// Line too long, skip it
+			line_start = pos;
+			continue;
+		}
+
+		count = kernel_read(fp, buf, line_len, &line_start);
+		buf[line_len] = '\0'; // Null-terminate the string
 
 		struct uid_data *data =
 		    kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
