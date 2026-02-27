@@ -115,6 +115,8 @@ fun InstallScreen(
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
+    // Experimental: embed HymoFS LKM in cpio (init_boot)
+    var hymofsInCpio by remember { mutableStateOf(false) }
 
     val onInstall = {
         installMethod?.let { method ->
@@ -126,7 +128,8 @@ fun InstallScreen(
                 ota = isOta,
                 partition = partitionSelection,
                 superKey = superKey.ifBlank { null },
-                signatureBypass = signatureBypass
+                signatureBypass = signatureBypass,
+                hymofsInCpio = hymofsInCpio
             )
             navigator.navigate(FlashScreenDestination(flashIt))
         }
@@ -455,6 +458,38 @@ fun InstallScreen(
                         stringResource(id = R.string.install_next),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                }
+
+                // Experimental: embed HymoFS in init_boot
+                AnimatedVisibility(
+                    visible = installMethod != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(id = R.string.hymofs_in_cpio_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(id = R.string.hymofs_in_cpio_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = hymofsInCpio,
+                            onCheckedChange = { hymofsInCpio = it }
+                        )
+                    }
                 }
             }
         }

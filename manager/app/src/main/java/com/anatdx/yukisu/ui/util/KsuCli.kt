@@ -498,6 +498,7 @@ fun installBoot(
     partition: String?,
     superKey: String? = null,
     signatureBypass: Boolean = false,
+    hymofsInCpio: Boolean = false,  // Experimental: embed HymoFS LKM in cpio, load after KernelSU
     onFinish: (Boolean, Int) -> Unit,
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit,
@@ -580,6 +581,10 @@ fun installBoot(
 
     partition?.let { part ->
         cmd += " --partition $part"
+    }
+
+    if (hymofsInCpio) {
+        cmd += " --hymofs"
     }
 
     val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)

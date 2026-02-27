@@ -270,7 +270,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                 }
 
-                // 仅 shouldAutoExit 时自动退出；作为打开方弝进入时坜留在界面让用户查看结果
+                // ? shouldAutoExit ???????????????????????????
                 if (shouldAutoExit) {
                     scope.launch {
                         while (shouldWarningUserMetaModule) {
@@ -779,7 +779,8 @@ sealed class FlashIt : Parcelable {
         val ota: Boolean,
         val partition: String? = null,
         val superKey: String? = null,
-        val signatureBypass: Boolean = false
+        val signatureBypass: Boolean = false,
+        val hymofsInCpio: Boolean = false
     ) : FlashIt()
     data class FlashModule(val uri: Uri) : FlashIt()
     data class FlashModules(val uris: List<Uri>, val currentIndex: Int = 0) : FlashIt()
@@ -812,6 +813,7 @@ fun flashIt(
             flashIt.partition,
             flashIt.superKey,
             flashIt.signatureBypass,
+            flashIt.hymofsInCpio,
             onFinish,
             onStdout,
             onStderr

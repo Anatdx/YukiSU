@@ -194,6 +194,14 @@ bool init() {
         if (!load_module("/kernelsu.ko")) {
             KLOGE("Cannot load kernelsu.ko");
         }
+
+        // Experimental: load HymoFS LKM if present in cpio (must be after kernelsu.ko)
+        if (access("/hymofs.ko", F_OK) == 0) {
+            KLOGI("Loading hymofs.ko..");
+            if (!load_module("/hymofs.ko")) {
+                KLOGW("Cannot load hymofs.ko (non-fatal)");
+            }
+        }
     }
     // /proc and /sys are unmounted here
 

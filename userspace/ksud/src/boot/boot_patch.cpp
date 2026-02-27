@@ -39,6 +39,17 @@ constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 // "LKMPRIO" in hex (little-endian)
 constexpr uint64_t LKM_PRIORITY_MAGIC = 0x4F4952504D4B4C;
 
+// Arch suffix for HymoFS LKM asset name (must match lkm.cpp)
+#if defined(__aarch64__)
+#define HYMO_ARCH_SUFFIX "_arm64"
+#elif defined(__arm__)
+#define HYMO_ARCH_SUFFIX "_armv7"
+#elif defined(__x86_64__)
+#define HYMO_ARCH_SUFFIX "_x86_64"
+#else
+#define HYMO_ARCH_SUFFIX "_arm64"
+#endif  // #if defined(__aarch64__)
+
 namespace {
 
 // LZ4 legacy ramdisk magic (reject before cpio to avoid huge cache/hang).
@@ -403,6 +414,8 @@ struct BootPatchArgs {
     std::string kmi;                // --kmi
     std::string partition;          // --partition
     std::string out_name;           // --out-name
+    bool hymofs_in_cpio =
+        false;  // --hymofs (experimental: embed HymoFS LKM in cpio, load after KernelSU)
 };
 
 namespace {
@@ -459,6 +472,8 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
         } else if (arg == "--out-name") {
             if (i + 1 < args.size())
                 result.out_name = args[++i];
+        } else if (arg == "--hymofs") {
+            result.hymofs_in_cpio = true;
         }
     }
 
@@ -841,6 +856,20 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         return 1;
     }
 
+    // Experimental: add HymoFS LKM to cpio (load after KernelSU in ksuinit)
+    if (parsed.hymofs_in_cpio) {
+        const std::string hymofs_asset = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
+        const std::string hymofs_file = workdir + "/hymofs.ko";
+        if (copy_asset_to_file(hymofs_asset, hymofs_file)) {
+            printf("- Adding HymoFS LKM (experimental)\n");
+            if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 hymofs.ko hymofs.ko")) {
+                LOGW("Failed to add hymofs.ko to cpio");
+            }
+        } else {
+            LOGW("HymoFS LKM asset %s not found, skipping", hymofs_asset.c_str());
+        }
+    }
+
     // Backup if flashing and not already patched
     if (!already_patched && parsed.flash) {
         if (!do_backup(magiskboot, workdir, ramdisk, bootimage)) {
@@ -1128,6 +1157,13 @@ int boot_restore(const std::vector<std::string>& args) {
     if (!from_backup) {
         // Remove kernelsu.ko
         do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kernelsu.ko");
+
+        // Remove hymofs.ko if present (experimental cpio embed)
+        auto hymofs_exists =
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists hymofs.ko"}, workdir);
+        if (hymofs_exists.exit_code == 0) {
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm hymofs.ko");
+        }
 
         // Restore init if init.real exists
         auto init_real_exists =
