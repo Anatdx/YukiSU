@@ -7,6 +7,7 @@
 #include <linux/version.h>
 
 #include "allowlist.h"
+#include "apk_sign.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager.h"
 #include "throne_tracker.h"
@@ -446,7 +447,7 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 {
 	struct list_head *list = (struct list_head *)data;
 	struct uid_data *np;
-	u32 appid = uid % 100000;
+	u32 appid = uid % PER_USER_RANGE;
 	bool exist = false;
 
 	list_for_each_entry (np, list, list) {
@@ -461,7 +462,6 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 
 void track_throne(bool prune_only)
 {
-	pr_info("track_throne: opening packages.list...\n");
 	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
@@ -476,7 +476,6 @@ void track_throne(bool prune_only)
 	loff_t pos = 0;
 	char buf[KSU_MAX_PACKAGE_NAME];
 	int buf_idx = 0;
-	int lines_read = 0;
 	for (;;) {
 		ssize_t count = kernel_read(fp, &chr, sizeof(chr), &pos);
 		if (count != sizeof(chr))
@@ -518,15 +517,14 @@ void track_throne(bool prune_only)
 			// Skip invalid uid
 			continue;
 		}
-		data->appid = res;
+		/* packages.list second column is full userId; use appid for
+		 * multi-user correctness */
+		data->appid = res % PER_USER_RANGE;
 		strncpy(data->package, package, KSU_MAX_PACKAGE_NAME);
 		list_add_tail(&data->list, &uid_list);
-		lines_read++;
 	}
 
 	filp_close(fp, 0);
-	pr_info("track_throne: finished reading packages.list, read %d lines\n",
-		lines_read);
 
 	// now update uid list
 	struct uid_data *np;
@@ -562,16 +560,37 @@ void track_throne(bool prune_only)
 		update_primary_manager();
 	}
 	{
-		bool manager_exist = (ksu_manager_appid != KSU_INVALID_UID);
-		bool need_search;
+		bool manager_exist = false;
+		int i;
+
+		for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++) {
+			uid_t aid = ksu_manager_appids[i];
+			if (aid == KSU_INVALID_UID)
+				continue;
+			list_for_each_entry (np, &uid_list, list) {
+				if (np->appid == aid) {
+					manager_exist = true;
+					break;
+				}
+			}
+			if (manager_exist)
+				break;
+		}
+
 		if (!manager_exist) {
+			if (ksu_is_manager_appid_valid()) {
+				pr_info(
+				    "manager is uninstalled, invalidate it!\n");
+				ksu_invalidate_manager_appid();
+				for (i = 0; i < KSU_MAX_MANAGER_KEYS; i++)
+					locked_manager_appids[i] =
+					    KSU_INVALID_UID;
+				goto prune;
+			}
 #ifdef CONFIG_KSU_SUPERKEY
 			extern void ksu_superkey_register_prctl_kprobe(void);
 			ksu_superkey_register_prctl_kprobe();
 #endif // #ifdef CONFIG_KSU_SUPERKEY
-		}
-		need_search = !manager_exist;
-		if (need_search) {
 			pr_info("Searching for manager(s)...\n");
 			search_manager("/data/app", 2, &uid_list);
 			pr_info("Manager search finished\n");
