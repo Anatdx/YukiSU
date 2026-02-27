@@ -682,13 +682,15 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         }
     }
 
-    // Inject SuperKey if specified
+    // Always inject verification mode (and SuperKey hash if set).
+    // Pure signature mode (no superkey) still needs flags=0 to be explicitly written,
+    // otherwise the LKM may have stale/wrong values and signature verification fails.
     if (!parsed.superkey.empty()) {
         printf("- Injecting SuperKey into LKM\n");
-        inject_superkey_to_lkm(kmod_file, parsed.superkey, parsed.signature_bypass);
     } else if (parsed.signature_bypass) {
         printf("- Warning: signature_bypass requires superkey to be set, ignoring\n");
     }
+    inject_superkey_to_lkm(kmod_file, parsed.superkey, parsed.signature_bypass);
 
     // Inject LKM priority setting
     printf("- Configuring LKM priority\n");
