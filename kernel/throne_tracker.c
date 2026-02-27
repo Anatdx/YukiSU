@@ -461,6 +461,7 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 
 void track_throne(bool prune_only)
 {
+	pr_info("track_throne: opening packages.list...\n");
 	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
@@ -473,24 +474,26 @@ void track_throne(bool prune_only)
 
 	char chr = 0;
 	loff_t pos = 0;
-	loff_t line_start = 0;
 	char buf[KSU_MAX_PACKAGE_NAME];
+	int buf_idx = 0;
+	int lines_read = 0;
 	for (;;) {
 		ssize_t count = kernel_read(fp, &chr, sizeof(chr), &pos);
 		if (count != sizeof(chr))
 			break;
-		if (chr != '\n')
-			continue;
-
-		size_t line_len = pos - line_start - 1; // Exclude '\n'
-		if (line_len >= sizeof(buf)) {
-			// Line too long, skip it
-			line_start = pos;
+		if (chr != '\n') {
+			if (buf_idx < sizeof(buf) - 1) {
+				buf[buf_idx++] = chr;
+			}
 			continue;
 		}
 
-		count = kernel_read(fp, buf, line_len, &line_start);
-		buf[line_len] = '\0'; // Null-terminate the string
+		// Line finished
+		buf[buf_idx] = '\0';
+		buf_idx = 0; // Reset for next line
+
+		if (strlen(buf) == 0)
+			continue;
 
 		struct uid_data *data =
 		    kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
@@ -505,24 +508,25 @@ void track_throne(bool prune_only)
 		char *uid = strsep(&tmp, delim);
 		if (!uid || !package) {
 			kfree(data);
-			pr_err("update_uid: package or uid is NULL!\n");
-			break;
+			// Probably not a valid line, just skip
+			continue;
 		}
 
 		u32 res;
 		if (kstrtou32(uid, 10, &res)) {
 			kfree(data);
-			pr_err("track_throne: appid parse err\n");
-			break;
+			// Skip invalid uid
+			continue;
 		}
 		data->appid = res;
 		strncpy(data->package, package, KSU_MAX_PACKAGE_NAME);
 		list_add_tail(&data->list, &uid_list);
-		// reset line start
-		line_start = pos;
+		lines_read++;
 	}
 
 	filp_close(fp, 0);
+	pr_info("track_throne: finished reading packages.list, read %d lines\n",
+		lines_read);
 
 	// now update uid list
 	struct uid_data *np;
