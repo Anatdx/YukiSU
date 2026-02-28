@@ -8,6 +8,8 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <fstream>
+#include <string>
 #include <thread>
 #include "../utils.hpp"
 #include "hymo_magic.h"
@@ -17,6 +19,21 @@ namespace hymo {
 static HymoFSStatus s_cached_status = HymoFSStatus::NotPresent;
 static bool s_status_checked = false;
 static int s_hymo_fd = -1;  // Cached anonymous fd
+
+// Fast check: if /proc/modules doesn't show hymofs_lkm, it's not loaded.
+// Avoids slow retry loop in get_anon_fd() when module is absent.
+static bool lkm_in_proc_modules() {
+    std::ifstream f("/proc/modules");
+    if (!f)
+        return false;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.compare(0, 11, "hymofs_lkm ") == 0 || line.compare(0, 11, "hymofs_lkm\t") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Get anonymous fd from kernel (only way to communicate with HymoFS)
 static int get_anon_fd() {
@@ -89,6 +106,13 @@ int HymoFS::get_protocol_version() {
 HymoFSStatus HymoFS::check_status() {
     if (s_status_checked) {
         return s_cached_status;
+    }
+
+    // Fast path: lsmod/proc/modules doesn't show hymofs_lkm → not loaded, skip slow retries
+    if (!lkm_in_proc_modules()) {
+        s_cached_status = HymoFSStatus::NotPresent;
+        s_status_checked = true;
+        return HymoFSStatus::NotPresent;
     }
 
     int k_ver = get_protocol_version();
