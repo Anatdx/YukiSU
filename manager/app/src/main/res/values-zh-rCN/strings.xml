@@ -115,7 +115,7 @@
     <string name="install_inactive_slot_warning">将在重启后强制切换到另一个槽位！注意只能在 OTA 更新完成后的重启之前使用。</string>
     <string name="install_next">下一步</string>
     <string name="install_select_partition">选择分区</string>
-    <string name="hymofs_in_cpio_title">实验：将 HymoFS 刷入 init_boot</string>
+    <string name="hymofs_in_cpio_title">实验：将 HymoFS 刷入 cpio</string>
     <string name="hymofs_in_cpio_desc">开启后，修补时会加入 HymoFS LKM，开机时紧随 KernelSU 加载</string>
     <string name="install_upload_lkm_file">使用本地 LKM 文件</string>
     <string name="install_only_support_ko_file">仅支持选择 .ko 文件</string>

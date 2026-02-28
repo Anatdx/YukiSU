@@ -858,7 +858,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         return 1;
     }
 
-    // Experimental: add HymoFS LKM to cpio (load after KernelSU in ksuinit)
+    // Experimental: add or remove HymoFS LKM in cpio (load after KernelSU in ksuinit)
     if (parsed.hymofs_in_cpio) {
         const std::string hymofs_asset = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
         const std::string hymofs_file = workdir + "/hymofs.ko";
@@ -869,6 +869,14 @@ int boot_patch_impl(const std::vector<std::string>& args) {
             }
         } else {
             LOGW("HymoFS LKM asset %s not found, skipping", hymofs_asset.c_str());
+        }
+    } else {
+        // User disabled HymoFS: remove hymofs.ko from cpio if it was previously
+        // embedded (otherwise it stays forever after re-patch without the option).
+        auto hymofs_exists =
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists hymofs.ko"}, workdir);
+        if (hymofs_exists.exit_code == 0) {
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm hymofs.ko");
         }
     }
 
