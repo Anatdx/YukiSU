@@ -500,76 +500,69 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 
 void track_throne(bool prune_only)
 {
-	pr_info("track_throne: opening packages.list...\n");
-	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+	struct list_head uid_list;
+	struct uid_data *np, *n;
+	struct file *fp;
+	char chr = 0;
+	loff_t pos = 0;
+	loff_t line_start = 0;
+	char buf[KSU_MAX_PACKAGE_NAME];
+	static bool manager_exist = false;
+	bool need_search = false;
+
+	// init uid list head
+	INIT_LIST_HEAD(&uid_list);
+
+	fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
 		       __func__, PTR_ERR(fp));
 		return;
 	}
 
-	struct list_head uid_list;
-	INIT_LIST_HEAD(&uid_list);
-
-	char chr = 0;
-	loff_t pos = 0;
-	char buf[KSU_MAX_PACKAGE_NAME];
-	int buf_idx = 0;
-	int lines_read = 0;
 	for (;;) {
+		struct uid_data *data = NULL;
 		ssize_t count = kernel_read(fp, &chr, sizeof(chr), &pos);
+		const char *delim = " ";
+		char *package = NULL;
+		char *tmp = NULL;
+		char *uid = NULL;
+		u32 res;
+
 		if (count != sizeof(chr))
 			break;
-		if (chr != '\n') {
-			if (buf_idx < sizeof(buf) - 1) {
-				buf[buf_idx++] = chr;
-			}
-			continue;
-		}
-
-		// Line finished
-		buf[buf_idx] = '\0';
-		buf_idx = 0; // Reset for next line
-
-		if (strlen(buf) == 0)
+		if (chr != '\n')
 			continue;
 
-		struct uid_data *data =
-		    kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
+		count = kernel_read(fp, buf, sizeof(buf), &line_start);
+		data = kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
 		if (!data) {
 			filp_close(fp, 0);
 			goto out;
 		}
 
-		char *tmp = buf;
-		const char *delim = " ";
-		char *package = strsep(&tmp, delim);
-		char *uid = strsep(&tmp, delim);
+		tmp = buf;
+		package = strsep(&tmp, delim);
+		uid = strsep(&tmp, delim);
 		if (!uid || !package) {
 			kfree(data);
-			// Probably not a valid line, just skip
-			continue;
+			pr_err("update_uid: package or uid is NULL!\n");
+			break;
 		}
 
-		u32 res;
 		if (kstrtou32(uid, 10, &res)) {
 			kfree(data);
-			// Skip invalid uid
-			continue;
+			pr_err("track_throne: appid parse err\n");
+			break;
 		}
 		data->appid = res;
 		strncpy(data->package, package, KSU_MAX_PACKAGE_NAME);
 		list_add_tail(&data->list, &uid_list);
-		lines_read++;
+		// reset line start
+		line_start = pos;
 	}
 
 	filp_close(fp, 0);
-	pr_info("track_throne: finished reading packages.list, read %d lines\n",
-		lines_read);
-
-	// now update uid list
-	struct uid_data *np;
-	struct uid_data *n;
 
 	if (prune_only)
 		goto prune;
@@ -599,22 +592,18 @@ void track_throne(bool prune_only)
 			}
 		}
 		update_primary_manager();
-	}
-	{
-		bool manager_exist = (ksu_manager_appid != KSU_INVALID_UID);
-		pr_info(
-		    "track_throne: ksu_manager_appid=%d, KSU_INVALID_UID=%d\n",
-		    ksu_manager_appid, KSU_INVALID_UID);
+		manager_exist = (ksu_manager_appid != KSU_INVALID_UID);
 		if (!manager_exist) {
 #ifdef CONFIG_KSU_SUPERKEY
 			extern void ksu_superkey_register_prctl_kprobe(void);
 			ksu_superkey_register_prctl_kprobe();
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 		}
-		/*
-		 * Always rescan /data/app to avoid stale manager_appid
-		 * after app reinstall / appid reuse.
-		 */
+	}
+
+	need_search = !manager_exist;
+
+	if (need_search) {
 		pr_info("Searching for manager(s)...\n");
 		search_manager("/data/app", 2, &uid_list);
 		pr_info("Manager search finished\n");
