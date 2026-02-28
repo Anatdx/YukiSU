@@ -68,9 +68,6 @@ void ksu_set_manager_appid_for_index(uid_t appid, int signature_index)
 		if (ksu_manager_appids[i] == KSU_INVALID_UID) {
 			ksu_manager_appids[i] = appid;
 			locked_manager_appids[i] = appid;
-			pr_info("Manager slot collision on signature_index=%d, "
-				"placed appid=%u into slot=%d\n",
-				signature_index, appid, i);
 			update_primary_manager();
 			return;
 		}
