@@ -11,11 +11,12 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
-# Size optimization (Os + LTO )
+# Size optimization (Os + LTO).
+# ksuinit is injected as /init into early ramdisk, so it must be fully static.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden -fno-rtti -fno-asynchronous-unwind-tables -fmerge-all-constants -fno-ident -fno-stack-protector -faddrsig -fno-semantic-interposition")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG -flto=full")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DNDEBUG -flto=full")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -flto=full -Wl,--gc-sections -Wl,--icf=all -Wl,--strip-all -Wl,--exclude-libs,ALL -Wl,-O2 -Wl,--lto-O3 -Wl,--hash-style=gnu -Wl,--build-id=none -Wl,-z,norelro")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -fuse-ld=lld -flto=full -Wl,--gc-sections -Wl,--icf=all -Wl,--strip-all -Wl,--exclude-libs,ALL -Wl,-O2 -Wl,--lto-O3 -Wl,--hash-style=gnu -Wl,--build-id=none -Wl,-z,norelro")
 
 add_executable(ksuinit
     src/main.cpp

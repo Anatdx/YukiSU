@@ -21,6 +21,7 @@
 #define REBOOT_SYMBOL "__arm64_sys_reboot"
 #define SYS_READ_SYMBOL "__arm64_sys_read"
 #define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
+#define SYS_FSTAT_SYMBOL "__arm64_sys_newfstat"
 #define SYS_PRCTL_SYMBOL "__arm64_sys_prctl"
 
 #elif defined(__x86_64__)
@@ -41,6 +42,7 @@
 #define REBOOT_SYMBOL "__x64_sys_reboot"
 #define SYS_READ_SYMBOL "__x64_sys_read"
 #define SYS_EXECVE_SYMBOL "__x64_sys_execve"
+#define SYS_FSTAT_SYMBOL "__x64_sys_newfstat"
 #define SYS_PRCTL_SYMBOL "__x64_sys_prctl"
 
 #else

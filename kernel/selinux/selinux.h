@@ -29,6 +29,7 @@ bool is_zygote(const struct cred *cred);
 bool is_init(const struct cred *cred);
 
 void apply_kernelsu_rules(void);
+void cache_sid(void);
 
 u32 ksu_get_ksu_file_sid(void);
 

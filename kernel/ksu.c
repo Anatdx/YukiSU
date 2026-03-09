@@ -10,6 +10,17 @@
 #include <linux/module.h>
 #include <linux/version.h>
 
+// workaround for A12-5.10 kernels with mismatched stack protector toolchain
+#if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
+#include <linux/random.h>
+#include <linux/stackprotector.h>
+unsigned long __stack_chk_guard __ro_after_init
+    __attribute__((visibility("hidden")));
+#define NO_STACK_PROTECTOR_WORKAROUND __attribute__((no_stack_protector))
+#else
+#define NO_STACK_PROTECTOR_WORKAROUND
+#endif // #if defined(CONFIG_STACKPROTECTOR) && !...
+
 #include "allowlist.h"
 #include "feature.h"
 #include "file_wrapper.h"
@@ -35,9 +46,19 @@ void yukisu_custom_config_exit(void)
 #endif // #if __SULOG_GATE
 }
 
+NO_STACK_PROTECTOR_WORKAROUND
 int __init kernelsu_init(void)
 {
 	pr_info("KernelSU LKM initializing, version: %u\n", KSU_VERSION);
+
+#if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
+	unsigned long canary;
+
+	get_random_bytes(&canary, sizeof(canary));
+	canary ^= LINUX_VERSION_CODE;
+	canary &= CANARY_MASK;
+	__stack_chk_guard = canary;
+#endif // #if defined(CONFIG_STACKPROTECTOR) && !...
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert(
