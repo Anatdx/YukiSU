@@ -1,6 +1,3 @@
-#include <linux/rcupdate.h>
-#include <linux/slab.h>
-#include <linux/task_work.h>
 #include <asm/current.h>
 #include <linux/compat.h>
 #include <linux/cred.h>
@@ -8,24 +5,27 @@
 #include <linux/err.h>
 #include <linux/file.h>
 #include <linux/fs.h>
-#include <linux/version.h>
 #include <linux/input-event-codes.h>
 #include <linux/kprobes.h>
+#include <linux/namei.h>
 #include <linux/printk.h>
+#include <linux/rcupdate.h>
+#include <linux/slab.h>
+#include <linux/task_work.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/namei.h>
-#include <linux/workqueue.h>
 #include <linux/uio.h>
+#include <linux/version.h>
+#include <linux/workqueue.h>
 
-#include "manager.h"
 #include "allowlist.h"
 #include "arch.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
-#include "util.h"
+#include "manager.h"
 #include "selinux/selinux.h"
 #include "throne_tracker.h"
+#include "util.h"
 
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
@@ -538,8 +538,8 @@ static int sys_fstat_handler_pre(struct kretprobe_instance *p,
 	unsigned int fd = PT_REGS_PARM1(real_regs);
 	void __user *statbuf =
 	    (void __user *)(unsigned long)PT_REGS_PARM2(real_regs);
-	*(void **)&p->data = NULL;
 
+	*(void **)&p->data = NULL;
 	struct file *file = fget(fd);
 	if (!file)
 		return 1;
