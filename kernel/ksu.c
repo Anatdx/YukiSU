@@ -49,7 +49,6 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #include "ksud.h"
 #include "supercalls.h"
 #include "superkey.h"
-#include "syscall_hook_manager.h"
 #include "throne_tracker.h"
 #include "sulog.h"
 
@@ -65,6 +64,33 @@ void yukisu_custom_config_exit(void)
 	ksu_sulog_exit();
 #endif // #if __SULOG_GATE
 }
+
+// dispatcher of ksu hooks
+#if defined(KSU_TP_HOOK)
+#include "syscall_hook_manager.h"
+#define ksu_hook_init() ksu_syscall_hook_manager_init()
+#define ksu_hook_exit() ksu_syscall_hook_manager_exit()
+#elif defined(CONFIG_KSU_MANUAL_HOOK)
+// only lsm hook need call init
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
+#define ksu_hook_init() ksu_lsm_hook_init()
+#else
+#define ksu_hook_init()                                                        \
+	do {                                                                   \
+	} while (0)
+#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
+#define ksu_hook_exit()                                                        \
+	do {                                                                   \
+	} while (0)
+#elif defined(CONFIG_KSU_SUSFS)
+// susfs doesn't have exit
+#define ksu_hook_init() susfs_init()
+#define ksu_hook_exit()                                                        \
+	do {                                                                   \
+	} while (0)
+#else
+#error Unsupport hook type
+#endif // #if defined(KSU_TP_HOOK)
 
 int __init kernelsu_init(void)
 {
@@ -98,7 +124,7 @@ int __init kernelsu_init(void)
 
 	yukisu_custom_config_init();
 
-	ksu_syscall_hook_manager_init();
+	ksu_hook_init();
 
 	ksu_allowlist_init();
 
@@ -128,7 +154,7 @@ void kernelsu_exit(void)
 
 	ksu_ksud_exit();
 
-	ksu_syscall_hook_manager_exit();
+	ksu_hook_exit();
 
 	yukisu_custom_config_exit();
 
