@@ -83,9 +83,7 @@ static int do_get_info(void __user *arg)
 	struct ksu_get_info_cmd cmd = {.version = KERNEL_SU_VERSION,
 				       .flags = 0};
 
-#ifdef MODULE
 	cmd.flags |= KSU_GET_INFO_FLAG_LKM;
-#endif // #ifdef MODULE
 	if (is_manager()) {
 		cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
 	}
@@ -123,7 +121,6 @@ static int do_report_event(void __user *arg)
 #if __SULOG_GATE
 				ksu_sulog_init();
 #endif // #if __SULOG_GATE
-				ksu_dynamic_manager_init();
 			}
 		}
 		break;

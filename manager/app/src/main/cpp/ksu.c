@@ -146,15 +146,6 @@ bool is_safe_mode() {
   return legacy_is_safe_mode();
 }
 
-bool is_lkm_mode() {
-  auto info = get_info();
-  if (info.version > 0) {
-    return (info.flags & KSU_GET_INFO_FLAG_LKM) != 0;
-  }
-  // Legacy Compatible
-  return (legacy_get_info().flags & KSU_GET_INFO_FLAG_LKM) != 0;
-}
-
 bool is_manager() {
   // Do a fresh query to avoid stale cached flags after kernel crowns manager.
   struct ksu_get_info_cmd info = {};

@@ -30,7 +30,6 @@ class HomeViewModel : ViewModel() {
         val isManager: Boolean = false,
         val ksuVersion: Int? = null,
         val ksuFullVersion : String? = null,
-        val lkmMode: Boolean? = null,
         val kernelVersion: KernelVersion = getKernelVersion(),
         val isRootAvailable: Boolean = false,
         val requireNewKernel: Boolean = false
@@ -145,10 +144,6 @@ class HomeViewModel : ViewModel() {
                     fullVersion
                 }
 
-                val lkmMode = ksuVersion?.let {
-                    if (kernelVersion.isGKI()) Natives.isLkmMode else null
-                }
-
                 val isRootAvailable = try {
                     rootAvailable()
                 } catch (_: Exception) {
@@ -165,7 +160,6 @@ class HomeViewModel : ViewModel() {
                     isManager = isManager,
                     ksuVersion = ksuVersion,
                     ksuFullVersion = ksuFullVersion,
-                    lkmMode = lkmMode,
                     kernelVersion = kernelVersion,
                     isRootAvailable = isRootAvailable,
                     requireNewKernel = requireNewKernel

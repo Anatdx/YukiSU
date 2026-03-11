@@ -16,8 +16,7 @@
 
 // workaround for A12-5.10 kernels with mismatched stack protector toolchain
 #if defined(CONFIG_STACKPROTECTOR) &&                                          \
-    (defined(CONFIG_ARM64) && defined(MODULE) &&                               \
-     !defined(CONFIG_STACKPROTECTOR_PER_TASK))
+    (defined(CONFIG_ARM64) && !defined(CONFIG_STACKPROTECTOR_PER_TASK))
 #include <linux/random.h>
 #include <linux/stackprotector.h>
 unsigned long __stack_chk_guard __ro_after_init
@@ -46,7 +45,6 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #endif // #if defined(CONFIG_STACKPROTECTOR) &&
 
 #include "allowlist.h"
-#include "dynamic_manager.h"
 #include "feature.h"
 #include "file_wrapper.h"
 #include "klog.h" // IWYU pragma: keep
@@ -73,41 +71,14 @@ void yukisu_custom_config_exit(void)
 #endif // #if __SULOG_GATE
 }
 
-// dispatcher of ksu hooks
-#if defined(KSU_TP_HOOK)
 #include "syscall_hook_manager.h"
 #define ksu_hook_init() ksu_syscall_hook_manager_init()
 #define ksu_hook_exit() ksu_syscall_hook_manager_exit()
-#elif defined(CONFIG_KSU_MANUAL_HOOK)
-// only lsm hook need call init
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
-#define ksu_hook_init() ksu_lsm_hook_init()
-#else
-#define ksu_hook_init()                                                        \
-	do {                                                                   \
-	} while (0)
-#endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
-#define ksu_hook_exit()                                                        \
-	do {                                                                   \
-	} while (0)
-#elif defined(CONFIG_KSU_SUSFS)
-// susfs doesn't have exit
-#define ksu_hook_init() susfs_init()
-#define ksu_hook_exit()                                                        \
-	do {                                                                   \
-	} while (0)
-#else
-#error Unsupport hook type
-#endif // #if defined(KSU_TP_HOOK)
 
 int __init kernelsu_init(void)
 {
 	pr_info("KernelSU LKM initializing, version: %u\n", KSU_VERSION);
-#ifdef MODULE
 	ksu_late_loaded = (current->pid != 1);
-#else
-	ksu_late_loaded = false;
-#endif // #ifdef MODULE
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert(
@@ -161,7 +132,6 @@ int __init kernelsu_init(void)
 #if __SULOG_GATE
 		ksu_sulog_init();
 #endif // #if __SULOG_GATE
-		ksu_dynamic_manager_init();
 
 		ksu_boot_completed = true;
 		track_throne(false);
@@ -173,11 +143,9 @@ int __init kernelsu_init(void)
 		ksu_file_wrapper_init();
 	}
 
-#ifdef MODULE
 #ifndef CONFIG_KSU_DEBUG
 	kobject_del(&THIS_MODULE->mkobj.kobj);
 #endif // #ifndef CONFIG_KSU_DEBUG
-#endif // #ifdef MODULE
 
 	pr_info("KernelSU LKM initialized\n");
 	return 0;

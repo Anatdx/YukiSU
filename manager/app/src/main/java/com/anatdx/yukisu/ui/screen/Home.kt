@@ -151,6 +151,18 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 val isSignatureOk by produceState(initialValue = false) {
                     value = withContext(Dispatchers.IO) { Natives.isSignatureOk() }
                 }
+                val isLateLoadMode by produceState(
+                    initialValue = false,
+                    key1 = viewModel.systemStatus.ksuVersion
+                ) {
+                    value = withContext(Dispatchers.IO) {
+                        if (viewModel.systemStatus.ksuVersion == null) {
+                            false
+                        } else {
+                            runCatching { Natives.isLateLoadMode }.getOrDefault(false)
+                        }
+                    }
+                }
                 val hymofsStatus by produceState(initialValue = HymoFSStatus.NOT_PRESENT) {
                     value = HymoFSManager.getStatus()
                 }
@@ -242,37 +254,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     }
                 }
 
-                // GKI 内置 KSU 不受支持：红色横幅警告（仅 built-in，LKM 不显示）
-                if (viewModel.isCoreDataLoaded &&
-                    viewModel.systemStatus.kernelVersion.isGKI() &&
-                    viewModel.systemStatus.ksuVersion != null &&
-                    !Natives.isLkmMode
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.error,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Outlined.Warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onError,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = stringResource(R.string.home_gki_builtin_unsupported),
-                                color = MaterialTheme.colorScheme.onError,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-
                 // 状态卡片
                 if (viewModel.isCoreDataLoaded) {
                     val isNotManager = !viewModel.systemStatus.isManager
@@ -290,7 +271,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         onSuperKeyAuth = {
                             superKeyDialog.show()
                         },
-                        isSignatureOk = isSignatureOk
+                        isSignatureOk = isSignatureOk,
+                        isLateLoadMode = isLateLoadMode
                     )
 
                     // 警告信息
@@ -328,7 +310,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSimpleMode = viewModel.isSimpleMode,
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
-                        lkmMode = viewModel.systemStatus.lkmMode,
                         hymofsAvailable = hymofsStatus == HymoFSStatus.AVAILABLE,
                         onKernelClick = { showKernelSpoofDialog = true },
                     )
@@ -502,6 +483,7 @@ private fun StatusCard(
     isSuperKeyMode: Boolean = false,
     needsSuperKeyAuth: Boolean = false,
     isSignatureOk: Boolean = false,
+    isLateLoadMode: Boolean = false,
     onClickInstall: () -> Unit = {},
     onSuperKeyAuth: () -> Unit = {}
 ) {
@@ -624,6 +606,22 @@ private fun StatusCard(
                                     Spacer(Modifier.width(6.dp))
                                 }
                                 // 其它情况（例如都没有）：不显示认证徽章
+                            }
+
+                            if (isLateLoadMode) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier
+                                ) {
+                                    Text(
+                                        text = stringResource(id = R.string.jailbreak_mode),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        color = MaterialTheme.colorScheme.onTertiary
+                                    )
+                                }
+                                Spacer(Modifier.width(6.dp))
                             }
 
                             // 架构标签（缓存避免重复 syscall）
@@ -866,7 +864,6 @@ private fun InfoCard(
     isSimpleMode: Boolean,
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
-    lkmMode: Boolean?,
     hymofsAvailable: Boolean = false,
     onKernelClick: () -> Unit = {},
 ) {
@@ -1254,7 +1251,6 @@ private fun StatusCardPreview() {
             HomeViewModel.SystemStatus(
                 isManager = true,
                 ksuVersion = 1,
-                lkmMode = null,
                 kernelVersion = KernelVersion(5, 10, 101),
                 isRootAvailable = true
             )
@@ -1264,7 +1260,6 @@ private fun StatusCardPreview() {
             HomeViewModel.SystemStatus(
                 isManager = true,
                 ksuVersion = 10000,
-                lkmMode = true,
                 kernelVersion = KernelVersion(5, 10, 101),
                 isRootAvailable = true
             )
@@ -1274,7 +1269,6 @@ private fun StatusCardPreview() {
             HomeViewModel.SystemStatus(
                 isManager = false,
                 ksuVersion = null,
-                lkmMode = true,
                 kernelVersion = KernelVersion(5, 10, 101),
                 isRootAvailable = false
             )
@@ -1284,7 +1278,6 @@ private fun StatusCardPreview() {
             HomeViewModel.SystemStatus(
                 isManager = false,
                 ksuVersion = null,
-                lkmMode = false,
                 kernelVersion = KernelVersion(4, 10, 101),
                 isRootAvailable = false
             )

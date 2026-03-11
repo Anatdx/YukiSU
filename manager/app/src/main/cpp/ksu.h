@@ -20,8 +20,6 @@ bool uid_should_umount(int uid);
 
 bool is_safe_mode();
 
-bool is_lkm_mode();
-
 bool is_manager();
 bool is_late_load_mode();
 
@@ -114,7 +112,6 @@ struct ksu_become_daemon_cmd {
 };
 
 enum ksu_get_info_flag : uint32_t {
-  KSU_GET_INFO_FLAG_LKM = 1U << 0,
   KSU_GET_INFO_FLAG_MANAGER = 1U << 1,
   KSU_GET_INFO_FLAG_LATE_LOAD = 1U << 2,
 };

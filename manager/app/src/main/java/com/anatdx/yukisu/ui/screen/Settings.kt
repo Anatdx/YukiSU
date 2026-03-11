@@ -634,10 +634,8 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
                     }
-                    if (Natives.isLkmMode) {
-                        UninstallItem(navigator) {
-                            loadingDialog.withLoading(it)
-                        }
+                    UninstallItem(navigator) {
+                        loadingDialog.withLoading(it)
                     }
                 }
             )
