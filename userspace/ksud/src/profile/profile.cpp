@@ -1,6 +1,7 @@
 #include "profile.hpp"
 #include "../defs.hpp"
 #include "../log.hpp"
+#include "../sepolicy/sepolicy.hpp"
 #include "../utils.hpp"
 
 #include <dirent.h>
@@ -95,12 +96,11 @@ int apply_profile_sepolies() {
             continue;
 
         const std::string path = std::string(PROFILE_SELINUX_DIR) + entry->d_name;
-        auto content = read_file(path);
-        if (!content)
-            continue;
-
-        // TODO: Apply sepolicy via ksucalls
-        LOGD("Apply sepolicy for %s", entry->d_name);
+        if (sepolicy_apply_file(path) == 0) {
+            LOGI("Applied sepolicy for %s", entry->d_name);
+        } else {
+            LOGW("Failed to apply sepolicy for %s", entry->d_name);
+        }
     }
 
     closedir(dir);
