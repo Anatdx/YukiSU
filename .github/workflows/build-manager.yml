@@ -29,7 +29,7 @@ on:
   workflow_call:
     inputs:
       full_archs:
-        description: "Build all archs for hymofs (armv7, x86_64) - for release"
+        description: "Build extra ksud/ksuinit archs for release; HymoFS LKM is arm64-only in DDK CI"
         required: false
         default: false
         type: boolean

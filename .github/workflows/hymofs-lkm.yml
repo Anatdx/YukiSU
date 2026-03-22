@@ -1,15 +1,14 @@
-# Build HymoFS kernel module (clone kernel + make). Called by build-hymofs-lkm.yml matrix.
 name: Build HymoFS Kernel Module
 
 on:
   workflow_call:
     inputs:
       kmi:
-        description: "KMI version (kernel branch)"
+        description: "KMI version"
         required: true
         type: string
       arch:
-        description: "Target arch: arm64, armv7, x86_64"
+        description: "Target architecture (DDK currently supports arm64 only)"
         required: true
         type: string
       hymofs_ref:
@@ -17,13 +16,22 @@ on:
         required: false
         default: "main"
         type: string
+      ddk_release:
+        description: "DDK release version"
+        required: false
+        default: "20251104"
+        type: string
 
 jobs:
   build:
     name: Build hymofs ${{ inputs.arch }} ${{ inputs.kmi }}
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      options: --privileged
     env:
       OUT: ${{ github.workspace }}/out
+      SRC_ROOT: ${{ github.workspace }}/hymofs_src
       SRC: ${{ github.workspace }}/hymofs_src/src
 
     steps:
@@ -32,119 +40,57 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate target arch
+        run: |
+          if [ "${{ inputs.arch }}" != "arm64" ]; then
+            echo "DDK workflow currently supports arm64 only, got: ${{ inputs.arch }}"
+            exit 1
+          fi
+
       - name: Clone HymoFS
         run: |
           set -euo pipefail
           echo "Cloning HymoFS (ref: ${{ inputs.hymofs_ref }})..."
-          git clone --depth 1 "https://github.com/Anatdx/HymoFS.git" hymofs_src
-          (cd hymofs_src && git fetch --depth 1 origin "${{ inputs.hymofs_ref }}" && git checkout FETCH_HEAD)
-          ls -la hymofs_src/src/
+          git clone --depth 1 "https://github.com/Anatdx/HymoFS.git" "$SRC_ROOT"
+          (
+            cd "$SRC_ROOT"
+            git fetch --depth 1 origin "${{ inputs.hymofs_ref }}"
+            git checkout FETCH_HEAD
+          )
+          ls -la "$SRC/"
 
       - name: Generate version
         id: parse_version
         run: |
-          COMMIT_NUM=$(cd hymofs_src && git rev-list --count HEAD)
-          VERSION=$(echo "$COMMIT_NUM + 200" | bc)
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Clone kernel tree
-        run: |
-          set -euo pipefail
-          KMI="${{ inputs.kmi }}"
-          echo "Cloning kernel tree ($KMI)..."
-          git clone --depth 1 -b "$KMI" https://android.googlesource.com/kernel/common kernel_src
-          test -f kernel_src/Makefile
-          echo "Kernel ready at kernel_src/"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git make clang lld llvm gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache \
-            flex bison bc rsync cpio \
-            libelf-dev libssl-dev libdw-dev pahole zip
+          COMMIT_NUM=$(cd "$SRC_ROOT" && git rev-list --count HEAD)
+          VERSION=$((COMMIT_NUM + 200))
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build hymofs_lkm.ko
         run: |
           set -euo pipefail
-          KMI="${{ inputs.kmi }}"
-          ARCH="${{ inputs.arch }}"
-          KERNEL_SRC="$GITHUB_WORKSPACE/kernel_src"
-          SRC="$GITHUB_WORKSPACE/hymofs_src/src"
+          if [ -z "${KDIR:-}" ] || [ ! -f "$KDIR/Makefile" ]; then
+            echo "KDIR is not available inside DDK container: ${KDIR:-<empty>}"
+            exit 1
+          fi
+
           VERSION="${{ steps.parse_version.outputs.VERSION }}"
-
-          # 5.10: use GCC cross (no LLVM); else LLVM=1
-          CC_EXTRA=""
-          if [[ "$KMI" == android12-5.10 ]] || [[ "$KMI" == android13-5.10 ]]; then
-            LLVM_ARGS=""
-            case "$ARCH" in
-              arm64)   CROSS_ARGS="CROSS_COMPILE=aarch64-linux-gnu-" ;;
-              armv7)   CROSS_ARGS="CROSS_COMPILE=arm-linux-gnueabi-" ;;
-              x86_64)  CROSS_ARGS="" ;;
-              *) echo "Unknown arch: $ARCH"; exit 1 ;;
-            esac
-          else
-            LLVM_ARGS="LLVM=1 LLVM_IAS=1"
-            case "$ARCH" in
-              arm64)   CROSS_ARGS="" ;;
-              armv7)   CROSS_ARGS="CROSS_COMPILE=arm-linux-gnueabi-"
-                # Kernel passes -r to compiler; ccache treats -r as its own option. Use wrapper to rewrite -r -> --relocatable.
-                WRAP_DIR="$GITHUB_WORKSPACE/.ccache_clang_wrap"
-                mkdir -p "$WRAP_DIR"
-                printf '%s\n' '#!/bin/bash' 'args=()' 'for a in "$@"; do' '  [[ "$a" == "-r" ]] && a="--relocatable"' '  args+=("$a")' 'done' 'exec ccache clang "${args[@]}"' > "$WRAP_DIR/clang"
-                chmod +x "$WRAP_DIR/clang"
-                CC_EXTRA="CC=$WRAP_DIR/clang" ;;
-              x86_64)  CROSS_ARGS="" ;;
-              *) echo "Unknown arch: $ARCH"; exit 1 ;;
-            esac
-          fi
-          [ -n "$CC_EXTRA" ] && OPT_CC="$CC_EXTRA" || OPT_CC=""
-          [ -n "$CROSS_ARGS" ] && OPT_CROSS="$CROSS_ARGS" || OPT_CROSS=""
-          [ -n "$LLVM_ARGS" ] && OPT_LLVM="$LLVM_ARGS" || OPT_LLVM=""
-
-          unset M
-          echo "Preparing kernel tree (KMI=$KMI, ARCH=$ARCH)..."
-
-          if [[ "$ARCH" == "arm64" ]]; then
-            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM gki_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM defconfig
-            if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
-              $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM olddefconfig 2>/dev/null || true
-            fi
-            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM modules_prepare
-            echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=arm64)..."
-            make -C "$KERNEL_SRC" ARCH=arm64 $OPT_CROSS $OPT_LLVM M="$SRC" KBUILD_MODPOST_WARN=1 \
-              CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
-          elif [[ "$ARCH" == "armv7" ]]; then
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC multi_v7_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC defconfig
-            if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
-              $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC olddefconfig 2>/dev/null || true
-            fi
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC modules_prepare
-            echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=arm)..."
-            make -C "$KERNEL_SRC" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- $OPT_CROSS $OPT_LLVM $OPT_CC M="$SRC" KBUILD_MODPOST_WARN=1 \
-              CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
-          else
-            # x86_64: kernel ARCH=x86
-            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM gki_defconfig 2>/dev/null || \
-              make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM x86_64_defconfig
-            if [[ "$KMI" == *"6.12"* ]] && [ -f "$KERNEL_SRC/scripts/config" ]; then
-              $KERNEL_SRC/scripts/config --file "$KERNEL_SRC/.config" -d GENDWARFKSYMS 2>/dev/null || true
-              make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM olddefconfig 2>/dev/null || true
-            fi
-            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM modules_prepare
-            echo "Building hymofs_lkm.ko (KMI=$KMI, ARCH=x86)..."
-            make -C "$KERNEL_SRC" ARCH=x86 $OPT_CROSS $OPT_LLVM M="$SRC" KBUILD_MODPOST_WARN=1 \
-              CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\"" modules
-          fi
+          echo "Building hymofs_lkm.ko with KDIR=$KDIR"
+          (
+            cd "$SRC_ROOT"
+            make -j"$(nproc --all)" CC=clang \
+              CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\""
+          )
 
           mkdir -p "$OUT"
           cp "$SRC/hymofs_lkm.ko" "$OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
           llvm-strip -d "$OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko" 2>/dev/null || true
           ls -la "$OUT/"
+
+      - name: Install GPG
+        run: |
+          apt-get update
+          apt-get install -y gnupg
 
       - name: Import GPG key and Sign hymofs_lkm.ko
         env:
@@ -161,7 +107,7 @@ jobs:
           printf '%s\n' "$GPG_PRIVATE_KEY" > key.asc
           gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
           rm -f key.asc
-          cd $OUT
+          cd "$OUT"
           KO_FILE="${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
           echo "Signing $KO_FILE..."
           gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
