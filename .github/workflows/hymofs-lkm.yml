@@ -30,6 +30,8 @@ jobs:
       image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
       options: --privileged
     env:
+      KMI: ${{ inputs.kmi }}
+      TARGET_ARCH: ${{ inputs.arch }}
       OUT: ${{ github.workspace }}/out
       SRC_ROOT: ${{ github.workspace }}/hymofs_src
       SRC: ${{ github.workspace }}/hymofs_src/src
@@ -42,8 +44,8 @@ jobs:
 
       - name: Validate target arch
         run: |
-          if [ "${{ inputs.arch }}" != "arm64" ]; then
-            echo "DDK workflow currently supports arm64 only, got: ${{ inputs.arch }}"
+          if [ "$TARGET_ARCH" != "arm64" ]; then
+            echo "DDK workflow currently supports arm64 only, got: $TARGET_ARCH"
             exit 1
           fi
 
@@ -83,8 +85,9 @@ jobs:
           )
 
           mkdir -p "$OUT"
-          cp "$SRC/hymofs_lkm.ko" "$OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
-          llvm-strip -d "$OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko" 2>/dev/null || true
+          KO_FILE="${KMI}_${TARGET_ARCH}_hymofs_lkm.ko"
+          cp "$SRC/hymofs_lkm.ko" "$OUT/$KO_FILE"
+          llvm-strip -d "$OUT/$KO_FILE" 2>/dev/null || true
           ls -la "$OUT/"
 
       - name: Install GPG
@@ -101,14 +104,14 @@ jobs:
           mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
           if [ -z "${GPG_PRIVATE_KEY:-}" ]; then
             echo "GPG_PRIVATE_KEY not set, skipping signing."
-            touch "$OUT/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko.asc"
+            touch "$OUT/${KMI}_${TARGET_ARCH}_hymofs_lkm.ko.asc"
             exit 0
           fi
           printf '%s\n' "$GPG_PRIVATE_KEY" > key.asc
           gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
           rm -f key.asc
           cd "$OUT"
-          KO_FILE="${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko"
+          KO_FILE="${KMI}_${TARGET_ARCH}_hymofs_lkm.ko"
           echo "Signing $KO_FILE..."
           gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
             --passphrase "$GPG_PASSPHRASE" \
@@ -118,7 +121,7 @@ jobs:
       - name: Upload .ko
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.kmi }}-${{ inputs.arch }}-hymofs-lkm
+          name: ${{ env.KMI }}-${{ env.TARGET_ARCH }}-hymofs-lkm
           path: |
-            ${{ env.OUT }}/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko
-            ${{ env.OUT }}/${{ inputs.kmi }}_${{ inputs.arch }}_hymofs_lkm.ko.asc
+            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_hymofs_lkm.ko
+            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_hymofs_lkm.ko.asc

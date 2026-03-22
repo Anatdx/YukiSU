@@ -34,6 +34,7 @@ jobs:
     - name: Prepare LKM files
       if: ${{ inputs.pack_lkm }}
       run: |
+        set -euo pipefail
         mkdir -p ./userspace/ksud/assets
         cp android*-lkm/*_kernelsu.ko ./userspace/ksud/assets/ 2>/dev/null || true
         # HymoFS: copy only arch-matching .ko (arm64/armv7/x86_64)
@@ -43,7 +44,20 @@ jobs:
           armv7|armv7-linux-androideabi) arch_suffix="_armv7" ;;
           *) arch_suffix="_arm64" ;;
         esac
-        cp *-hymofs-lkm/*${arch_suffix}_hymofs_lkm.ko ./userspace/ksud/assets/ 2>/dev/null || true
+        mapfile -t hymofs_assets < <(find . -type f -name "android*${arch_suffix}_hymofs_lkm.ko" | sort)
+        if [ "${#hymofs_assets[@]}" -gt 0 ]; then
+          cp "${hymofs_assets[@]}" ./userspace/ksud/assets/
+        fi
+        echo "HymoFS assets copied into ksud/assets:"
+        find ./userspace/ksud/assets -maxdepth 1 -type f -name "*${arch_suffix}_hymofs_lkm.ko" -print \
+          | sed 's|^.*/||' | sort || true
+        if [ "$arch_suffix" = "_arm64" ] && ! find ./userspace/ksud/assets -maxdepth 1 -type f \
+          -name "android*${arch_suffix}_hymofs_lkm.ko" | grep -q .; then
+          echo "::error::No KMI-tagged HymoFS assets were copied for ${arch_suffix}"
+          echo "Downloaded HymoFS-related files:"
+          find . -type f -name "*hymofs_lkm.ko" -print | sort || true
+          exit 1
+        fi
     
     - name: Prepare ksuinit
       if: ${{ inputs.pack_ksuinit }}
@@ -116,6 +130,16 @@ jobs:
         # Show binary info
         ls -lh ksud
         file ksud
+        echo "Embedded HymoFS assets:"
+        strings ksud | grep -F '_hymofs_lkm.ko' | sort -u || true
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64)
+            if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_hymofs_lkm\.ko$'; then
+              echo "::error::Expected KMI-tagged embedded HymoFS assets were not found in ksud"
+              exit 1
+            fi
+            ;;
+        esac
 
     - name: Import GPG key
       env:

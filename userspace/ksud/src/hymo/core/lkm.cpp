@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <vector>
 #include "../../assets.hpp"
 #include "../defs.hpp"
 #include "../mount/hymofs.hpp"
@@ -230,6 +231,25 @@ static std::string get_current_kmi() {
 #define HYMO_ARCH_SUFFIX "_arm64"
 #endif  // #if defined(__aarch64__)
 
+static bool copy_embedded_hymofs_asset(const std::string& kmi, const std::string& dest_path,
+                                       std::string* used_asset = nullptr) {
+    std::vector<std::string> candidates;
+    if (!kmi.empty()) {
+        candidates.push_back(kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko");
+    }
+    candidates.push_back(std::string(HYMO_ARCH_SUFFIX) + "_hymofs_lkm.ko");
+
+    for (const auto& asset_name : candidates) {
+        if (ksud::copy_asset_to_file(asset_name, dest_path)) {
+            if (used_asset != nullptr) {
+                *used_asset = asset_name;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 bool lkm_is_loaded() {
     return HymoFS::is_available();
 }
@@ -273,15 +293,15 @@ bool lkm_load() {
     }
 
     if (!kmi.empty() && ensure_base_dir()) {
-        const std::string asset_name = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
-
         char tmp_path[256];
         snprintf(tmp_path, sizeof(tmp_path), "%s/.lkm_XXXXXX", HYMO_DATA_DIR);
         int tmp_fd = mkstemp(tmp_path);
         if (tmp_fd >= 0) {
             close(tmp_fd);
-            if (ksud::copy_asset_to_file(asset_name, tmp_path)) {
+            std::string used_asset;
+            if (copy_embedded_hymofs_asset(kmi, tmp_path, &used_asset)) {
                 ko_path = tmp_path;
+                LOG_INFO("HymoFS LKM: using embedded asset " + used_asset);
             } else {
                 unlink(tmp_path);
             }

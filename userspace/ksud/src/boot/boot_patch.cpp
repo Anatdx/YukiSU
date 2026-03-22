@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 #include <regex>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -47,6 +48,25 @@ constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 #endif  // #if defined(__aarch64__)
 
 namespace {
+
+bool copy_embedded_hymofs_asset(const std::string& kmi, const std::string& dest_path,
+                                std::string* used_asset = nullptr) {
+    std::vector<std::string> candidates;
+    if (!kmi.empty()) {
+        candidates.push_back(kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko");
+    }
+    candidates.push_back(std::string(HYMO_ARCH_SUFFIX) + "_hymofs_lkm.ko");
+
+    for (const auto& asset_name : candidates) {
+        if (copy_asset_to_file(asset_name, dest_path)) {
+            if (used_asset != nullptr) {
+                *used_asset = asset_name;
+            }
+            return true;
+        }
+    }
+    return false;
+}
 
 // LZ4 legacy ramdisk magic (reject before cpio to avoid huge cache/hang).
 constexpr std::array<unsigned char, 4> LZ4_LEGACY_MAGIC = {0x02, 0x21, 0x4c, 0x18};
@@ -811,12 +831,12 @@ int boot_patch_impl(const std::vector<std::string>& args) {
             }
         }
         if (!have_hymofs) {
-            const std::string hymofs_asset = kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko";
-            if (copy_asset_to_file(hymofs_asset, hymofs_file)) {
+            std::string used_asset;
+            if (copy_embedded_hymofs_asset(kmi, hymofs_file, &used_asset)) {
                 have_hymofs = true;
-                printf("- Adding HymoFS LKM (embedded)\n");
+                printf("- Adding HymoFS LKM (embedded: %s)\n", used_asset.c_str());
             } else {
-                LOGW("HymoFS LKM asset %s not found, skipping", hymofs_asset.c_str());
+                LOGW("HymoFS LKM asset for %s not found, skipping", kmi.c_str());
             }
         }
         if (have_hymofs &&
