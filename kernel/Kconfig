@@ -33,7 +33,7 @@ config KSU_MANUAL_SU
 
 config KSU_KRETPROBES_SUCOMPAT
 	bool "Use kretprobes for getname_flags sucompat (EXPERIMENTAL)"
-	depends on KRETPROBES && !KSU_TAMPER_SYSCALL_TABLE
+	depends on KRETPROBES
 	default n
 	help
 	  Hook getname_flags() via kretprobe to implement sucompat.

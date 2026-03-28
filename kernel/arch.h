@@ -12,6 +12,7 @@
 #define __PT_CCALL_PARM4_REG regs[3]
 #define __PT_PARM5_REG regs[4]
 #define __PT_PARM6_REG regs[5]
+#define __PT_ORIG_SYSCALL_REG regs[8]
 #define __PT_RET_REG regs[30]
 #define __PT_FP_REG regs[29] /* Works only with CONFIG_FRAME_POINTER */
 #define __PT_RC_REG regs[0]
@@ -34,6 +35,7 @@
 #define __PT_CCALL_PARM4_REG cx
 #define __PT_PARM5_REG r8
 #define __PT_PARM6_REG r9
+#define __PT_ORIG_SYSCALL_REG orig_ax
 #define __PT_RET_REG sp
 #define __PT_FP_REG bp
 #define __PT_RC_REG ax
@@ -68,5 +70,7 @@
 #define PT_REGS_IP(x) (__PT_REGS_CAST(x)->__PT_IP_REG)
 
 #define PT_REAL_REGS(regs) ((struct pt_regs *)PT_REGS_PARM1(regs))
+
+#define PT_REGS_ORIG_SYSCALL(x) (__PT_REGS_CAST(x)->__PT_ORIG_SYSCALL_REG)
 
 #endif // #ifndef __KSU_H_ARCH

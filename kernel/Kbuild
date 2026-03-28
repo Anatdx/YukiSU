@@ -4,9 +4,15 @@ kernelsu-objs += app_profile.o
 kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
 
-# Tracepoint hook mode needs syscall_hook_manager and util
+# TSR (Tracepoint Syscall Redirect) hook infrastructure
 kernelsu-objs += syscall_hook_manager.o
-kernelsu-objs += util.o
+kernelsu-objs += tp_marker.o
+
+ifeq ($(CONFIG_ARM64),y)
+  kernelsu-objs += hook/arm64/patch_memory.o hook/arm64/syscall_hook.o
+else ifeq ($(CONFIG_X86_64),y)
+  kernelsu-objs += hook/x86_64/patch_memory.o hook/x86_64/syscall_hook.o
+endif
 kernelsu-objs += throne_tracker.o
 kernelsu-objs += pkg_observer.o
 kernelsu-objs += setuid_hook.o
@@ -173,6 +179,9 @@ ccflags-y += -DKSU_HAS_GETFD_SECURE
 endif
 ifeq ($(shell grep -A1 "^int vfs_getattr" $(srctree)/fs/stat.c | grep -q "query_flags"; echo $$?),0)
 ccflags-y += -DKSU_HAS_NEW_VFS_GETATTR
+endif
+ifneq ($(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h; echo $$?),0)
+ccflags-y += -DKSU_HAS_NEW_DCACHE_FLUSH
 endif
 
 # Checks Samsung
