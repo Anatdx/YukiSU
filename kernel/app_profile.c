@@ -3,6 +3,7 @@
 #include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
+#include <linux/tty.h>
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/thread_info.h>

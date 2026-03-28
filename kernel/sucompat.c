@@ -4,7 +4,6 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/pgtable.h>
-#include <linux/preempt.h>
 #include <linux/printk.h>
 #include <linux/ptrace.h>
 #include <linux/sched/task_stack.h>
@@ -18,7 +17,6 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "sucompat.h"
-#include "util.h"
 
 #include "sulog.h"
 
@@ -75,14 +73,29 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 			 int *__unused_flags)
 {
 	const char su[] = SU_PATH;
+	unsigned long addr;
+	const char __user *fn;
+	long ret;
+
+	if (!ksu_su_compat_enabled) {
+		return 0;
+	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
 		return 0;
 	}
 
 	char path[sizeof(su) + 1];
+	if (unlikely(!filename_user || !*filename_user))
+		return 0;
+
+	addr = untagged_addr((unsigned long)*filename_user);
+	fn = (const char __user *)addr;
 	memset(path, 0, sizeof(path));
-	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+	ret = strncpy_from_user(path, fn, sizeof(path));
+	if (ret < 0)
+		return 0;
+	path[sizeof(path) - 1] = '\0';
 
 	if (unlikely(!memcmp(path, su, sizeof(su)))) {
 #if __SULOG_GATE
@@ -100,18 +113,30 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
 	// const char sh[] = SH_PATH;
 	const char su[] = SU_PATH;
+	unsigned long addr;
+	const char __user *fn;
+	long ret;
+
+	if (!ksu_su_compat_enabled) {
+		return 0;
+	}
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
 		return 0;
 	}
 
-	if (unlikely(!filename_user)) {
+	if (unlikely(!filename_user || !*filename_user)) {
 		return 0;
 	}
 
 	char path[sizeof(su) + 1];
+	addr = untagged_addr((unsigned long)*filename_user);
+	fn = (const char __user *)addr;
 	memset(path, 0, sizeof(path));
-	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+	ret = strncpy_from_user(path, fn, sizeof(path));
+	if (ret < 0)
+		return 0;
+	path[sizeof(path) - 1] = '\0';
 
 	if (unlikely(!memcmp(path, su, sizeof(su)))) {
 #if __SULOG_GATE
@@ -125,27 +150,28 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	return 0;
 }
 
-int ksu_handle_execve_sucompat(const char __user **filename_user,
-			       void *__never_use_argv, void *__never_use_envp,
-			       int *__never_use_flags)
+int ksu_handle_execve_sucompat(const char __user **filename_user)
 {
 	const char su[] = SU_PATH;
 	const char __user *fn;
 	char path[sizeof(su) + 1];
 	long ret;
 	unsigned long addr;
+#if __SULOG_GATE
+	bool is_allowed;
+#endif // #if __SULOG_GATE
 
-	if (unlikely(!filename_user))
+	if (unlikely(!filename_user || !*filename_user))
 		return 0;
+
+	if (!ksu_su_compat_enabled) {
+		return 0;
+	}
 
 #if __SULOG_GATE
-	bool is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
-	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path);
-
+	is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
 	if (!is_allowed)
 		return 0;
-
-	ksu_sulog_report_su_attempt(current_uid().val, NULL, path, is_allowed);
 #else
 	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
 		return 0;
@@ -155,29 +181,23 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
 	addr = untagged_addr((unsigned long)*filename_user);
 	fn = (const char __user *)addr;
 	memset(path, 0, sizeof(path));
-	ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-
-	if (ret < 0 && try_set_access_flag(addr)) {
-		ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-	}
-
-	if (ret < 0 && preempt_count()) {
-		/* This is crazy, but we know what we are doing:
-		 * Temporarily exit atomic context to handle page faults, then
-		 * restore it */
-		pr_info("Access filename failed, try rescue..\n");
-		preempt_enable_no_resched_notrace();
-		ret = strncpy_from_user(path, fn, sizeof(path));
-		preempt_disable_notrace();
-	}
+	/* Now running in normal process context via TSR dispatcher,
+	 * so strncpy_from_user is safe (no atomic context issues). */
+	ret = strncpy_from_user(path, fn, sizeof(path));
 
 	if (ret < 0) {
 		pr_warn("Access filename when execve failed: %ld", ret);
 		return 0;
 	}
+	path[sizeof(path) - 1] = '\0';
 
 	if (likely(memcmp(path, su, sizeof(su))))
 		return 0;
+
+#if __SULOG_GATE
+	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path);
+	ksu_sulog_report_su_attempt(current_uid().val, NULL, path, true);
+#endif // #if __SULOG_GATE
 
 	pr_info("sys_execve su found\n");
 	*filename_user = ksud_user_path();

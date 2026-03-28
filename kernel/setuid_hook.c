@@ -5,7 +5,6 @@
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/task_work.h>
 #include <linux/thread_info.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -21,7 +20,7 @@
 #include "selinux/selinux.h"
 #include "setuid_hook.h"
 #include "supercalls.h"
-#include "syscall_hook_manager.h"
+#include "tp_marker.h"
 
 static bool ksu_enhanced_security_enabled = false;
 
@@ -46,24 +45,18 @@ static const struct ksu_feature_handler enhanced_security_handler = {
     .set_handler = enhanced_security_feature_set,
 };
 
-static void ksu_install_manager_fd_tw_func(struct callback_head *cb)
+/*
+ * Called AFTER the original setresuid syscall has succeeded (via TSR
+ * dispatcher). old_uid/new_uid are the uid before/after the call.
+ */
+int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
 {
-	ksu_install_fd();
-	kfree(cb);
-}
-
-int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
-{
-	uid_t new_uid = ruid;
-	uid_t old_uid = current_uid().val;
-
 	pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
 
 	// if old process is root, ignore it.
 	if (old_uid != 0 && ksu_enhanced_security_enabled) {
 		// disallow any non-ksu domain escalation from non-root to root!
-		// euid is what we care about here as it controls permission
-		if (unlikely(euid == 0)) {
+		if (unlikely(new_uid == 0)) {
 			if (!is_ksu_domain()) {
 				pr_warn("find suspicious EoP: %d %s, from %d "
 					"to %d\n",
@@ -76,7 +69,7 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		// disallow appuid decrease to any other uid if it is not
 		// allowed to su
 		if (is_appuid(old_uid)) {
-			if (euid < current_euid().val &&
+			if (new_uid < old_uid &&
 			    !ksu_is_allow_uid_for_current(old_uid)) {
 				pr_warn("find suspicious EoP: %d %s, from %d "
 					"to %d\n",
@@ -95,15 +88,10 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		ksu_set_task_tracepoint_flag(current);
 		spin_unlock_irq(&current->sighand->siglock);
 
+		/* Running in process context via TSR dispatcher, so we can
+		 * install the fd directly without task_work. */
 		pr_info("install fd for manager: %d\n", new_uid);
-		struct callback_head *cb = kzalloc(sizeof(*cb), GFP_ATOMIC);
-		if (!cb)
-			return 0;
-		cb->func = ksu_install_manager_fd_tw_func;
-		if (task_work_add(current, cb, TWA_RESUME)) {
-			kfree(cb);
-			pr_warn("install manager fd add task_work failed\n");
-		}
+		ksu_install_fd();
 		return 0;
 	}
 

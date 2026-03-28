@@ -14,6 +14,13 @@
 #include <linux/susfs.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
+#if defined(__x86_64__)
+#include <asm/cpufeature.h>
+#ifndef X86_FEATURE_INDIRECT_SAFE
+#error "FATAL: Your kernel is missing the indirect syscall bypass patches!"
+#endif // #ifndef X86_FEATURE_INDIRECT_SAFE
+#endif // #if defined(__x86_64__)
+
 // workaround for A12-5.10 kernels with mismatched stack protector toolchain
 #if defined(CONFIG_STACKPROTECTOR) &&                                          \
     (defined(CONFIG_ARM64) && !defined(CONFIG_STACKPROTECTOR_PER_TASK))
@@ -71,14 +78,61 @@ void yukisu_custom_config_exit(void)
 #endif // #if __SULOG_GATE
 }
 
+#include "hook/syscall_hook.h"
 #include "syscall_hook_manager.h"
-#define ksu_hook_init() ksu_syscall_hook_manager_init()
-#define ksu_hook_exit() ksu_syscall_hook_manager_exit()
+
+static bool ksu_hooks_started;
+
+static void ksu_hook_init(void)
+{
+	int ret = ksu_syscall_hook_init();
+
+	ksu_hooks_started = false;
+	if (ret) {
+		pr_err("ksu: syscall_hook_init failed: %d\n", ret);
+		return;
+	}
+	ksu_syscall_hook_manager_init();
+	ksu_hooks_started = true;
+}
+
+static void ksu_hook_exit(void)
+{
+	if (!ksu_hooks_started)
+		return;
+
+	ksu_syscall_hook_manager_exit();
+	ksu_hooks_started = false;
+}
 
 int __init kernelsu_init(void)
 {
 	pr_info("KernelSU LKM initializing, version: %u\n", KSU_VERSION);
 	ksu_late_loaded = (current->pid != 1);
+
+#if defined(__x86_64__)
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
+		pr_alert("*****************************************************"
+			 "********");
+		pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE "
+			 "NOTICE    **");
+		pr_alert("**                                                   "
+			 "      **");
+		pr_alert("**        X86_FEATURE_INDIRECT_SAFE is not enabled!  "
+			 "      **");
+		pr_alert("**      KernelSU will abort initialization to "
+			 "prevent      **");
+		pr_alert("**                     kernel panic.                 "
+			 "      **");
+		pr_alert("**                                                   "
+			 "      **");
+		pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE "
+			 "NOTICE    **");
+		pr_alert("*****************************************************"
+			 "********");
+		return -ENOSYS;
+	}
+#endif // #if defined(__x86_64__)
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert(
