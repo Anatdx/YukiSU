@@ -2,6 +2,7 @@
 #ifndef __KSU_SYSCALL_HOOK_H
 #define __KSU_SYSCALL_HOOK_H
 
+#include <asm/syscall.h>
 #include <asm/unistd.h>
 #include <linux/types.h>
 
@@ -15,7 +16,9 @@ struct pt_regs;
 #error "Unable to determine syscall count for TSR hook table"
 #endif // #ifdef __NR_syscalls
 
-typedef long (*syscall_fn_t)(const struct pt_regs *regs);
+#if defined(__x86_64__)
+typedef sys_call_ptr_t syscall_fn_t;
+#endif // #if defined(__x86_64__)
 typedef long (*ksu_syscall_hook_fn)(int orig_nr, const struct pt_regs *regs);
 
 /* Dispatcher number: the unused syscall slot where our dispatcher lives */
