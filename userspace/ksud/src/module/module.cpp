@@ -9,10 +9,10 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <array>
+#include <cctype>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
@@ -49,6 +49,7 @@ struct ModuleInfo {
 namespace {
 
 constexpr uint32_t KSU_GET_INFO_FLAG_LATE_LOAD = 1U << 2;
+constexpr const char* INSTALLER_SCRIPT_NAME = "installer.sh";
 
 // Escape special characters for JSON string
 std::string escape_json(const std::string& s) {
@@ -152,91 +153,28 @@ std::map<std::string, std::string> parse_module_prop(const std::string& path) {
     return props;
 }
 
-// Validate module ID - must be alphanumeric with underscores/hyphens, no path separators
+// Validate module ID like official ksud: ^[a-zA-Z][a-zA-Z0-9._-]+$
 bool validate_module_id(const std::string& id) {
-    if (id.empty())
+    if (id.size() < 2) {
         return false;
-    if (id.length() > 64)
+    }
+
+    const auto is_valid_char = [](const char c) {
+        const unsigned char uc = static_cast<unsigned char>(c);
+        return std::isalnum(uc) != 0 || c == '.' || c == '_' || c == '-';
+    };
+
+    if (std::isalpha(static_cast<unsigned char>(id.front())) == 0) {
         return false;
+    }
 
     for (const char c : id) {
-        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' ||
-            c == '>' || c == '|') {
+        if (!is_valid_char(c)) {
             return false;
         }
     }
 
-    // ID shouldn't start with . or have .. sequences
-    return id[0] != '.' && id.find("..") == std::string::npos;
-}
-
-// Extract zip file to directory using unzip command
-bool extract_zip(const std::string& zip_path, const std::string& dest_dir) {
-    auto result = exec_command({"unzip", "-o", "-q", zip_path, "-d", dest_dir});
-    return result.exit_code == 0;
-}
-
-// Set permissions recursively (directory tree); recursion is intentional
-// NOLINTNEXTLINE(misc-no-recursion)
-void set_perm_recursive(const std::string& path, uid_t uid, gid_t gid, mode_t dir_mode,
-                        mode_t file_mode, const char* secontext = "u:object_r:system_file:s0") {
-    DIR* dir = opendir(path.c_str());
-    if (!dir)
-        return;
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-
-        const std::string fullpath = path + "/" + entry->d_name;
-        struct stat st{};
-        if (lstat(fullpath.c_str(), &st) != 0)
-            continue;
-
-        if (S_ISDIR(st.st_mode)) {
-            chown(fullpath.c_str(), uid, gid);
-            chmod(fullpath.c_str(), dir_mode);
-            // Set SELinux context using chcon command
-            exec_command({"chcon", secontext, fullpath});
-            set_perm_recursive(fullpath, uid, gid, dir_mode, file_mode, secontext);
-        } else {
-            chown(fullpath.c_str(), uid, gid);
-            chmod(fullpath.c_str(), file_mode);
-            exec_command({"chcon", secontext, fullpath});
-        }
-    }
-    closedir(dir);
-}
-
-// Handle partition symlinks (vendor, system_ext, product, odm)
-void handle_partition(const std::string& modpath, const std::string& partition) {
-    const std::string part_path = modpath + "/system/" + partition;
-    if (!file_exists(part_path))
-        return;
-
-    const std::string native_part = "/" + partition;
-    struct stat st{};
-
-    // Only move if it's a native directory (not a symlink)
-    if (stat(native_part.c_str(), &st) == 0 && S_ISDIR(st.st_mode) &&
-        lstat(native_part.c_str(), &st) == 0 && !S_ISLNK(st.st_mode)) {
-        printf("- Handle partition /%s\n", partition.c_str());
-
-        const std::string new_path = modpath + "/" + partition;
-        const std::string cmd = "mv -f " + part_path + " " + new_path;
-        system(cmd.c_str());
-
-        const std::string link_path = modpath + "/system/" + partition;
-        symlink(("../" + partition).c_str(), link_path.c_str());
-    }
-}
-
-// Mark file for removal (create character device node)
-void mark_remove(const std::string& path) {
-    const std::string dir = path.substr(0, path.find_last_of('/'));
-    exec_command({"mkdir", "-p", dir});
-    mknod(path.c_str(), S_IFCHR | 0644, makedev(0, 0));
+    return true;
 }
 
 // Check if module is metamodule
@@ -248,8 +186,7 @@ bool is_metamodule(const std::map<std::string, std::string>& props) {
     return val == "1" || val == "true" || val == "TRUE";
 }
 
-// Get current metamodule ID if exists (internal impl)
-static std::string get_metamodule_id_impl() {
+std::string get_metamodule_path_impl() {
     const std::string link_path =
         std::string(METAMODULE_DIR).substr(0, std::string(METAMODULE_DIR).length() - 1);
 
@@ -259,14 +196,52 @@ static std::string get_metamodule_id_impl() {
         const ssize_t len = readlink(link_path.c_str(), target.data(), target.size() - 1);
         if (len > 0 && static_cast<size_t>(len) < target.size()) {
             target[static_cast<size_t>(len)] = '\0';
-            const std::string target_path(target.data());
-            const size_t pos = target_path.find_last_of('/');
-            if (pos != std::string::npos) {
-                return target_path.substr(pos + 1);
+            std::filesystem::path resolved_path(target.data());
+            if (resolved_path.is_relative()) {
+                resolved_path = std::filesystem::path(link_path).parent_path() / resolved_path;
+            }
+
+            std::error_code ec;
+            const std::filesystem::path normalized = resolved_path.lexically_normal();
+            if (std::filesystem::is_directory(normalized, ec)) {
+                return normalized.string();
             }
         }
     }
+
+    DIR* dir = opendir(MODULE_DIR);
+    if (!dir) {
+        return "";
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+        if (entry->d_type != DT_DIR) {
+            continue;
+        }
+
+        const std::string module_path = std::string(MODULE_DIR) + entry->d_name;
+        const auto props = parse_module_prop(module_path + "/module.prop");
+        if (is_metamodule(props)) {
+            closedir(dir);
+            return module_path;
+        }
+    }
+
+    closedir(dir);
     return "";
+}
+
+// Get current metamodule ID if exists (internal impl)
+static std::string get_metamodule_id_impl() {
+    const std::string metamodule_path = get_metamodule_path_impl();
+    if (metamodule_path.empty()) {
+        return "";
+    }
+    return std::filesystem::path(metamodule_path).filename().string();
 }
 
 // Check if it's safe to install module
@@ -275,11 +250,19 @@ int check_install_safety(bool installing_metamodule) {
     if (installing_metamodule)
         return 0;
 
-    const std::string metamodule_id = get_metamodule_id_impl();
-    if (metamodule_id.empty())
+    const std::string metamodule_path = get_metamodule_path_impl();
+    if (metamodule_path.empty()) {
         return 0;
+    }
 
-    const std::string metamodule_path = std::string(MODULE_DIR) + metamodule_id;
+    const std::string metamodule_id = std::filesystem::path(metamodule_path).filename().string();
+    const bool has_metainstall =
+        file_exists(metamodule_path + "/" + METAMODULE_METAINSTALL_SCRIPT) ||
+        file_exists(std::string(MODULE_UPDATE_DIR) + metamodule_id + "/" +
+                    METAMODULE_METAINSTALL_SCRIPT);
+    if (!has_metainstall) {
+        return 0;
+    }
 
     // Check for marker files
     const bool has_update = file_exists(metamodule_path + "/" + UPDATE_FILE_NAME);
@@ -334,372 +317,30 @@ void remove_metamodule_symlink() {
     }
 }
 
-// Execute customize.sh if present
-bool exec_customize_sh(const std::string& modpath, const std::string& zipfile) {
-    const std::string customize = modpath + "/customize.sh";
-    if (!file_exists(customize))
-        return true;
+std::string build_install_wrapper_script(bool installing_metamodule) {
+    const std::string installer_path = std::string(BINARY_DIR) + INSTALLER_SCRIPT_NAME;
+    std::ostringstream script;
+    script << "#!/system/bin/sh\n";
+    script << ". " << installer_path << "\n";
 
-    printf("- Executing customize.sh\n");
-
-    std::string busybox = BUSYBOX_PATH;
-    if (!file_exists(busybox))
-        busybox = "/system/bin/sh";
-
-    // Create wrapper script with utility functions
-    const std::string wrapper = modpath + "/.customize_wrapper.sh";
-    std::ofstream wrapper_file(wrapper);
-    if (!wrapper_file) {
-        printf("! Failed to create wrapper script\n");
-        return false;
+    if (!installing_metamodule) {
+        const std::string metamodule_path = get_metamodule_path_impl();
+        const std::string metainstall_path = metamodule_path + "/" + METAMODULE_METAINSTALL_SCRIPT;
+        if (!metamodule_path.empty() && !file_exists(metamodule_path + "/" + DISABLE_FILE_NAME) &&
+            file_exists(metainstall_path)) {
+            LOGI("Using metainstall.sh from metamodule: %s", metainstall_path.c_str());
+            script << ". " << metainstall_path << "\n";
+            script << "exit 0\n";
+            return script.str();
+        }
     }
 
-    // Write shell utility functions
-    wrapper_file << R"WRAPPER(#!/system/bin/sh
-# Utility functions for customize.sh
-
-ui_print() {
-  echo "$1"
+    script << "install_module\n";
+    script << "exit 0\n";
+    return script.str();
 }
 
-toupper() {
-  echo "$@" | tr '[:lower:]' '[:upper:]'
-}
-
-grep_cmdline() {
-  local REGEX="s/^$1=//p"
-  { echo $(cat /proc/cmdline)$(sed -e 's/[^\"]//g' -e 's/\"\"//g' /proc/cmdline) | xargs -n 1; \
-    sed -e 's/ = /=/g' -e 's/, /,/g' -e 's/\"//g' /proc/bootconfig; \
-  } 2>/dev/null | sed -n "$REGEX"
-}
-
-grep_prop() {
-  local REGEX="s/$1=//p"
-  shift
-  local FILES=$@
-  [ -z "$FILES" ] && FILES='/system/build.prop'
-  cat $FILES 2>/dev/null | dos2unix | sed -n "$REGEX" | head -n 1 | xargs
-}
-
-grep_get_prop() {
-  local result=$(grep_prop $@)
-  if [ -z "$result" ]; then
-    getprop "$1"
-  else
-    echo $result
-  fi
-}
-
-is_mounted() {
-  grep -q " $(readlink -f $1) " /proc/mounts 2>/dev/null
-  return $?
-}
-
-recovery_cleanup() {
-  :
-}
-
-ensure_bb() {
-  :
-}
-
-recovery_actions() {
-  :
-}
-
-setup_flashable() {
-  ensure_bb
-  $BOOTMODE && return
-  recovery_actions
-}
-
-abort() {
-  ui_print "$1"
-  $BOOTMODE || recovery_cleanup
-  [ ! -z "$MODPATH" ] && rm -rf "$MODPATH"
-  rm -rf "$TMPDIR"
-  exit 1
-}
-
-print_title() {
-  local len line1len line2len bar
-  line1len=$(echo -n $1 | wc -c)
-  line2len=$(echo -n $2 | wc -c)
-  len=$line2len
-  [ $line1len -gt $line2len ] && len=$line1len
-  len=$((len + 2))
-  bar=$(printf "%${len}s" | tr ' ' '*')
-  ui_print "$bar"
-  ui_print " $1 "
-  [ "$2" ] && ui_print " $2 "
-  ui_print "$bar"
-}
-
-check_sepolicy() {
-  /data/adb/ksud sepolicy check "$1"
-  return $?
-}
-
-set_perm() {
-  chown $2:$3 $1 || return 1
-  chmod $4 $1 || return 1
-  local CON=$5
-  [ -z "$CON" ] && CON=u:object_r:system_file:s0
-  chcon $CON $1 || return 1
-}
-
-set_perm_recursive() {
-  find $1 -type d 2>/dev/null | while read dir; do
-    set_perm $dir $2 $3 $4 $6
-  done
-  find $1 -type f -o -type l 2>/dev/null | while read file; do
-    set_perm $file $2 $3 $5 $6
-  done
-}
-
-mktouch() {
-  mkdir -p ${1%/*} 2>/dev/null
-  [ -z $2 ] && touch $1 || echo $2 > $1
-  chmod 644 $1
-}
-
-mark_remove() {
-  mkdir -p ${1%/*} 2>/dev/null
-  mknod $1 c 0 0
-  chmod 644 $1
-}
-
-request_size_check() {
-  reqSizeM=`du -ms "$1" | cut -f1`
-}
-
-request_zip_size_check() {
-  reqSizeM=`unzip -l "$1" | tail -n 1 | awk '{ print int(($1 - 1) / 1048576 + 1) }'`
-}
-
-boot_actions() { return; }
-
-# find_block [partname...]
-find_block() {
-  local BLOCK DEV DEVICE DEVNAME PARTNAME UEVENT
-  for BLOCK in "$@"; do
-    DEVICE=`find /dev/block \( -type b -o -type c -o -type l \) -iname $BLOCK | head -n 1` 2>/dev/null
-    if [ ! -z $DEVICE ]; then
-      readlink -f $DEVICE
-      return 0
-    fi
-  done
-  for UEVENT in /sys/dev/block/*/uevent; do
-    DEVNAME=`grep_prop DEVNAME $UEVENT`
-    PARTNAME=`grep_prop PARTNAME $UEVENT`
-    for BLOCK in "$@"; do
-      if [ "$(toupper $BLOCK)" = "$(toupper $PARTNAME)" ]; then
-        echo /dev/block/$DEVNAME
-        return 0
-      fi
-    done
-  done
-  for DEV in "$@"; do
-    DEVICE=`find /dev \( -type b -o -type c -o -type l \) -maxdepth 1 -iname $DEV | head -n 1` 2>/dev/null
-    if [ ! -z $DEVICE ]; then
-      readlink -f $DEVICE
-      return 0
-    fi
-  done
-  return 1
-}
-
-setup_mntpoint() {
-  local POINT=$1
-  [ -L $POINT ] && mv -f $POINT ${POINT}_link
-  if [ ! -d $POINT ]; then
-    rm -f $POINT
-    mkdir -p $POINT
-  fi
-}
-
-mount_name() {
-  local PART=$1
-  local POINT=$2
-  local FLAG=$3
-  setup_mntpoint $POINT
-  is_mounted $POINT && return
-  mount $FLAG $POINT 2>/dev/null
-  if ! is_mounted $POINT; then
-    local BLOCK=$(find_block $PART)
-    mount $FLAG $BLOCK $POINT || return
-  fi
-  ui_print "- Mounting $POINT"
-}
-
-mount_ro_ensure() {
-  $BOOTMODE && return
-  local PART=$1
-  local POINT=$2
-  mount_name "$PART" $POINT '-o ro'
-  is_mounted $POINT || abort "! Cannot mount $POINT"
-}
-
-mount_partitions() {
-  SLOT=`grep_cmdline androidboot.slot_suffix`
-  if [ -z $SLOT ]; then
-    SLOT=`grep_cmdline androidboot.slot`
-    [ -z $SLOT ] || SLOT=_${SLOT}
-  fi
-  [ -z $SLOT ] || ui_print "- Current boot slot: $SLOT"
-
-  if is_mounted /system_root; then
-    umount /system 2>/dev/null
-    umount /system_root 2>/dev/null
-  fi
-  mount_ro_ensure "system$SLOT app$SLOT" /system
-  if [ -f /system/init -o -L /system/init ]; then
-    SYSTEM_ROOT=true
-    setup_mntpoint /system_root
-    if ! mount --move /system /system_root; then
-      umount /system
-      umount -l /system 2>/dev/null
-      mount_ro_ensure "system$SLOT app$SLOT" /system_root
-    fi
-    mount -o bind /system_root/system /system
-  else
-    SYSTEM_ROOT=false
-    grep ' / ' /proc/mounts | grep -qv 'rootfs' || grep -q ' /system_root ' /proc/mounts && SYSTEM_ROOT=true
-  fi
-  [ -L /system/vendor ] && mount_name vendor$SLOT /vendor '-o ro'
-  $SYSTEM_ROOT && ui_print "- Device is system-as-root"
-
-  if ! $BOOTMODE; then
-    mount_name "cache cac" /cache
-    mount_name metadata /metadata
-    mount_name persist /persist
-  fi
-}
-
-check_managed_features() {
-  local PROP_FILE=$1
-  local MANAGED_FEATURES=$(grep_prop managedFeatures "$PROP_FILE")
-
-  [ -z "$MANAGED_FEATURES" ] && return 0
-
-  ui_print "- Checking managed features: $MANAGED_FEATURES"
-
-  echo "$MANAGED_FEATURES" | tr ',' '\n' | while read -r feature; do
-    feature=$(echo "$feature" | xargs)
-    [ -z "$feature" ] && continue
-
-    local status=$(/data/adb/ksud feature check "$feature" 2>/dev/null)
-
-    case "$status" in
-      "unsupported")
-        ui_print "! WARNING: Feature '$feature' is NOT SUPPORTED by kernel"
-        ui_print "!          This module may not work correctly!"
-        ;;
-      "managed")
-        ui_print "! WARNING: Feature '$feature' is already MANAGED by another module"
-        ui_print "!          Feature conflicts may occur!"
-        ;;
-      "supported")
-        ui_print "- Feature '$feature' is supported and available"
-        ;;
-      *)
-        ui_print "! WARNING: Unable to check feature '$feature' status"
-        ;;
-    esac
-  done
-}
-
-handle_partition() {
-  if [ ! -e $MODPATH/system/$1 ]; then
-    return
-  fi
-
-  if [ -d "/$1" ] && [ ! -L "/$1" ]; then
-    ui_print "- Handle partition /$1"
-    mv -f $MODPATH/system/$1 $MODPATH/$1 && ln -sf ../$1 $MODPATH/system/$1
-  fi
-}
-
-is_legacy_script() {
-  unzip -l "$ZIPFILE" install.sh | grep -q install.sh
-  return $?
-}
-
-NVBASE=${NVBASE:-/data/adb}
-TMPDIR=${TMPDIR:-/dev/tmp}
-POSTFSDATAD=${POSTFSDATAD:-$NVBASE/post-fs-data.d}
-SERVICED=${SERVICED:-$NVBASE/service.d}
-export NVBASE TMPDIR POSTFSDATAD SERVICED
-
-api_level_arch_detect() {
-  API=$(grep_get_prop ro.build.version.sdk)
-  ABI=$(grep_get_prop ro.product.cpu.abi)
-  if [ "$ABI" = "x86" ]; then
-    ARCH=x86
-    ABI32=x86
-    IS64BIT=false
-  elif [ "$ABI" = "arm64-v8a" ]; then
-    ARCH=arm64
-    ABI32=armeabi-v7a
-    IS64BIT=true
-  elif [ "$ABI" = "x86_64" ]; then
-    ARCH=x64
-    ABI32=x86
-    IS64BIT=true
-  else
-    ARCH=arm
-    ABI=armeabi-v7a
-    ABI32=armeabi-v7a
-    IS64BIT=false
-  fi
-
-  export API ARCH ABI ABI32 IS64BIT
-}
-
-api_level_arch_detect
-
-# Now source the actual customize.sh
-. )WRAPPER";
-    wrapper_file << customize << "\n";
-    wrapper_file.close();
-
-    chmod(wrapper.c_str(), 0755);
-
-    const CommonScriptEnv common_env = build_common_script_env();
-    const pid_t pid = fork();
-    if (pid < 0)
-        return false;
-
-    if (pid == 0) {
-        chdir(modpath.c_str());
-
-        apply_common_script_env(common_env, nullptr, true);
-        setenv("MODPATH", modpath.c_str(), 1);
-        setenv("ZIPFILE", zipfile.c_str(), 1);
-        setenv("NVBASE", "/data/adb", 1);
-        setenv("TMPDIR", "/dev/tmp", 1);
-        setenv("POSTFSDATAD", "/data/adb/post-fs-data.d", 1);
-        setenv("SERVICED", "/data/adb/service.d", 1);
-        setenv("BOOTMODE", "true", 1);
-
-        execl(busybox.c_str(), "sh", wrapper.c_str(), nullptr);
-        _exit(127);
-    }
-
-    int status;
-    waitpid(pid, &status, 0);
-
-    // Clean up wrapper
-    unlink(wrapper.c_str());
-
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-}
-
-// Native C++ module installation - replaces shell script
-bool exec_install_script(const std::string& zip_path) {
-    printf("- Extracting module files\n");
-
-    // Get absolute path
+bool exec_install_script(const std::string& zip_path, bool installing_metamodule) {
     std::array<char, PATH_MAX> realpath_buf{};
     if (realpath(zip_path.c_str(), realpath_buf.data()) == nullptr) {
         printf("! Invalid zip path: %s\n", zip_path.c_str());
@@ -707,186 +348,60 @@ bool exec_install_script(const std::string& zip_path) {
     }
     const std::string zipfile = realpath_buf.data();
 
-    // Create temp directory
-    const std::string tmpdir = "/dev/tmp";
-    exec_command({"rm", "-rf", tmpdir});
-    exec_command({"mkdir", "-p", tmpdir});
-    exec_command({"chcon", "u:object_r:system_file:s0", tmpdir});
-
-    // Extract module.prop first
-    auto result = exec_command({"unzip", "-o", "-q", zipfile, "module.prop", "-d", tmpdir});
-    if (result.exit_code != 0) {
-        printf("! Unable to extract zip file\n");
-        exec_command({"rm", "-rf", tmpdir});
+    const std::string installer_path = std::string(BINARY_DIR) + INSTALLER_SCRIPT_NAME;
+    if (!file_exists(installer_path)) {
+        printf("! Missing installer script: %s\n", installer_path.c_str());
         return false;
     }
 
-    // Parse module.prop
-    auto props = parse_module_prop(tmpdir + "/module.prop");
-    const std::string mod_id = props.count("id") ? props["id"] : "";
-    const std::string mod_name = props.count("name") ? props["name"] : "";
-    const std::string mod_author = props.count("author") ? props["author"] : "";
+    std::string busybox = BUSYBOX_PATH;
+    if (!file_exists(busybox)) {
+        LOGW("Busybox not found at %s, falling back to /system/bin/sh", BUSYBOX_PATH);
+        busybox = "/system/bin/sh";
+    }
 
-    if (mod_id.empty()) {
-        printf("! Module ID not found in module.prop\n");
-        exec_command({"rm", "-rf", tmpdir});
+    char wrapper_path[] = "/dev/ksud_installer_XXXXXX";
+    const int wrapper_fd = mkstemp(wrapper_path);
+    if (wrapper_fd < 0) {
+        printf("! Failed to create installer wrapper\n");
         return false;
     }
 
-    printf("\n");
-    printf("******************************\n");
-    printf(" %s \n", mod_name.c_str());
-    printf(" by %s \n", mod_author.c_str());
-    printf("******************************\n");
-    printf(" Powered by YukiSU \n");
-    printf("******************************\n");
-    printf("\n");
+    const std::string wrapper_content = build_install_wrapper_script(installing_metamodule);
+    FILE* wrapper_file = fdopen(wrapper_fd, "w");
+    if (wrapper_file == nullptr) {
+        close(wrapper_fd);
+        unlink(wrapper_path);
+        printf("! Failed to open installer wrapper\n");
+        return false;
+    }
+    if (fputs(wrapper_content.c_str(), wrapper_file) == EOF || fclose(wrapper_file) != 0) {
+        unlink(wrapper_path);
+        printf("! Failed to write installer wrapper\n");
+        return false;
+    }
+    chmod(wrapper_path, 0755);
 
-    // Check if this is a metamodule
-    const bool installing_metamodule = is_metamodule(props);
-
-    // Check install safety for regular modules
-    if (!installing_metamodule) {
-        const int safety = check_install_safety(false);
-        if (safety != 0) {
-            printf("\n❌ Installation Blocked\n");
-            printf("┌────────────────────────────────\n");
-            printf("│ A metamodule is active\n");
-            printf("│\n");
-            if (safety == 1) {
-                printf("│ Current state: Disabled\n");
-                printf("│ Action required: Re-enable or uninstall it, then reboot\n");
-            } else {
-                printf("│ Current state: Pending changes\n");
-                printf("│ Action required: Reboot to apply changes first\n");
-            }
-            printf("└─────────────────────────────────\n\n");
-            exec_command({"rm", "-rf", tmpdir});
-            return false;
-        }
+    const CommonScriptEnv common_env = build_common_script_env();
+    const pid_t pid = fork();
+    if (pid < 0) {
+        unlink(wrapper_path);
+        return false;
     }
 
-    // Check for duplicate metamodule
-    if (installing_metamodule) {
-        const std::string existing_id = get_metamodule_id_impl();
-        if (!existing_id.empty() && existing_id != mod_id) {
-            printf("\n❌ Installation Failed\n");
-            printf("┌────────────────────────────────\n");
-            printf("│ A metamodule is already installed\n");
-            printf("│   Current metamodule: %s\n", existing_id.c_str());
-            printf("│\n");
-            printf("│ Only one metamodule can be active at a time.\n");
-            printf("│\n");
-            printf("│ To install this metamodule:\n");
-            printf("│   1. Uninstall the current metamodule\n");
-            printf("│   2. Reboot your device\n");
-            printf("│   3. Install the new metamodule\n");
-            printf("└─────────────────────────────────\n\n");
-            exec_command({"rm", "-rf", tmpdir});
-            return false;
-        }
+    if (pid == 0) {
+        apply_common_script_env(common_env);
+        setenv("OUTFD", "1", 1);
+        setenv("ZIPFILE", zipfile.c_str(), 1);
+
+        execl(busybox.c_str(), "sh", wrapper_path, nullptr);
+        _exit(127);
     }
 
-    // Determine module root path
-    const std::string modroot = std::string(MODULE_DIR) + "../modules_update";
-    exec_command({"mkdir", "-p", modroot});
-
-    const std::string modpath = modroot + "/" + mod_id;
-    exec_command({"rm", "-rf", modpath});
-    exec_command({"mkdir", "-p", modpath});
-
-    // Check for customize.sh to determine if we should skip extraction
-    result = exec_command({"unzip", "-o", "-q", zipfile, "customize.sh", "-d", modpath});
-
-    bool skip_unzip = false;
-    if (result.exit_code == 0 && file_exists(modpath + "/customize.sh")) {
-        // Check if customize.sh contains SKIPUNZIP=1
-        std::ifstream f(modpath + "/customize.sh");
-        std::string line;
-        while (std::getline(f, line)) {
-            if (line.find("SKIPUNZIP=1") != std::string::npos) {
-                skip_unzip = true;
-                break;
-            }
-        }
-    }
-
-    if (!skip_unzip) {
-        printf("- Extracting module files\n");
-        // Extract everything except META-INF
-        result = exec_command({"unzip", "-o", "-q", zipfile, "-x", "META-INF/*", "-d", modpath});
-        if (result.exit_code != 0) {
-            printf("! Failed to extract module files\n");
-            exec_command({"rm", "-rf", modpath});
-            exec_command({"rm", "-rf", tmpdir});
-            return false;
-        }
-
-        // Set default permissions
-        printf("- Setting permissions\n");
-        set_perm_recursive(modpath, 0, 0, 0755, 0644);
-
-        // Special permissions for bin/xbin directories
-        const std::array<std::string, 3> bin_dirs = {
-            modpath + "/system/bin",
-            modpath + "/system/xbin",
-            modpath + "/system/system_ext/bin",
-        };
-        for (const auto& bindir : bin_dirs) {
-            if (file_exists(bindir))
-                set_perm_recursive(bindir, 0, 2000, 0755, 0755);
-        }
-
-        // Vendor directory with special secontext
-        const std::string vendor_dir = modpath + "/system/vendor";
-        if (file_exists(vendor_dir))
-            set_perm_recursive(vendor_dir, 0, 2000, 0755, 0755, "u:object_r:vendor_file:s0");
-    }
-
-    // Execute customize.sh if present
-    if (file_exists(modpath + "/customize.sh")) {
-        if (!exec_customize_sh(modpath, zipfile)) {
-            printf("! customize.sh failed\n");
-            exec_command({"rm", "-rf", modpath});
-            exec_command({"rm", "-rf", tmpdir});
-            return false;
-        }
-    }
-
-    // Handle partition symlinks (skip when metamodule or built-in hymo handles mounts)
-    if (!installing_metamodule && !should_skip_default_partition_handling()) {
-        handle_partition(modpath, "vendor");
-        handle_partition(modpath, "system_ext");
-        handle_partition(modpath, "product");
-        handle_partition(modpath, "odm");
-    }
-
-    // Update existing module if in BOOTMODE
-    const std::string final_module = std::string(MODULE_DIR) + mod_id;
-    exec_command({"mkdir", "-p", std::string(MODULE_DIR)});
-    exec_command({"touch", final_module + "/update"});
-    exec_command({"rm", "-f", final_module + "/remove"});
-    exec_command({"rm", "-f", final_module + "/disable"});
-    exec_command({"cp", "-f", modpath + "/module.prop", final_module + "/module.prop"});
-
-    // Create metamodule symlink if needed
-    if (installing_metamodule) {
-        printf("- Creating metamodule symlink\n");
-        if (!create_metamodule_symlink(mod_id)) {
-            printf("! Failed to create metamodule symlink\n");
-            exec_command({"rm", "-rf", modpath});
-            exec_command({"rm", "-rf", tmpdir});
-            return false;
-        }
-    }
-
-    // Clean up
-    exec_command({"rm", "-f", modpath + "/customize.sh"});
-    exec_command({"rm", "-f", modpath + "/README.md"});
-    exec_command({"rm", "-rf", tmpdir});
-
-    printf("- Done\n");
-    return true;
+    int status;
+    waitpid(pid, &status, 0);
+    unlink(wrapper_path);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 }  // namespace
@@ -915,6 +430,7 @@ void apply_common_script_env(const CommonScriptEnv& env, const char* module_id,
                              bool set_magisk_compat) {
     setenv("ASH_STANDALONE", "1", 1);
     setenv("KSU", "true", 1);
+    setenv("YUKISU", "1", 1);
     setenv("KSU_KERNEL_VER_CODE", env.kernel_ver_code.c_str(), 1);
     setenv("KSU_VER_CODE", VERSION_CODE, 1);
     setenv("KSU_VER", VERSION_NAME, 1);
@@ -952,6 +468,12 @@ int module_install(const std::string& zip_path) {
         (void)0;  // best-effort
     }
 
+    const auto boot_completed = getprop("sys.boot_completed");
+    if (!boot_completed || *boot_completed != "1") {
+        printf("! Android is Booting!\n");
+        return 1;
+    }
+
     printf("\n");
     printf("__   __ _   _  _  __ ___  ____   _   _ \n");
     printf("\\ \\ / /| | | || |/ /|_ _|/ ___| | | | |\n");
@@ -964,9 +486,8 @@ int module_install(const std::string& zip_path) {
     }
     // Ensure banner is output before script execution
 
-    // Ensure binary assets (busybox, etc.) exist - use ignore_if_exist=true since
-    // binaries should already be extracted during post-fs-data boot stage
-    if (ensure_binaries(true) != 0) {
+    // Refresh binary assets so installer.sh and busybox links stay in sync with the build.
+    if (ensure_binaries(false) != 0) {
         printf("! Failed to extract binary assets\n");
         return 1;
     }
@@ -979,9 +500,84 @@ int module_install(const std::string& zip_path) {
         return 1;
     }
 
-    // Use the embedded installer script (same as Rust version)
-    if (!exec_install_script(zip_path)) {
+    const std::string tmp_module_prop = "/dev/ksud_module_install";
+    exec_command({"rm", "-rf", tmp_module_prop});
+    const auto extract_result =
+        exec_command({"unzip", "-o", "-q", zip_path, "module.prop", "-d", tmp_module_prop});
+    if (extract_result.exit_code != 0) {
+        printf("! Unable to extract zip file\n");
+        exec_command({"rm", "-rf", tmp_module_prop});
+        return 1;
+    }
+
+    const auto props = parse_module_prop(tmp_module_prop + "/module.prop");
+    exec_command({"rm", "-rf", tmp_module_prop});
+
+    const std::string mod_id = props.count("id") ? trim(props.at("id")) : "";
+    if (mod_id.empty()) {
+        printf("! Module ID not found in module.prop\n");
+        return 1;
+    }
+    if (!validate_module_id(mod_id)) {
+        printf("! Invalid module ID: %s\n", mod_id.c_str());
+        return 1;
+    }
+
+    const bool installing_metamodule = is_metamodule(props);
+
+    if (!installing_metamodule) {
+        const int safety = check_install_safety(false);
+        if (safety != 0) {
+            printf("\n❌ Installation Blocked\n");
+            printf("┌────────────────────────────────\n");
+            printf("│ A metamodule with custom installer is active\n");
+            printf("│\n");
+            if (safety == 1) {
+                printf("│ Current state: Disabled\n");
+                printf("│ Action required: Re-enable or uninstall it, then reboot\n");
+            } else {
+                printf("│ Current state: Pending changes\n");
+                printf("│ Action required: Reboot to apply changes first\n");
+            }
+            printf("└─────────────────────────────────\n\n");
+            return 1;
+        }
+    }
+
+    if (installing_metamodule) {
+        const std::string existing_id = get_metamodule_id_impl();
+        if (!existing_id.empty() && existing_id != mod_id) {
+            printf("\n❌ Installation Failed\n");
+            printf("┌────────────────────────────────\n");
+            printf("│ A metamodule is already installed\n");
+            printf("│   Current metamodule: %s\n", existing_id.c_str());
+            printf("│\n");
+            printf("│ Only one metamodule can be active at a time.\n");
+            printf("│\n");
+            printf("│ To install this metamodule:\n");
+            printf("│   1. Uninstall the current metamodule\n");
+            printf("│   2. Reboot your device\n");
+            printf("│   3. Install the new metamodule\n");
+            printf("└─────────────────────────────────\n\n");
+            return 1;
+        }
+    }
+
+    // Use the embedded installer script (same as the official Rust ksud flow)
+    if (!exec_install_script(zip_path, installing_metamodule)) {
         printf("! Module installation failed\n");
+        return 1;
+    }
+
+    const std::string final_module = std::string(MODULE_DIR) + mod_id;
+    exec_command({"mkdir", "-p", std::string(MODULE_DIR)});
+    exec_command({"mkdir", "-p", final_module});
+    exec_command({"cp", "-f", std::string(MODULE_UPDATE_DIR) + mod_id + "/module.prop",
+                  final_module + "/module.prop"});
+    exec_command({"touch", final_module + "/" + UPDATE_FILE_NAME});
+
+    if (installing_metamodule && !create_metamodule_symlink(mod_id)) {
+        printf("! Failed to create metamodule symlink\n");
         return 1;
     }
 
@@ -990,19 +586,16 @@ int module_install(const std::string& zip_path) {
 }
 
 int module_uninstall(const std::string& id) {
+    if (!validate_module_id(id)) {
+        printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
     const std::string module_dir = std::string(MODULE_DIR) + id;
 
     if (!file_exists(module_dir)) {
         printf("Module %s not found\n", id.c_str());
         return 1;
-    }
-
-    // Check if this is the current metamodule
-    const std::string current_metamodule = get_metamodule_id_impl();
-    if (!current_metamodule.empty() && current_metamodule == id) {
-        // Remove metamodule symlink when uninstalling
-        remove_metamodule_symlink();
-        printf("Metamodule symlink removed\n");
     }
 
     // Create remove flag
@@ -1019,6 +612,11 @@ int module_uninstall(const std::string& id) {
 }
 
 int module_undo_uninstall(const std::string& id) {
+    if (!validate_module_id(id)) {
+        printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
     const std::string module_dir = std::string(MODULE_DIR) + id;
     const std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
 
@@ -1037,6 +635,11 @@ int module_undo_uninstall(const std::string& id) {
 }
 
 int module_enable(const std::string& id) {
+    if (!validate_module_id(id)) {
+        printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
     const std::string module_dir = std::string(MODULE_DIR) + id;
     const std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
 
@@ -1057,6 +660,11 @@ int module_enable(const std::string& id) {
 }
 
 int module_disable(const std::string& id) {
+    if (!validate_module_id(id)) {
+        printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
     const std::string module_dir = std::string(MODULE_DIR) + id;
 
     if (!file_exists(module_dir)) {
@@ -1077,6 +685,11 @@ int module_disable(const std::string& id) {
 }
 
 int module_run_action(const std::string& id) {
+    if (!validate_module_id(id)) {
+        printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
     const std::string module_dir = std::string(MODULE_DIR) + id;
     const std::string action_script = module_dir + "/" + MODULE_ACTION_SH;
 
@@ -1239,9 +852,38 @@ int prune_modules() {
         const std::string remove_flag = module_path + "/" + REMOVE_FILE_NAME;
 
         if (file_exists(remove_flag)) {
-            const std::string cmd = "rm -rf " + module_path;
-            system(cmd.c_str());
-            LOGI("Removed module %s", entry->d_name);
+            const std::string module_id = entry->d_name;
+            const auto props = parse_module_prop(module_path + "/module.prop");
+            const bool removing_metamodule = is_metamodule(props);
+
+            if (removing_metamodule) {
+                remove_metamodule_symlink();
+            } else {
+                const int metauninstall_rc = metamodule_exec_uninstall_script(module_id);
+                if (metauninstall_rc != 0) {
+                    LOGW("metauninstall.sh failed for %s with code %d", module_id.c_str(),
+                         metauninstall_rc);
+                }
+            }
+
+            const std::string uninstall_script = module_path + "/uninstall.sh";
+            if (file_exists(uninstall_script)) {
+                const int uninstall_rc = run_script(uninstall_script, true, module_id);
+                if (uninstall_rc != 0) {
+                    LOGW("uninstall.sh failed for %s with code %d", module_id.c_str(),
+                         uninstall_rc);
+                }
+            }
+
+            exec_command({"rm", "-rf", std::string(MODULE_CONFIG_DIR) + module_id});
+
+            std::error_code ec;
+            std::filesystem::remove_all(module_path, ec);
+            if (ec) {
+                LOGW("Failed to remove module %s: %s", entry->d_name, ec.message().c_str());
+            } else {
+                LOGI("Removed module %s", entry->d_name);
+            }
         }
     }
 
@@ -1284,6 +926,8 @@ int handle_updated_modules() {
 
         const std::string src = update_dir + entry->d_name;
         const std::string dst = std::string(MODULE_DIR) + entry->d_name;
+        const bool disabled = file_exists(dst + "/" + DISABLE_FILE_NAME);
+        const bool removed = file_exists(dst + "/" + REMOVE_FILE_NAME);
 
         // Remove old module if exists
         if (file_exists(dst)) {
@@ -1293,6 +937,11 @@ int handle_updated_modules() {
 
         // Move updated module
         if (rename(src.c_str(), dst.c_str()) == 0) {
+            if (removed) {
+                ensure_file_exists(dst + "/" + REMOVE_FILE_NAME);
+            } else if (disabled) {
+                ensure_file_exists(dst + "/" + DISABLE_FILE_NAME);
+            }
             LOGI("Updated module: %s", entry->d_name);
         } else {
             LOGE("Failed to update module: %s", entry->d_name);
@@ -1369,6 +1018,7 @@ int exec_stage_script(const std::string& stage, bool block) {
     if (!dir)
         return 0;
 
+    const std::string metamodule_id = get_metamodule_id_impl();
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (entry->d_name[0] == '.')
@@ -1377,6 +1027,9 @@ int exec_stage_script(const std::string& stage, bool block) {
             continue;
 
         const std::string module_id = entry->d_name;
+        if (!metamodule_id.empty() && module_id == metamodule_id)
+            continue;
+
         const std::string module_path = std::string(MODULE_DIR) + module_id;
 
         // Skip disabled modules
@@ -1411,15 +1064,10 @@ int exec_common_scripts(const std::string& stage_dir, bool block) {
     while ((entry = readdir(dir)) != nullptr) {
         if (entry->d_name[0] == '.')
             continue;
-        if (entry->d_type != DT_REG)
+        const std::string script = dir_path + entry->d_name;
+        if (access(script.c_str(), X_OK) != 0)
             continue;
 
-        // Only run .sh files
-        const std::string name = entry->d_name;
-        if (name.size() < 3 || name.substr(name.size() - 3) != ".sh")
-            continue;
-
-        const std::string script = dir_path + name;
         run_script(script, block);
     }
 

@@ -24,3 +24,4 @@ ksud
 src/defs.cpp
 
 assets/*
+!assets/installer.sh

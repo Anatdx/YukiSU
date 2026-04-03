@@ -212,7 +212,7 @@ int ensure_binaries(bool ignore_if_exist) {
         chmod(dest.c_str(), 0755);
     }
     
-    // Ensure ksud symlink exists (like Rust version's link_ksud_to_bin)
+    // Ensure multi-call symlinks exist.
     struct stat st{};
     if (stat(DAEMON_PATH, &st) == 0 && stat(DAEMON_LINK_PATH, &st) != 0) {
         unlink(DAEMON_LINK_PATH);  // Remove if broken symlink
@@ -220,6 +220,16 @@ int ensure_binaries(bool ignore_if_exist) {
             LOGW("Failed to create ksud symlink: %s", strerror(errno));
         } else {
             LOGI("Created ksud symlink: %s -> %s", DAEMON_LINK_PATH, DAEMON_PATH);
+        }
+    }
+
+    const std::string busybox_link = std::string(BINARY_DIR) + "busybox";
+    if (stat(DAEMON_PATH, &st) == 0 && stat(busybox_link.c_str(), &st) != 0) {
+        unlink(busybox_link.c_str());
+        if (symlink(DAEMON_PATH, busybox_link.c_str()) != 0) {
+            LOGW("Failed to create busybox symlink: %s", strerror(errno));
+        } else {
+            LOGI("Created busybox symlink: %s -> %s", busybox_link.c_str(), DAEMON_PATH);
         }
     }
     
