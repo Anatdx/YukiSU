@@ -19,13 +19,51 @@ bool file_exists(const std::string& path) {
     return stat(path.c_str(), &st) == 0;
 }
 
-int run_script(const std::string& script, bool block) {
-    if (!file_exists(script))
+std::string get_metamodule_module_path(std::string* module_id_out = nullptr) {
+    const std::string module_id = get_metamodule_id();
+    if (module_id.empty()) {
+        return "";
+    }
+
+    const std::string module_path = std::string(MODULE_DIR) + module_id;
+    if (!file_exists(module_path)) {
+        return "";
+    }
+
+    if (module_id_out != nullptr) {
+        *module_id_out = module_id;
+    }
+    return module_path;
+}
+
+std::string get_enabled_metamodule_script_path(const std::string& script_name,
+                                               std::string* module_id_out = nullptr) {
+    const std::string module_path = get_metamodule_module_path(module_id_out);
+    if (module_path.empty()) {
+        return "";
+    }
+
+    if (file_exists(module_path + "/" + DISABLE_FILE_NAME)) {
+        LOGI("Metamodule is disabled, skipping %s", script_name.c_str());
+        return "";
+    }
+
+    const std::string script_path = module_path + "/" + script_name;
+    if (!file_exists(script_path)) {
+        return "";
+    }
+
+    return script_path;
+}
+
+int run_script(const std::string& script, bool block, const std::string& module_id = "",
+               const char* extra_env_name = nullptr, const char* extra_env_value = nullptr) {
+    if (script.empty() || !file_exists(script)) {
         return 0;
+    }
 
     LOGI("Running metamodule script: %s", script.c_str());
 
-    // Use busybox for script execution (like regular module scripts)
     std::string busybox = BUSYBOX_PATH;
     if (!file_exists(busybox)) {
         LOGW("Busybox not found at %s, falling back to /system/bin/sh", BUSYBOX_PATH);
@@ -39,17 +77,22 @@ int run_script(const std::string& script, bool block) {
 
     const CommonScriptEnv common_env = build_common_script_env();
 
-    // Prepare all values BEFORE fork
     const char* busybox_path = busybox.c_str();
     const char* script_path = script.c_str();
     const char* script_dir_path = script_dir.c_str();
+    const char* module_id_cstr = module_id.empty() ? nullptr : module_id.c_str();
+    const char* extra_env_name_cstr = extra_env_name;
+    const char* extra_env_value_cstr = extra_env_value;
 
     const pid_t pid = fork();
     if (pid == 0) {
         setsid();
         chdir(script_dir_path);
 
-        apply_common_script_env(common_env);
+        apply_common_script_env(common_env, module_id_cstr, true);
+        if (extra_env_name_cstr != nullptr && extra_env_value_cstr != nullptr) {
+            setenv(extra_env_name_cstr, extra_env_value_cstr, 1);
+        }
 
         execl(busybox_path, "sh", script_path, nullptr);
         _exit(127);
@@ -76,8 +119,9 @@ int metamodule_init() {
 }
 
 int metamodule_exec_stage_script(const std::string& stage, bool block) {
-    const std::string script = std::string(METAMODULE_DIR) + stage + ".sh";
-    return run_script(script, block);
+    std::string module_id;
+    const std::string script = get_enabled_metamodule_script_path(stage + ".sh", &module_id);
+    return run_script(script, block, module_id);
 }
 
 // Check if built-in hymo mount should be disabled
@@ -95,16 +139,15 @@ bool should_use_builtin_mount() {
 }  // namespace
 
 bool should_skip_default_partition_handling() {
-    // External metamodule exists (metamount.sh in metamodule dir)
-    const std::string script = std::string(METAMODULE_DIR) + "metamount.sh";
-    if (file_exists(script))
+    if (!get_enabled_metamodule_script_path(METAMODULE_MOUNT_SCRIPT).empty()) {
         return true;
+    }
     // Built-in hymo active (no external metamodule, built-in not disabled)
     return should_use_builtin_mount();
 }
 
 int metamodule_exec_mount_script() {
-    const std::string script = std::string(METAMODULE_DIR) + "metamount.sh";
+    const std::string script = get_enabled_metamodule_script_path(METAMODULE_MOUNT_SCRIPT);
 
     // Built-in Hymo mount check first; only use metamodule when no built-in path
     if (should_use_builtin_mount() && !file_exists(script)) {
@@ -127,38 +170,7 @@ int metamodule_exec_mount_script() {
     // External metamodule exists
     if (file_exists(script)) {
         LOGI("External metamodule found, executing metamount.sh: %s", script.c_str());
-
-        // Use busybox for script execution
-        std::string busybox = BUSYBOX_PATH;
-        if (!file_exists(busybox)) {
-            LOGW("Busybox not found at %s, falling back to /system/bin/sh", BUSYBOX_PATH);
-            busybox = "/system/bin/sh";
-        }
-
-        const char* busybox_path = busybox.c_str();
-        const char* script_path = script.c_str();
-        const CommonScriptEnv common_env = build_common_script_env();
-
-        const pid_t pid = fork();
-        if (pid == 0) {
-            setsid();
-            chdir(METAMODULE_DIR);
-
-            apply_common_script_env(common_env);
-            setenv("MODULE_DIR", MODULE_DIR, 1);
-
-            execl(busybox_path, "sh", script_path, nullptr);
-            _exit(127);
-        }
-
-        if (pid < 0) {
-            LOGE("Failed to fork for metamount script");
-            return -1;
-        }
-
-        int status;
-        waitpid(pid, &status, 0);
-        const int ret = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        const int ret = run_script(script, true, "", "MODULE_DIR", MODULE_DIR);
 
         if (ret == 0) {
             LOGI("External metamodule mount script executed successfully");
@@ -170,6 +182,11 @@ int metamodule_exec_mount_script() {
     }
 
     return 0;
+}
+
+int metamodule_exec_uninstall_script(const std::string& module_id) {
+    const std::string script = get_enabled_metamodule_script_path(METAMODULE_METAUNINSTALL_SCRIPT);
+    return run_script(script, true, "", "MODULE_ID", module_id.c_str());
 }
 
 }  // namespace ksud
