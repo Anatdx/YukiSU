@@ -30,6 +30,7 @@ constexpr const char* KSURC_PATH = "/data/adb/ksu/.ksurc";
 constexpr const char* DAEMON_PATH = "/data/adb/ksud";
 constexpr const char* MAGISKBOOT_PATH = "/data/adb/ksu/bin/magiskboot";
 constexpr const char* DAEMON_LINK_PATH = "/data/adb/ksu/bin/ksud";
+constexpr const char* SULOGD_LOCK_PATH = "/data/adb/ksu/sulogd.lock";
 
 constexpr const char* MODULE_DIR = "/data/adb/modules/";
 constexpr const char* MODULE_UPDATE_DIR = "/data/adb/modules_update/";

@@ -17,8 +17,6 @@
 #include "sucompat.h"
 #include "syscall_hook_manager.h"
 
-#include "sulog.h"
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 static struct group_info root_groups = {
     .usage = REFCOUNT_INIT(2),
@@ -76,7 +74,7 @@ void disable_seccomp(struct task_struct *tsk)
 	disable_seccomp_for_task(tsk);
 }
 
-void escape_with_root_profile(void)
+int escape_with_root_profile(void)
 {
 	struct cred *cred;
 	struct task_struct *p = current;
@@ -85,17 +83,13 @@ void escape_with_root_profile(void)
 	cred = prepare_creds();
 	if (!cred) {
 		pr_warn("prepare_creds failed!\n");
-		return;
+		return -ENOMEM;
 	}
 
 	if (cred->euid.val == 0) {
 		pr_warn("Already root, don't escape!\n");
-#if __SULOG_GATE
-		ksu_sulog_report_su_grant(current_euid().val, NULL,
-					  "escape_to_root_failed");
-#endif // #if __SULOG_GATE
 		abort_creds(cred);
-		return;
+		return 0;
 	}
 
 	struct root_profile profile;
@@ -134,14 +128,13 @@ void escape_with_root_profile(void)
 	disable_seccomp(current);
 
 	setup_selinux(profile.selinux_domain);
-#if __SULOG_GATE
-	ksu_sulog_report_su_grant(current_euid().val, NULL, "escape_to_root");
-#endif // #if __SULOG_GATE
 
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);
 	}
+
+	return 0;
 }
 
 void escape_to_root_for_init(void)
@@ -245,10 +238,6 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 		rcu_read_unlock();
 		pr_err("cmd_su: target task not found for PID: %d\n",
 		       target_pid);
-#if __SULOG_GATE
-		ksu_sulog_report_su_grant(target_uid, "cmd_su",
-					  "target_not_found");
-#endif // #if __SULOG_GATE
 		return;
 	}
 	get_task_struct(target_task);
@@ -265,10 +254,6 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	if (newcreds == NULL) {
 		pr_err("cmd_su: failed to allocate new cred for PID: %d\n",
 		       target_pid);
-#if __SULOG_GATE
-		ksu_sulog_report_su_grant(target_uid, "cmd_su",
-					  "cred_alloc_failed");
-#endif // #if __SULOG_GATE
 		put_task_struct(target_task);
 		return;
 	}
@@ -321,9 +306,6 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
 	}
 
 	put_task_struct(target_task);
-#if __SULOG_GATE
-	ksu_sulog_report_su_grant(target_uid, "cmd_su", "manual_escalation");
-#endif // #if __SULOG_GATE
 	for_each_thread(p, t)
 	{
 		ksu_set_task_tracepoint_flag(t);

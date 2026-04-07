@@ -2,6 +2,7 @@
 #include "../defs.hpp"
 #include "../log.hpp"
 #include "../module/module.hpp"
+#include "../sulog.hpp"
 #include "../utils.hpp"
 #include "ksucalls.hpp"
 
@@ -45,7 +46,7 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
         {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
          "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
         {static_cast<uint32_t>(FeatureId::SuLog),
-         "SU Log - enables logging of SU command usage to kernel log for auditing purposes"},
+         "SU Log - streams kernel sulog events to userspace and persists them to disk"},
     };
     return desc;
 }
@@ -124,6 +125,11 @@ int feature_set(const std::string& id, uint64_t value) {
     if (ret < 0) {
         LOGE("Failed to set feature %s to %" PRIu64, id.c_str(), value);
         return 1;
+    }
+
+    if (feature_id == static_cast<uint32_t>(FeatureId::SuLog) && value != 0 &&
+        ensure_sulogd_running() != 0) {
+        LOGW("Failed to ensure sulogd is running after enabling sulog");
     }
 
     printf("Feature '%s' set to %" PRIu64 " (%s)\n", feature_id_to_name(feature_id), value,
@@ -313,6 +319,10 @@ void apply_config(const std::map<uint32_t, uint64_t>& features) {
     for (const auto& [id, value] : features) {
         const int ret = set_feature(id, value);
         if (ret >= 0) {
+            if (id == static_cast<uint32_t>(FeatureId::SuLog) && value != 0 &&
+                ensure_sulogd_running() != 0) {
+                LOGW("Failed to ensure sulogd is running while applying config");
+            }
             LOGI("Set feature %s to %" PRIu64, feature_id_to_name(id), value);
             applied++;
         } else {

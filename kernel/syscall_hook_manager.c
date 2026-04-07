@@ -25,6 +25,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "setuid_hook.h"
+#include "sulog_event.h"
 #include "sucompat.h"
 #include "syscall_hook_manager.h"
 #include "tp_marker.h"
@@ -111,24 +112,37 @@ static long ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
 	    (const char __user **)&PT_REGS_PARM1(regs);
 	const struct cred *cred;
 	bool current_is_init;
+	struct ksu_sulog_pending_event *pending_root_execve = NULL;
+	long ret;
 
 	/* ksud boot-time tracking (init second_stage, zygote detection) */
 	if (static_branch_unlikely(&ksud_execve_key))
 		ksu_execve_hook_ksud(regs);
 
-	if (!ksu_su_compat_enabled)
-		return ksu_syscall_table[orig_nr](regs);
+	if (current_euid().val == 0) {
+		const char __user *const __user *argv_user =
+		    (const char __user *const __user *)PT_REGS_PARM2(regs);
+		pending_root_execve = ksu_sulog_capture_root_execve(
+		    *filename_user, argv_user, GFP_KERNEL);
+	}
 
 	cred = current_cred();
 	current_is_init = is_init(cred);
 
 	if (current->pid != 1 && current_is_init) {
 		ksu_handle_init_mark_tracker(*filename_user);
-	} else {
-		ksu_handle_execve_sucompat(filename_user);
+		ret = ksu_syscall_table[orig_nr](regs);
+		ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
+		return ret;
+	} else if (ksu_su_compat_enabled) {
+		ret = ksu_handle_execve_sucompat(filename_user, orig_nr, regs);
+		ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
+		return ret;
 	}
 
-	return ksu_syscall_table[orig_nr](regs);
+	ret = ksu_syscall_table[orig_nr](regs);
+	ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
+	return ret;
 }
 
 static long ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)

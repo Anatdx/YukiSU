@@ -10,6 +10,7 @@
 #include "module/module.hpp"
 #include "module/module_config.hpp"
 #include "profile/profile.hpp"
+#include "sulog.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
 
@@ -214,6 +215,7 @@ int on_post_data_fs() {
 
     // Load feature config (with init_features handling managed features)
     init_features();
+    ensure_sulogd_running_if_enabled();
 
     // HymoFS LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
     hymo::lkm_autoload_post_fs_data();

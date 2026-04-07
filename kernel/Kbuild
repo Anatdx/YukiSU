@@ -22,7 +22,10 @@ kernelsu-objs += feature.o
 kernelsu-objs += ksud.o
 kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o
+kernelsu-objs += event_queue.o
 kernelsu-objs += sulog.o
+kernelsu-objs += sulog_event.o
+kernelsu-objs += sulog_fd.o
 
 # kernel_compat.c removed; kernel_compat.h provides inline ksu_copy_from_user_retry only
 # Built-in (lsm_hooks, embed_ksud) is no longer supported.

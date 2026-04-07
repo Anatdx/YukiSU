@@ -13,12 +13,13 @@
 
 #include "allowlist.h"
 #include "app_profile.h"
+#include "arch.h"
 #include "feature.h"
+#include "hook/syscall_hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
+#include "sulog_event.h"
 #include "sucompat.h"
-
-#include "sulog.h"
 
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
@@ -77,33 +78,31 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	const char __user *fn;
 	long ret;
 
-	if (!ksu_su_compat_enabled) {
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
-	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
+	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
-	}
 
-	char path[sizeof(su) + 1];
 	if (unlikely(!filename_user || !*filename_user))
 		return 0;
 
 	addr = untagged_addr((unsigned long)*filename_user);
 	fn = (const char __user *)addr;
-	memset(path, 0, sizeof(path));
-	ret = strncpy_from_user(path, fn, sizeof(path));
-	if (ret < 0)
-		return 0;
-	path[sizeof(path) - 1] = '\0';
 
-	if (unlikely(!memcmp(path, su, sizeof(su)))) {
-#if __SULOG_GATE
-		ksu_sulog_report_syscall(current_uid().val, NULL, "faccessat",
-					 path);
-#endif // #if __SULOG_GATE
-		pr_info("faccessat su->sh!\n");
-		*filename_user = sh_user_path();
+	{
+		char path[sizeof(su) + 1];
+
+		memset(path, 0, sizeof(path));
+		ret = strncpy_from_user(path, fn, sizeof(path));
+		if (ret < 0)
+			return 0;
+		path[sizeof(path) - 1] = '\0';
+
+		if (unlikely(!memcmp(path, su, sizeof(su)))) {
+			pr_info("faccessat su->sh!\n");
+			*filename_user = sh_user_path();
+		}
 	}
 
 	return 0;
@@ -111,100 +110,101 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
-	// const char sh[] = SH_PATH;
 	const char su[] = SU_PATH;
 	unsigned long addr;
 	const char __user *fn;
 	long ret;
 
-	if (!ksu_su_compat_enabled) {
+	if (!ksu_su_compat_enabled)
 		return 0;
-	}
 
-	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
+	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return 0;
-	}
 
-	if (unlikely(!filename_user || !*filename_user)) {
+	if (unlikely(!filename_user || !*filename_user))
 		return 0;
-	}
 
-	char path[sizeof(su) + 1];
 	addr = untagged_addr((unsigned long)*filename_user);
 	fn = (const char __user *)addr;
-	memset(path, 0, sizeof(path));
-	ret = strncpy_from_user(path, fn, sizeof(path));
-	if (ret < 0)
-		return 0;
-	path[sizeof(path) - 1] = '\0';
 
-	if (unlikely(!memcmp(path, su, sizeof(su)))) {
-#if __SULOG_GATE
-		ksu_sulog_report_syscall(current_uid().val, NULL, "newfstatat",
-					 path);
-#endif // #if __SULOG_GATE
-		pr_info("newfstatat su->sh!\n");
-		*filename_user = sh_user_path();
+	{
+		char path[sizeof(su) + 1];
+
+		memset(path, 0, sizeof(path));
+		ret = strncpy_from_user(path, fn, sizeof(path));
+		if (ret < 0)
+			return 0;
+		path[sizeof(path) - 1] = '\0';
+
+		if (unlikely(!memcmp(path, su, sizeof(su)))) {
+			pr_info("newfstatat su->sh!\n");
+			*filename_user = sh_user_path();
+		}
 	}
 
 	return 0;
 }
 
-int ksu_handle_execve_sucompat(const char __user **filename_user)
+long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+				const struct pt_regs *regs)
 {
 	const char su[] = SU_PATH;
 	const char __user *fn;
+	const char __user *const __user *argv_user =
+	    (const char __user *const __user *)PT_REGS_PARM2(regs);
+	struct ksu_sulog_pending_event *pending_sucompat = NULL;
 	char path[sizeof(su) + 1];
 	long ret;
 	unsigned long addr;
-#if __SULOG_GATE
-	bool is_allowed;
-#endif // #if __SULOG_GATE
 
 	if (unlikely(!filename_user || !*filename_user))
-		return 0;
+		goto do_orig_execve;
 
-	if (!ksu_su_compat_enabled) {
-		return 0;
-	}
+	if (!ksu_su_compat_enabled)
+		goto do_orig_execve;
 
-#if __SULOG_GATE
-	is_allowed = ksu_is_allow_uid_for_current(current_uid().val);
-	if (!is_allowed)
-		return 0;
-#else
-	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
-		return 0;
-	}
-#endif // #if __SULOG_GATE
+	if (!ksu_is_allow_uid_for_current(current_uid().val))
+		goto do_orig_execve;
 
 	addr = untagged_addr((unsigned long)*filename_user);
 	fn = (const char __user *)addr;
 	memset(path, 0, sizeof(path));
-	/* Now running in normal process context via TSR dispatcher,
-	 * so strncpy_from_user is safe (no atomic context issues). */
-	ret = strncpy_from_user(path, fn, sizeof(path));
 
+	ret = strncpy_from_user(path, fn, sizeof(path));
 	if (ret < 0) {
 		pr_warn("Access filename when execve failed: %ld", ret);
-		return 0;
+		goto do_orig_execve;
 	}
 	path[sizeof(path) - 1] = '\0';
 
 	if (likely(memcmp(path, su, sizeof(su))))
-		return 0;
-
-#if __SULOG_GATE
-	ksu_sulog_report_syscall(current_uid().val, NULL, "execve", path);
-	ksu_sulog_report_su_attempt(current_uid().val, NULL, path, true);
-#endif // #if __SULOG_GATE
+		goto do_orig_execve;
 
 	pr_info("sys_execve su found\n");
+	pending_sucompat =
+	    ksu_sulog_capture_sucompat(*filename_user, argv_user, GFP_KERNEL);
 	*filename_user = ksud_user_path();
 
-	escape_with_root_profile();
+	ret = escape_with_root_profile();
+	if (ret) {
+		pr_err("escape_with_root_profile failed: %ld\n", ret);
+		ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+		goto do_orig_execve;
+	}
 
-	return 0;
+	ret = ksu_syscall_table[orig_nr](regs);
+	if (ret < 0) {
+		pr_err("failed to execve ksud as su: %ld, fallback to sh\n",
+		       ret);
+		ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+		*filename_user = sh_user_path();
+	} else {
+		ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+		return ret;
+	}
+
+do_orig_execve:
+	return ksu_syscall_table[orig_nr](regs);
 }
 
 // sucompat: permitted process can execute 'su' to gain root access.

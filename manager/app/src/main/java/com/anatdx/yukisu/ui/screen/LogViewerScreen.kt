@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,8 +39,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.*
-import java.time.format.DateTimeFormatter
 import android.os.Process.myUid
 import androidx.core.content.edit
 
@@ -52,7 +49,7 @@ private val SPACING_LARGE = 16.dp
 private const val PAGE_SIZE = 10000
 private const val MAX_TOTAL_LOGS = 100000
 
-private const val LOGS_PATCH = "/data/adb/ksu/log/sulog.log"
+private const val DEFAULT_LOG_PATH = ""
 
 data class LogEntry(
     val timestamp: String,
@@ -61,47 +58,54 @@ data class LogEntry(
     val comm: String,
     val details: String,
     val pid: String,
-    val rawLine: String
+    val rawLine: String,
+    val isViewerSelfNoise: Boolean = false,
+    val isCurrentManagerCommand: Boolean = false,
 )
 
 data class LogPageInfo(
     val currentPage: Int = 0,
     val totalPages: Int = 0,
     val totalLogs: Int = 0,
-    val hasMore: Boolean = false
+    val hasMore: Boolean = false,
+    val currentFileName: String = ""
 )
 
 enum class LogType(val displayName: String, val color: Color) {
-    SU_GRANT("SU_GRANT", Color(0xFF4CAF50)),
-    SU_EXEC("SU_EXEC", Color(0xFF2196F3)),
-    PERM_CHECK("PERM_CHECK", Color(0xFFFF9800)),
-    SYSCALL("SYSCALL", Color(0xFF00BCD4)),
-    MANAGER_OP("MANAGER_OP", Color(0xFF9C27B0)),
+    ROOT_EXECVE("ROOT_EXECVE", Color(0xFF3F51B5)),
+    SUCOMPAT("SUCOMPAT", Color(0xFF009688)),
+    IOCTL_GRANT_ROOT("IOCTL_GRANT_ROOT", Color(0xFF8BC34A)),
+    DAEMON_EVENT("DAEMON_EVENT", Color(0xFF795548)),
+    DROPPED("DROPPED", Color(0xFFE53935)),
     UNKNOWN("UNKNOWN", Color(0xFF757575))
 }
 
 enum class LogExclType(val displayName: String, val color: Color) {
     CURRENT_APP("Current app", Color(0xFF9E9E9E)),
-    PRCTL_STAR("prctl_*", Color(0xFF00BCD4)),
-    PRCTL_UNKNOWN("prctl_unknown", Color(0xFF00BCD4)),
-    SETUID("setuid", Color(0xFF00BCD4))
+    LOG_VIEWER_SELF_REFRESH("Log viewer self-refresh", Color(0xFF607D8B)),
 }
-
-private val utcFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-private val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
 private fun saveExcludedSubTypes(context: Context, types: Set<LogExclType>) {
     val prefs = context.getSharedPreferences("sulog", Context.MODE_PRIVATE)
     val nameSet = types.map { it.name }.toSet()
-    prefs.edit { putStringSet("excluded_subtypes", nameSet) }
+    prefs.edit {
+        putStringSet("excluded_subtypes", nameSet)
+        putInt("excluded_subtypes_version", 1)
+    }
 }
 
 private fun loadExcludedSubTypes(context: Context): Set<LogExclType> {
     val prefs = context.getSharedPreferences("sulog", Context.MODE_PRIVATE)
     val nameSet = prefs.getStringSet("excluded_subtypes", emptySet()) ?: emptySet()
-    return nameSet.mapNotNull { name ->
+    val loaded = nameSet.mapNotNull { name ->
         LogExclType.entries.firstOrNull { it.name == name }
     }.toSet()
+    val prefsVersion = prefs.getInt("excluded_subtypes_version", 0)
+    return if (prefsVersion < 1) {
+        loaded + LogExclType.LOG_VIEWER_SELF_REFRESH
+    } else {
+        loaded
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +124,9 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
     var showSearchBar by rememberSaveable { mutableStateOf(false) }
     var pageInfo by remember { mutableStateOf(LogPageInfo()) }
     var lastLogFileHash by remember { mutableStateOf("") }
+    var currentLogPath by remember { mutableStateOf(DEFAULT_LOG_PATH) }
+    var activeLogPath by remember { mutableStateOf(DEFAULT_LOG_PATH) }
+    var logSources by remember { mutableStateOf<List<SulogLogSource>>(emptyList()) }
     val currentUid = remember { myUid().toString() }
 
     val initialExcluded = remember {
@@ -139,17 +146,19 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
             val matchesSearch = searchQuery.isEmpty() ||
                     entry.comm.contains(searchQuery, ignoreCase = true) ||
                     entry.details.contains(searchQuery, ignoreCase = true) ||
-                    entry.uid.contains(searchQuery, ignoreCase = true)
+                    entry.uid.contains(searchQuery, ignoreCase = true) ||
+                    entry.rawLine.contains(searchQuery, ignoreCase = true)
 
             // 排除本应用
-            if (LogExclType.CURRENT_APP in excludedSubTypes && entry.uid == currentUid) return@filter false
+            if (
+                LogExclType.CURRENT_APP in excludedSubTypes &&
+                (entry.uid == currentUid || entry.isCurrentManagerCommand)
+            ) {
+                return@filter false
+            }
 
-            // 排除 SYSCALL 子类型
-            if (entry.type == LogType.SYSCALL) {
-                val detail = entry.details
-                if (LogExclType.PRCTL_STAR in excludedSubTypes && detail.startsWith("Syscall: prctl") && !detail.startsWith("Syscall: prctl_unknown")) return@filter false
-                if (LogExclType.PRCTL_UNKNOWN in excludedSubTypes && detail.startsWith("Syscall: prctl_unknown")) return@filter false
-                if (LogExclType.SETUID in excludedSubTypes && detail.startsWith("Syscall: setuid")) return@filter false
+            if (LogExclType.LOG_VIEWER_SELF_REFRESH in excludedSubTypes && entry.isViewerSelfNoise) {
+                return@filter false
             }
 
             // 普通类型筛选
@@ -157,6 +166,34 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
             matchesFilter && matchesSearch
         }
     }
+    val currentCleanAction = remember(currentLogPath, activeLogPath) {
+        if (currentLogPath.isBlank()) {
+            SulogLogSourceCleanAction.Clear
+        } else {
+            resolveSulogSourceCleanAction(currentLogPath, activeLogPath)
+        }
+    }
+    val currentManageTitle = stringResource(
+        if (currentCleanAction == SulogLogSourceCleanAction.Clear) {
+            R.string.log_viewer_clear_logs
+        } else {
+            R.string.log_viewer_delete_log
+        }
+    )
+    val currentManageConfirmMessage = stringResource(
+        if (currentCleanAction == SulogLogSourceCleanAction.Clear) {
+            R.string.log_viewer_clear_logs_confirm
+        } else {
+            R.string.log_viewer_delete_log_confirm
+        }
+    )
+    val currentManageSuccessMessage = stringResource(
+        if (currentCleanAction == SulogLogSourceCleanAction.Clear) {
+            R.string.log_viewer_logs_cleared
+        } else {
+            R.string.log_viewer_log_deleted
+        }
+    )
 
     val loadingDialog = rememberLoadingDialog()
     val confirmDialog = rememberConfirmDialog()
@@ -170,8 +207,10 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                 loadLogsWithPagination(
                     page,
                     forceRefresh,
-                    lastLogFileHash
-                ) { entries, newPageInfo, newHash ->
+                    lastLogFileHash,
+                    currentLogPath,
+                    activeLogPath
+                ) { entries, newPageInfo, newHash, newPath, newSources, newActivePath ->
                     logEntries = if (page == 0 || forceRefresh) {
                         entries
                     } else {
@@ -179,6 +218,9 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                     }
                     pageInfo = newPageInfo
                     lastLogFileHash = newHash
+                    currentLogPath = newPath
+                    logSources = newSources
+                    activeLogPath = newActivePath
                 }
             } finally {
                 isLoading = false
@@ -201,7 +243,7 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
             delay(5_000)
             if (!isLoading) {
                 scope.launch {
-                    val hasNewLogs = checkForNewLogs(lastLogFileHash)
+                    val hasNewLogs = checkForNewLogs(lastLogFileHash, currentLogPath, activeLogPath)
                     if (hasNewLogs) {
                         loadPage(0, true)
                     }
@@ -224,18 +266,24 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                 onSearchQueryChange = { searchQuery = it },
                 onSearchToggle = { showSearchBar = !showSearchBar },
                 onRefresh = onManualRefresh,
+                canManageLogs = currentLogPath.isNotBlank(),
+                manageLogsTitle = currentManageTitle,
                 onClearLogs = {
                     scope.launch {
+                        if (currentLogPath.isBlank()) return@launch
                         val result = confirmDialog.awaitConfirm(
-                            title = context.getString(R.string.log_viewer_clear_logs),
-                            content = context.getString(R.string.log_viewer_clear_logs_confirm)
+                            title = currentManageTitle,
+                            content = currentManageConfirmMessage
                         )
                         if (result == ConfirmResult.Confirmed) {
                             loadingDialog.withLoading {
-                                clearLogs()
+                                when (currentCleanAction) {
+                                    SulogLogSourceCleanAction.Clear -> clearLogs(currentLogPath)
+                                    SulogLogSourceCleanAction.Delete -> deleteLogs(currentLogPath)
+                                }
                                 loadPage(0, true)
                             }
-                            snackBarHost.showSnackbar(context.getString(R.string.log_viewer_logs_cleared))
+                            snackBarHost.showSnackbar(currentManageSuccessMessage)
                         }
                     }
                 }
@@ -255,6 +303,12 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                 logCount = filteredEntries.size,
                 totalCount = logEntries.size,
                 pageInfo = pageInfo,
+                logSources = logSources,
+                currentLogPath = currentLogPath,
+                onLogSourceSelected = { path ->
+                    currentLogPath = path
+                    loadPage(0, true)
+                },
                 excludedSubTypes = excludedSubTypes,
                 onExcludeToggle = { excl ->
                     excludedSubTypes = if (excl in excludedSubTypes)
@@ -264,32 +318,38 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                 }
             )
 
-            // 日志列表
-            if (isLoading && logEntries.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                if (isLoading && logEntries.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (filteredEntries.isEmpty()) {
+                    EmptyLogState(
+                        hasLogs = logEntries.isNotEmpty(),
+                        onRefresh = onManualRefresh
+                    )
+                } else {
+                    LogList(
+                        entries = filteredEntries,
+                        pageInfo = pageInfo,
+                        isLoading = isLoading,
+                        onLoadMore = loadNextPage,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
-            } else if (filteredEntries.isEmpty()) {
-                EmptyLogState(
-                    hasLogs = logEntries.isNotEmpty(),
-                    onRefresh = onManualRefresh
-                )
-            } else {
-                LogList(
-                    entries = filteredEntries,
-                    pageInfo = pageInfo,
-                    isLoading = isLoading,
-                    onLoadMore = loadNextPage,
-                    modifier = Modifier.fillMaxSize()
-                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogControlPanel(
     filterType: LogType?,
@@ -297,10 +357,46 @@ private fun LogControlPanel(
     logCount: Int,
     totalCount: Int,
     pageInfo: LogPageInfo,
+    logSources: List<SulogLogSource>,
+    currentLogPath: String,
+    onLogSourceSelected: (String) -> Unit,
     excludedSubTypes: Set<LogExclType>,
     onExcludeToggle: (LogExclType) -> Unit
 ) {
-    var isExpanded by rememberSaveable { mutableStateOf(true) }
+    var fileSelectorExpanded by rememberSaveable { mutableStateOf(false) }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var controlsExpanded by rememberSaveable { mutableStateOf(false) }
+    val selectedSource = remember(logSources, currentLogPath) {
+        resolveSelectedSulogSource(logSources, currentLogPath, currentLogPath)
+    }
+    val activeFilterCount = (if (filterType != null) 1 else 0) + excludedSubTypes.size
+    val excludedLabels = excludedSubTypes.map { excl ->
+        when (excl) {
+            LogExclType.CURRENT_APP -> stringResource(R.string.log_viewer_exclude_current_app)
+            LogExclType.LOG_VIEWER_SELF_REFRESH -> stringResource(R.string.log_viewer_exclude_viewer_refresh)
+        }
+    }
+    val selectedSourceLabel = selectedSource.displayName.ifBlank {
+        stringResource(R.string.log_viewer_no_logs)
+    }
+    val summaryParts = buildList {
+        add(stringResource(R.string.log_viewer_showing_entries, logCount, totalCount))
+        if (pageInfo.totalPages > 0) {
+            add(
+                stringResource(
+                    R.string.log_viewer_page_info_compact,
+                    pageInfo.currentPage + 1,
+                    pageInfo.totalPages
+                )
+            )
+        }
+        if (logSources.isNotEmpty()) {
+            add(stringResource(R.string.log_viewer_file_count, logSources.size))
+        }
+        if (activeFilterCount > 0) {
+            add(stringResource(R.string.log_viewer_filters_with_count, activeFilterCount))
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -309,130 +405,326 @@ private fun LogControlPanel(
         colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
         elevation = getCardElevation()
     ) {
-        Column {
-            // 标题栏（点击展开/收起）
+        Column(
+            modifier = Modifier.padding(SPACING_LARGE),
+            verticalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
-                    .padding(SPACING_LARGE),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
             ) {
-                Text(
-                    text = stringResource(R.string.settings),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Icon(
-                    imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { controlsExpanded = !controlsExpanded },
+                    verticalArrangement = Arrangement.spacedBy(SPACING_SMALL)
+                ) {
+                    Text(
+                        text = selectedSourceLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = summaryParts.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(SPACING_SMALL),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalIconButton(onClick = { showFilterSheet = true }) {
+                        BadgedBox(
+                            badge = {
+                                if (activeFilterCount > 0) {
+                                    Badge {
+                                        Text(if (activeFilterCount > 9) "9+" else activeFilterCount.toString())
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Tune,
+                                contentDescription = stringResource(R.string.log_viewer_filters)
+                            )
+                        }
+                    }
+
+                    FilledTonalIconButton(onClick = { controlsExpanded = !controlsExpanded }) {
+                        Icon(
+                            imageVector = if (controlsExpanded) {
+                                Icons.Filled.ExpandLess
+                            } else {
+                                Icons.Filled.ExpandMore
+                            },
+                            contentDescription = stringResource(
+                                if (controlsExpanded) {
+                                    R.string.collapse_menu
+                                } else {
+                                    R.string.expand_menu
+                                }
+                            )
+                        )
+                    }
+                }
             }
 
             AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                visible = controlsExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = SPACING_LARGE)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
                 ) {
-                    // 类型过滤
-                    Text(
-                        text = stringResource(R.string.log_viewer_filter_type),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(SPACING_MEDIUM))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)) {
-                        item {
-                            FilterChip(
-                                onClick = { onFilterTypeSelected(null) },
-                                label = { Text(stringResource(R.string.log_viewer_all_types)) },
-                                selected = filterType == null
-                            )
+                    ExposedDropdownMenuBox(
+                        modifier = Modifier.fillMaxWidth(),
+                        expanded = fileSelectorExpanded,
+                        onExpandedChange = {
+                            if (logSources.isNotEmpty()) {
+                                fileSelectorExpanded = it
+                            }
                         }
-                        items(LogType.entries.toTypedArray()) { type ->
-                            FilterChip(
-                                onClick = { onFilterTypeSelected(if (filterType == type) null else type) },
-                                label = { Text(type.displayName) },
-                                selected = filterType == type,
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(type.color, RoundedCornerShape(4.dp))
-                                    )
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(SPACING_MEDIUM))
-
-                    // 排除子类型
-                    Text(
-                        text = stringResource(R.string.log_viewer_exclude_subtypes),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(SPACING_MEDIUM))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)) {
-                        items(LogExclType.entries.toTypedArray()) { excl ->
-                            val label = if (excl == LogExclType.CURRENT_APP)
-                                stringResource(R.string.log_viewer_exclude_current_app)
-                            else excl.displayName
-
-                            FilterChip(
-                                onClick = { onExcludeToggle(excl) },
-                                label = { Text(label) },
-                                selected = excl in excludedSubTypes,
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(excl.color, RoundedCornerShape(4.dp))
-                                    )
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(SPACING_MEDIUM))
-
-                    // 统计信息
-                    Column(verticalArrangement = Arrangement.spacedBy(SPACING_SMALL)) {
-                        Text(
-                            text = stringResource(R.string.log_viewer_showing_entries, logCount, totalCount),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                            readOnly = true,
+                            singleLine = true,
+                            value = selectedSourceLabel,
+                            onValueChange = {},
+                            enabled = logSources.isNotEmpty(),
+                            label = { Text(stringResource(R.string.log_viewer_select_file)) },
+                            trailingIcon = {
+                                Icon(
+                                    if (fileSelectorExpanded) {
+                                        Icons.Filled.ArrowDropUp
+                                    } else {
+                                        Icons.Filled.ArrowDropDown
+                                    },
+                                    contentDescription = null
+                                )
+                            }
                         )
-                        if (pageInfo.totalPages > 0) {
-                            Text(
-                                text = stringResource(
-                                    R.string.log_viewer_page_info,
-                                    pageInfo.currentPage + 1,
-                                    pageInfo.totalPages,
-                                    pageInfo.totalLogs
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (pageInfo.totalLogs >= MAX_TOTAL_LOGS) {
-                            Text(
-                                text = stringResource(R.string.log_viewer_too_many_logs, MAX_TOTAL_LOGS),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
+                        ExposedDropdownMenu(
+                            expanded = fileSelectorExpanded,
+                            onDismissRequest = { fileSelectorExpanded = false }
+                        ) {
+                            logSources.forEachIndexed { index, source ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (index == 0) {
+                                                "${source.displayName} (${stringResource(R.string.log_viewer_latest_file)})"
+                                            } else {
+                                                source.displayName
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        fileSelectorExpanded = false
+                                        onLogSourceSelected(source.path)
+                                    }
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(SPACING_LARGE))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM),
+                        verticalArrangement = Arrangement.spacedBy(SPACING_SMALL)
+                    ) {
+                        AssistChip(
+                            onClick = { showFilterSheet = true },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        R.string.log_viewer_filter_summary,
+                                        filterType?.displayName
+                                            ?: stringResource(R.string.log_viewer_all_types)
+                                    )
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.FilterList,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+
+                        if (excludedLabels.isNotEmpty()) {
+                            AssistChip(
+                                onClick = { showFilterSheet = true },
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            R.string.log_viewer_exclude_summary,
+                                            excludedLabels.joinToString()
+                                        )
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Block,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            )
+                        }
+
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(stringResource(R.string.log_viewer_showing_entries, logCount, totalCount))
+                            }
+                        )
+
+                        if (pageInfo.totalPages > 0) {
+                            AssistChip(
+                                onClick = {},
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            R.string.log_viewer_page_info_compact,
+                                            pageInfo.currentPage + 1,
+                                            pageInfo.totalPages
+                                        )
+                                    )
+                                }
+                            )
+                        }
+
+                        if (logSources.isNotEmpty()) {
+                            AssistChip(
+                                onClick = {},
+                                label = {
+                                    Text(stringResource(R.string.log_viewer_file_count, logSources.size))
+                                }
+                            )
+                        }
+                    }
                 }
             }
+
+            if (pageInfo.totalLogs >= MAX_TOTAL_LOGS) {
+                Text(
+                    text = stringResource(R.string.log_viewer_too_many_logs, MAX_TOTAL_LOGS),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+
+    if (showFilterSheet) {
+        LogFilterBottomSheet(
+            filterType = filterType,
+            onFilterTypeSelected = onFilterTypeSelected,
+            excludedSubTypes = excludedSubTypes,
+            onExcludeToggle = onExcludeToggle,
+            onDismiss = { showFilterSheet = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LogFilterBottomSheet(
+    filterType: LogType?,
+    onFilterTypeSelected: (LogType?) -> Unit,
+    excludedSubTypes: Set<LogExclType>,
+    onExcludeToggle: (LogExclType) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SPACING_LARGE),
+            verticalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
+        ) {
+            Text(
+                text = stringResource(R.string.log_viewer_filter_options),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Text(
+                text = stringResource(R.string.log_viewer_filter_type),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM),
+                verticalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
+            ) {
+                FilterChip(
+                    onClick = { onFilterTypeSelected(null) },
+                    label = { Text(stringResource(R.string.log_viewer_all_types)) },
+                    selected = filterType == null
+                )
+                LogType.entries.forEach { type ->
+                    FilterChip(
+                        onClick = { onFilterTypeSelected(if (filterType == type) null else type) },
+                        label = { Text(type.displayName) },
+                        selected = filterType == type,
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(type.color, RoundedCornerShape(4.dp))
+                            )
+                        }
+                    )
+                }
+            }
+
+            Text(
+                text = stringResource(R.string.log_viewer_exclude_subtypes),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(SPACING_MEDIUM),
+                verticalArrangement = Arrangement.spacedBy(SPACING_MEDIUM)
+            ) {
+                LogExclType.entries.forEach { excl ->
+                    val label = when (excl) {
+                        LogExclType.CURRENT_APP -> stringResource(R.string.log_viewer_exclude_current_app)
+                        LogExclType.LOG_VIEWER_SELF_REFRESH -> stringResource(R.string.log_viewer_exclude_viewer_refresh)
+                    }
+
+                    FilterChip(
+                        onClick = { onExcludeToggle(excl) },
+                        label = { Text(label) },
+                        selected = excl in excludedSubTypes,
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(excl.color, RoundedCornerShape(4.dp))
+                            )
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(SPACING_LARGE))
         }
     }
 }
@@ -660,6 +952,8 @@ private fun LogViewerTopBar(
     onSearchQueryChange: (String) -> Unit,
     onSearchToggle: () -> Unit,
     onRefresh: () -> Unit,
+    canManageLogs: Boolean,
+    manageLogsTitle: String,
     onClearLogs: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -698,10 +992,10 @@ private fun LogViewerTopBar(
                         contentDescription = stringResource(R.string.log_viewer_refresh)
                     )
                 }
-                IconButton(onClick = onClearLogs) {
+                IconButton(onClick = onClearLogs, enabled = canManageLogs) {
                     Icon(
                         imageVector = Icons.Filled.DeleteSweep,
-                        contentDescription = stringResource(R.string.log_viewer_clear_logs)
+                        contentDescription = manageLogsTitle
                     )
                 }
             },
@@ -748,17 +1042,19 @@ private fun LogViewerTopBar(
 }
 
 private suspend fun checkForNewLogs(
-    lastHash: String
+    lastHash: String,
+    preferredPath: String,
+    previousActivePath: String,
 ): Boolean {
     return withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
-            val logPath = "/data/adb/ksu/log/sulog.log"
+            val sources = listSulogSources(shell)
+            val activePath = readActiveSulogPath(shell)
+            val source = resolveSelectedSulogSource(sources, preferredPath, activePath, previousActivePath)
+            val currentHash = buildVisibleSulogSourceSignature(shell, sources, source, activePath)
 
-            val result = runCmd(shell, "stat -c '%Y %s' $logPath 2>/dev/null || echo '0 0'")
-            val currentHash = result.trim()
-
-            currentHash != lastHash && currentHash != "0 0"
+            currentHash != lastHash
         } catch (_: Exception) {
             false
         }
@@ -769,173 +1065,136 @@ private suspend fun loadLogsWithPagination(
     page: Int,
     forceRefresh: Boolean,
     lastHash: String,
-    onLoaded: (List<LogEntry>, LogPageInfo, String) -> Unit
+    preferredPath: String,
+    previousActivePath: String,
+    onLoaded: (List<LogEntry>, LogPageInfo, String, String, List<SulogLogSource>, String) -> Unit
 ) {
     withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
+            val sources = listSulogSources(shell)
+            val activePath = readActiveSulogPath(shell)
+            val source = resolveSelectedSulogSource(sources, preferredPath, activePath, previousActivePath)
+            val currentHash = buildVisibleSulogSourceSignature(shell, sources, source, activePath)
+            val statPart = readSulogSourceStat(shell, source.path)
 
-            // 获取文件信息
-            val statResult = runCmd(shell, "stat -c '%Y %s' $LOGS_PATCH 2>/dev/null || echo '0 0'")
-            val currentHash = statResult.trim()
-
-            if (!forceRefresh && currentHash == lastHash && currentHash != "0 0") {
+            if (source.path.isBlank() || statPart == "0 0") {
                 withContext(Dispatchers.Main) {
-                    onLoaded(emptyList(), LogPageInfo(), currentHash)
+                    onLoaded(emptyList(), LogPageInfo(), currentHash, DEFAULT_LOG_PATH, sources, activePath)
                 }
                 return@withContext
             }
 
-            // 获取总行数
-            val totalLinesResult = runCmd(shell, "wc -l < $LOGS_PATCH 2>/dev/null || echo '0'")
+            val quotedPath = shellQuote(source.path)
+
+            if (page == 0 && !forceRefresh && currentHash == lastHash && statPart != "0 0") {
+                withContext(Dispatchers.Main) {
+                    onLoaded(
+                        emptyList(),
+                        LogPageInfo(currentFileName = source.name),
+                        currentHash,
+                        source.path,
+                        sources,
+                        activePath
+                    )
+                }
+                return@withContext
+            }
+
+            val totalLinesResult = runCmd(shell, "wc -l < $quotedPath 2>/dev/null || echo '0'")
             val totalLines = totalLinesResult.trim().toIntOrNull() ?: 0
 
             if (totalLines == 0) {
                 withContext(Dispatchers.Main) {
-                    onLoaded(emptyList(), LogPageInfo(), currentHash)
+                    onLoaded(
+                        emptyList(),
+                        LogPageInfo(currentFileName = source.name),
+                        currentHash,
+                        source.path,
+                        sources,
+                        activePath
+                    )
                 }
                 return@withContext
             }
 
-            // 限制最大日志数量
             val effectiveTotal = minOf(totalLines, MAX_TOTAL_LOGS)
             val totalPages = (effectiveTotal + PAGE_SIZE - 1) / PAGE_SIZE
+            val retainedStartLine = totalLines - effectiveTotal + 1
 
-            // 计算要读取的行数范围
-            val startLine = if (page == 0) {
-                maxOf(1, totalLines - effectiveTotal + 1)
-            } else {
-                val skipLines = page * PAGE_SIZE
-                maxOf(1, totalLines - effectiveTotal + 1 + skipLines)
-            }
+            val endOffsetExclusive = effectiveTotal - page * PAGE_SIZE
+            val startOffsetInclusive = maxOf(0, endOffsetExclusive - PAGE_SIZE)
+            val startLine = retainedStartLine + startOffsetInclusive
+            val endLine = retainedStartLine + endOffsetExclusive - 1
 
-            val endLine = minOf(startLine + PAGE_SIZE - 1, totalLines)
-
-            if (startLine > totalLines) {
+            if (startLine > endLine || startLine > totalLines) {
                 withContext(Dispatchers.Main) {
-                    onLoaded(emptyList(), LogPageInfo(page, totalPages, effectiveTotal, false), currentHash)
+                    onLoaded(
+                        emptyList(),
+                        LogPageInfo(
+                            currentPage = page,
+                            totalPages = totalPages,
+                            totalLogs = effectiveTotal,
+                            hasMore = false,
+                            currentFileName = source.name
+                        ),
+                        currentHash,
+                        source.path,
+                        sources,
+                        activePath
+                    )
                 }
                 return@withContext
             }
 
-            val result = runCmd(shell, "sed -n '${startLine},${endLine}p' $LOGS_PATCH 2>/dev/null || echo ''")
-            val entries = parseLogEntries(result)
+            val result = runCmd(shell, "sed -n '${startLine},${endLine}p' $quotedPath 2>/dev/null || echo ''")
+            val entries = parseLogEntries(
+                logContent = result,
+                useCurrentClockFallback = source.path == activePath
+            )
 
-            val hasMore = endLine < totalLines
-            val pageInfo = LogPageInfo(page, totalPages, effectiveTotal, hasMore)
+            val hasMore = page < totalPages - 1
+            val pageInfo = LogPageInfo(
+                currentPage = page,
+                totalPages = totalPages,
+                totalLogs = effectiveTotal,
+                hasMore = hasMore,
+                currentFileName = source.name
+            )
 
             withContext(Dispatchers.Main) {
-                onLoaded(entries, pageInfo, currentHash)
+                onLoaded(entries, pageInfo, currentHash, source.path, sources, activePath)
             }
         } catch (_: Exception) {
             withContext(Dispatchers.Main) {
-                onLoaded(emptyList(), LogPageInfo(), lastHash)
+                onLoaded(emptyList(), LogPageInfo(), lastHash, DEFAULT_LOG_PATH, emptyList(), DEFAULT_LOG_PATH)
             }
         }
     }
 }
 
-private suspend fun clearLogs() {
+private suspend fun clearLogs(path: String) {
     withContext(Dispatchers.IO) {
         try {
+            if (path.isBlank()) return@withContext
             val shell = getRootShell()
-            runCmd(shell, "echo '' > $LOGS_PATCH")
+            runCmd(shell, ": > ${shellQuote(path)}")
         } catch (_: Exception) {
         }
     }
 }
 
-private fun parseLogEntries(logContent: String): List<LogEntry> {
-    if (logContent.isBlank()) return emptyList()
-
-    val entries = logContent.lines()
-        .filter { it.isNotBlank() && it.startsWith("[") }
-        .mapNotNull { line ->
-            try {
-                parseLogLine(line)
-            } catch (_: Exception) {
-                null
-            }
+private suspend fun deleteLogs(path: String) {
+    withContext(Dispatchers.IO) {
+        try {
+            if (path.isBlank()) return@withContext
+            val shell = getRootShell()
+            runCmd(shell, "rm -f ${shellQuote(path)}")
+        } catch (_: Exception) {
         }
-
-    return entries.reversed()
-}
-private fun utcToLocal(utc: String): String {
-    return try {
-        val instant = LocalDateTime.parse(utc, utcFormatter).atOffset(ZoneOffset.UTC).toInstant()
-        val local = instant.atZone(ZoneId.systemDefault())
-        local.format(localFormatter)
-    } catch (_: Exception) {
-        utc
     }
 }
 
-private fun parseLogLine(line: String): LogEntry? {
-    // 解析格式: [timestamp] TYPE: UID=xxx COMM=xxx ...
-    val timestampRegex = """\[(.*?)]""".toRegex()
-    val timestampMatch = timestampRegex.find(line) ?: return null
-    val timestamp = utcToLocal(timestampMatch.groupValues[1])
-
-    val afterTimestamp = line.substring(timestampMatch.range.last + 1).trim()
-    val parts = afterTimestamp.split(":")
-    if (parts.size < 2) return null
-
-    val typeStr = parts[0].trim()
-    val type = when (typeStr) {
-        "SU_GRANT" -> LogType.SU_GRANT
-        "SU_EXEC" -> LogType.SU_EXEC
-        "PERM_CHECK" -> LogType.PERM_CHECK
-        "SYSCALL" -> LogType.SYSCALL
-        "MANAGER_OP" -> LogType.MANAGER_OP
-        else -> LogType.UNKNOWN
-    }
-
-    val details = parts[1].trim()
-    val uid: String = extractValue(details, "UID") ?: ""
-    val comm: String = extractValue(details, "COMM") ?: ""
-    val pid: String = extractValue(details, "PID") ?: ""
-
-    // 构建详细信息字符串
-    val detailsStr = when (type) {
-        LogType.SU_GRANT -> {
-            val method: String = extractValue(details, "METHOD") ?: ""
-            "Method: $method"
-        }
-        LogType.SU_EXEC -> {
-            val target: String = extractValue(details, "TARGET") ?: ""
-            val result: String = extractValue(details, "RESULT") ?: ""
-            "Target: $target, Result: $result"
-        }
-        LogType.PERM_CHECK -> {
-            val result: String = extractValue(details, "RESULT") ?: ""
-            "Result: $result"
-        }
-        LogType.SYSCALL -> {
-            val syscall = extractValue(details, "SYSCALL") ?: ""
-            val args = extractValue(details, "ARGS") ?: ""
-            "Syscall: $syscall, Args: $args"
-        }
-        LogType.MANAGER_OP -> {
-            val op: String = extractValue(details, "OP") ?: ""
-            val managerUid: String = extractValue(details, "MANAGER_UID") ?: ""
-            val targetUid: String = extractValue(details, "TARGET_UID") ?: ""
-            "Operation: $op, Manager UID: $managerUid, Target UID: $targetUid"
-        }
-        else -> details
-    }
-
-    return LogEntry(
-        timestamp = timestamp,
-        type = type,
-        uid = uid,
-        comm = comm,
-        details = detailsStr,
-        pid = pid,
-        rawLine = line
-    )
-}
-
-private fun extractValue(text: String, key: String): String? {
-    val regex = """$key=(\S+)""".toRegex()
-    return regex.find(text)?.groupValues?.get(1)
+private fun parseLogEntries(logContent: String, useCurrentClockFallback: Boolean): List<LogEntry> {
+    return parseSulogEntries(logContent, useCurrentClockFallback).reversed()
 }

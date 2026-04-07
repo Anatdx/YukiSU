@@ -30,6 +30,7 @@ constexpr uint32_t KSU_IOCTL_GET_WRAPPER_FD = _IOW(K, 15, uint64_t);
 constexpr uint32_t KSU_IOCTL_MANAGE_MARK = _IOWR(K, 16, uint64_t);
 constexpr uint32_t KSU_IOCTL_NUKE_EXT4_SYSFS = _IOW(K, 17, uint64_t);
 constexpr uint32_t KSU_IOCTL_ADD_TRY_UMOUNT = _IOW(K, 18, uint64_t);
+constexpr uint32_t KSU_IOCTL_GET_SULOG_FD = _IOW(K, 20, uint64_t);
 constexpr uint32_t KSU_IOCTL_LIST_TRY_UMOUNT = _IOWR(K, 200, uint64_t);
 
 // Structures for ioctl - use natural C alignment (matching kernel and Rust repr(C))
@@ -67,6 +68,10 @@ struct SetFeatureCmd {
 
 struct GetWrapperFdCmd {
     int32_t fd;
+    uint32_t flags;
+};
+
+struct GetSulogFdCmd {
     uint32_t flags;
 };
 
@@ -111,6 +116,7 @@ std::pair<uint64_t, bool> get_feature(uint32_t feature_id);
 int set_feature(uint32_t feature_id, uint64_t value);
 
 int get_wrapped_fd(int fd);
+int get_sulog_fd();
 
 // Mark management
 uint32_t mark_get(int32_t pid);

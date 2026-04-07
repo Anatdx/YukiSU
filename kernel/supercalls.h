@@ -114,6 +114,10 @@ struct ksu_get_wrapper_fd_cmd {
 	__u32 flags;
 };
 
+struct ksu_get_sulog_fd_cmd {
+	__u32 flags;
+};
+
 struct ksu_manage_mark_cmd {
 	__u32 operation;
 	__s32 pid;
@@ -198,6 +202,7 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_MANAGE_MARK _IOC(_IOC_READ | _IOC_WRITE, 'K', 16, 0)
 #define KSU_IOCTL_NUKE_EXT4_SYSFS _IOC(_IOC_WRITE, 'K', 17, 0)
 #define KSU_IOCTL_ADD_TRY_UMOUNT _IOC(_IOC_WRITE, 'K', 18, 0)
+#define KSU_IOCTL_GET_SULOG_FD _IOC(_IOC_WRITE, 'K', 20, 0)
 #define KSU_IOCTL_GET_FULL_VERSION _IOC(_IOC_READ, 'K', 100, 0)
 #define KSU_IOCTL_HOOK_TYPE _IOC(_IOC_READ, 'K', 101, 0)
 #define KSU_IOCTL_LIST_TRY_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0)

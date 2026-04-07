@@ -18,6 +18,7 @@
 #include "profile/profile.hpp"
 #include "sepolicy/sepolicy.hpp"
 #include "su.hpp"
+#include "sulog.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
 
@@ -140,6 +141,7 @@ void print_usage() {
     printf("  sepolicy       SELinux policy patch tool\n");
     printf("  profile        Manage app profiles\n");
     printf("  feature        Manage kernel features\n");
+    printf("  sulogd         Run sulog reader daemon\n");
     printf("  boot-patch     Patch boot image\n");
     printf("  boot-restore   Restore boot image\n");
     printf("  boot-info      Show boot information\n");
@@ -274,6 +276,7 @@ int cmd_debug(const std::vector<std::string>& args) {
         printf("  su [-g]            Root shell\n");
         printf("  version            Get kernel version\n");
         printf("  mark <get|mark|unmark|refresh> [PID]\n");
+        printf("  sulogd             Launch sulog daemon now\n");
         return 1;
     }
 
@@ -292,6 +295,8 @@ int cmd_debug(const std::vector<std::string>& args) {
         return grant_root_shell(global_mnt);
     } else if (subcmd == "mark" && args.size() > 1) {
         return debug_mark(std::vector<std::string>(args.begin() + 1, args.end()));
+    } else if (subcmd == "sulogd") {
+        return ensure_sulogd_running();
     }
 
     printf("Unknown debug subcommand: %s\n", subcmd.c_str());
@@ -819,6 +824,8 @@ int cli_run(int argc, char** argv) {
         return cmd_profile(args);
     } else if (cmd == "feature") {
         return cmd_feature(args);
+    } else if (cmd == "sulogd") {
+        return run_sulogd();
     } else if (cmd == "boot-patch") {
         return boot_patch(args);
     } else if (cmd == "boot-restore") {

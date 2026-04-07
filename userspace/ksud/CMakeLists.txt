@@ -265,6 +265,7 @@ set(KSUD_OUR_SOURCES
     src/late_load.cpp
     src/umount.cpp
     src/debug.cpp
+    src/sulog.cpp
     src/magica/adb_client.cpp
     src/magica/magica.cpp
     src/core/hide_bootloader.cpp

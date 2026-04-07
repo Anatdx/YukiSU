@@ -18,8 +18,6 @@
 #include "ksud.h"
 #include "selinux/selinux.h"
 
-#include "sulog.h"
-
 static bool ksu_kernel_umount_enabled = true;
 
 static int kernel_umount_feature_get(u64 *value)
@@ -136,10 +134,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 			current->pid);
 		return 0;
 	}
-#if __SULOG_GATE
-	ksu_sulog_report_syscall(new_uid, NULL, "setuid", NULL);
-#endif // #if __SULOG_GATE
-       // umount the target mnt
+	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
 
 	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);

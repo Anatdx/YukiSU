@@ -89,8 +89,21 @@ detect_ndk_host() {
 	fi
 }
 
+detect_jobs() {
+	if command -v nproc >/dev/null 2>&1; then
+		nproc --all
+	elif command -v getconf >/dev/null 2>&1; then
+		getconf _NPROCESSORS_ONLN
+	elif command -v sysctl >/dev/null 2>&1; then
+		sysctl -n hw.logicalcpu
+	else
+		echo 8
+	fi
+}
+
 NDK_HOST=$(detect_ndk_host)
 TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST"
+MAKE_JOBS=$(detect_jobs)
 
 echo "=== YukiSU 本地构建 ==="
 echo "KMI: $KMI | ABI: $ABI | NDK: $ANDROID_NDK_HOME"
@@ -101,9 +114,9 @@ if [[ "$SKIP_LKM" != "true" ]]; then
 	mkdir -p "$OUT_DIR"
 	docker run --rm -v "$REPO_ROOT:/src" -w /src \
 		"ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}" \
-		bash -c "cd kernel && CONFIG_KSU=m CONFIG_KSU_MANUAL_SU=y CONFIG_KSU_SUPERKEY=y CC=clang make -j$(nproc --all) && \
-             mkdir -p /src/out && cp kernelsu.ko /src/out/${KMI}_kernelsu.ko && \
-             llvm-strip -d /src/out/${KMI}_kernelsu.ko 2>/dev/null || true"
+		bash -c "cd kernel && CONFIG_KSU=m CONFIG_KSU_MANUAL_SU=y CONFIG_KSU_SUPERKEY=y CC=clang make -j${MAKE_JOBS} && \
+	             mkdir -p /src/out && cp kernelsu.ko /src/out/${KMI}_kernelsu.ko && \
+	             (llvm-strip -d /src/out/${KMI}_kernelsu.ko 2>/dev/null || true)"
 	echo "    LKM 已输出: $OUT_DIR/${KMI}_kernelsu.ko"
 else
 	echo ">>> [1/5] 跳过 LKM 构建"

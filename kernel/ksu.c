@@ -162,6 +162,10 @@ int __init kernelsu_init(void)
 
 	yukisu_custom_config_init();
 
+#if __SULOG_GATE
+	ksu_sulog_init();
+#endif // #if __SULOG_GATE
+
 	if (ksu_late_loaded) {
 		pr_info("late load mode, skipping kprobe hooks\n");
 
@@ -182,10 +186,6 @@ int __init kernelsu_init(void)
 		ksu_throne_tracker_init();
 		ksu_observer_init();
 		ksu_file_wrapper_init();
-
-#if __SULOG_GATE
-		ksu_sulog_init();
-#endif // #if __SULOG_GATE
 
 		ksu_boot_completed = true;
 		track_throne(false);
