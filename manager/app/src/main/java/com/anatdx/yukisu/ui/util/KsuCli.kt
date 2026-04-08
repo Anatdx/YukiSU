@@ -312,9 +312,11 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
 fun install() {
     val start = SystemClock.elapsedRealtime()
     val ksudPath = getKsuDaemonPath()
+    val libadbrootPath =
+        ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libadbroot.so"
     // magiskboot is built into ksud (multi-call binary); pass ksud path so it can exec itself as magiskboot
     Log.i(TAG, "install: ksud=$ksudPath")
-    val result = execKsud("install --magiskboot $ksudPath", true)
+    val result = execKsud("install --magiskboot $ksudPath --libadbroot $libadbrootPath", true)
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
 }
 
@@ -496,6 +498,8 @@ fun installBoot(
     lkm: LkmSelection,
     ota: Boolean,
     partition: String?,
+    allowShell: Boolean = false,
+    enableAdb: Boolean = false,
     superKey: String? = null,
     signatureBypass: Boolean = false,
     hymofsInCpio: Boolean = false,  // Experimental: embed HymoFS LKM in cpio, load after KernelSU
@@ -582,6 +586,14 @@ fun installBoot(
 
     partition?.let { part ->
         cmd += " --partition $part"
+    }
+
+    if (allowShell) {
+        cmd += " --allow-shell"
+    }
+
+    if (enableAdb) {
+        cmd += " --enable-adbd"
     }
 
     var hymofsFile: File? = null

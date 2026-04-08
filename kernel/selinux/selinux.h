@@ -36,5 +36,6 @@ u32 ksu_get_ksu_file_sid(void);
 int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
 void setup_ksu_cred(void);
+void escape_to_root_for_adb_root(void);
 
 #endif // #ifndef __KSU_H_SELINUX

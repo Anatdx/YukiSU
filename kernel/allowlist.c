@@ -112,21 +112,6 @@ void ksu_show_allow_list(void)
 	rcu_read_unlock();
 }
 
-#ifdef CONFIG_KSU_DEBUG
-static void ksu_grant_root_to_shell(void)
-{
-	struct app_profile profile = {
-	    .version = KSU_APP_PROFILE_VER,
-	    .allow_su = true,
-	    .current_uid = 2000,
-	};
-	strcpy(profile.key, "com.android.shell");
-	strcpy(profile.rp_config.profile.selinux_domain,
-	       KSU_DEFAULT_SELINUX_DOMAIN);
-	ksu_set_app_profile(&profile, false);
-}
-#endif // #ifdef CONFIG_KSU_DEBUG
-
 bool ksu_get_app_profile(struct app_profile *profile)
 {
 	struct perm_data *p = NULL;
@@ -305,6 +290,10 @@ bool __ksu_is_allow_uid(uid_t uid)
 		return true;
 	}
 
+	if (unlikely(allow_shell) && uid == SHELL_UID) {
+		return true;
+	}
+
 	if (likely(uid <= BITMAP_UID_MAX)) {
 		return !!(allow_list_bitmap[uid / BITS_PER_BYTE] &
 			  (1 << (uid % BITS_PER_BYTE)));
@@ -359,6 +348,11 @@ bool ksu_uid_should_umount(uid_t uid)
 void ksu_get_root_profile(uid_t uid, struct root_profile *out)
 {
 	struct perm_data *p = NULL;
+
+	if (unlikely(allow_shell && uid == SHELL_UID)) {
+		memcpy(out, &default_root_profile, sizeof(*out));
+		return;
+	}
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(p, &allow_list, list)
@@ -484,11 +478,6 @@ void ksu_load_allow_list(void)
 	struct file *fp = NULL;
 	u32 magic;
 	u32 version;
-
-#ifdef CONFIG_KSU_DEBUG
-	// always allow adb shell by default
-	ksu_grant_root_to_shell();
-#endif // #ifdef CONFIG_KSU_DEBUG
 
 	// load allowlist now!
 	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);

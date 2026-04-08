@@ -379,6 +379,9 @@ struct BootPatchArgs {
     std::string kmi;                // --kmi
     std::string partition;          // --partition
     std::string out_name;           // --out-name
+    bool allow_shell = false;       // --allow-shell
+    bool enable_adbd = false;       // --enable-adbd
+    std::string adb_debug_prop;     // --adb-debug-prop
     bool hymofs_in_cpio =
         false;  // --hymofs (experimental: embed HymoFS LKM in cpio, load after KernelSU)
     std::string hymofs_module;  // --hymofs-module (custom HymoFS LKM path; overrides embedded)
@@ -431,6 +434,13 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
         } else if (arg == "--out-name") {
             if (i + 1 < args.size())
                 result.out_name = args[++i];
+        } else if (arg == "--allow-shell") {
+            result.allow_shell = true;
+        } else if (arg == "--enable-adbd") {
+            result.enable_adbd = true;
+        } else if (arg == "--adb-debug-prop") {
+            if (i + 1 < args.size())
+                result.adb_debug_prop = args[++i];
         } else if (arg == "--hymofs") {
             result.hymofs_in_cpio = true;
         } else if (arg == "--hymofs-module") {
@@ -814,6 +824,72 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0755 kernelsu.ko kernelsu.ko")) {
         cleanup();
         return 1;
+    }
+
+    if (parsed.allow_shell) {
+        printf("- Adding allow shell config\n");
+        std::ofstream(workdir + "/ksu_allow_shell").close();
+        if (!do_cpio_cmd(magiskboot, workdir, ramdisk,
+                         "add 0644 ksu_allow_shell ksu_allow_shell")) {
+            cleanup();
+            return 1;
+        }
+    } else {
+        auto allow_shell_exists = exec_command_magiskboot(
+            magiskboot, {"cpio", ramdisk, "exists ksu_allow_shell"}, workdir);
+        if (allow_shell_exists.exit_code == 0) {
+            printf("- Removing allow shell config\n");
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm ksu_allow_shell");
+        }
+    }
+
+    if (parsed.enable_adbd || !parsed.adb_debug_prop.empty()) {
+        printf("- Adding adb debug props\n");
+        std::ofstream(workdir + "/force_debuggable").close();
+        if (!do_cpio_cmd(magiskboot, workdir, ramdisk,
+                         "add 0644 force_debuggable force_debuggable")) {
+            cleanup();
+            return 1;
+        }
+
+        std::ofstream prop_file(workdir + "/adb_debug.prop");
+        if (!prop_file.is_open()) {
+            LOGE("Failed to create adb_debug.prop");
+            cleanup();
+            return 1;
+        }
+        if (parsed.enable_adbd) {
+            printf("- Enabling adbd debug props\n");
+            prop_file << "ro.debuggable=1\n";
+            prop_file << "ro.force.debuggable=1\n";
+            prop_file << "ro.adb.secure=0\n";
+        }
+        if (!parsed.adb_debug_prop.empty()) {
+            printf("- Appending custom adb props\n");
+            prop_file << parsed.adb_debug_prop;
+            if (parsed.adb_debug_prop.back() != '\n') {
+                prop_file << '\n';
+            }
+        }
+        prop_file.close();
+        if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 adb_debug.prop adb_debug.prop")) {
+            cleanup();
+            return 1;
+        }
+    } else {
+        auto force_debuggable_exists = exec_command_magiskboot(
+            magiskboot, {"cpio", ramdisk, "exists force_debuggable"}, workdir);
+        if (force_debuggable_exists.exit_code == 0) {
+            printf("- Removing /force_debuggable\n");
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm force_debuggable");
+        }
+
+        auto adb_debug_prop_exists = exec_command_magiskboot(
+            magiskboot, {"cpio", ramdisk, "exists adb_debug.prop"}, workdir);
+        if (adb_debug_prop_exists.exit_code == 0) {
+            printf("- Removing /adb_debug.prop\n");
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm adb_debug.prop");
+        }
     }
 
     // Experimental: add or remove HymoFS LKM in cpio (load after KernelSU in ksuinit)

@@ -110,6 +110,8 @@
     <string name="settings_check_update_summary">在应用启动后自动检查是否有最新版</string>
     <string name="settings_auto_jailbreak">自动越狱</string>
     <string name="settings_auto_jailbreak_summary">开机检测到 Permissive SELinux 时自动使用 Magica 引导 late-load。需要授予本应用自启动权限。</string>
+    <string name="settings_adb_root">ADB Root</string>
+    <string name="settings_adb_root_summary">使用上游 KernelSU 官方链路让 adbd 以 root 权限运行</string>
     <string name="grant_root_failed">获取 root 失败！</string>
     <string name="action">执行</string>
     <string name="close">关闭</string>
@@ -126,6 +128,11 @@
     <string name="install_jailbreak_requires_permissive">只有在 SELinux 为宽容模式时才能使用此功能。</string>
     <string name="install_jailbreak_button">触发 late-load</string>
     <string name="install_jailbreak_failed">触发 late-load 失败</string>
+    <string name="advanced_options">高级选项</string>
+    <string name="allow_shell">总是给 shell 授予 root 权限</string>
+    <string name="allow_shell_summary">让 KernelSU 以 allow_shell=1 加载，使 adb shell 始终可以进入 su。</string>
+    <string name="enable_adb">启动时强制启用 ADB</string>
+    <string name="enable_adb_summary">向 ramdisk 写入调试属性，强制启用 adb 并关闭 adb 认证。</string>
     <string name="hymofs_in_cpio_title">实验：将 HymoFS 刷入 cpio</string>
     <string name="hymofs_in_cpio_desc">开启后，修补时会加入 HymoFS LKM，开机时紧随 KernelSU 加载</string>
     <string name="hymofs_custom_lkm_title">自定义 HymoFS LKM</string>

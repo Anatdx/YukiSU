@@ -122,6 +122,15 @@ object Natives {
     external fun isSuLogEnabled(): Boolean
     external fun setSuLogEnabled(enabled: Boolean): Boolean
 
+    /**
+     * ADB Root can be enabled/disabled.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isAdbRootEnabled(): Boolean
+    external fun setAdbRootEnabled(enabled: Boolean): Boolean
+
     external fun getHookType(): String
 
     external fun getUserName(uid: Int): String?

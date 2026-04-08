@@ -21,6 +21,7 @@
 
 #include "allowlist.h"
 #include "arch.h"
+#include "feature/adb_root.h"
 #include "hook/syscall_hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
@@ -131,6 +132,10 @@ static long ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
 
 	if (current->pid != 1 && current_is_init) {
 		ksu_handle_init_mark_tracker(*filename_user);
+		ret = ksu_adb_root_handle_execve((struct pt_regs *)regs);
+		if (ret) {
+			pr_err("hook_manager: adb root failed: %ld\n", ret);
+		}
 		ret = ksu_syscall_table[orig_nr](regs);
 		ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
 		return ret;

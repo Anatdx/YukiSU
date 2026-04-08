@@ -92,6 +92,7 @@ enum ksu_feature_id {
   KSU_FEATURE_SU_COMPAT = 0,
   KSU_FEATURE_KERNEL_UMOUNT = 1,
   KSU_FEATURE_ENHANCED_SECURITY = 2,
+  KSU_FEATURE_ADB_ROOT = 3,
   KSU_FEATURE_SULOG = 100,
 };
 
@@ -185,6 +186,10 @@ bool is_enhanced_security_enabled();
 // Su log
 bool set_sulog_enabled(bool enabled);
 bool is_sulog_enabled();
+
+// ADB root
+bool set_adb_root_enabled(bool enabled);
+bool is_adb_root_enabled();
 
 // Other command structures
 struct ksu_get_full_version_cmd {

@@ -6,6 +6,9 @@ cmake_minimum_required(VERSION 3.18.1)
 
 project("kernelsu")
 
+find_package(cxx REQUIRED CONFIG)
+link_libraries(cxx::cxx)
+
 add_library(kernelsu
         SHARED
         jni.c
@@ -16,3 +19,10 @@ add_library(kernelsu
 find_library(log-lib log)
 
 target_link_libraries(kernelsu ${log-lib})
+
+add_library(adbroot
+        SHARED
+        adbroot.cc
+)
+
+target_link_libraries(adbroot ${log-lib})

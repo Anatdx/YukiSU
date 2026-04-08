@@ -31,6 +31,7 @@ const std::map<std::string, uint32_t>& get_feature_map() {
         {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
         {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
         {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
+        {"adb_root", static_cast<uint32_t>(FeatureId::AdbRoot)},
         {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
     };
     return map;
@@ -45,6 +46,8 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
          "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
         {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
          "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
+        {static_cast<uint32_t>(FeatureId::AdbRoot),
+         "ADB Root - run adbd with root privileges via kernel feature injection"},
         {static_cast<uint32_t>(FeatureId::SuLog),
          "SU Log - streams kernel sulog events to userspace and persists them to disk"},
     };

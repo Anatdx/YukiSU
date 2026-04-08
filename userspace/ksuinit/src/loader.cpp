@@ -228,8 +228,14 @@ bool load_module(const char* path) {
         sym->st_value = it->second;
     }
 
+    const char* param_values = "";
+    if (access("/ksu_allow_shell", F_OK) == 0) {
+        KLOGW("ksu allow shell at init");
+        param_values = "allow_shell=1";
+    }
+
     // Load the module
-    if (init_module_syscall(buffer.data(), buffer.size(), "") != 0) {
+    if (init_module_syscall(buffer.data(), buffer.size(), param_values) != 0) {
         KLOGE("init_module failed: %s", strerror(errno));
         return false;
     }
