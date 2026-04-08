@@ -165,6 +165,8 @@ fun InstallScreen(
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
+    var allowShell by remember { mutableStateOf(false) }
+    var enableAdb by remember { mutableStateOf(false) }
     // Experimental: embed HymoFS LKM in cpio (init_boot)
     var hymofsInCpio by remember { mutableStateOf(false) }
     var hymofsLkmUri by remember { mutableStateOf<Uri?>(null) }
@@ -178,6 +180,8 @@ fun InstallScreen(
                 lkm = lkmSelection,
                 ota = isOta,
                 partition = partitionSelection,
+                allowShell = allowShell,
+                enableAdb = enableAdb,
                 superKey = superKey.ifBlank { null },
                 signatureBypass = signatureBypass,
                 hymofsInCpio = hymofsInCpio,
@@ -466,6 +470,90 @@ fun InstallScreen(
                                     checked = signatureBypass,
                                     onCheckedChange = { signatureBypass = it },
                                     enabled = superKey.isNotBlank()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = installMethod != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    ElevatedCard(
+                        colors = getCardColors(MaterialTheme.colorScheme.secondaryContainer),
+                        elevation = getCardElevation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.DeveloperMode,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(id = R.string.advanced_options),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(id = R.string.allow_shell),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = stringResource(id = R.string.allow_shell_summary),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                    )
+                                }
+                                Switch(
+                                    checked = allowShell,
+                                    onCheckedChange = { allowShell = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(id = R.string.enable_adb),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = stringResource(id = R.string.enable_adb_summary),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                    )
+                                }
+                                Switch(
+                                    checked = enableAdb,
+                                    onCheckedChange = { enableAdb = it }
                                 )
                             }
                         }

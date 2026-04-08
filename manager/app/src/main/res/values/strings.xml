@@ -112,6 +112,8 @@
     <string name="settings_check_update_summary">Automatically check for updates when opening the app</string>
     <string name="settings_auto_jailbreak">Auto jailbreak</string>
     <string name="settings_auto_jailbreak_summary">Automatically use Magica to bootstrap late-load when Permissive SELinux is detected at boot. Requires granting autostart permission to this app.</string>
+    <string name="settings_adb_root">ADB Root</string>
+    <string name="settings_adb_root_summary">Run adbd with root privileges using the upstream KernelSU feature chain</string>
     <string name="grant_root_failed">Failed to grant root!</string>
     <string name="action">Action</string>
     <string name="close">Close</string>
@@ -168,6 +170,11 @@
     <string name="install_jailbreak_requires_permissive">This action is only available while SELinux is permissive.</string>
     <string name="install_jailbreak_button">Trigger late-load</string>
     <string name="install_jailbreak_failed">Failed to trigger late-load</string>
+    <string name="advanced_options">Advanced options</string>
+    <string name="allow_shell">Always grant root to Shell</string>
+    <string name="allow_shell_summary">Load KernelSU with allow_shell=1 so adb shell can always enter su.</string>
+    <string name="enable_adb">Force enable adb on boot</string>
+    <string name="enable_adb_summary">Add debug ramdisk props to force-enable adb and disable adb authentication.</string>
     <string name="hymofs_in_cpio_title">Experimental: Embed HymoFS in cpio</string>
     <string name="hymofs_in_cpio_desc">When enabled, HymoFS LKM will be added to cpio and loaded after KernelSU at boot</string>
     <string name="hymofs_custom_lkm_title">Custom HymoFS LKM</string>

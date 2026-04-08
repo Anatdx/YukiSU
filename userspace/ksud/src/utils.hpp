@@ -27,7 +27,8 @@ void umask(mode_t mask);
 bool has_magisk();
 
 // Install/Uninstall
-int install(const std::optional<std::string>& magiskboot_path);
+int install(const std::optional<std::string>& magiskboot_path,
+            const std::optional<std::string>& libadbroot_path = std::nullopt);
 int uninstall(const std::optional<std::string>& magiskboot_path);
 
 // Zip utilities

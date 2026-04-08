@@ -281,6 +281,22 @@ bool is_sulog_enabled() {
   return value != 0;
 }
 
+bool set_adb_root_enabled(bool enabled) {
+  return set_feature(KSU_FEATURE_ADB_ROOT, enabled ? 1 : 0);
+}
+
+bool is_adb_root_enabled() {
+  uint64_t value = 0;
+  bool supported = false;
+  if (!get_feature(KSU_FEATURE_ADB_ROOT, &value, &supported)) {
+    return false;
+  }
+  if (!supported) {
+    return false;
+  }
+  return value != 0;
+}
+
 void get_full_version(char *buff) {
   struct ksu_get_full_version_cmd cmd = {0};
   if (ksuctl(KSU_IOCTL_GET_FULL_VERSION, &cmd) == 0) {

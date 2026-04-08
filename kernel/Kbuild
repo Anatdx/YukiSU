@@ -19,6 +19,7 @@ kernelsu-objs += setuid_hook.o
 kernelsu-objs += kernel_umount.o
 kernelsu-objs += supercalls.o
 kernelsu-objs += feature.o
+kernelsu-objs += feature/adb_root.o
 kernelsu-objs += ksud.o
 kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o

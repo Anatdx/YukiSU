@@ -95,7 +95,7 @@ int run() {
 
     clear_all_temp_configs();
 
-    if (install(std::nullopt) != 0) {
+    if (install(std::nullopt, std::nullopt) != 0) {
         LOGE("late-load: install() failed");
         return 1;
     }

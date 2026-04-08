@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/version.h>
 #ifdef CONFIG_KSU_SUSFS
@@ -53,6 +54,7 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 
 #include "allowlist.h"
 #include "feature.h"
+#include "feature/adb_root.h"
 #include "file_wrapper.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
@@ -66,6 +68,13 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 
 struct cred *ksu_cred;
 bool ksu_late_loaded;
+
+#ifdef CONFIG_KSU_DEBUG
+bool allow_shell = true;
+#else
+bool allow_shell = false;
+#endif // #ifdef CONFIG_KSU_DEBUG
+module_param(allow_shell, bool, 0);
 
 void yukisu_custom_config_init(void)
 {
@@ -148,12 +157,17 @@ int __init kernelsu_init(void)
 	    "*************************************************************");
 #endif // #ifdef CONFIG_KSU_DEBUG
 
+	if (allow_shell) {
+		pr_alert("shell is allowed at init!");
+	}
+
 	ksu_cred = prepare_creds();
 	if (!ksu_cred) {
 		pr_err("prepare cred failed!\n");
 	}
 
 	ksu_feature_init();
+	ksu_adb_root_init();
 
 	ksu_supercalls_init();
 
@@ -218,6 +232,7 @@ void kernelsu_exit(void)
 	ksu_hook_exit();
 	yukisu_custom_config_exit();
 	ksu_supercalls_exit();
+	ksu_adb_root_exit();
 	ksu_feature_exit();
 
 	if (ksu_cred) {

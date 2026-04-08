@@ -559,7 +559,34 @@ int exec_command_async(const std::vector<std::string>& args) {
     return 0;
 }
 
-int install(const std::optional<std::string>& magiskboot_path) {
+namespace {
+
+bool copy_optional_file(const std::optional<std::string>& src_path, const char* dst_path,
+                        mode_t mode) {
+    if (!src_path) {
+        return true;
+    }
+
+    std::ifstream src(*src_path, std::ios::binary);  // NOLINT(misc-const-correctness)
+    std::ofstream dst(dst_path, std::ios::binary);
+    if (!src || !dst) {
+        LOGE("Failed to copy %s from %s", dst_path, src_path->c_str());
+        return false;
+    }
+
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
+
+    chmod(dst_path, mode);
+    (void)restorecon(std::filesystem::path(dst_path), false);
+    return true;
+}
+
+}  // namespace
+
+int install(const std::optional<std::string>& magiskboot_path,
+            const std::optional<std::string>& libadbroot_path) {
     if (!ensure_dir_exists(ADB_DIR)) {
         LOGE("Failed to create %s", ADB_DIR);
         return 1;
@@ -610,12 +637,22 @@ int install(const std::optional<std::string>& magiskboot_path) {
 
     // Copy magiskboot if provided
     if (magiskboot_path) {
-        std::ifstream mb_src(*magiskboot_path, std::ios::binary);  // NOLINT(misc-const-correctness)
-        std::ofstream mb_dst(MAGISKBOOT_PATH, std::ios::binary);
-        if (mb_src && mb_dst) {
-            mb_dst << mb_src.rdbuf();
-            chmod(MAGISKBOOT_PATH, 0755);
+        if (!copy_optional_file(magiskboot_path, MAGISKBOOT_PATH, 0755)) {
+            return 1;
         }
+    }
+
+    if (libadbroot_path) {
+        if (!ensure_dir_exists(LIBRARY_DIR)) {
+            LOGE("Failed to create %s", LIBRARY_DIR);
+            return 1;
+        }
+
+        if (!copy_optional_file(libadbroot_path, LIBADBROOT_PATH, 0644)) {
+            return 1;
+        }
+
+        (void)restorecon(std::filesystem::path(LIBRARY_DIR), false);
     }
 
     return 0;

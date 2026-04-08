@@ -15,6 +15,7 @@ extern const char* const VERSION_NAME;
 constexpr const char* ADB_DIR = "/data/adb/";
 constexpr const char* WORKING_DIR = "/data/adb/ksu/";
 constexpr const char* BINARY_DIR = "/data/adb/ksu/bin/";
+constexpr const char* LIBRARY_DIR = "/data/adb/ksu/lib/";
 constexpr const char* LOG_DIR = "/data/adb/ksu/log/";
 
 // Binary tool paths
@@ -29,6 +30,7 @@ constexpr const char* PROFILE_TEMPLATE_DIR = "/data/adb/ksu/profile/templates/";
 constexpr const char* KSURC_PATH = "/data/adb/ksu/.ksurc";
 constexpr const char* DAEMON_PATH = "/data/adb/ksud";
 constexpr const char* MAGISKBOOT_PATH = "/data/adb/ksu/bin/magiskboot";
+constexpr const char* LIBADBROOT_PATH = "/data/adb/ksu/lib/libadbroot.so";
 constexpr const char* DAEMON_LINK_PATH = "/data/adb/ksu/bin/ksud";
 constexpr const char* SULOGD_LOCK_PATH = "/data/adb/ksu/sulogd.lock";
 
@@ -63,6 +65,7 @@ enum class FeatureId : uint32_t {
     SuCompat = 0,
     KernelUmount = 1,
     EnhancedSecurity = 2,
+    AdbRoot = 3,
     SuLog = 100,
 };
 

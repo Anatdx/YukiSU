@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import com.topjohnwu.superuser.ShellUtils
 import com.maxkeppeker.sheets.core.models.base.IconSource
 import com.maxkeppeler.sheets.list.models.ListOption
 import com.ramcosta.composedestinations.annotation.Destination
@@ -435,6 +436,32 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                         suLogMode = 2
                                         isSuLogEnabled = false
                                     }
+                                }
+                            }
+                        )
+
+                        var adbRootEnabled by rememberSaveable {
+                            mutableStateOf(Natives.isAdbRootEnabled())
+                        }
+                        val adbRootStatus by produceState(initialValue = "") {
+                            value = getFeatureStatus("adb_root")
+                        }
+                        val adbRootSummary = when (adbRootStatus) {
+                            "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
+                            "managed" -> stringResource(id = R.string.feature_status_managed_summary)
+                            else -> stringResource(id = R.string.settings_adb_root_summary)
+                        }
+                        SwitchItem(
+                            icon = Icons.Filled.DeveloperMode,
+                            title = stringResource(id = R.string.settings_adb_root),
+                            summary = adbRootSummary,
+                            checked = adbRootEnabled,
+                            enabled = adbRootStatus == "supported",
+                            onCheckedChange = { enabled ->
+                                if (Natives.setAdbRootEnabled(enabled)) {
+                                    execKsud("feature save", true)
+                                    ShellUtils.fastCmd(getRootShell(), "setprop ctl.restart adbd")
+                                    adbRootEnabled = enabled
                                 }
                             }
                         )
