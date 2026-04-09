@@ -2,6 +2,6 @@
 
 namespace ksud::late_load {
 
-int run();
+int run(bool post_magica = false);
 
 }  // namespace ksud::late_load

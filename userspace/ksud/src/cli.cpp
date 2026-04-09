@@ -720,15 +720,7 @@ int cmd_late_load(const std::vector<std::string>& args) {
         return magica::run(*magica_port);
     }
 
-    const int result = late_load::run();
-    if (post_magica) {
-        LOGI("Restoring adb properties after Magica late-load");
-        if (magica::disable_adb_root() != 0) {
-            LOGE("Failed to restore adb properties after Magica late-load");
-        }
-    }
-
-    return result;
+    return late_load::run(post_magica);
 }
 
 }  // namespace

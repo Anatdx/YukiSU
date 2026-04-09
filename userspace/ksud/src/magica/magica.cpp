@@ -1,5 +1,7 @@
 #include "magica.hpp"
 
+#include "../../third_party/resetpropAlone/src/prop_area.hpp"
+#include "../../third_party/resetpropAlone/src/property_contexts.hpp"
 #include "../defs.hpp"
 #include "../log.hpp"
 #include "../utils.hpp"
@@ -24,6 +26,7 @@ namespace {
 
 constexpr int kConnectRetries = 30;
 constexpr int kRetryDelaySeconds = 1;
+constexpr const char* kPropertyDir = "/dev/__properties__";
 
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
@@ -65,6 +68,84 @@ bool reset_prop(const char* name, const char* value) {
     (void)value;
     return false;
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+}
+
+bool delete_prop(const char* name) {
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+    std::array<char*, 4> argv_c = {
+        const_cast<char*>("resetprop"),
+        const_cast<char*>("-d"),
+        const_cast<char*>(name),
+        nullptr,
+    };
+    const int rc = resetprop_main(3, argv_c.data());
+    if (rc != 0) {
+        LOGE("resetprop delete failed for %s", name);
+        return false;
+    }
+    return true;
+#else
+    LOGE("resetprop is not available in this ksud build");
+    (void)name;
+    return false;
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+}
+
+void compact_prop_context_if_possible(const char* name) {
+#if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
+    std::string context;
+    std::string error;
+    if (!resetprop::resolve_property_context_from(kPropertyDir, name, &context, &error)) {
+        LOGW("Failed to resolve property context for %s: %s", name, error.c_str());
+        return;
+    }
+
+    resetprop::CompactSummary summary;
+    if (!resetprop::compact_property_areas(kPropertyDir, context, &summary, &error)) {
+        LOGW("Failed to compact property area for %s (%s): %s", name, context.c_str(),
+             error.c_str());
+        return;
+    }
+
+    LOGI("Compacted property area for %s (%s): scanned=%zu valid=%zu compacted=%zu", name,
+         context.c_str(), summary.files_scanned, summary.valid_areas, summary.files_compacted);
+#else
+    (void)name;
+#endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+}
+
+bool clear_prop_if_exists(const char* name) {
+    const auto current = getprop(name);
+    if (!current.has_value()) {
+        LOGI("Property %s already absent", name);
+        return true;
+    }
+
+    if (delete_prop(name)) {
+        LOGI("Deleting %s", name);
+        if (!getprop(name).has_value()) {
+            compact_prop_context_if_possible(name);
+            return true;
+        }
+        LOGW("Property %s still visible after delete, fallback to clearing", name);
+    }
+
+    LOGI("Clearing %s", name);
+    if (!reset_prop(name, "")) {
+        return false;
+    }
+
+    const auto updated = getprop(name);
+    if (!updated.has_value()) {
+        return true;
+    }
+
+    if (!updated->empty()) {
+        LOGE("Property %s did not clear (current=%s)", name, updated->c_str());
+        return false;
+    }
+
+    return true;
 }
 
 bool ensure_prop_value(const char* name, const char* expected) {
@@ -168,9 +249,13 @@ int run(uint16_t port) {
 int disable_adb_root() {
     bool ok = ensure_prop_value("ro.debuggable", "0") && ensure_prop_value("ro.adb.secure", "1");
 
-    const std::array<std::vector<std::string>, 3> cleanup_cmds = {
-        std::vector<std::string>{"setprop", "service.adb.root", "0"},
-        std::vector<std::string>{"setprop", "service.adb.tcp.port", "-1"},
+    for (const char* prop : {"service.adb.root", "service.adb.tcp.port", "ro.boot.selinux"}) {
+        if (!clear_prop_if_exists(prop)) {
+            ok = false;
+        }
+    }
+
+    const std::array<std::vector<std::string>, 1> cleanup_cmds = {
         std::vector<std::string>{"setprop", "ctl.restart", "adbd"},
     };
 

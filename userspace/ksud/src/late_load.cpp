@@ -8,6 +8,7 @@
 #include "init_event.hpp"
 #include "kernelsu_loader.hpp"
 #include "log.hpp"
+#include "magica/magica.hpp"
 #include "module/metamodule.hpp"
 #include "module/module.hpp"
 #include "module/module_config.hpp"
@@ -20,12 +21,18 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ksud::late_load {
 
 namespace {
 
 constexpr const char* kManagerPackage = "com.anatdx.yukisu";
+constexpr const char* kLateLoadTmpCandidates[] = {
+    "/dev/kernelsu_XXXXXX",
+    "/data/local/tmp/kernelsu_XXXXXX",
+    "/data/adb/kernelsu_XXXXXX",
+};
 
 bool is_kernelsu_loaded() {
     return access("/sys/module/kernelsu", F_OK) == 0;
@@ -39,24 +46,33 @@ bool extract_and_load_kernelsu() {
     }
 
     const std::string asset_name = kmi + "_kernelsu.ko";
-    char tmp_path[] = "/dev/kernelsu_XXXXXX";
-    const int tmp_fd = mkstemp(tmp_path);
+    std::array<char, PATH_MAX> tmp_path{};
+    int tmp_fd = -1;
+    for (const char* candidate : kLateLoadTmpCandidates) {
+        std::snprintf(tmp_path.data(), tmp_path.size(), "%s", candidate);
+        tmp_fd = mkstemp(tmp_path.data());
+        if (tmp_fd >= 0) {
+            LOGI("late-load: using temp module path %s", tmp_path.data());
+            break;
+        }
+        LOGW("late-load: mkstemp failed at %s: %s", candidate, strerror(errno));
+    }
     if (tmp_fd < 0) {
-        LOGE("late-load: mkstemp failed: %s", strerror(errno));
+        LOGE("late-load: failed to allocate temp module file");
         return false;
     }
     close(tmp_fd);
 
-    const bool copied = copy_asset_to_file(asset_name, tmp_path);
+    const bool copied = copy_asset_to_file(asset_name, tmp_path.data());
     if (!copied) {
         LOGE("late-load: no embedded module matches %s", asset_name.c_str());
-        unlink(tmp_path);
+        unlink(tmp_path.data());
         return false;
     }
 
     LOGI("late-load: loading %s via relocated init_module", asset_name.c_str());
-    const bool loaded = ksud::kernelsu_loader::load_module(tmp_path);
-    unlink(tmp_path);
+    const bool loaded = ksud::kernelsu_loader::load_module(tmp_path.data());
+    unlink(tmp_path.data());
     return loaded;
 }
 
@@ -82,13 +98,43 @@ void restart_manager() {
     (void)exec_command({"am", "start", "-n", activity});
 }
 
+bool run_finalizer_command(const std::vector<std::string>& args, const char* prefix) {
+    const auto result = exec_command(args);
+    if (result.exit_code == 0) {
+        return true;
+    }
+
+    LOGE("%s failed: %s", prefix, args.front().c_str());
+    if (!result.stdout_str.empty()) {
+        LOGE("stdout: %s", result.stdout_str.c_str());
+    }
+    if (!result.stderr_str.empty()) {
+        LOGE("stderr: %s", result.stderr_str.c_str());
+    }
+    return false;
+}
+
+void run_post_magica_cleanup() {
+    LOGI("Running post-magica finalization after late-load");
+
+    if (!run_finalizer_command({"setenforce", "1"}, "late-load post-magica")) {
+        LOGE("Failed to re-enable SELinux enforcing after Magica late-load");
+    }
+
+    if (magica::disable_adb_root() != 0) {
+        LOGE("Failed to restore adb properties after Magica late-load");
+    }
+}
+
 }  // namespace
 
-int run() {
+int run(bool post_magica) {
     LOGI("late-load command triggered");
+    int result = 0;
 
     if (!is_kernelsu_loaded() && !extract_and_load_kernelsu()) {
-        return 1;
+        result = 1;
+        goto finalize;
     }
 
     ksud::umask(0);
@@ -97,7 +143,8 @@ int run() {
 
     if (install(std::nullopt, std::nullopt) != 0) {
         LOGE("late-load: install() failed");
-        return 1;
+        result = 1;
+        goto finalize;
     }
 
     if (handle_updated_modules() != 0) {
@@ -144,7 +191,12 @@ int run() {
 
     restart_manager();
 
-    return 0;
+finalize:
+    if (post_magica) {
+        run_post_magica_cleanup();
+    }
+
+    return result;
 }
 
 }  // namespace ksud::late_load
