@@ -132,6 +132,7 @@ void print_usage() {
     printf("USAGE: ksud <COMMAND>\n\n");
     printf("COMMANDS:\n");
     printf("  module         Manage KernelSU modules\n");
+    printf("  insmod         Load a kernel module with kallsyms access\n");
     printf("  late-load      Load kernelsu.ko and execute late-load stage scripts\n");
     printf("  post-fs-data   Trigger post-fs-data event\n");
     printf("  services       Trigger service event\n");
@@ -273,6 +274,7 @@ int cmd_debug(const std::vector<std::string>& args) {
         printf("SUBCOMMANDS:\n");
         printf("  set-manager [PKG]  Set manager app\n");
         printf("  get-sign <APK>     Get APK signature\n");
+        printf("  insmod <KO> [PARAMS...]  Load a kernel module (legacy alias)\n");
         printf("  su [-g]            Root shell\n");
         printf("  version            Get kernel version\n");
         printf("  mark <get|mark|unmark|refresh> [PID]\n");
@@ -287,6 +289,8 @@ int cmd_debug(const std::vector<std::string>& args) {
         return debug_set_manager(pkg);
     } else if (subcmd == "get-sign" && args.size() > 1) {
         return debug_get_sign(args[1]);
+    } else if (subcmd == "insmod" && args.size() > 1) {
+        return debug_insmod(args[1], std::vector<std::string>(args.begin() + 2, args.end()));
     } else if (subcmd == "version") {
         printf("Kernel Version: %d\n", get_version());
         return 0;
@@ -301,6 +305,15 @@ int cmd_debug(const std::vector<std::string>& args) {
 
     printf("Unknown debug subcommand: %s\n", subcmd.c_str());
     return 1;
+}
+
+int cmd_insmod(const std::vector<std::string>& args) {
+    if (args.empty()) {
+        printf("USAGE: ksud insmod <KO> [PARAMS...]\n");
+        return 1;
+    }
+
+    return debug_insmod(args[0], std::vector<std::string>(args.begin() + 1, args.end()));
 }
 
 int cmd_umount(const std::vector<std::string>& args) {
@@ -684,11 +697,17 @@ int cmd_flash_new(const std::vector<std::string>& args) {
 
 int cmd_late_load(const std::vector<std::string>& args) {
     bool post_magica = false;
+    bool allow_shell = false;
     std::optional<uint16_t> magica_port;
 
     for (size_t i = 0; i < args.size(); ++i) {
         if (args[i] == "--post-magica") {
             post_magica = true;
+            continue;
+        }
+
+        if (args[i] == "--allow-shell") {
+            allow_shell = true;
             continue;
         }
 
@@ -712,15 +731,15 @@ int cmd_late_load(const std::vector<std::string>& args) {
         }
 
         printf("Unknown late-load option: %s\n", args[i].c_str());
-        printf("Usage: ksud late-load [--magica [PORT]] [--post-magica]\n");
+        printf("Usage: ksud late-load [--magica [PORT]] [--post-magica] [--allow-shell]\n");
         return 1;
     }
 
     if (magica_port.has_value()) {
-        return magica::run(*magica_port);
+        return magica::run(*magica_port, allow_shell);
     }
 
-    return late_load::run(post_magica);
+    return late_load::run(post_magica, allow_shell);
 }
 
 }  // namespace
@@ -782,6 +801,8 @@ int cli_run(int argc, char** argv) {
     } else if (cmd == "version" || cmd == "-v" || cmd == "--version") {
         print_version();
         return 0;
+    } else if (cmd == "insmod") {
+        return cmd_insmod(args);
     } else if (cmd == "late-load") {
         return cmd_late_load(args);
     } else if (cmd == "post-fs-data") {

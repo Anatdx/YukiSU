@@ -38,7 +38,16 @@ bool is_kernelsu_loaded() {
     return access("/sys/module/kernelsu", F_OK) == 0;
 }
 
-bool extract_and_load_kernelsu() {
+std::string get_kernelsu_load_params(bool allow_shell) {
+    if (allow_shell || access("/ksu_allow_shell", F_OK) == 0) {
+        LOGW("late-load: loading kernelsu.ko with allow_shell=1");
+        return "allow_shell=1";
+    }
+
+    return "";
+}
+
+bool extract_and_load_kernelsu(bool allow_shell) {
     const std::string kmi = get_current_kmi();
     if (kmi.empty()) {
         LOGE("late-load: failed to detect current KMI");
@@ -71,7 +80,8 @@ bool extract_and_load_kernelsu() {
     }
 
     LOGI("late-load: loading %s via relocated init_module", asset_name.c_str());
-    const bool loaded = ksud::kernelsu_loader::load_module(tmp_path.data());
+    const bool loaded =
+        ksud::kernelsu_loader::load_module(tmp_path.data(), get_kernelsu_load_params(allow_shell));
     unlink(tmp_path.data());
     return loaded;
 }
@@ -128,11 +138,11 @@ void run_post_magica_cleanup() {
 
 }  // namespace
 
-int run(bool post_magica) {
+int run(bool post_magica, bool allow_shell) {
     LOGI("late-load command triggered");
     int result = 0;
 
-    if (!is_kernelsu_loaded() && !extract_and_load_kernelsu()) {
+    if (!is_kernelsu_loaded() && !extract_and_load_kernelsu(allow_shell)) {
         result = 1;
         goto finalize;
     }

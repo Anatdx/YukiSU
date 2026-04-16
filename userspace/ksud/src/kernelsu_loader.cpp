@@ -47,45 +47,14 @@ private:
     std::string original_value_;
 };
 
-std::unordered_map<std::string, uint64_t> parse_kallsyms() {
-    KptrGuard guard;
-
-    std::unordered_map<std::string, uint64_t> symbols;
-    std::ifstream ifs("/proc/kallsyms");
-    if (!ifs.is_open()) {
-        LOGE("loader: cannot open /proc/kallsyms");
-        return symbols;
+void normalize_symbol_name(std::string* name) {
+    size_t pos = name->find('$');
+    if (pos == std::string::npos) {
+        pos = name->find(".llvm.");
     }
-
-    std::string line;
-    while (std::getline(ifs, line)) {
-        std::istringstream iss(line);
-        std::string addr_str;
-        std::string type;
-        std::string name;
-        if (!(iss >> addr_str >> type >> name)) {
-            continue;
-        }
-
-        uint64_t addr = 0;
-        try {
-            addr = std::stoull(addr_str, nullptr, 16);
-        } catch (...) {
-            continue;
-        }
-
-        size_t pos = name.find('$');
-        if (pos == std::string::npos) {
-            pos = name.find(".llvm.");
-        }
-        if (pos != std::string::npos) {
-            name = name.substr(0, pos);
-        }
-
-        symbols[name] = addr;
+    if (pos != std::string::npos) {
+        name->resize(pos);
     }
-
-    return symbols;
 }
 
 bool read_file(const char* path, std::vector<uint8_t>* buffer) {
@@ -112,8 +81,7 @@ int init_module_syscall(void* module_image, unsigned long len, const char* param
 }
 
 template <typename Ehdr, typename Shdr, typename Sym>
-bool patch_undefined_symbols(std::vector<uint8_t>* buffer,
-                             const std::unordered_map<std::string, uint64_t>& kernel_symbols) {
+bool patch_undefined_symbols(std::vector<uint8_t>* buffer) {
     if (buffer->size() < sizeof(Ehdr)) {
         LOGE("loader: file too small to be an ELF");
         return false;
@@ -146,6 +114,7 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer,
     auto* sym_base = reinterpret_cast<Sym*>(buffer->data() + symtab->sh_offset);
     auto* str_base = reinterpret_cast<char*>(buffer->data() + strtab->sh_offset);
     const size_t sym_count = symtab->sh_size / sizeof(Sym);
+    std::unordered_map<std::string, std::vector<Sym*>> unresolved_symbols;
 
     for (size_t i = 1; i < sym_count; ++i) {
         auto* sym = &sym_base[i];
@@ -157,15 +126,65 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer,
         if (name == nullptr || *name == '\0') {
             continue;
         }
+        unresolved_symbols[name].push_back(sym);
+    }
 
-        const auto it = kernel_symbols.find(name);
-        if (it == kernel_symbols.end()) {
-            LOGW("loader: cannot find symbol: %s", name);
+    if (unresolved_symbols.empty()) {
+        return true;
+    }
+
+    KptrGuard guard;
+    std::ifstream ifs("/proc/kallsyms");
+    if (!ifs.is_open()) {
+        LOGE("loader: cannot open /proc/kallsyms");
+        return false;
+    }
+
+    std::string line;
+    while (!unresolved_symbols.empty() && std::getline(ifs, line)) {
+        std::istringstream iss(line);
+        std::string addr_str;
+        std::string type;
+        std::string name;
+        std::string module_name;
+        if (!(iss >> addr_str >> type >> name)) {
             continue;
         }
 
-        sym->st_shndx = SHN_ABS;
-        sym->st_value = static_cast<decltype(sym->st_value)>(it->second);
+        // Kernel symbols come before module symbols in /proc/kallsyms. Stop scanning once we
+        // reach module-owned entries so we don't accidentally relocate against them.
+        if (iss >> module_name) {
+            break;
+        }
+
+        uint64_t addr = 0;
+        try {
+            addr = std::stoull(addr_str, nullptr, 16);
+        } catch (...) {
+            continue;
+        }
+
+        normalize_symbol_name(&name);
+
+        const auto it = unresolved_symbols.find(name);
+        if (it == unresolved_symbols.end()) {
+            continue;
+        }
+
+        for (auto* sym : it->second) {
+            sym->st_shndx = SHN_ABS;
+            sym->st_value = static_cast<decltype(sym->st_value)>(addr);
+        }
+        unresolved_symbols.erase(it);
+    }
+
+    if (!ifs.eof() && ifs.fail()) {
+        LOGE("loader: failed while reading /proc/kallsyms");
+        return false;
+    }
+
+    for (const auto& [name, _] : unresolved_symbols) {
+        LOGW("loader: cannot find symbol: %s", name.c_str());
     }
 
     return true;
@@ -173,7 +192,7 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer,
 
 }  // namespace
 
-bool load_module(const char* path) {
+bool load_module(const char* path, const std::string& param_values) {
     std::vector<uint8_t> buffer;
     if (!read_file(path, &buffer)) {
         return false;
@@ -184,20 +203,12 @@ bool load_module(const char* path) {
         return false;
     }
 
-    const auto kernel_symbols = parse_kallsyms();
-    if (kernel_symbols.empty()) {
-        LOGE("loader: cannot parse kallsyms");
-        return false;
-    }
-
     const unsigned char elf_class = buffer[EI_CLASS];
     bool patched = false;
     if (elf_class == ELFCLASS64) {
-        patched =
-            patch_undefined_symbols<Elf64_Ehdr, Elf64_Shdr, Elf64_Sym>(&buffer, kernel_symbols);
+        patched = patch_undefined_symbols<Elf64_Ehdr, Elf64_Shdr, Elf64_Sym>(&buffer);
     } else if (elf_class == ELFCLASS32) {
-        patched =
-            patch_undefined_symbols<Elf32_Ehdr, Elf32_Shdr, Elf32_Sym>(&buffer, kernel_symbols);
+        patched = patch_undefined_symbols<Elf32_Ehdr, Elf32_Shdr, Elf32_Sym>(&buffer);
     } else {
         LOGE("loader: unsupported ELF class %u", elf_class);
         return false;
@@ -207,7 +218,7 @@ bool load_module(const char* path) {
         return false;
     }
 
-    if (init_module_syscall(buffer.data(), buffer.size(), "") != 0) {
+    if (init_module_syscall(buffer.data(), buffer.size(), param_values.c_str()) != 0) {
         if (errno == EEXIST) {
             return true;
         }
