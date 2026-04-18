@@ -1,6 +1,7 @@
 #include "debug.hpp"
 #include "boot/apk_sign.hpp"
 #include "core/ksucalls.hpp"
+#include "kernelsu_loader.hpp"
 #include "log.hpp"
 #include "utils.hpp"
 
@@ -97,6 +98,31 @@ int debug_get_sign(const std::string& apk) {
     }
 
     printf("size: 0x%x, hash: %s\n", size, hash.c_str());
+    return 0;
+}
+
+int debug_insmod(const std::string& module, const std::vector<std::string>& params) {
+    std::error_code ec;
+    const auto resolved_path = std::filesystem::canonical(module, ec);
+    if (ec) {
+        printf("Failed to resolve module path %s: %s\n", module.c_str(), ec.message().c_str());
+        return 1;
+    }
+
+    std::string param_values;
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (i != 0) {
+            param_values.push_back(' ');
+        }
+        param_values += params[i];
+    }
+
+    if (!kernelsu_loader::load_module(resolved_path.c_str(), param_values)) {
+        printf("Failed to load kernel module: %s\n", resolved_path.c_str());
+        return 1;
+    }
+
+    printf("Loaded kernel module: %s\n", resolved_path.c_str());
     return 0;
 }
 
