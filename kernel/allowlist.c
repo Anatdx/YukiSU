@@ -3,8 +3,9 @@
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/hashtable.h>
 #include <linux/kernel.h>
-#include <linux/list.h>
+#include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
@@ -35,39 +36,6 @@ static struct non_root_profile default_non_root_profile;
 
 void persistent_allow_list(void);
 
-static int allow_list_arr[PAGE_SIZE / sizeof(int)] __read_mostly
-    __aligned(PAGE_SIZE);
-static int allow_list_pointer __read_mostly = 0;
-
-static void remove_uid_from_arr(uid_t uid)
-{
-	int *temp_arr;
-	int i, j;
-
-	if (allow_list_pointer == 0)
-		return;
-
-	temp_arr = kzalloc(sizeof(allow_list_arr), GFP_KERNEL);
-	if (temp_arr == NULL) {
-		pr_err("%s: unable to allocate memory\n", __func__);
-		return;
-	}
-
-	for (i = j = 0; i < allow_list_pointer; i++) {
-		if (allow_list_arr[i] == uid)
-			continue;
-		temp_arr[j++] = allow_list_arr[i];
-	}
-
-	allow_list_pointer = j;
-
-	for (; j < ARRAY_SIZE(allow_list_arr); j++)
-		temp_arr[j] = -1;
-
-	memcpy(&allow_list_arr, temp_arr, PAGE_SIZE);
-	kfree(temp_arr);
-}
-
 static void init_default_profiles(void)
 {
 	kernel_cap_t full_cap = CAP_FULL_SET;
@@ -86,50 +54,52 @@ static void init_default_profiles(void)
 }
 
 struct perm_data {
-	struct list_head list;
+	struct hlist_node list;
 	struct rcu_head rcu;
+	struct kref ref;
 	struct app_profile profile;
 };
 
-static struct list_head allow_list;
-
-static uint8_t allow_list_bitmap[PAGE_SIZE] __read_mostly __aligned(PAGE_SIZE);
-#define BITMAP_UID_MAX ((sizeof(allow_list_bitmap) * BITS_PER_BYTE) - 1)
+#define ALLOW_LIST_BITS 8
+static DEFINE_HASHTABLE(allow_list, ALLOW_LIST_BITS);
+static u16 allow_list_count = 0;
 
 #define KERNEL_SU_ALLOWLIST "/data/adb/ksu/.allowlist"
 
 void ksu_show_allow_list(void)
 {
+	int bucket;
 	struct perm_data *p = NULL;
 
 	pr_info("ksu_show_allow_list\n");
 	rcu_read_lock();
-	list_for_each_entry_rcu(p, &allow_list, list)
+	hash_for_each_rcu(allow_list, bucket, p, list)
 	{
-		pr_info("uid :%d, allow: %d\n", p->profile.current_uid,
+		pr_info("uid :%d, allow: %d\n", p->profile.curr_uid,
 			p->profile.allow_su);
 	}
 	rcu_read_unlock();
 }
 
-bool ksu_get_app_profile(struct app_profile *profile)
+struct app_profile *ksu_get_app_profile(uid_t uid)
 {
 	struct perm_data *p = NULL;
-	bool found = false;
 
+retry:
 	rcu_read_lock();
-	list_for_each_entry_rcu(p, &allow_list, list)
+	hash_for_each_possible_rcu(allow_list, p, list, uid)
 	{
-		if (profile->current_uid == p->profile.current_uid) {
-			memcpy(profile, &p->profile, sizeof(*profile));
-			found = true;
-			goto exit;
+		if (uid == p->profile.curr_uid) {
+			if (likely(kref_get_unless_zero(&p->ref))) {
+				rcu_read_unlock();
+				return &p->profile;
+			}
+			rcu_read_unlock();
+			goto retry;
 		}
 	}
-
-exit:
 	rcu_read_unlock();
-	return found;
+	return NULL;
 }
 
 static inline bool forbid_system_uid(uid_t uid)
@@ -163,11 +133,28 @@ static bool profile_valid(struct app_profile *profile)
 	return true;
 }
 
+static void release_perm_data(struct kref *ref)
+{
+	struct perm_data *p = container_of(ref, struct perm_data, ref);
+
+	kfree_rcu(p, rcu);
+}
+
+static void put_perm_data(struct perm_data *data)
+{
+	kref_put(&data->ref, release_perm_data);
+}
+
+void ksu_put_app_profile(struct app_profile *profile)
+{
+	struct perm_data *p = container_of(profile, struct perm_data, profile);
+
+	put_perm_data(p);
+}
+
 bool ksu_set_app_profile(struct app_profile *profile, bool persist)
 {
-	struct perm_data *p = NULL;
-	struct perm_data *np = NULL;
-	u16 count = 0;
+	struct perm_data *p = NULL, *np = NULL;
 	bool result = false;
 
 	if (!profile_valid(profile)) {
@@ -175,93 +162,73 @@ bool ksu_set_app_profile(struct app_profile *profile, bool persist)
 		return false;
 	}
 
+	if (unlikely(profile->curr_uid == KSU_APP_PROFILE_PRESERVE_UID &&
+		     strcmp(profile->key, "$") != 0)) {
+		pr_err(
+		    "Failed to set app profile: invalid preserved uid key\n");
+		return false;
+	}
+
 	mutex_lock(&allowlist_mutex);
 
-	list_for_each_entry (p, &allow_list, list) {
-		++count;
-		// both uid and package must match, otherwise it will break
-		// multiple package with different user id
-		if (profile->current_uid == p->profile.current_uid &&
-		    !strcmp(profile->key, p->profile.key)) {
-			// found: replace node so RCU readers never see
-			// half-updated data
-			np = (struct perm_data *)kzalloc(
-			    sizeof(struct perm_data), GFP_KERNEL);
+	hash_for_each_possible(allow_list, p, list, profile->curr_uid)
+	{
+		if (profile->curr_uid == p->profile.curr_uid) {
+			if (strcmp(profile->key, p->profile.key) != 0) {
+				pr_warn("ksu_set_app_profile: key changed: "
+					"uid=%d old=%s new=%s\n",
+					profile->curr_uid, p->profile.key,
+					profile->key);
+			}
+			np = kzalloc(sizeof(*np), GFP_KERNEL);
 			if (!np) {
 				result = false;
 				goto out_unlock;
 			}
+			kref_init(&np->ref);
 			memcpy(&np->profile, profile, sizeof(*profile));
-			list_replace_rcu(&p->list, &np->list);
-			kfree_rcu(p, rcu);
+			hlist_replace_rcu(&p->list, &np->list);
+			put_perm_data(p);
 			result = true;
 			goto out;
 		}
 	}
 
-	// not found, alloc a new node
-	if (count >= U16_MAX) {
+	if (unlikely(allow_list_count == U16_MAX)) {
 		pr_err("too many app profile\n");
 		result = false;
 		goto out_unlock;
 	}
 
-	np = (struct perm_data *)kzalloc(sizeof(struct perm_data), GFP_KERNEL);
+	np = kzalloc(sizeof(*np), GFP_KERNEL);
 	if (!np) {
 		pr_err("ksu_set_app_profile alloc failed\n");
 		result = false;
 		goto out_unlock;
 	}
 
+	kref_init(&np->ref);
 	memcpy(&np->profile, profile, sizeof(*profile));
 	if (profile->allow_su) {
 		pr_info("set root profile, key: %s, uid: %d, gid: %d, context: "
 			"%s\n",
-			profile->key, profile->current_uid,
+			profile->key, profile->curr_uid,
 			profile->rp_config.profile.gid,
 			profile->rp_config.profile.selinux_domain);
 	} else {
 		pr_info(
 		    "set app profile, key: %s, uid: %d, umount modules: %d\n",
-		    profile->key, profile->current_uid,
+		    profile->key, profile->curr_uid,
 		    profile->nrp_config.profile.umount_modules);
 	}
-	list_add_tail_rcu(&np->list, &allow_list);
+	hash_add_rcu(allow_list, &np->list, np->profile.curr_uid);
+	++allow_list_count;
 	result = true;
 
 out:
-	if (profile->current_uid <= BITMAP_UID_MAX) {
-		if (profile->allow_su)
-			allow_list_bitmap[profile->current_uid /
-					  BITS_PER_BYTE] |=
-			    1 << (profile->current_uid % BITS_PER_BYTE);
-		else
-			allow_list_bitmap[profile->current_uid /
-					  BITS_PER_BYTE] &=
-			    ~(1 << (profile->current_uid % BITS_PER_BYTE));
-	} else {
-		if (profile->allow_su) {
-			if (allow_list_pointer >= ARRAY_SIZE(allow_list_arr)) {
-				pr_err("too many apps registered\n");
-				WARN_ON(1);
-				result = false;
-				goto out_unlock;
-			}
-			allow_list_arr[allow_list_pointer++] =
-			    profile->current_uid;
-		} else {
-			remove_uid_from_arr(profile->current_uid);
-		}
-	}
-
-	// check if the default profiles is changed, cache it to a single struct
-	if (unlikely(!strcmp(profile->key, "$"))) {
-		memcpy(&default_non_root_profile, &profile->nrp_config.profile,
-		       sizeof(default_non_root_profile));
-	}
-	if (unlikely(!strcmp(profile->key, "#"))) {
-		memcpy(&default_root_profile, &profile->rp_config.profile,
-		       sizeof(default_root_profile));
+	if (unlikely(profile->curr_uid == KSU_APP_PROFILE_PRESERVE_UID)) {
+		default_non_root_profile.umount_modules =
+		    profile->nrp_config.profile.umount_modules;
 	}
 
 out_unlock:
@@ -277,7 +244,7 @@ out_unlock:
 
 bool __ksu_is_allow_uid(uid_t uid)
 {
-	int i;
+	struct perm_data *p = NULL;
 
 	if (forbid_system_uid(uid)) {
 		// do not bother going through the list if it's system
@@ -294,15 +261,15 @@ bool __ksu_is_allow_uid(uid_t uid)
 		return true;
 	}
 
-	if (likely(uid <= BITMAP_UID_MAX)) {
-		return !!(allow_list_bitmap[uid / BITS_PER_BYTE] &
-			  (1 << (uid % BITS_PER_BYTE)));
-	} else {
-		for (i = 0; i < allow_list_pointer; i++) {
-			if (allow_list_arr[i] == uid)
-				return true;
+	rcu_read_lock();
+	hash_for_each_possible_rcu(allow_list, p, list, uid)
+	{
+		if (uid == p->profile.curr_uid && p->profile.allow_su) {
+			rcu_read_unlock();
+			return true;
 		}
 	}
+	rcu_read_unlock();
 
 	return false;
 }
@@ -320,57 +287,80 @@ EXPORT_SYMBOL(__ksu_is_allow_uid_for_current);
 
 bool ksu_uid_should_umount(uid_t uid)
 {
-	struct app_profile profile = {.current_uid = uid};
+	struct app_profile *profile = NULL;
+	bool should_umount;
 
 	if (likely(ksu_is_manager_uid_valid()) &&
 	    unlikely(ksu_is_uid_manager(uid))) {
 		// we should not umount on manager (any signature slot)
 		return false;
 	}
-	bool found = ksu_get_app_profile(&profile);
-	if (!found) {
+	profile = ksu_get_app_profile(uid);
+	if (!profile) {
 		// no app profile found, it must be non root app
 		return default_non_root_profile.umount_modules;
 	}
-	if (profile.allow_su) {
+	if (profile->allow_su) {
 		// if found and it is granted to su, we shouldn't umount for it
-		return false;
+		should_umount = false;
 	} else {
 		// found an app profile
-		if (profile.nrp_config.use_default) {
-			return default_non_root_profile.umount_modules;
+		if (profile->nrp_config.use_default) {
+			should_umount = default_non_root_profile.umount_modules;
 		} else {
-			return profile.nrp_config.profile.umount_modules;
+			should_umount =
+			    profile->nrp_config.profile.umount_modules;
 		}
 	}
+
+	ksu_put_app_profile(profile);
+	return should_umount;
 }
 
-void ksu_get_root_profile(uid_t uid, struct root_profile *out)
+struct root_profile *ksu_get_root_profile(uid_t uid)
 {
 	struct perm_data *p = NULL;
 
-	if (unlikely(allow_shell && uid == SHELL_UID)) {
-		memcpy(out, &default_root_profile, sizeof(*out));
-		return;
+	if (likely(ksu_is_manager_uid_valid()) &&
+	    unlikely(ksu_is_uid_manager(uid))) {
+		return &default_root_profile;
 	}
 
+	if (unlikely(allow_shell && uid == SHELL_UID)) {
+		return &default_root_profile;
+	}
+
+retry:
 	rcu_read_lock();
-	list_for_each_entry_rcu(p, &allow_list, list)
+	hash_for_each_possible_rcu(allow_list, p, list, uid)
 	{
-		if (uid == p->profile.current_uid && p->profile.allow_su) {
+		if (uid == p->profile.curr_uid && p->profile.allow_su) {
 			if (!p->profile.rp_config.use_default) {
-				memcpy(out, &p->profile.rp_config.profile,
-				       sizeof(*out));
+				if (likely(kref_get_unless_zero(&p->ref))) {
+					rcu_read_unlock();
+					return &p->profile.rp_config.profile;
+				}
 				rcu_read_unlock();
-				return;
+				goto retry;
 			}
 			break;
 		}
 	}
 	rcu_read_unlock();
 
-	// use default profile
-	memcpy(out, &default_root_profile, sizeof(*out));
+	return &default_root_profile;
+}
+
+void ksu_put_root_profile(struct root_profile *profile)
+{
+	struct perm_data *p = NULL;
+
+	if (profile == &default_root_profile) {
+		return;
+	}
+
+	p = container_of(profile, struct perm_data, profile.rp_config.profile);
+	put_perm_data(p);
 }
 
 bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
@@ -378,15 +368,16 @@ bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
 {
 	struct perm_data *p = NULL;
 	u16 i = 0, j = 0;
+	int bucket;
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(p, &allow_list, list)
+	hash_for_each_rcu(allow_list, bucket, p, list)
 	{
 		if (p->profile.allow_su == allow &&
 		    !(ksu_is_manager_uid_valid() &&
-		      ksu_is_uid_manager(p->profile.current_uid))) {
+		      ksu_is_uid_manager(p->profile.curr_uid))) {
 			if (j < length && array)
-				array[j++] = p->profile.current_uid;
+				array[j++] = p->profile.curr_uid;
 			++i;
 		}
 	}
@@ -405,8 +396,8 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 	u32 magic = FILE_MAGIC;
 	u32 version = FILE_FORMAT_VERSION;
 	struct perm_data *p = NULL;
-	struct list_head *pos = NULL;
 	loff_t off = 0;
+	int bucket;
 
 	mutex_lock(&allowlist_mutex);
 	struct file *fp =
@@ -429,10 +420,10 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 		goto close_file;
 	}
 
-	list_for_each (pos, &allow_list) {
-		p = list_entry(pos, struct perm_data, list);
+	hash_for_each(allow_list, bucket, p, list)
+	{
 		pr_info("save allow list, name: %s uid :%d, allow: %d\n",
-			p->profile.key, p->profile.current_uid,
+			p->profile.key, p->profile.curr_uid,
 			p->profile.allow_su);
 
 		kernel_write(fp, &p->profile, sizeof(p->profile), &off);
@@ -450,7 +441,9 @@ void persistent_allow_list(void)
 	struct task_struct *tsk;
 	struct callback_head *cb;
 
+	rcu_read_lock();
 	tsk = get_pid_task(find_vpid(1), PIDTYPE_PID);
+	rcu_read_unlock();
 	if (!tsk) {
 		pr_err("save_allow_list find init task err\n");
 		return;
@@ -524,7 +517,7 @@ void ksu_load_allow_list(void)
 		}
 
 		pr_info("load_allow_uid, name: %s, uid: %d, allow: %d\n",
-			profile.key, profile.current_uid, profile.allow_su);
+			profile.key, profile.curr_uid, profile.allow_su);
 		ksu_set_app_profile(&profile, false);
 	}
 
@@ -537,7 +530,8 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 			 void *data)
 {
 	struct perm_data *np = NULL;
-	struct perm_data *n = NULL;
+	struct hlist_node *tmp = NULL;
+	int bucket;
 	bool modified = false;
 
 	if (!ksu_boot_completed) {
@@ -546,22 +540,18 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 	}
 
 	mutex_lock(&allowlist_mutex);
-	list_for_each_entry_safe (np, n, &allow_list, list) {
-		uid_t uid = np->profile.current_uid;
+	hash_for_each_safe(allow_list, bucket, tmp, np, list)
+	{
+		uid_t uid = np->profile.curr_uid;
 		char *package = np->profile.key;
 		// we use this uid for special cases, don't prune it!
 		bool is_preserved_uid = uid == KSU_APP_PROFILE_PRESERVE_UID;
 		if (!is_preserved_uid && !is_uid_valid(uid, package, data)) {
 			modified = true;
 			pr_info("prune uid: %d, package: %s\n", uid, package);
-			list_del_rcu(&np->list);
-			if (likely(uid <= BITMAP_UID_MAX)) {
-				allow_list_bitmap[uid / BITS_PER_BYTE] &=
-				    ~(1 << (uid % BITS_PER_BYTE));
-			}
-			remove_uid_from_arr(uid);
-			smp_mb();
-			kfree_rcu(np, rcu);
+			hlist_del_rcu(&np->list);
+			put_perm_data(np);
+			--allow_list_count;
 		}
 	}
 	mutex_unlock(&allowlist_mutex);
@@ -573,15 +563,8 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 
 void ksu_allowlist_init(void)
 {
-	int i;
-
-	BUILD_BUG_ON(sizeof(allow_list_bitmap) != PAGE_SIZE);
-	BUILD_BUG_ON(sizeof(allow_list_arr) != PAGE_SIZE);
-
-	for (i = 0; i < ARRAY_SIZE(allow_list_arr); i++)
-		allow_list_arr[i] = -1;
-
-	INIT_LIST_HEAD(&allow_list);
+	hash_init(allow_list);
+	allow_list_count = 0;
 
 	init_default_profiles();
 }
@@ -589,12 +572,14 @@ void ksu_allowlist_init(void)
 void ksu_allowlist_exit(void)
 {
 	struct perm_data *np = NULL;
-	struct perm_data *n = NULL;
+	struct hlist_node *tmp = NULL;
+	int bucket;
 
 	// free allowlist
 	mutex_lock(&allowlist_mutex);
-	list_for_each_entry_safe (np, n, &allow_list, list) {
-		list_del(&np->list);
+	hash_for_each_safe(allow_list, bucket, tmp, np, list)
+	{
+		hlist_del(&np->list);
 		kfree(np);
 	}
 	mutex_unlock(&allowlist_mutex);
@@ -606,23 +591,24 @@ bool ksu_temp_grant_root_once(uid_t uid)
 	struct app_profile profile = {
 	    .version = KSU_APP_PROFILE_VER,
 	    .allow_su = true,
-	    .current_uid = uid,
+	    .curr_uid = uid,
 	};
 
 	const char *default_key = "com.temp.once";
 
 	struct perm_data *p = NULL;
-	struct list_head *pos = NULL;
 	bool found = false;
 
-	list_for_each (pos, &allow_list) {
-		p = list_entry(pos, struct perm_data, list);
-		if (p->profile.current_uid == uid) {
+	mutex_lock(&allowlist_mutex);
+	hash_for_each_possible(allow_list, p, list, uid)
+	{
+		if (p->profile.curr_uid == uid) {
 			strcpy(profile.key, p->profile.key);
 			found = true;
 			break;
 		}
 	}
+	mutex_unlock(&allowlist_mutex);
 
 	if (!found) {
 		strcpy(profile.key, default_key);
@@ -652,23 +638,24 @@ void ksu_temp_revoke_root_once(uid_t uid)
 	struct app_profile profile = {
 	    .version = KSU_APP_PROFILE_VER,
 	    .allow_su = false,
-	    .current_uid = uid,
+	    .curr_uid = uid,
 	};
 
 	const char *default_key = "com.temp.once";
 
 	struct perm_data *p = NULL;
-	struct list_head *pos = NULL;
 	bool found = false;
 
-	list_for_each (pos, &allow_list) {
-		p = list_entry(pos, struct perm_data, list);
-		if (p->profile.current_uid == uid) {
+	mutex_lock(&allowlist_mutex);
+	hash_for_each_possible(allow_list, p, list, uid)
+	{
+		if (p->profile.curr_uid == uid) {
 			strcpy(profile.key, p->profile.key);
 			found = true;
 			break;
 		}
 	}
+	mutex_unlock(&allowlist_mutex);
 
 	if (!found) {
 		strcpy(profile.key, default_key);

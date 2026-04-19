@@ -9,6 +9,7 @@
 #include <linux/kprobes.h>
 #include <linux/seccomp.h>
 #include <linux/slab.h>
+#include <linux/stddef.h>
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
 #include <linux/uaccess.h>
@@ -327,23 +328,34 @@ static int do_get_manager_uid(void __user *arg)
 
 static int do_get_app_profile(void __user *arg)
 {
-	struct ksu_get_app_profile_cmd cmd;
+	uid_t uid;
+	struct app_profile *profile;
+	int ret = 0;
 
-	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+	if (copy_from_user(
+		&uid,
+		(char __user *)arg +
+		    offsetof(struct ksu_get_app_profile_cmd, profile.curr_uid),
+		sizeof(uid))) {
 		pr_err("get_app_profile: copy_from_user failed\n");
 		return -EFAULT;
 	}
 
-	if (!ksu_get_app_profile(&cmd.profile)) {
-		return -ENOENT;
+	profile = ksu_get_app_profile(uid);
+	if (!profile) {
+		ret = -ENOENT;
+	} else {
+		if (copy_to_user(
+			(char __user *)arg +
+			    offsetof(struct ksu_get_app_profile_cmd, profile),
+			profile, sizeof(*profile))) {
+			pr_err("get_app_profile: copy_to_user failed\n");
+			ret = -EFAULT;
+		}
+		ksu_put_app_profile(profile);
 	}
 
-	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
-		pr_err("get_app_profile: copy_to_user failed\n");
-		return -EFAULT;
-	}
-
-	return 0;
+	return ret;
 }
 
 static int do_set_app_profile(void __user *arg)
