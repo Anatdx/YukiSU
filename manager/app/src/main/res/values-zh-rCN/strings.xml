@@ -697,6 +697,14 @@
     <string name="hymofs_uname_version">编译时间</string>
     <string name="hymofs_uname_version_desc">内核版本/编译时间戳。设置后 HymoFS 将伪装此值</string>
     <string name="hymofs_uname_use_current">使用当前内核信息</string>
+    <string name="hymofs_uname_mode">伪装模式</string>
+    <string name="hymofs_uname_mode_scoped">作用域</string>
+    <string name="hymofs_uname_mode_global">全局</string>
+    <string name="hymofs_uname_mode_scoped_desc">按进程：仅 hymo 隐藏的 UID 看到伪造值（安全默认）</string>
+    <string name="hymofs_uname_mode_global_desc">系统级：改写 init_uts_ns，所有进程均看到伪造值</string>
+    <string name="hymofs_uname_restore">恢复原始（全局）</string>
+    <string name="hymofs_uname_restored">已恢复原始内核 uname</string>
+    <string name="hymofs_uname_restore_failed">恢复失败（需要已有全局应用）</string>
     <!-- HymoFS 内部提示 -->
     <string name="hymofs_toast_load_error">加载数据出错：%s</string>
     <string name="hymofs_toast_mode_updated">模式已更新，重启后生效</string>

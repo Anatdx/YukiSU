@@ -723,6 +723,14 @@
     <string name="hymofs_uname_version">Build time</string>
     <string name="hymofs_uname_version_desc">Kernel version/build timestamp. When set, HymoFS will spoof this.</string>
     <string name="hymofs_uname_use_current">Use current kernel info</string>
+    <string name="hymofs_uname_mode">Spoof mode</string>
+    <string name="hymofs_uname_mode_scoped">Scoped</string>
+    <string name="hymofs_uname_mode_global">Global</string>
+    <string name="hymofs_uname_mode_scoped_desc">Per-process: only hymo-hidden UIDs see fake values (safe default).</string>
+    <string name="hymofs_uname_mode_global_desc">System-wide: rewrites init_uts_ns, every task sees fake values.</string>
+    <string name="hymofs_uname_restore">Restore original (global)</string>
+    <string name="hymofs_uname_restored">Restored original kernel uname.</string>
+    <string name="hymofs_uname_restore_failed">Restore failed (requires prior global apply).</string>
     <string name="hymofs_fs_type_title">Storage filesystem</string>
     <string name="hymofs_fs_type_auto">Auto (let hymo choose)</string>
     <string name="hymofs_fs_type_ext4">EXT4 image</string>

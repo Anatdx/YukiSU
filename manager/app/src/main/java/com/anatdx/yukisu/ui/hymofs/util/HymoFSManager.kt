@@ -141,6 +141,7 @@ object HymoFSManager {
         val partitions: List<String> = emptyList(),
         val unameRelease: String = "",
         val unameVersion: String = "",
+        val unameMode: String = "scoped",  // "scoped" (per-task ns) or "global" (init_uts_ns)
         val lkmAutoload: Boolean = true,
         val lkmKmiOverride: String = "",
         val hymofsBuiltin: Boolean = false
@@ -387,6 +388,9 @@ object HymoFSManager {
                     } ?: emptyList(),
                     unameRelease = json.optString("uname_release", ""),
                     unameVersion = json.optString("uname_version", ""),
+                    unameMode = json.optString("uname_mode", "scoped").let {
+                        if (it == "global") "global" else "scoped"
+                    },
                     lkmAutoload = json.optBoolean("lkm_autoload", true),
                     lkmKmiOverride = json.optString("lkm_kmi_override", ""),
                     hymofsBuiltin = json.optBoolean("hymofs_builtin", false)
@@ -427,6 +431,9 @@ object HymoFSManager {
                 }
                 if (config.unameRelease.isNotEmpty()) put("uname_release", config.unameRelease)
                 if (config.unameVersion.isNotEmpty()) put("uname_version", config.unameVersion)
+                if (config.unameMode.isNotEmpty() && config.unameMode != "scoped") {
+                    put("uname_mode", config.unameMode)
+                }
             }
             val content = json.toString(2)
 
@@ -805,16 +812,34 @@ object HymoFSManager {
 
     /**
      * Apply kernel uname spoofing immediately (hymo debug set-uname).
-     * Call after saveConfig for immediate effect.
+     * mode: "scoped" (default, per-task uts_ns) or "global" (rewrite init_uts_ns).
      */
-    suspend fun setUname(release: String, version: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun setUname(release: String, version: String, mode: String = "scoped"): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val r = release.replace("'", "'\\''")
+                val v = version.replace("'", "'\\''")
+                val modeArg = if (mode == "global") "global" else "scoped"
+                val result = Shell.cmd(
+                    "${getKsud()} hymo debug set-uname $modeArg '$r' '$v'"
+                ).exec()
+                result.isSuccess
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set uname", e)
+                false
+            }
+        }
+
+    /**
+     * Restore original kernel uname captured on first global apply.
+     * Requires protocol >= 15 and a prior global apply.
+     */
+    suspend fun restoreUnameGlobal(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val r = release.replace("'", "'\\''")
-            val v = version.replace("'", "'\\''")
-            val result = Shell.cmd("${getKsud()} hymo debug set-uname '$r' '$v'").exec()
+            val result = Shell.cmd("${getKsud()} hymo debug set-uname-restore").exec()
             result.isSuccess
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to set uname", e)
+            Log.e(TAG, "Failed to restore global uname", e)
             false
         }
     }

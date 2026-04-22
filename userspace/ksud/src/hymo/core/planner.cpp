@@ -4,6 +4,8 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <algorithm>
+#include <cstring>
+#include <functional>
 #include <map>
 #include <set>
 #include "../defs.hpp"
@@ -12,6 +14,42 @@
 #include "user_rules.hpp"
 
 namespace hymo {
+
+namespace {
+
+// Cache /system dev so spoofed_dev makes redirected files look like /system.
+unsigned long g_system_dev = 0;
+bool g_system_dev_resolved = false;
+
+unsigned long resolve_system_dev() {
+    if (!g_system_dev_resolved) {
+        struct stat st{};
+        if (stat("/system", &st) == 0)
+            g_system_dev = static_cast<unsigned long>(st.st_dev);
+        g_system_dev_resolved = true;
+    }
+    return g_system_dev;
+}
+
+// Stable spoofed ino derived from path; high bit avoids collision with real
+// small inodes and matches the kernel generic-spoof pattern (| 0x100000).
+unsigned long stable_spoof_ino(const std::string& path) {
+    return (std::hash<std::string>{}(path) & 0x7FFFFFFFFFFFFULL) | 0x100000ULL;
+}
+
+// Push an explicit kstat spoof for `virtual_path` so vfs_getattr returns
+// /system-like dev/ino. Best-effort: failures are logged but non-fatal.
+void push_spoof_kstat(const std::string& virtual_path) {
+    struct hymo_spoof_kstat k{};
+    strncpy(k.target_pathname, virtual_path.c_str(), HYMO_MAX_LEN_PATHNAME - 1);
+    k.target_pathname[HYMO_MAX_LEN_PATHNAME - 1] = '\0';
+    k.spoofed_dev = resolve_system_dev();
+    k.spoofed_ino = stable_spoof_ino(virtual_path);
+    k.is_static = 1;
+    HymoFS::add_spoof_kstat(k);
+}
+
+}  // namespace
 
 bool MountPlan::is_covered_by_overlay(const std::string& path) const {
     for (const auto& op : overlay_ops) {
@@ -475,9 +513,18 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
     // Apply rules: Add files first (auto-injects parents), then hide
     for (const auto& rule : add_rules) {
         HymoFS::add_rule(rule.src, rule.target, rule.type);
+        // api15: register spoof against the MIRROR path. After getname-redirect,
+        // vfs_getattr operates on the mirror inode, so the entry handler's
+        // path/ino lookup must key off the mirror — not the virtual src.
+        push_spoof_kstat(rule.target);
     }
     for (const auto& rule : merge_rules) {
         HymoFS::add_merge_rule(rule.src, rule.target);
+        // Merge dirs aren't redirected wholesale, but their listed children come
+        // from the mirror. Register both so the parent dir stat also looks like
+        // /system, and per-child stats hit via ino lookup at registration time.
+        push_spoof_kstat(rule.src);
+        push_spoof_kstat(rule.target);
     }
     for (const auto& path : hide_rules) {
         HymoFS::hide_path(path);

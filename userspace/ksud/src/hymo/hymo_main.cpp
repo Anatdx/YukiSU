@@ -113,7 +113,9 @@ void print_help() {
     std::cout << "  debug enable       Enable kernel debug logging\n";
     std::cout << "  debug disable      Disable kernel debug logging\n";
     std::cout << "  debug stealth on|off    Enable/disable stealth mode\n";
-    std::cout << "  debug set-uname <release> <version>  Set kernel version spoofing\n\n";
+    std::cout << "  debug set-uname [global|scoped] <release> <version>  Set kernel version "
+                 "spoofing\n";
+    std::cout << "  debug set-uname-restore  Restore original kernel uname (global mode)\n\n";
 
     std::cout << "Options:\n";
     std::cout << "  -c, --config FILE       Config file path\n";
@@ -1197,32 +1199,50 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 }
                 return 0;
             } else if (subcmd == "set-uname") {
-                if (cli.args.size() < 3) {
-                    std::cerr << "Usage: ksud hymo debug set-uname <release> <version>\n";
-                    std::cerr << "Example: ksud hymo debug set-uname \"5.15.0-generic\" \"#1 SMP "
-                                 "PREEMPT ...\"\n";
+                // Optional leading `global` / `scoped` (default scoped), then release/version.
+                std::string mode = "scoped";
+                std::vector<std::string> pos;
+                for (size_t i = 1; i < cli.args.size(); ++i) {
+                    const std::string& a = cli.args[i];
+                    if (pos.empty() && (a == "global" || a == "--global"))
+                        mode = "global";
+                    else if (pos.empty() && (a == "scoped" || a == "--scoped"))
+                        mode = "scoped";
+                    else
+                        pos.push_back(a);
+                }
+                if (pos.size() < 2) {
+                    std::cerr
+                        << "Usage: ksud hymo debug set-uname [global|scoped] <release> <version>\n";
+                    std::cerr << "Example: ksud hymo debug set-uname global \"5.15.0-generic\" "
+                                 "\"#1 SMP PREEMPT ...\"\n";
                     return 1;
                 }
-                const std::string release = cli.args[1];
-                const std::string version = cli.args[2];
+                const std::string release = pos[0];
+                const std::string version = pos[1];
 
                 if (HymoFS::is_available()) {
                     Config config = load_config(cli);
                     config.uname_release = release;
                     config.uname_version = version;
+                    config.uname_mode = mode;
 
                     const fs::path config_path = cli.config_file.empty()
                                                      ? (fs::path(BASE_DIR) / "config.json")
                                                      : fs::path(cli.config_file);
 
                     if (config.save_to_file(config_path)) {
-                        std::cout << "Kernel version spoofing configured:\n";
+                        std::cout << "Kernel version spoofing configured (" << mode << "):\n";
                         std::cout << "  Release: " << release << "\n";
                         std::cout << "  Version: " << version << "\n";
 
-                        if (HymoFS::set_uname(release, version)) {
-                            std::cout << "Applied uname spoofing to kernel.\n";
-                            LOG_VERBOSE("Kernel uname updated: " + release + " " + version);
+                        const bool is_global = (mode == "global");
+                        const bool ok = is_global ? HymoFS::set_uname_global(release, version)
+                                                  : HymoFS::set_uname(release, version);
+                        if (ok) {
+                            std::cout << "Applied uname spoofing to kernel (" << mode << ").\n";
+                            LOG_VERBOSE("Kernel uname updated [" + mode + "]: " + release + " " +
+                                        version);
                         } else {
                             std::cerr << "Warning: Failed to apply uname to kernel.\n";
                         }
@@ -1235,9 +1255,24 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     return 1;
                 }
                 return 0;
+            } else if (subcmd == "set-uname-restore") {
+                if (HymoFS::is_available()) {
+                    if (HymoFS::restore_uname_global()) {
+                        std::cout << "Restored original kernel uname (global).\n";
+                        LOG_VERBOSE("Kernel uname restored to captured originals");
+                    } else {
+                        std::cerr << "Failed to restore kernel uname (requires protocol >= 15 and "
+                                     "a prior global apply).\n";
+                        return 1;
+                    }
+                } else {
+                    std::cerr << "HymoFS not available.\n";
+                    return 1;
+                }
+                return 0;
             } else {
                 std::cerr << "Unknown debug subcommand: " << subcmd << "\n";
-                std::cerr << "Available: enable, disable, stealth, set-uname\n";
+                std::cerr << "Available: enable, disable, stealth, set-uname, set-uname-restore\n";
                 return 1;
             }
         }
@@ -1571,8 +1606,13 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             // Apply Uname Spoofing if configured
             if (!config.uname_release.empty() || !config.uname_version.empty()) {
-                if (HymoFS::set_uname(config.uname_release, config.uname_version)) {
-                    LOG_VERBOSE("Applied kernel version spoofing: release=\"" +
+                const bool is_global = (config.uname_mode == "global");
+                const bool ok =
+                    is_global ? HymoFS::set_uname_global(config.uname_release, config.uname_version)
+                              : HymoFS::set_uname(config.uname_release, config.uname_version);
+                if (ok) {
+                    LOG_VERBOSE(std::string("Applied kernel version spoofing (") +
+                                (is_global ? "global" : "scoped") + "): release=\"" +
                                 config.uname_release + "\", version=\"" + config.uname_version +
                                 "\"");
                 } else {

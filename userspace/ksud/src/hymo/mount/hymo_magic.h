@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: Apache-2.0 OR GPL-2.0 */
+/*
+ * HymoFS - userspace/kernel shared definitions (ioctl, protocol, constants).
+ *
+ * License: Author's work under Apache-2.0; when used with the kernel or LKM,
+ * GPL-2.0 applies for kernel compatibility.
+ */
 #ifndef _LINUX_HYMO_MAGIC_H
 #define _LINUX_HYMO_MAGIC_H
 
@@ -13,7 +20,7 @@
 
 #define HYMO_MAGIC1 0x48594D4F  // "HYMO"
 #define HYMO_MAGIC2 0x524F4F54  // "ROOT"
-#define HYMO_PROTOCOL_VERSION 14
+#define HYMO_PROTOCOL_VERSION 15
 
 #define HYMO_MAX_LEN_PATHNAME 256
 #define HYMO_FAKE_CMDLINE_SIZE 4096
@@ -32,11 +39,21 @@
 /* Marks an inode for kstat spoofing */
 #define AS_FLAGS_HYMO_SPOOF_KSTAT 42
 #define BIT_HYMO_SPOOF_KSTAT BIT(42)
+/* Marks a directory as having inject/merge rules (fast path for iterate_dir) */
+#define AS_FLAGS_HYMO_DIR_HAS_INJECT 43
+#define BIT_HYMO_DIR_HAS_INJECT BIT(43)
+/* Marks an inode as having shadow inode_operations installed (lookup-time i_op override) */
+#define AS_FLAGS_HYMO_IOP_INSTALLED 44
+#define BIT_HYMO_IOP_INSTALLED BIT(44)
 #endif  // #ifdef __KERNEL__
 
-// Only one syscall command: Get anonymous FD
+/* Syscall number: 142 = SYS_reboot on aarch64; we kprobe __arm64_sys_reboot (5.10 compatible). */
+#define HYMO_SYSCALL_NR 142
+
+/* Only one syscall command: Get anonymous FD */
 #define HYMO_CMD_GET_FD 0x48021
-// prctl option for GET_FD (SECCOMP-safe). arg2 = (int *) for fd output.
+
+/* prctl option for GET_FD (SECCOMP-safe path). arg2 = (int *) for fd output. */
 #define HYMO_PRCTL_GET_FD 0x48021
 
 struct hymo_syscall_arg {
@@ -48,6 +65,12 @@ struct hymo_syscall_arg {
 struct hymo_syscall_list_arg {
     char* buf;  // Keep as char* for output buffer
     size_t size;
+};
+
+struct hymo_uid_list_arg {
+    __u32 count;
+    __u32 reserved;
+    __aligned_u64 uids;
 };
 
 /*
@@ -103,9 +126,12 @@ struct hymo_spoof_cmdline {
 #define HYMO_FEATURE_CMDLINE_SPOOF (1 << 2)
 #define HYMO_FEATURE_SELINUX_BYPASS (1 << 4)
 #define HYMO_FEATURE_MERGE_DIR (1 << 5)
-#define HYMO_FEATURE_MOUNT_HIDE (1 << 6)   /* hide overlay from /proc/mounts and mountinfo */
-#define HYMO_FEATURE_MAPS_SPOOF (1 << 7)   /* spoof ino/dev/pathname in /proc/pid/maps */
-#define HYMO_FEATURE_STATFS_SPOOF (1 << 8) /* spoof statfs f_type so direct matches resolved */
+#define HYMO_FEATURE_MOUNT_HIDE \
+    (1 << 6) /* hide overlay from /proc/mounts and /proc/pid/mountinfo */
+#define HYMO_FEATURE_MAPS_SPOOF \
+    (1 << 7) /* spoof ino/dev/pathname in /proc/pid/maps (read buffer filter) */
+#define HYMO_FEATURE_STATFS_SPOOF \
+    (1 << 8) /* spoof statfs f_type so direct matches resolved (INCONSISTENT_MOUNT) */
 
 /*
  * Maps spoof rule: when a /proc/pid/maps line has (target_ino[, target_dev]),
@@ -122,23 +148,27 @@ struct hymo_maps_rule {
 
 /*
  * Feature config structs - enable + reserved for future custom rules.
+ * mount_hide: path_pattern empty = hide all overlay; non-empty = hide only matching (future).
+ * maps_spoof: rules via ADD_MAPS_RULE; struct allows future inline rule.
+ * statfs_spoof: path empty = auto spoof; non-empty = custom path->f_type (future).
  */
 struct hymo_mount_hide_arg {
     int enable;
-    char path_pattern[HYMO_MAX_LEN_PATHNAME];
+    char path_pattern[HYMO_MAX_LEN_PATHNAME]; /* reserved: empty = all overlay */
     int err;
 };
 
 struct hymo_maps_spoof_arg {
     int enable;
+    /* reserved for future: inline rule, batch config */
     char reserved[sizeof(struct hymo_maps_rule)];
     int err;
 };
 
 struct hymo_statfs_spoof_arg {
     int enable;
-    char path[HYMO_MAX_LEN_PATHNAME];
-    unsigned long spoof_f_type;
+    char path[HYMO_MAX_LEN_PATHNAME]; /* reserved: empty = auto */
+    unsigned long spoof_f_type;       /* reserved: 0 = use d_real_inode */
     int err;
 };
 
@@ -163,11 +193,19 @@ struct hymo_statfs_spoof_arg {
 #define HYMO_IOC_SET_CMDLINE _IOW(HYMO_IOC_MAGIC, 18, struct hymo_spoof_cmdline)
 #define HYMO_IOC_GET_FEATURES _IOR(HYMO_IOC_MAGIC, 19, int)
 #define HYMO_IOC_SET_ENABLED _IOW(HYMO_IOC_MAGIC, 20, int)
+#define HYMO_IOC_SET_HIDE_UIDS _IOW(HYMO_IOC_MAGIC, 21, struct hymo_uid_list_arg)
 #define HYMO_IOC_GET_HOOKS _IOWR(HYMO_IOC_MAGIC, 22, struct hymo_syscall_list_arg)
 #define HYMO_IOC_ADD_MAPS_RULE _IOW(HYMO_IOC_MAGIC, 23, struct hymo_maps_rule)
 #define HYMO_IOC_CLEAR_MAPS_RULES _IO(HYMO_IOC_MAGIC, 24)
 #define HYMO_IOC_SET_MOUNT_HIDE _IOW(HYMO_IOC_MAGIC, 25, struct hymo_mount_hide_arg)
 #define HYMO_IOC_SET_MAPS_SPOOF _IOW(HYMO_IOC_MAGIC, 26, struct hymo_maps_spoof_arg)
 #define HYMO_IOC_SET_STATFS_SPOOF _IOW(HYMO_IOC_MAGIC, 27, struct hymo_statfs_spoof_arg)
+/*
+ * Global uname spoof: rewrite init_uts_ns in place. Affects ALL tasks that
+ * share init_uts_ns (i.e. all of Android userspace by default). Blunt but
+ * covers every kernel path that reads utsname(). Pass all-empty struct to
+ * restore originals.
+ */
+#define HYMO_IOC_SET_UNAME_GLOBAL _IOW(HYMO_IOC_MAGIC, 28, struct hymo_spoof_uname)
 
 #endif /* _LINUX_HYMO_MAGIC_H */

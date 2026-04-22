@@ -16,6 +16,9 @@
 
 namespace hymo {
 
+static bool apply_uname_common(unsigned long cmd, const std::string& release,
+                               const std::string& version, const char* label);
+
 static HymoFSStatus s_cached_status = HymoFSStatus::NotPresent;
 static bool s_status_checked = false;
 static int s_hymo_fd = -1;  // Cached anonymous fd
@@ -355,7 +358,11 @@ bool HymoFS::set_enabled(bool enable) {
 }
 
 bool HymoFS::set_uname(const std::string& release, const std::string& version) {
-    // Always execute to allow clearing (sending empty strings)
+    return apply_uname_common(HYMO_IOC_SET_UNAME, release, version, "set_uname (scoped)");
+}
+
+static bool apply_uname_common(unsigned long cmd, const std::string& release,
+                               const std::string& version, const char* label) {
     struct hymo_spoof_uname uname_data;
     memset(&uname_data, 0, sizeof(uname_data));
 
@@ -363,23 +370,39 @@ bool HymoFS::set_uname(const std::string& release, const std::string& version) {
         strncpy(uname_data.release, release.c_str(), HYMO_UNAME_LEN - 1);
         uname_data.release[HYMO_UNAME_LEN - 1] = '\0';
     }
-
     if (!version.empty()) {
         strncpy(uname_data.version, version.c_str(), HYMO_UNAME_LEN - 1);
         uname_data.version[HYMO_UNAME_LEN - 1] = '\0';
     }
 
-    LOG_VERBOSE("HymoFS: Setting uname: release=\"" + release + "\", version=\"" + version + "\"");
-    bool ret = hymo_execute_cmd(HYMO_IOC_SET_UNAME, &uname_data) == 0;
+    LOG_VERBOSE(std::string("HymoFS: ") + label + ": release=\"" + release + "\", version=\"" +
+                version + "\"");
+    bool ret = hymo_execute_cmd(cmd, &uname_data) == 0;
     if (!ret) {
         if (errno == EOPNOTSUPP) {
-            LOG_VERBOSE("HymoFS: uname spoofing not supported by kernel (LKM build)");
+            LOG_VERBOSE(std::string("HymoFS: ") + label +
+                        " not supported by kernel (LKM build / protocol < 15)");
         } else {
-            LOG_ERROR("HymoFS: set_uname failed: " + std::string(strerror(errno)));
+            LOG_ERROR(std::string("HymoFS: ") + label + " failed: " + std::string(strerror(errno)));
         }
     } else {
-        LOG_VERBOSE("HymoFS: set_uname success");
+        LOG_VERBOSE(std::string("HymoFS: ") + label + " success");
     }
+    return ret;
+}
+
+bool HymoFS::set_uname_global(const std::string& release, const std::string& version) {
+    return apply_uname_common(HYMO_IOC_SET_UNAME_GLOBAL, release, version, "set_uname_global");
+}
+
+bool HymoFS::restore_uname_global() {
+    /* All-empty struct signals the kernel to restore the captured originals. */
+    struct hymo_spoof_uname uname_data;
+    memset(&uname_data, 0, sizeof(uname_data));
+    LOG_VERBOSE("HymoFS: restore_uname_global");
+    bool ret = hymo_execute_cmd(HYMO_IOC_SET_UNAME_GLOBAL, &uname_data) == 0;
+    if (!ret && errno != EOPNOTSUPP)
+        LOG_ERROR("HymoFS: restore_uname_global failed: " + std::string(strerror(errno)));
     return ret;
 }
 
@@ -477,6 +500,37 @@ bool HymoFS::add_maps_rule(unsigned long target_ino, unsigned long target_dev,
         return false;
     }
     return true;
+}
+
+static bool issue_spoof_kstat(unsigned long cmd, const struct hymo_spoof_kstat& src,
+                              const char* label) {
+    struct hymo_spoof_kstat k = src;  // local mutable copy (kernel writes back .err)
+    k.target_pathname[HYMO_MAX_LEN_PATHNAME - 1] = '\0';
+    k.err = 0;
+
+    LOG_VERBOSE(std::string("HymoFS: ") + label + " path=" + std::string(k.target_pathname) +
+                " ino=" + std::to_string(k.target_ino) +
+                " -> spoof_ino=" + std::to_string(k.spoofed_ino));
+
+    int ret = hymo_execute_cmd(cmd, &k);
+    if (ret != 0) {
+        LOG_ERROR(std::string("HymoFS: ") + label +
+                  " ioctl failed: " + std::string(strerror(errno)));
+        return false;
+    }
+    if (k.err != 0) {
+        LOG_ERROR(std::string("HymoFS: ") + label + " kernel err=" + std::to_string(k.err));
+        return false;
+    }
+    return true;
+}
+
+bool HymoFS::add_spoof_kstat(const struct hymo_spoof_kstat& k) {
+    return issue_spoof_kstat(HYMO_IOC_ADD_SPOOF_KSTAT, k, "add_spoof_kstat");
+}
+
+bool HymoFS::update_spoof_kstat(const struct hymo_spoof_kstat& k) {
+    return issue_spoof_kstat(HYMO_IOC_UPDATE_SPOOF_KSTAT, k, "update_spoof_kstat");
 }
 
 bool HymoFS::clear_maps_rules() {

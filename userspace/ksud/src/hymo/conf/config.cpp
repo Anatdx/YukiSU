@@ -75,6 +75,11 @@ Config Config::from_file(const fs::path& path) {
                 config.uname_release = o.at("uname_release").as_string();
             if (o.count("uname_version"))
                 config.uname_version = o.at("uname_version").as_string();
+            if (o.count("uname_mode")) {
+                std::string mode = o.at("uname_mode").as_string();
+                if (mode == "scoped" || mode == "global")
+                    config.uname_mode = mode;
+            }
 
             if (o.count("partitions") && o.at("partitions").type == json::Type::Array) {
                 for (const auto& p : o.at("partitions").as_array()) {
@@ -123,6 +128,8 @@ bool Config::save_to_file(const fs::path& path) const {
         root["uname_release"] = json::Value(uname_release);
     if (!uname_version.empty())
         root["uname_version"] = json::Value(uname_version);
+    if (!uname_mode.empty() && uname_mode != "scoped")
+        root["uname_mode"] = json::Value(uname_mode);
 
     if (!partitions.empty()) {
         json::Value parts = json::Value::array();

@@ -36,7 +36,15 @@ public:
     static bool set_debug(bool enable);
     static bool set_stealth(bool enable);
     static bool set_enabled(bool enable);
+    /* Scoped uname spoof: applied per-task to hymo-hidden uids (CLONE_NEWUTS lazy unshare). */
     static bool set_uname(const std::string& release, const std::string& version);
+
+    /* Global uname spoof: rewrites init_uts_ns in place. Affects every task that still shares it
+     * (almost all of Android userspace). Requires protocol >= 15. */
+    static bool set_uname_global(const std::string& release, const std::string& version);
+
+    /* Restore originals captured on first global apply. Requires protocol >= 15. */
+    static bool restore_uname_global();
     static bool fix_mounts();
     static bool hide_overlay_xattrs(const std::string& path);
 
@@ -49,6 +57,13 @@ public:
                               unsigned long spoofed_ino, unsigned long spoofed_dev,
                               const std::string& spoofed_pathname);
     static bool clear_maps_rules();
+
+    /* Explicit kstat spoof (api15). Path is required; target_ino is optional —
+     * kernel auto-resolves it from the path if zero. Spoofed fields default to
+     * zero, which means "leave that field untouched". Returns false on ioctl
+     * error. Idempotent: re-issuing for the same path overwrites in place. */
+    static bool add_spoof_kstat(const struct hymo_spoof_kstat& k);
+    static bool update_spoof_kstat(const struct hymo_spoof_kstat& k);
 
     // Release cached anon-fd/session so module refs can drain before unload.
     static void release_connection();

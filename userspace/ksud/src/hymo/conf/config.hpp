@@ -60,6 +60,9 @@ struct Config {
     std::string mirror_path;
     std::string uname_release;
     std::string uname_version;
+    /* "scoped" (default): per-task uts_ns unshare, only hymo-hidden uids see fake values.
+     * "global": rewrites init_uts_ns — all tasks see fake values. Requires protocol >= 15. */
+    std::string uname_mode = "scoped";
     std::vector<std::string> partitions;
     std::map<std::string, std::string> module_modes;
     std::map<std::string, std::vector<ModuleRuleConfig>> module_rules;

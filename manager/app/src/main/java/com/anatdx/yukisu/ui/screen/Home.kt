@@ -1170,8 +1170,10 @@ private fun KernelSpoofDialog(
 
     var unameRelease by remember { mutableStateOf("") }
     var unameVersion by remember { mutableStateOf("") }
+    var unameMode by remember { mutableStateOf("scoped") }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
     var loadFromSysfsTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -1179,6 +1181,7 @@ private fun KernelSpoofDialog(
         val config = HymoFSManager.loadConfig()
         unameRelease = config.unameRelease
         unameVersion = config.unameVersion
+        unameMode = config.unameMode.ifBlank { "scoped" }
         loading = false
     }
 
@@ -1230,6 +1233,56 @@ private fun KernelSpoofDialog(
                     ) {
                         Text(stringResource(R.string.hymofs_uname_use_current))
                     }
+
+                    Text(
+                        text = stringResource(R.string.hymofs_uname_mode),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = unameMode == "scoped",
+                            onClick = { unameMode = "scoped" },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        ) { Text(stringResource(R.string.hymofs_uname_mode_scoped)) }
+                        SegmentedButton(
+                            selected = unameMode == "global",
+                            onClick = { unameMode = "global" },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        ) { Text(stringResource(R.string.hymofs_uname_mode_global)) }
+                    }
+                    Text(
+                        text = stringResource(
+                            if (unameMode == "global") R.string.hymofs_uname_mode_global_desc
+                            else R.string.hymofs_uname_mode_scoped_desc
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    if (unameMode == "global") {
+                        OutlinedButton(
+                            onClick = {
+                                if (restoring || saving) return@OutlinedButton
+                                restoring = true
+                                scope.launch {
+                                    val ok = HymoFSManager.restoreUnameGlobal()
+                                    restoring = false
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            if (ok) R.string.hymofs_uname_restored
+                                            else R.string.hymofs_uname_restore_failed
+                                        ),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            enabled = !saving && !restoring,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.hymofs_uname_restore))
+                        }
+                    }
                 }
             }
         },
@@ -1248,11 +1301,16 @@ private fun KernelSpoofDialog(
                         val config = HymoFSManager.loadConfig()
                         val updated = config.copy(
                             unameRelease = unameRelease.trim(),
-                            unameVersion = unameVersion.trim()
+                            unameVersion = unameVersion.trim(),
+                            unameMode = unameMode,
                         )
                         val ok = HymoFSManager.saveConfig(updated)
                         if (ok && unameRelease.isNotBlank() && unameVersion.isNotBlank()) {
-                            HymoFSManager.setUname(unameRelease.trim(), unameVersion.trim())
+                            HymoFSManager.setUname(
+                                unameRelease.trim(),
+                                unameVersion.trim(),
+                                unameMode,
+                            )
                         }
                         saving = false
                         if (ok) {
