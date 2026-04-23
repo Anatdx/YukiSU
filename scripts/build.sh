@@ -245,7 +245,11 @@ ls -la "$APK_DIR"/*.apk 2>/dev/null || true
 echo ""
 
 if [[ "$DO_INSTALL" == "true" ]]; then
-	APK_FILE=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)
+	apk_files=("$APK_DIR"/*.apk)
+	APK_FILE=""
+	if [[ ${#apk_files[@]} -gt 0 ]]; then
+		APK_FILE="${apk_files[0]}"
+	fi
 	if [[ -n "$APK_FILE" ]]; then
 		echo ">>> 安装到设备 ..."
 		adb install -r "$APK_FILE" && echo "APK 安装成功" || echo "APK 安装失败"
