@@ -2,6 +2,11 @@ name: Build LKM for HymoFS
 on:
   workflow_call:
     inputs:
+      hymofs_ref:
+        description: "Override HymoFS git ref (branch/tag/commit); auto-selects dev on feat/hymofs* refs when empty"
+        required: false
+        default: ""
+        type: string
       full_archs:
         description: "Reserved input; DDK workflow currently builds arm64 only"
         required: false
@@ -9,6 +14,11 @@ on:
         type: boolean
   workflow_dispatch:
     inputs:
+      hymofs_ref:
+        description: "Override HymoFS git ref (branch/tag/commit); leave empty to auto-select"
+        required: false
+        default: ""
+        type: string
       full_archs:
         description: "Reserved input; DDK workflow currently builds arm64 only"
         required: false
@@ -34,4 +44,5 @@ jobs:
     with:
       kmi: ${{ matrix.kmi }}
       arch: ${{ matrix.arch }}
+      hymofs_ref: ${{ inputs.hymofs_ref || (startsWith(github.head_ref || github.ref_name, 'feat/hymofs') && 'dev' || 'main') }}
       ddk_release: '20251104'
