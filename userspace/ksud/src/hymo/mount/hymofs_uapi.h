@@ -2,11 +2,13 @@
 /*
  * HymoFS - userspace/kernel shared definitions (ioctl, protocol, constants).
  *
- * License: Author's work under Apache-2.0; when used with the kernel or LKM,
- * GPL-2.0 applies for kernel compatibility.
+ * License: Author's work under Apache-2.0; when used as a kernel module
+ * (or linked with the Linux kernel), GPL-2.0 applies for kernel compatibility.
+ *
+ * Author: Anatdx
  */
-#ifndef _LINUX_HYMO_MAGIC_H
-#define _LINUX_HYMO_MAGIC_H
+#ifndef _HYMOFS_UAPI_H
+#define _HYMOFS_UAPI_H
 
 #ifdef __KERNEL__
 #include <linux/bits.h>
@@ -16,7 +18,19 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
-#endif  // #ifdef __KERNEL__
+
+#ifndef __u32
+#define __u32 uint32_t
+#endif  // #ifndef __u32
+
+#ifndef __aligned_u64
+#if defined(__GNUC__)
+#define __aligned_u64 uint64_t __attribute__((aligned(8)))
+#else
+#define __aligned_u64 uint64_t
+#endif  // #if defined(__GNUC__)
+#endif  // #ifndef __aligned_u64
+#endif  /* #ifdef __KERNEL__ */
 
 #define HYMO_MAGIC1 0x48594D4F  // "HYMO"
 #define HYMO_MAGIC2 0x524F4F54  // "ROOT"
@@ -45,7 +59,7 @@
 /* Marks an inode as having shadow inode_operations installed (lookup-time i_op override) */
 #define AS_FLAGS_HYMO_IOP_INSTALLED 44
 #define BIT_HYMO_IOP_INSTALLED BIT(44)
-#endif  // #ifdef __KERNEL__
+#endif /* #ifdef __KERNEL__ */
 
 /* Syscall number: 142 = SYS_reboot on aarch64; we kprobe __arm64_sys_reboot (5.10 compatible). */
 #define HYMO_SYSCALL_NR 142
@@ -132,6 +146,8 @@ struct hymo_spoof_cmdline {
     (1 << 7) /* spoof ino/dev/pathname in /proc/pid/maps (read buffer filter) */
 #define HYMO_FEATURE_STATFS_SPOOF \
     (1 << 8) /* spoof statfs f_type so direct matches resolved (INCONSISTENT_MOUNT) */
+#define HYMO_FEATURE_FAKE_MOUNTINFO \
+    (1 << 9) /* serve per-marked-app fake mountinfo (no KSU mounts, renumbered ids) */
 
 /*
  * Maps spoof rule: when a /proc/pid/maps line has (target_ino[, target_dev]),
@@ -208,4 +224,4 @@ struct hymo_statfs_spoof_arg {
  */
 #define HYMO_IOC_SET_UNAME_GLOBAL _IOW(HYMO_IOC_MAGIC, 28, struct hymo_spoof_uname)
 
-#endif /* _LINUX_HYMO_MAGIC_H */
+#endif /* _HYMOFS_UAPI_H */

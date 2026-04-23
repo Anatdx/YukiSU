@@ -20,7 +20,7 @@
 namespace fs = std::filesystem;
 namespace hymo {
 
-// HYMO_SYSCALL_NR is provided by hymo_magic.h (api15+).
+// HYMO_SYSCALL_NR is provided by hymofs_uapi.h (api15+).
 static std::string g_lkm_last_error;
 
 static void set_lkm_last_error(const std::string& msg) {

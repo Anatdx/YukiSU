@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 #include "defs.hpp"
-#include "hymo_magic.h"
+#include "hymofs_uapi.h"
 
 namespace fs = std::filesystem;
 

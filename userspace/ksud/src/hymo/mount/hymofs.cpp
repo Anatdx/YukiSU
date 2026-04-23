@@ -12,7 +12,7 @@
 #include <string>
 #include <thread>
 #include "../utils.hpp"
-#include "hymo_magic.h"
+#include "hymofs_uapi.h"
 
 namespace hymo {
 
