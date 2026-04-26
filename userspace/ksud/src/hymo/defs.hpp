@@ -19,7 +19,7 @@ constexpr const char* MOUNT_STATS_FILE = HYMO_DATA_DIR "/run/mount_stats.json";
 constexpr const char* DAEMON_LOG_FILE = HYMO_DATA_DIR "/daemon.log";
 constexpr const char* SYSTEM_RW_DIR = HYMO_DATA_DIR "/rw";
 constexpr const char* MODULE_PROP_FILE = HYMO_MODULE_DIR "/module.prop";
-constexpr const char* LKM_KO = HYMO_MODULE_DIR "/hymofs_lkm.ko";
+constexpr const char* LKM_KO = HYMO_MODULE_DIR "/kasumi_lkm.ko";
 constexpr const char* LKM_AUTOLOAD_FILE = HYMO_DATA_DIR "/lkm_autoload";
 constexpr const char* LKM_KMI_OVERRIDE_FILE = HYMO_DATA_DIR "/lkm_kmi_override";
 constexpr const char* USER_HIDE_RULES_FILE = HYMO_DATA_DIR "/user_hide_rules.json";
@@ -51,7 +51,7 @@ constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
 constexpr uint32_t KSU_IOCTL_NUKE_EXT4_SYSFS = 0x40004b11;
 constexpr uint32_t KSU_IOCTL_ADD_TRY_UMOUNT = 0x40004b12;
 
-// HymoFS Devices
-constexpr const char* HYMO_MIRROR_DEV = "/dev/hymo_mirror";
+// Kasumi devices
+constexpr const char* KASUMI_MIRROR_DEV = "/dev/kasumi_mirror";
 
 }  // namespace hymo

@@ -3,19 +3,19 @@
 #include <filesystem>
 #include <string>
 #include "defs.hpp"
-#include "hymofs_uapi.h"
+#include "kasumi_uapi.h"
 
 namespace fs = std::filesystem;
 
 namespace hymo {
 
-enum class HymoFSStatus { Available, NotPresent, KernelTooOld, ModuleTooOld };
+enum class KasumiStatus { Available, NotPresent, KernelTooOld, ModuleTooOld };
 
-class HymoFS {
+class Kasumi {
 public:
-    static constexpr int EXPECTED_PROTOCOL_VERSION = HYMO_PROTOCOL_VERSION;
+    static constexpr int EXPECTED_PROTOCOL_VERSION = KSM_PROTOCOL_VERSION;
 
-    static HymoFSStatus check_status();
+    static KasumiStatus check_status();
     static bool is_available();
     static int get_protocol_version();
     static bool clear_rules();
@@ -49,7 +49,7 @@ public:
     static bool hide_overlay_xattrs(const std::string& path);
 
     // /proc/pid/maps spoof (hymo_maps): add rule or clear all
-    static int get_features();  // bitmask (HYMO_FEATURE_*) or -1 on error
+    static int get_features();  // bitmask (KSM_FEATURE_*) or -1 on error
     static bool set_mount_hide(bool enable);
     static bool set_maps_spoof(bool enable);
     static bool set_statfs_spoof(bool enable);
@@ -62,8 +62,8 @@ public:
      * kernel auto-resolves it from the path if zero. Spoofed fields default to
      * zero, which means "leave that field untouched". Returns false on ioctl
      * error. Idempotent: re-issuing for the same path overwrites in place. */
-    static bool add_spoof_kstat(const struct hymo_spoof_kstat& k);
-    static bool update_spoof_kstat(const struct hymo_spoof_kstat& k);
+    static bool add_spoof_kstat(const struct kasumi_spoof_kstat& k);
+    static bool update_spoof_kstat(const struct kasumi_spoof_kstat& k);
 
     // Release cached anon-fd/session so module refs can drain before unload.
     static void release_connection();

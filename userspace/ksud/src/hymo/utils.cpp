@@ -516,7 +516,7 @@ static bool is_dangerous_temp_path(const fs::path& path, bool allow_dev_mirror) 
         return true;
     }
 
-    if (allow_dev_mirror && (p == "/dev/hymo_mirror" || p.rfind("/dev/hymo_mirror/", 0) == 0)) {
+    if (allow_dev_mirror && (p == "/dev/kasumi_mirror" || p.rfind("/dev/kasumi_mirror/", 0) == 0)) {
         return false;
     }
 

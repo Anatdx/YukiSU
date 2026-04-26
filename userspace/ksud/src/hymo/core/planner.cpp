@@ -9,7 +9,7 @@
 #include <map>
 #include <set>
 #include "../defs.hpp"
-#include "../mount/hymofs.hpp"
+#include "../mount/kasumi.hpp"
 #include "../utils.hpp"
 #include "user_rules.hpp"
 
@@ -40,13 +40,13 @@ unsigned long stable_spoof_ino(const std::string& path) {
 // Push an explicit kstat spoof for `virtual_path` so vfs_getattr returns
 // /system-like dev/ino. Best-effort: failures are logged but non-fatal.
 void push_spoof_kstat(const std::string& virtual_path) {
-    struct hymo_spoof_kstat k{};
-    strncpy(k.target_pathname, virtual_path.c_str(), HYMO_MAX_LEN_PATHNAME - 1);
-    k.target_pathname[HYMO_MAX_LEN_PATHNAME - 1] = '\0';
+    struct kasumi_spoof_kstat k{};
+    strncpy(k.target_pathname, virtual_path.c_str(), KSM_MAX_LEN_PATHNAME - 1);
+    k.target_pathname[KSM_MAX_LEN_PATHNAME - 1] = '\0';
     k.spoofed_dev = resolve_system_dev();
     k.spoofed_ino = stable_spoof_ino(virtual_path);
     k.is_static = 1;
-    HymoFS::add_spoof_kstat(k);
+    Kasumi::add_spoof_kstat(k);
 }
 
 }  // namespace
@@ -94,7 +94,7 @@ static bool has_meaningful_content(const fs::path& base,
 }
 
 // Helper: Resolve symlinks in directory symlinks but preserve filename logic
-static std::string resolve_path_for_hymofs(const std::string& path_str) {
+static std::string resolve_path_for_kasumi(const std::string& path_str) {
     try {
         fs::path p(path_str);
         if (!p.has_parent_path())
@@ -143,10 +143,10 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
         target_partitions.push_back(part);
     }
 
-    HymoFSStatus status = HymoFS::check_status();
-    bool use_hymofs = (status == HymoFSStatus::Available) ||
-                      (config.ignore_protocol_mismatch && (status == HymoFSStatus::KernelTooOld ||
-                                                           status == HymoFSStatus::ModuleTooOld));
+    KasumiStatus status = Kasumi::check_status();
+    bool use_kasumi = (status == KasumiStatus::Available) ||
+                      (config.ignore_protocol_mismatch && (status == KasumiStatus::KernelTooOld ||
+                                                           status == KasumiStatus::ModuleTooOld));
 
     for (const auto& module : modules) {
         fs::path content_path = storage_root / module.id;
@@ -159,7 +159,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
         // Determine default mode
         std::string default_mode = module.mode;
         if (default_mode == "auto")
-            default_mode = use_hymofs ? "hymofs" : "overlay";
+            default_mode = use_kasumi ? "kasumi" : "overlay";
 
         bool has_rules = !module.rules.empty();
 
@@ -176,8 +176,8 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
 
             bool force_overlay = (default_mode == "overlay");
 
-            if (use_hymofs && !force_overlay) {
-                plan.hymofs_module_ids.push_back(module.id);
+            if (use_kasumi && !force_overlay) {
+                plan.kasumi_module_ids.push_back(module.id);
             } else {
                 // Fallback to OverlayFS or Forced OverlayFS
                 bool participates_in_overlay = false;
@@ -195,7 +195,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
             }
         } else {
             // Mixed mode handling
-            bool hymofs_active = false;
+            bool kasumi_active = false;
             bool overlay_active = false;
             bool magic_active = false;
 
@@ -259,13 +259,13 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
                                 magic_paths.insert(entry.path());
                                 magic_active = true;
                             }
-                        } else if (mode == "hymofs") {
-                            // Will be handled by update_hymofs_mappings
+                        } else if (mode == "kasumi") {
+                            // Will be handled by update_kasumi_mappings
                         }
                     }
 
-                    if (mode == "hymofs") {
-                        hymofs_active = true;
+                    if (mode == "kasumi") {
+                        kasumi_active = true;
                     }
                 }
             }
@@ -277,8 +277,8 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
                 magic_ids.insert(module.id);
             }
 
-            if (hymofs_active) {
-                plan.hymofs_module_ids.push_back(module.id);
+            if (kasumi_active) {
+                plan.kasumi_module_ids.push_back(module.id);
             }
             if (overlay_active) {
                 overlay_ids.insert(module.id);
@@ -286,7 +286,7 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
         }
     }
 
-    // Construct Overlay Operations (only if not using HymoFS)
+    // Construct Overlay Operations (only if not using Kasumi)
     for (auto& [target, layers] : overlay_layers) {
         if (layers.empty())
             continue;
@@ -324,13 +324,13 @@ struct AddRule {
     int type;
 };
 
-void update_hymofs_mappings(const Config& config, const std::vector<Module>& modules,
+void update_kasumi_mappings(const Config& config, const std::vector<Module>& modules,
                             const fs::path& storage_root, MountPlan& plan) {
-    if (!HymoFS::is_available())
+    if (!Kasumi::is_available())
         return;
 
     // Clear existing mappings
-    HymoFS::clear_rules();
+    Kasumi::clear_rules();
 
     std::vector<std::string> target_partitions = BUILTIN_PARTITIONS;
     for (const auto& part : config.partitions) {
@@ -343,19 +343,19 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
 
     // Process explicit hide rules from module configuration
     for (const auto& module : modules) {
-        bool is_hymofs = false;
-        for (const auto& id : plan.hymofs_module_ids) {
+        bool is_kasumi = false;
+        for (const auto& id : plan.kasumi_module_ids) {
             if (id == module.id) {
-                is_hymofs = true;
+                is_kasumi = true;
                 break;
             }
         }
-        if (!is_hymofs)
+        if (!is_kasumi)
             continue;
 
         for (const auto& rule : module.rules) {
             if (rule.mode == "hide") {
-                hide_rules.push_back(resolve_path_for_hymofs(rule.path));
+                hide_rules.push_back(resolve_path_for_kasumi(rule.path));
             }
         }
     }
@@ -365,14 +365,14 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
     for (auto it = modules.rbegin(); it != modules.rend(); ++it) {
         const auto& module = *it;
 
-        bool is_hymofs = false;
-        for (const auto& id : plan.hymofs_module_ids) {
+        bool is_kasumi = false;
+        for (const auto& id : plan.kasumi_module_ids) {
             if (id == module.id) {
-                is_hymofs = true;
+                is_kasumi = true;
                 break;
             }
         }
-        if (!is_hymofs)
+        if (!is_kasumi)
             continue;
 
         fs::path mod_path = storage_root / module.id;
@@ -380,8 +380,8 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
         // Determine default mode for this module
         std::string default_mode = module.mode;
         if (default_mode == "auto")
-            default_mode = "hymofs";  // If it's in hymofs_module_ids, default is
-                                      // effectively hymofs unless overridden
+            default_mode = "kasumi";  // If it's in kasumi_module_ids, default is
+                                      // effectively kasumi unless overridden
 
         for (const auto& part : target_partitions) {
             fs::path part_root = mod_path / part;
@@ -411,8 +411,8 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                         }
                     }
 
-                    // If mode is NOT hymofs, skip this file
-                    if (mode != "hymofs" && mode != "auto") {
+                    // If mode is NOT kasumi, skip this file
+                    if (mode != "kasumi" && mode != "auto") {
                         continue;
                     }
 
@@ -454,7 +454,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
 
                     if (entry.is_directory()) {
                         std::string final_virtual_path =
-                            resolve_path_for_hymofs(virtual_path.string());
+                            resolve_path_for_kasumi(virtual_path.string());
                         if (fs::exists(final_virtual_path) &&
                             fs::is_directory(final_virtual_path)) {
                             merge_rules.push_back(
@@ -491,7 +491,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                             type = DT_SOCK;
 
                         std::string final_virtual_path =
-                            resolve_path_for_hymofs(virtual_path.string());
+                            resolve_path_for_kasumi(virtual_path.string());
                         add_rules.push_back({final_virtual_path, entry.path().string(), type});
                     } else if (entry.is_character_file()) {
                         // Check for whiteout (0:0)
@@ -499,7 +499,7 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
                         if (stat(entry.path().c_str(), &st) == 0) {
                             if (major(st.st_rdev) == 0 && minor(st.st_rdev) == 0) {
                                 hide_rules.push_back(
-                                    resolve_path_for_hymofs(virtual_path.string()));
+                                    resolve_path_for_kasumi(virtual_path.string()));
                             }
                         }
                     }
@@ -512,14 +512,14 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
 
     // Apply rules: Add files first (auto-injects parents), then hide
     for (const auto& rule : add_rules) {
-        HymoFS::add_rule(rule.src, rule.target, rule.type);
+        Kasumi::add_rule(rule.src, rule.target, rule.type);
         // api15: register spoof against the MIRROR path. After getname-redirect,
         // vfs_getattr operates on the mirror inode, so the entry handler's
         // path/ino lookup must key off the mirror — not the virtual src.
         push_spoof_kstat(rule.target);
     }
     for (const auto& rule : merge_rules) {
-        HymoFS::add_merge_rule(rule.src, rule.target);
+        Kasumi::add_merge_rule(rule.src, rule.target);
         // Merge dirs aren't redirected wholesale, but their listed children come
         // from the mirror. Register both so the parent dir stat also looks like
         // /system, and per-child stats hit via ino lookup at registration time.
@@ -527,18 +527,18 @@ void update_hymofs_mappings(const Config& config, const std::vector<Module>& mod
         push_spoof_kstat(rule.target);
     }
     for (const auto& path : hide_rules) {
-        HymoFS::hide_path(path);
+        Kasumi::hide_path(path);
     }
 
     // Apply user-defined hide rules
     apply_user_hide_rules();
 
-    // Activate rules: we just added them, kernel must have hymofs_enabled=true for
-    // redirect/hide to take effect. Do not use config.hymofs_enabled here — if we
-    // reached update_hymofs_mappings we intend to use HymoFS.
-    HymoFS::set_enabled(true);
+    // Activate rules: we just added them, kernel must have kasumi_enabled=true for
+    // redirect/hide to take effect. Do not use config.kasumi_enabled here — if we
+    // reached update_kasumi_mappings we intend to use Kasumi.
+    Kasumi::set_enabled(true);
 
-    LOG_INFO("HymoFS mappings updated.");
+    LOG_INFO("Kasumi mappings updated.");
 }
 
 }  // namespace hymo

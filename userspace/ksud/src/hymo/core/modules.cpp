@@ -4,7 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include "../defs.hpp"
-#include "../mount/hymofs.hpp"
+#include "../mount/kasumi.hpp"
 #include "../utils.hpp"
 #include "inventory.hpp"
 #include "json.hpp"  // Changed include
@@ -23,8 +23,8 @@ static bool has_content(const fs::path& module_path,
 }
 
 void update_module_description(bool success, const std::string& storage_mode, bool nuke_active,
-                               size_t overlay_count, size_t magic_count, size_t hymofs_count,
-                               const std::string& warning_msg, bool hymofs_active) {
+                               size_t overlay_count, size_t magic_count, size_t kasumi_count,
+                               const std::string& warning_msg, bool kasumi_active) {
     if (!fs::exists(MODULE_PROP_FILE)) {
         LOG_WARN("module.prop not found, skipping update");
         return;
@@ -38,7 +38,7 @@ void update_module_description(bool success, const std::string& storage_mode, bo
     }
     desc << " | ";
     desc << "fs: " << storage_mode << " | ";
-    desc << "Modules: " << hymofs_count << " HymoFS + " << overlay_count << " Overlay + "
+    desc << "Modules: " << kasumi_count << " Kasumi + " << overlay_count << " Overlay + "
          << magic_count << " Magic";
 
     if (!warning_msg.empty()) {
@@ -51,7 +51,7 @@ void update_module_description(bool success, const std::string& storage_mode, bo
     bool desc_updated = false;
     bool name_updated = false;
 
-    std::string new_name = hymofs_active ? "Hymo - HymoFS Enabled" : "Hymo";
+    std::string new_name = kasumi_active ? "Hymo - Kasumi Enabled" : "Hymo";
 
     while (std::getline(infile, line)) {
         if (line.find("description=") == 0) {
@@ -106,8 +106,8 @@ void print_module_list(const Config& config) {
     for (const auto& mod : filtered_modules) {
         std::string strategy = mod.mode;
         if (strategy == "auto") {
-            if (HymoFS::is_available())
-                strategy = "hymofs";
+            if (Kasumi::is_available())
+                strategy = "kasumi";
             else
                 strategy = "overlay";
         }

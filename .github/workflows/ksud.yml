@@ -37,25 +37,25 @@ jobs:
         set -euo pipefail
         mkdir -p ./userspace/ksud/assets
         cp android*-lkm/*_kernelsu.ko ./userspace/ksud/assets/ 2>/dev/null || true
-        # HymoFS: copy only arch-matching .ko (arm64/armv7/x86_64)
+        # Kasumi: copy only arch-matching .ko (arm64/armv7/x86_64)
         case "${{ inputs.target }}" in
           aarch64|aarch64-linux-android) arch_suffix="_arm64" ;;
           x86_64|x86_64-linux-android) arch_suffix="_x86_64" ;;
           armv7|armv7-linux-androideabi) arch_suffix="_armv7" ;;
           *) arch_suffix="_arm64" ;;
         esac
-        mapfile -t hymofs_assets < <(find . -type f -name "android*${arch_suffix}_hymofs_lkm.ko" | sort)
-        if [ "${#hymofs_assets[@]}" -gt 0 ]; then
-          cp "${hymofs_assets[@]}" ./userspace/ksud/assets/
+        mapfile -t kasumi_assets < <(find . -type f -name "android*${arch_suffix}_kasumi_lkm.ko" | sort)
+        if [ "${#kasumi_assets[@]}" -gt 0 ]; then
+          cp "${kasumi_assets[@]}" ./userspace/ksud/assets/
         fi
-        echo "HymoFS assets copied into ksud/assets:"
-        find ./userspace/ksud/assets -maxdepth 1 -type f -name "*${arch_suffix}_hymofs_lkm.ko" -print \
+        echo "Kasumi assets copied into ksud/assets:"
+        find ./userspace/ksud/assets -maxdepth 1 -type f -name "*${arch_suffix}_kasumi_lkm.ko" -print \
           | sed 's|^.*/||' | sort || true
         if [ "$arch_suffix" = "_arm64" ] && ! find ./userspace/ksud/assets -maxdepth 1 -type f \
-          -name "android*${arch_suffix}_hymofs_lkm.ko" | grep -q .; then
-          echo "::error::No KMI-tagged HymoFS assets were copied for ${arch_suffix}"
-          echo "Downloaded HymoFS-related files:"
-          find . -type f -name "*hymofs_lkm.ko" -print | sort || true
+          -name "android*${arch_suffix}_kasumi_lkm.ko" | grep -q .; then
+          echo "::error::No KMI-tagged Kasumi assets were copied for ${arch_suffix}"
+          echo "Downloaded Kasumi-related files:"
+          find . -type f -name "*kasumi_lkm.ko" -print | sort || true
           exit 1
         fi
     
@@ -130,12 +130,12 @@ jobs:
         # Show binary info
         ls -lh ksud
         file ksud
-        echo "Embedded HymoFS assets:"
-        strings ksud | grep -F '_hymofs_lkm.ko' | sort -u || true
+        echo "Embedded Kasumi assets:"
+        strings ksud | grep -F '_kasumi_lkm.ko' | sort -u || true
         case "${{ inputs.target }}" in
           aarch64-linux-android|aarch64)
-            if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_hymofs_lkm\.ko$'; then
-              echo "::error::Expected KMI-tagged embedded HymoFS assets were not found in ksud"
+            if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_kasumi_lkm\.ko$'; then
+              echo "::error::Expected KMI-tagged embedded Kasumi assets were not found in ksud"
               exit 1
             fi
             ;;

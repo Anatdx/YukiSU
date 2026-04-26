@@ -28,7 +28,7 @@
 #include "core/webui.hpp"
 #include "defs.hpp"
 #include "hymo_cli.hpp"
-#include "mount/hymofs.hpp"
+#include "mount/kasumi.hpp"
 #include "utils.hpp"
 
 namespace fs = std::filesystem;
@@ -52,7 +52,7 @@ void print_help() {
     std::cout << "Usage: ksud hymo [OPTIONS] <command> [args...]\n\n";
     std::cout << "Main Commands:\n";
     std::cout << "  mount              Mount all modules (default action)\n";
-    std::cout << "  clear              Clear all HymoFS mappings\n";
+    std::cout << "  clear              Clear all Kasumi mappings\n";
     std::cout << "  fix-mounts         Fix mount namespace issues\n\n";
 
     std::cout << "Configuration Commands (config <subcommand>):\n";
@@ -63,29 +63,29 @@ void print_help() {
 
     std::cout << "Module Commands (module <subcommand>):\n";
     std::cout << "  module list        List all modules\n";
-    std::cout << "  module add <id>    Add module to HymoFS\n";
-    std::cout << "  module delete <id> Delete module from HymoFS\n";
+    std::cout << "  module add <id>    Add module to Kasumi\n";
+    std::cout << "  module delete <id> Delete module from Kasumi\n";
     std::cout << "  module hot-mount <id>    Hot mount a module\n";
     std::cout << "  module hot-unmount <id>  Hot unmount a module\n";
-    std::cout << "  module set-mode <id> <mode>  Set mount mode (auto/hymofs/overlay/magic/none)\n";
+    std::cout << "  module set-mode <id> <mode>  Set mount mode (auto/kasumi/overlay/magic/none)\n";
     std::cout << "  module add-rule <id> <path> <mode>  Add custom mount rule\n";
     std::cout << "  module remove-rule <id> <path>  Remove custom mount rule\n";
     std::cout << "  module check-conflicts  Check for file conflicts between modules\n\n";
 
-    std::cout << "HymoFS Commands (hymofs <subcommand>):\n";
-    std::cout << "  hymofs enable      Enable HymoFS (Protocol 11+)\n";
-    std::cout << "  hymofs disable     Disable HymoFS\n";
-    std::cout << "  hymofs list        List all active HymoFS rules\n";
-    std::cout << "  hymofs version     Show HymoFS protocol version\n";
+    std::cout << "Kasumi Commands (kasumi <subcommand>):\n";
+    std::cout << "  kasumi enable      Enable Kasumi (Protocol 11+)\n";
+    std::cout << "  kasumi disable     Disable Kasumi\n";
+    std::cout << "  kasumi list        List all active Kasumi rules\n";
+    std::cout << "  kasumi version     Show Kasumi protocol version\n";
     std::cout
-        << "  hymofs features    Show HymoFS feature bitmask (mount_hide, maps_spoof, etc.)\n";
-    std::cout << "  hymofs mount-hide on|off   Enable/disable overlay mount hiding\n";
-    std::cout << "  hymofs maps-spoof on|off  Enable/disable /proc/pid/maps spoofing\n";
-    std::cout << "  hymofs statfs-spoof on|off  Enable/disable statfs f_type spoofing\n";
-    std::cout << "  hymofs set-mirror <path>  Set custom mirror path\n";
-    std::cout << "  hymofs maps clear  Clear all /proc/pid/maps spoof rules\n";
-    std::cout << "  hymofs maps add <t_ino> <t_dev> <s_ino> <s_dev> <path>  Add maps spoof rule\n";
-    std::cout << "  hymofs raw <cmd> ...  Execute raw HymoFS command\n\n";
+        << "  kasumi features    Show Kasumi feature bitmask (mount_hide, maps_spoof, etc.)\n";
+    std::cout << "  kasumi mount-hide on|off   Enable/disable overlay mount hiding\n";
+    std::cout << "  kasumi maps-spoof on|off  Enable/disable /proc/pid/maps spoofing\n";
+    std::cout << "  kasumi statfs-spoof on|off  Enable/disable statfs f_type spoofing\n";
+    std::cout << "  kasumi set-mirror <path>  Set custom mirror path\n";
+    std::cout << "  kasumi maps clear  Clear all /proc/pid/maps spoof rules\n";
+    std::cout << "  kasumi maps add <t_ino> <t_dev> <s_ino> <s_dev> <path>  Add maps spoof rule\n";
+    std::cout << "  kasumi raw <cmd> ...  Execute raw Kasumi command\n\n";
 
     std::cout << "API Commands (api <subcommand>) - JSON output for WebUI:\n";
     std::cout << "  api system         Complete system info with stats\n";
@@ -95,9 +95,9 @@ void print_help() {
     std::cout << "  api lkm            LKM status (loaded, autoload) for WebUI\n";
     std::cout << "  api hooks          List currently used LKM hooks\n\n";
 
-    std::cout << "LKM Commands (lkm <subcommand>) - HymoFS kernel module:\n";
-    std::cout << "  lkm load           Load HymoFS kernel module\n";
-    std::cout << "  lkm unload         Unload HymoFS kernel module\n";
+    std::cout << "LKM Commands (lkm <subcommand>) - Kasumi kernel module:\n";
+    std::cout << "  lkm load           Load Kasumi kernel module\n";
+    std::cout << "  lkm unload         Unload Kasumi kernel module\n";
     std::cout << "  lkm status         Show LKM status (loaded, autoload)\n";
     std::cout << "  lkm set-autoload on|off  Enable/disable load at boot\n";
     std::cout
@@ -136,7 +136,7 @@ void print_help() {
     std::cout << "  ksud hymo debug enable             # Enable debug mode\n";
 }
 
-// Helper to segregate custom rules (Overlay/Magic) from HymoFS source tree
+// Helper to segregate custom rules (Overlay/Magic) from Kasumi source tree
 void segregate_custom_rules(MountPlan& plan, const fs::path& mirror_dir) {
     const fs::path staging_dir = mirror_dir / ".overlay_staging";
 
@@ -282,7 +282,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
         enum class Command {
             CONFIG,
             MODULE,
-            HYMOFS,
+            KASUMI,
             API,
             DEBUG,
             HIDE,
@@ -299,8 +299,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 return Command::CONFIG;
             if (cmd == "module")
                 return Command::MODULE;
-            if (cmd == "hymofs")
-                return Command::HYMOFS;
+            if (cmd == "kasumi")
+                return Command::KASUMI;
             if (cmd == "api")
                 return Command::API;
             if (cmd == "debug")
@@ -355,18 +355,18 @@ int hymo::run_hymo_main(int argc, char** argv) {
                           << ",\n";
                 std::cout << "  \"enable_hidexattr\": "
                           << (config.enable_hidexattr ? "true" : "false") << ",\n";
-                std::cout << "  \"hymofs_enabled\": " << (config.hymofs_enabled ? "true" : "false")
+                std::cout << "  \"kasumi_enabled\": " << (config.kasumi_enabled ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"uname_release\": \"" << config.uname_release << "\",\n";
                 std::cout << "  \"uname_version\": \"" << config.uname_version << "\",\n";
-                std::cout << "  \"hymofs_available\": "
-                          << (HymoFS::is_available() ? "true" : "false") << ",\n";
-                std::cout << "  \"hymofs_status\": " << (int)HymoFS::check_status() << ",\n";
+                std::cout << "  \"kasumi_available\": "
+                          << (Kasumi::is_available() ? "true" : "false") << ",\n";
+                std::cout << "  \"kasumi_status\": " << (int)Kasumi::check_status() << ",\n";
                 std::cout << "  \"lkm_autoload\": " << (lkm_get_autoload() ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"lkm_kmi_override\": \"" << lkm_get_kmi_override() << "\",\n";
-                std::cout << "  \"hymofs_builtin\": "
-                          << (HymoFS::is_available() && !lkm_is_loaded() ? "true" : "false")
+                std::cout << "  \"kasumi_builtin\": "
+                          << (Kasumi::is_available() && !lkm_is_loaded() ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"tmpfs_xattr_supported\": "
                           << (check_tmpfs_xattr() ? "true" : "false") << ",\n";
@@ -482,7 +482,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         const fs::path src_dir = module_path / part;
                         if (fs::exists(src_dir) && fs::is_directory(src_dir)) {
                             const fs::path target_base = fs::path("/") / part;
-                            if (HymoFS::add_rules_from_directory(target_base, src_dir)) {
+                            if (Kasumi::add_rules_from_directory(target_base, src_dir)) {
                                 if (config.verbose)
                                     std::cout << "Added rules for " << src_dir << "\n";
                                 success_count++;
@@ -496,14 +496,14 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                         RuntimeState state = load_runtime_state();
                         bool already_active = false;
-                        for (const auto& id : state.hymofs_module_ids) {
+                        for (const auto& id : state.kasumi_module_ids) {
                             if (id == module_id) {
                                 already_active = true;
                                 break;
                             }
                         }
                         if (!already_active) {
-                            state.hymofs_module_ids.push_back(module_id);
+                            state.kasumi_module_ids.push_back(module_id);
                             state.save();
                         }
                     } else {
@@ -514,7 +514,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         const fs::path src_dir = module_path / part;
                         if (fs::exists(src_dir) && fs::is_directory(src_dir)) {
                             const fs::path target_base = fs::path("/") / part;
-                            if (HymoFS::remove_rules_from_directory(target_base, src_dir)) {
+                            if (Kasumi::remove_rules_from_directory(target_base, src_dir)) {
                                 if (config.verbose)
                                     std::cout << "Deleted rules for " << src_dir << "\n";
                                 success_count++;
@@ -528,10 +528,10 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         LOG_INFO("CLI: Removed rules for module " + module_id);
 
                         RuntimeState state = load_runtime_state();
-                        auto it = std::remove(state.hymofs_module_ids.begin(),
-                                              state.hymofs_module_ids.end(), module_id);
-                        if (it != state.hymofs_module_ids.end()) {
-                            state.hymofs_module_ids.erase(it, state.hymofs_module_ids.end());
+                        auto it = std::remove(state.kasumi_module_ids.begin(),
+                                              state.kasumi_module_ids.end(), module_id);
+                        if (it != state.kasumi_module_ids.end()) {
+                            state.kasumi_module_ids.erase(it, state.kasumi_module_ids.end());
                             state.save();
                         }
                     } else {
@@ -574,7 +574,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         const fs::path src_dir = module_path / part;
                         if (fs::exists(src_dir) && fs::is_directory(src_dir)) {
                             const fs::path target_base = fs::path("/") / part;
-                            if (HymoFS::add_rules_from_directory(target_base, src_dir)) {
+                            if (Kasumi::add_rules_from_directory(target_base, src_dir)) {
                                 if (config.verbose)
                                     std::cout << "Added rules for " << src_dir << "\n";
                                 success_count++;
@@ -588,14 +588,14 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                         RuntimeState state = load_runtime_state();
                         bool already_active = false;
-                        for (const auto& id : state.hymofs_module_ids) {
+                        for (const auto& id : state.kasumi_module_ids) {
                             if (id == mod_id) {
                                 already_active = true;
                                 break;
                             }
                         }
                         if (!already_active) {
-                            state.hymofs_module_ids.push_back(mod_id);
+                            state.kasumi_module_ids.push_back(mod_id);
                             state.save();
                         }
                     } else {
@@ -620,7 +620,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     for (const auto& part : all_partitions) {
                         const fs::path src_dir = module_path / part;
                         const fs::path target_base = fs::path("/") / part;
-                        if (HymoFS::remove_rules_from_directory(target_base, src_dir)) {
+                        if (Kasumi::remove_rules_from_directory(target_base, src_dir)) {
                             success_count++;
                         }
                     }
@@ -630,10 +630,10 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         LOG_INFO("CLI: Hot unmounted module " + mod_id);
 
                         RuntimeState state = load_runtime_state();
-                        auto it = std::remove(state.hymofs_module_ids.begin(),
-                                              state.hymofs_module_ids.end(), mod_id);
-                        if (it != state.hymofs_module_ids.end()) {
-                            state.hymofs_module_ids.erase(it, state.hymofs_module_ids.end());
+                        auto it = std::remove(state.kasumi_module_ids.begin(),
+                                              state.kasumi_module_ids.end(), mod_id);
+                        if (it != state.kasumi_module_ids.end()) {
+                            state.kasumi_module_ids.erase(it, state.kasumi_module_ids.end());
                             state.save();
                         }
                     } else {
@@ -794,9 +794,9 @@ int hymo::run_hymo_main(int argc, char** argv) {
             }
         }
 
-        case Command::HYMOFS: {
+        case Command::KASUMI: {
             if (cli.args.empty()) {
-                std::cerr << "Usage: ksud hymo hymofs <enable|disable|list|version|features|"
+                std::cerr << "Usage: ksud hymo kasumi <enable|disable|list|version|features|"
                              "mount-hide|maps-spoof|statfs-spoof|set-mirror|maps|raw>\n";
                 return 1;
             }
@@ -804,7 +804,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             if (subcmd == "mount-hide" || subcmd == "maps-spoof" || subcmd == "statfs-spoof") {
                 if (cli.args.size() < 2) {
-                    std::cerr << "Usage: ksud hymo hymofs " << subcmd << " <on|off>\n";
+                    std::cerr << "Usage: ksud hymo kasumi " << subcmd << " <on|off>\n";
                     return 1;
                 }
                 const std::string& val = cli.args[1];
@@ -814,20 +814,20 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 } else if (val == "off" || val == "0" || val == "false") {
                     enable = false;
                 } else {
-                    std::cerr << "Usage: ksud hymo hymofs " << subcmd << " <on|off>\n";
+                    std::cerr << "Usage: ksud hymo kasumi " << subcmd << " <on|off>\n";
                     return 1;
                 }
-                if (!HymoFS::is_available()) {
-                    std::cerr << "HymoFS not available.\n";
+                if (!Kasumi::is_available()) {
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 bool ok = false;
                 if (subcmd == "mount-hide")
-                    ok = HymoFS::set_mount_hide(enable);
+                    ok = Kasumi::set_mount_hide(enable);
                 else if (subcmd == "maps-spoof")
-                    ok = HymoFS::set_maps_spoof(enable);
+                    ok = Kasumi::set_maps_spoof(enable);
                 else
-                    ok = HymoFS::set_statfs_spoof(enable);
+                    ok = Kasumi::set_statfs_spoof(enable);
                 if (ok) {
                     std::cout << subcmd << " " << (enable ? "on" : "off") << "\n";
                     return 0;
@@ -835,47 +835,47 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 std::cerr << "Failed to set " << subcmd << ".\n";
                 return 1;
             } else if (subcmd == "features") {
-                if (!HymoFS::is_available()) {
-                    std::cerr << "HymoFS not available.\n";
+                if (!Kasumi::is_available()) {
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
-                const int f = HymoFS::get_features();
+                const int f = Kasumi::get_features();
                 if (f < 0) {
                     std::cerr << "get_features failed: " << strerror(errno) << "\n";
                     return 1;
                 }
                 std::cout << "features: 0x" << std::hex << f << std::dec;
-                if (f & HYMO_FEATURE_MOUNT_HIDE)
+                if (f & KSM_FEATURE_MOUNT_HIDE)
                     std::cout << " mount_hide";
-                if (f & HYMO_FEATURE_MAPS_SPOOF)
+                if (f & KSM_FEATURE_MAPS_SPOOF)
                     std::cout << " maps_spoof";
-                if (f & HYMO_FEATURE_STATFS_SPOOF)
+                if (f & KSM_FEATURE_STATFS_SPOOF)
                     std::cout << " statfs_spoof";
-                if (f & HYMO_FEATURE_CMDLINE_SPOOF)
+                if (f & KSM_FEATURE_CMDLINE_SPOOF)
                     std::cout << " cmdline_spoof";
-                if (f & HYMO_FEATURE_UNAME_SPOOF)
+                if (f & KSM_FEATURE_UNAME_SPOOF)
                     std::cout << " uname_spoof";
-                if (f & HYMO_FEATURE_KSTAT_SPOOF)
+                if (f & KSM_FEATURE_KSTAT_SPOOF)
                     std::cout << " kstat_spoof";
-                if (f & HYMO_FEATURE_MERGE_DIR)
+                if (f & KSM_FEATURE_MERGE_DIR)
                     std::cout << " merge_dir";
-                if (f & HYMO_FEATURE_SELINUX_BYPASS)
+                if (f & KSM_FEATURE_SELINUX_BYPASS)
                     std::cout << " selinux_bypass";
                 std::cout << "\n";
                 return 0;
             } else if (subcmd == "maps") {
                 if (cli.args.size() < 2) {
-                    std::cerr << "Usage: ksud hymo hymofs maps <clear|add <t_ino> <t_dev> <s_ino> "
+                    std::cerr << "Usage: ksud hymo kasumi maps <clear|add <t_ino> <t_dev> <s_ino> "
                                  "<s_dev> <path>>\n";
                     return 1;
                 }
                 const std::string maps_sub = cli.args[1];
                 if (maps_sub == "clear") {
-                    if (!HymoFS::is_available()) {
-                        std::cerr << "HymoFS not available.\n";
+                    if (!Kasumi::is_available()) {
+                        std::cerr << "Kasumi not available.\n";
                         return 1;
                     }
-                    if (HymoFS::clear_maps_rules()) {
+                    if (Kasumi::clear_maps_rules()) {
                         std::cout << "Maps spoof rules cleared.\n";
                         return 0;
                     }
@@ -883,7 +883,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     return 1;
                 } else if (maps_sub == "add") {
                     if (cli.args.size() < 7) {
-                        std::cerr << "Usage: ksud hymo hymofs maps add <target_ino> <target_dev> "
+                        std::cerr << "Usage: ksud hymo kasumi maps add <target_ino> <target_dev> "
                                      "<spoofed_ino> <spoofed_dev> <spoofed_path>\n";
                         return 1;
                     }
@@ -892,39 +892,39 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     unsigned long s_ino = std::stoul(cli.args[4]);
                     unsigned long s_dev = std::stoul(cli.args[5]);
                     const std::string path = cli.args[6];
-                    if (!HymoFS::is_available()) {
-                        std::cerr << "HymoFS not available.\n";
+                    if (!Kasumi::is_available()) {
+                        std::cerr << "Kasumi not available.\n";
                         return 1;
                     }
-                    if (HymoFS::add_maps_rule(t_ino, t_dev, s_ino, s_dev, path)) {
+                    if (Kasumi::add_maps_rule(t_ino, t_dev, s_ino, s_dev, path)) {
                         std::cout << "Maps rule added.\n";
                         return 0;
                     }
                     std::cerr << "add_maps_rule failed.\n";
                     return 1;
                 } else {
-                    std::cerr << "Unknown hymofs maps subcommand: " << maps_sub << "\n";
+                    std::cerr << "Unknown kasumi maps subcommand: " << maps_sub << "\n";
                     return 1;
                 }
             } else if (subcmd == "enable" || subcmd == "disable") {
                 const bool enable = (subcmd == "enable");
-                if (HymoFS::is_available()) {
-                    if (HymoFS::set_enabled(enable)) {
-                        std::cout << "HymoFS " << (enable ? "enabled" : "disabled") << ".\n";
-                        LOG_INFO("HymoFS " + std::string(enable ? "enabled" : "disabled"));
+                if (Kasumi::is_available()) {
+                    if (Kasumi::set_enabled(enable)) {
+                        std::cout << "Kasumi " << (enable ? "enabled" : "disabled") << ".\n";
+                        LOG_INFO("Kasumi " + std::string(enable ? "enabled" : "disabled"));
                     } else {
-                        std::cerr << "Failed to set HymoFS enable state.\n";
+                        std::cerr << "Failed to set Kasumi enable state.\n";
                         return 1;
                     }
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 return 0;
             } else if (subcmd == "list") {
                 json::Value root = json::Value::array();
-                if (HymoFS::is_available()) {
-                    const std::string rules_str = HymoFS::get_active_rules();
+                if (Kasumi::is_available()) {
+                    const std::string rules_str = Kasumi::get_active_rules();
                     std::istringstream iss(rules_str);
                     std::string line;
                     while (std::getline(iss, line)) {
@@ -969,19 +969,19 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 return 0;
             } else if (subcmd == "version") {
                 std::cout << "{\n";
-                std::cout << "  \"protocol_version\": " << HymoFS::EXPECTED_PROTOCOL_VERSION
+                std::cout << "  \"protocol_version\": " << Kasumi::EXPECTED_PROTOCOL_VERSION
                           << ",\n";
-                std::cout << "  \"hymofs_available\": "
-                          << (HymoFS::is_available() ? "true" : "false") << ",\n";
+                std::cout << "  \"kasumi_available\": "
+                          << (Kasumi::is_available() ? "true" : "false") << ",\n";
 
-                if (HymoFS::is_available()) {
-                    const int ver = HymoFS::get_protocol_version();
+                if (Kasumi::is_available()) {
+                    const int ver = Kasumi::get_protocol_version();
                     std::cout << "  \"kernel_version\": " << ver << ",\n";
                     std::cout << "  \"protocol_mismatch\": "
-                              << (ver != HymoFS::EXPECTED_PROTOCOL_VERSION ? "true" : "false")
+                              << (ver != Kasumi::EXPECTED_PROTOCOL_VERSION ? "true" : "false")
                               << ",\n";
 
-                    const std::string rules = HymoFS::get_active_rules();
+                    const std::string rules = Kasumi::get_active_rules();
                     std::set<std::string> active_modules;
                     std::istringstream iss(rules);
                     std::string line;
@@ -996,7 +996,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                             }
                         }
 
-                        pos = line.find("/dev/hymo_mirror/");
+                        pos = line.find("/dev/kasumi_mirror/");
                         if (pos != std::string::npos) {
                             const size_t start = pos + 17;
                             const size_t end = line.find('/', start);
@@ -1024,13 +1024,13 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                 const RuntimeState state = load_runtime_state();
                 const std::string mount_base =
-                    state.mount_point.empty() ? hymo::HYMO_MIRROR_DEV : state.mount_point;
+                    state.mount_point.empty() ? hymo::KASUMI_MIRROR_DEV : state.mount_point;
                 std::cout << "  \"mount_base\": \"" << mount_base << "\"\n";
                 std::cout << "}\n";
                 return 0;
             } else if (subcmd == "set-mirror") {
                 if (cli.args.size() < 2) {
-                    std::cerr << "Usage: ksud hymo hymofs set-mirror <path>\n";
+                    std::cerr << "Usage: ksud hymo kasumi set-mirror <path>\n";
                     return 1;
                 }
                 const std::string path = cli.args[1];
@@ -1042,8 +1042,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                                                  : fs::path(cli.config_file);
                 if (config.save_to_file(config_path)) {
                     std::cout << "Mirror path set to: " << path << "\n";
-                    if (HymoFS::is_available()) {
-                        if (HymoFS::set_mirror_path(path)) {
+                    if (Kasumi::is_available()) {
+                        if (Kasumi::set_mirror_path(path)) {
                             std::cout << "Applied mirror path to kernel.\n";
                         } else {
                             std::cerr << "Failed to apply mirror path to kernel.\n";
@@ -1056,7 +1056,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 return 0;
             } else if (subcmd == "raw") {
                 if (cli.args.size() < 2) {
-                    std::cerr << "Usage: ksud hymo hymofs raw <cmd> [args...]\n";
+                    std::cerr << "Usage: ksud hymo kasumi raw <cmd> [args...]\n";
                     return 1;
                 }
                 const std::string cmd = cli.args[1];
@@ -1064,33 +1064,33 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                 if (cmd == "add") {
                     if (cli.args.size() < 4) {
-                        std::cerr << "Usage: ksud hymo hymofs raw add <src> <target> [type]\n";
+                        std::cerr << "Usage: ksud hymo kasumi raw add <src> <target> [type]\n";
                         return 1;
                     }
                     int type = 0;
                     if (cli.args.size() >= 5)
                         type = std::stoi(cli.args[4]);
-                    success = HymoFS::add_rule(cli.args[2], cli.args[3], type);
+                    success = Kasumi::add_rule(cli.args[2], cli.args[3], type);
                 } else if (cmd == "hide") {
                     if (cli.args.size() < 3) {
-                        std::cerr << "Usage: ksud hymo hymofs raw hide <path>\n";
+                        std::cerr << "Usage: ksud hymo kasumi raw hide <path>\n";
                         return 1;
                     }
-                    success = HymoFS::hide_path(cli.args[2]);
+                    success = Kasumi::hide_path(cli.args[2]);
                 } else if (cmd == "delete") {
                     if (cli.args.size() < 3) {
-                        std::cerr << "Usage: ksud hymo hymofs raw delete <src>\n";
+                        std::cerr << "Usage: ksud hymo kasumi raw delete <src>\n";
                         return 1;
                     }
-                    success = HymoFS::delete_rule(cli.args[2]);
+                    success = Kasumi::delete_rule(cli.args[2]);
                 } else if (cmd == "merge") {
                     if (cli.args.size() < 4) {
-                        std::cerr << "Usage: ksud hymo hymofs raw merge <src> <target>\n";
+                        std::cerr << "Usage: ksud hymo kasumi raw merge <src> <target>\n";
                         return 1;
                     }
-                    success = HymoFS::add_merge_rule(cli.args[2], cli.args[3]);
+                    success = Kasumi::add_merge_rule(cli.args[2], cli.args[3]);
                 } else if (cmd == "clear") {
-                    success = HymoFS::clear_rules();
+                    success = Kasumi::clear_rules();
                 } else {
                     std::cerr << "Unknown raw command: " << cmd << "\n";
                     return 1;
@@ -1106,7 +1106,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 }
                 return 0;
             } else {
-                std::cerr << "Unknown hymofs subcommand: " << subcmd << "\n";
+                std::cerr << "Unknown kasumi subcommand: " << subcmd << "\n";
                 std::cerr << "Available: enable, disable, list, version, set-mirror, raw\n";
                 return 1;
             }
@@ -1133,15 +1133,15 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 std::cout << "  \"loaded\": " << (lkm_is_loaded() ? "true" : "false") << ",\n";
                 std::cout << "  \"autoload\": " << (lkm_get_autoload() ? "true" : "false") << ",\n";
                 std::cout << "  \"kmi_override\": \"" << lkm_get_kmi_override() << "\",\n";
-                std::cout << "  \"hymofs_builtin\": "
-                          << (HymoFS::is_available() && !lkm_is_loaded() ? "true" : "false")
+                std::cout << "  \"kasumi_builtin\": "
+                          << (Kasumi::is_available() && !lkm_is_loaded() ? "true" : "false")
                           << "\n";
                 std::cout << "}\n";
             } else if (subcmd == "hooks") {
-                if (HymoFS::is_available()) {
-                    std::cout << HymoFS::get_hooks() << "\n";
+                if (Kasumi::is_available()) {
+                    std::cout << Kasumi::get_hooks() << "\n";
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
             } else {
@@ -1161,8 +1161,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             if (subcmd == "enable" || subcmd == "disable") {
                 const bool enable = (subcmd == "enable");
-                if (HymoFS::is_available()) {
-                    if (HymoFS::set_debug(enable)) {
+                if (Kasumi::is_available()) {
+                    if (Kasumi::set_debug(enable)) {
                         std::cout << "Kernel debug logging " << (enable ? "enabled" : "disabled")
                                   << ".\n";
                         LOG_VERBOSE("Kernel debug logging " +
@@ -1172,7 +1172,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         return 1;
                     }
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 return 0;
@@ -1185,8 +1185,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 const bool enable =
                     (state == "enable" || state == "on" || state == "1" || state == "true");
 
-                if (HymoFS::is_available()) {
-                    if (HymoFS::set_stealth(enable)) {
+                if (Kasumi::is_available()) {
+                    if (Kasumi::set_stealth(enable)) {
                         std::cout << "Stealth mode " << (enable ? "enabled" : "disabled") << ".\n";
                         LOG_VERBOSE("Stealth mode " + std::string(enable ? "enabled" : "disabled"));
                     } else {
@@ -1194,7 +1194,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         return 1;
                     }
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 return 0;
@@ -1221,7 +1221,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 const std::string release = pos[0];
                 const std::string version = pos[1];
 
-                if (HymoFS::is_available()) {
+                if (Kasumi::is_available()) {
                     Config config = load_config(cli);
                     config.uname_release = release;
                     config.uname_version = version;
@@ -1237,8 +1237,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         std::cout << "  Version: " << version << "\n";
 
                         const bool is_global = (mode == "global");
-                        const bool ok = is_global ? HymoFS::set_uname_global(release, version)
-                                                  : HymoFS::set_uname(release, version);
+                        const bool ok = is_global ? Kasumi::set_uname_global(release, version)
+                                                  : Kasumi::set_uname(release, version);
                         if (ok) {
                             std::cout << "Applied uname spoofing to kernel (" << mode << ").\n";
                             LOG_VERBOSE("Kernel uname updated [" + mode + "]: " + release + " " +
@@ -1251,13 +1251,13 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         return 1;
                     }
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 return 0;
             } else if (subcmd == "set-uname-restore") {
-                if (HymoFS::is_available()) {
-                    if (HymoFS::restore_uname_global()) {
+                if (Kasumi::is_available()) {
+                    if (Kasumi::restore_uname_global()) {
                         std::cout << "Restored original kernel uname (global).\n";
                         LOG_VERBOSE("Kernel uname restored to captured originals");
                     } else {
@@ -1266,7 +1266,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         return 1;
                     }
                 } else {
-                    std::cerr << "HymoFS not available.\n";
+                    std::cerr << "Kasumi not available.\n";
                     return 1;
                 }
                 return 0;
@@ -1287,9 +1287,9 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             if (lkm_subcmd == "load") {
                 if (lkm_load()) {
-                    std::cout << "HymoFS LKM loaded.\n";
+                    std::cout << "Kasumi LKM loaded.\n";
                 } else {
-                    std::cerr << "Failed to load HymoFS LKM.\n";
+                    std::cerr << "Failed to load Kasumi LKM.\n";
                     const std::string err = lkm_get_last_error();
                     if (!err.empty()) {
                         std::cerr << "Reason: " << err << "\n";
@@ -1298,9 +1298,9 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 }
             } else if (lkm_subcmd == "unload") {
                 if (lkm_unload()) {
-                    std::cout << "HymoFS LKM unloaded.\n";
+                    std::cout << "Kasumi LKM unloaded.\n";
                 } else {
-                    std::cerr << "Failed to unload HymoFS LKM.\n";
+                    std::cerr << "Failed to unload Kasumi LKM.\n";
                     const std::string err = lkm_get_last_error();
                     if (!err.empty()) {
                         std::cerr << "Reason: " << err << "\n";
@@ -1385,29 +1385,29 @@ int hymo::run_hymo_main(int argc, char** argv) {
         }
 
         case Command::CLEAR: {
-            if (HymoFS::is_available()) {
-                if (HymoFS::clear_rules()) {
-                    std::cout << "Successfully cleared all HymoFS rules.\n";
-                    LOG_INFO("User manually cleared all HymoFS rules via CLI");
+            if (Kasumi::is_available()) {
+                if (Kasumi::clear_rules()) {
+                    std::cout << "Successfully cleared all Kasumi rules.\n";
+                    LOG_INFO("User manually cleared all Kasumi rules via CLI");
 
                     RuntimeState state = load_runtime_state();
-                    state.hymofs_module_ids.clear();
+                    state.kasumi_module_ids.clear();
                     state.save();
                 } else {
-                    std::cerr << "Failed to clear HymoFS rules.\n";
-                    LOG_ERROR("Failed to clear HymoFS rules via CLI");
+                    std::cerr << "Failed to clear Kasumi rules.\n";
+                    LOG_ERROR("Failed to clear Kasumi rules via CLI");
                     return 1;
                 }
             } else {
-                std::cerr << "HymoFS not available.\n";
+                std::cerr << "Kasumi not available.\n";
                 return 1;
             }
             return 0;
         }
 
         case Command::FIX_MOUNTS: {
-            if (HymoFS::is_available()) {
-                if (HymoFS::fix_mounts()) {
+            if (Kasumi::is_available()) {
+                if (Kasumi::fix_mounts()) {
                     std::cout << "Mount namespace fixed (mnt_id reordered).\n";
                     LOG_INFO("Mount namespace fixed via CLI.");
                 } else {
@@ -1415,15 +1415,15 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     return 1;
                 }
             } else {
-                std::cerr << "HymoFS not available.\n";
+                std::cerr << "Kasumi not available.\n";
                 return 1;
             }
             return 0;
         }
 
         case Command::RAW:
-            // Raw commands moved to "hymofs raw" subcommand
-            std::cerr << "Use 'ksud hymo hymofs raw <cmd> ...' for raw commands\n";
+            // Raw commands moved to "kasumi raw" subcommand
+            std::cerr << "Use 'ksud hymo kasumi raw <cmd> ...' for raw commands\n";
             return 1;
 
         case Command::MOUNT:
@@ -1462,14 +1462,14 @@ int hymo::run_hymo_main(int argc, char** argv) {
         // Ensure runtime directory exists
         ensure_dir_exists(RUN_DIR);
 
-        // Load HymoFS LKM before check_status so we can use HymoFS mount when autoload is on
+        // Load Kasumi LKM before check_status so we can use Kasumi mount when autoload is on
         if (lkm_get_autoload() && !lkm_is_loaded()) {
             if (lkm_load()) {
-                LOG_INFO("HymoFS LKM loaded (autoload) before mount");
-                HymoFS::invalidate_status_cache();
+                LOG_INFO("Kasumi LKM loaded (autoload) before mount");
+                Kasumi::invalidate_status_cache();
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
             } else {
-                LOG_WARN("HymoFS LKM autoload failed: " + lkm_get_last_error());
+                LOG_WARN("Kasumi LKM autoload failed: " + lkm_get_last_error());
             }
         }
 
@@ -1478,83 +1478,83 @@ int hymo::run_hymo_main(int argc, char** argv) {
         ExecutionResult exec_result;
         std::vector<Module> module_list;
 
-        const HymoFSStatus hymofs_status = HymoFS::check_status();
-        if (hymofs_status != HymoFSStatus::Available) {
-            LOG_INFO("HymoFS status: " + std::to_string(static_cast<int>(hymofs_status)) +
+        const KasumiStatus kasumi_status = Kasumi::check_status();
+        if (kasumi_status != KasumiStatus::Available) {
+            LOG_INFO("Kasumi status: " + std::to_string(static_cast<int>(kasumi_status)) +
                      " (0=Available, 1=NotPresent, 2=KernelTooOld, 3=ModuleTooOld); using "
                      "overlay/mirror if needed");
         }
         std::string warning_msg;
-        bool hymofs_active = false;
+        bool kasumi_active = false;
 
-        bool can_use_hymofs = (hymofs_status == HymoFSStatus::Available);
+        bool can_use_kasumi = (kasumi_status == KasumiStatus::Available);
 
         // Auto-select tempdir: treat empty or legacy /data path as "auto" so we upgrade to
-        // /dev/hymo_mirror when HymoFS becomes available (config may have saved /data from
-        // when HymoFS was not present).
+        // /dev/kasumi_mirror when Kasumi becomes available (config may have saved /data from
+        // when Kasumi was not present).
         const fs::path legacy_data_path = fs::path(HYMO_DATA_DIR) / "img_mnt";
         const bool tempdir_is_auto = config.tempdir.empty() || config.tempdir == legacy_data_path;
         if (tempdir_is_auto) {
-            if (can_use_hymofs && config.hymofs_enabled) {
-                config.tempdir = hymo::HYMO_MIRROR_DEV;
-                LOG_INFO("Auto-selected tempdir: /dev/hymo_mirror (HymoFS mode)");
+            if (can_use_kasumi && config.kasumi_enabled) {
+                config.tempdir = hymo::KASUMI_MIRROR_DEV;
+                LOG_INFO("Auto-selected tempdir: /dev/kasumi_mirror (Kasumi mode)");
             } else {
                 config.tempdir = legacy_data_path;
                 LOG_INFO("Auto-selected tempdir: /data/adb/hymo/img_mnt (default mode)");
             }
         }
 
-        if (!can_use_hymofs && config.ignore_protocol_mismatch) {
-            if (hymofs_status == HymoFSStatus::KernelTooOld ||
-                hymofs_status == HymoFSStatus::ModuleTooOld) {
-                LOG_WARN("Forcing HymoFS despite protocol mismatch "
+        if (!can_use_kasumi && config.ignore_protocol_mismatch) {
+            if (kasumi_status == KasumiStatus::KernelTooOld ||
+                kasumi_status == KasumiStatus::ModuleTooOld) {
+                LOG_WARN("Forcing Kasumi despite protocol mismatch "
                          "(ignore_protocol_mismatch=true)");
-                can_use_hymofs = true;
-                if (hymofs_status == HymoFSStatus::KernelTooOld) {
+                can_use_kasumi = true;
+                if (kasumi_status == KasumiStatus::KernelTooOld) {
                     warning_msg = "⚠️Kernel version is lower than module version. Please "
                                   "update your kernel.";
-                } else if (hymofs_status == HymoFSStatus::ModuleTooOld) {
+                } else if (kasumi_status == KasumiStatus::ModuleTooOld) {
                     warning_msg = "⚠️Module version is lower than kernel version. Please "
                                   "update your module.";
                 }
             } else {
-                LOG_WARN("Cannot force HymoFS: Kernel module not present or error "
+                LOG_WARN("Cannot force Kasumi: Kernel module not present or error "
                          "state (Status: " +
-                         std::to_string((int)hymofs_status) + ")");
+                         std::to_string((int)kasumi_status) + ")");
             }
         }
 
-        if (can_use_hymofs) {
-            // **HymoFS Fast Path**
-            LOG_INFO("Mode: HymoFS Fast Path");
+        if (can_use_kasumi) {
+            // **Kasumi Fast Path**
+            LOG_INFO("Mode: Kasumi Fast Path");
 
-            // Kernel defaults to hymofs_enabled=false; must set from config on every mount
-            if (HymoFS::set_enabled(config.hymofs_enabled)) {
-                LOG_VERBOSE("HymoFS enabled=" +
-                            std::string(config.hymofs_enabled ? "true" : "false"));
-                if (config.hymofs_enabled) {
-                    hymofs_active = true;
+            // Kernel defaults to kasumi_enabled=false; must set from config on every mount
+            if (Kasumi::set_enabled(config.kasumi_enabled)) {
+                LOG_VERBOSE("Kasumi enabled=" +
+                            std::string(config.kasumi_enabled ? "true" : "false"));
+                if (config.kasumi_enabled) {
+                    kasumi_active = true;
                 }
             } else {
-                LOG_WARN("Failed to set HymoFS enabled state.");
+                LOG_WARN("Failed to set Kasumi enabled state.");
             }
 
             // Determine Mirror Path
             // 1) User set (mirror_path non-empty): override everything.
-            // 2) Auto (mirror_path empty): HymoFS enabled → /dev/hymo_mirror, else →
+            // 2) Auto (mirror_path empty): Kasumi enabled → /dev/kasumi_mirror, else →
             // /data/adb/hymo/img_mnt.
             std::string effective_mirror_path;
             if (!config.mirror_path.empty()) {
                 effective_mirror_path = config.mirror_path;
             } else {
-                effective_mirror_path = config.hymofs_enabled
-                                            ? hymo::HYMO_MIRROR_DEV
+                effective_mirror_path = config.kasumi_enabled
+                                            ? hymo::KASUMI_MIRROR_DEV
                                             : (std::string(HYMO_DATA_DIR) + "/img_mnt");
             }
 
             // Apply Mirror Path to Kernel if using custom path
-            if (effective_mirror_path != hymo::HYMO_MIRROR_DEV) {
-                if (HymoFS::set_mirror_path(effective_mirror_path)) {
+            if (effective_mirror_path != hymo::KASUMI_MIRROR_DEV) {
+                if (Kasumi::set_mirror_path(effective_mirror_path)) {
                     LOG_INFO("Applied custom mirror path: " + effective_mirror_path);
                 } else {
                     LOG_WARN("Failed to apply custom mirror path: " + effective_mirror_path);
@@ -1563,7 +1563,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             // Apply Kernel Debug Setting
             if (config.enable_kernel_debug) {
-                if (HymoFS::set_debug(true)) {
+                if (Kasumi::set_debug(true)) {
                     LOG_VERBOSE("Kernel debug logging enabled via config.");
                 } else {
                     LOG_WARN("Failed to enable kernel debug logging (config).");
@@ -1572,7 +1572,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
             // Apply Stealth Mode
             if (config.enable_stealth) {
-                if (HymoFS::set_stealth(config.enable_stealth)) {
+                if (Kasumi::set_stealth(config.enable_stealth)) {
                     LOG_VERBOSE("Stealth mode set to: " +
                                 std::string(config.enable_stealth ? "true" : "false"));
                 } else {
@@ -1581,23 +1581,23 @@ int hymo::run_hymo_main(int argc, char** argv) {
             }
 
             // Apply Hidexattr: mount_hide, maps_spoof, statfs_spoof (with stealth)
-            if (config.enable_hidexattr && HymoFS::is_available()) {
-                if (HymoFS::set_mount_hide(true)) {
+            if (config.enable_hidexattr && Kasumi::is_available()) {
+                if (Kasumi::set_mount_hide(true)) {
                     LOG_VERBOSE("mount_hide enabled (hidexattr)");
                 } else {
                     LOG_WARN("Failed to enable mount_hide");
                 }
-                if (HymoFS::set_maps_spoof(true)) {
+                if (Kasumi::set_maps_spoof(true)) {
                     LOG_VERBOSE("maps_spoof enabled (hidexattr)");
                 } else {
                     LOG_WARN("Failed to enable maps_spoof");
                 }
-                if (HymoFS::set_statfs_spoof(true)) {
+                if (Kasumi::set_statfs_spoof(true)) {
                     LOG_VERBOSE("statfs_spoof enabled (hidexattr)");
                 } else {
                     LOG_WARN("Failed to enable statfs_spoof");
                 }
-                if (HymoFS::set_stealth(true)) {
+                if (Kasumi::set_stealth(true)) {
                     LOG_VERBOSE("stealth enabled (hidexattr)");
                 } else {
                     LOG_WARN("Failed to enable stealth for hidexattr");
@@ -1608,8 +1608,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
             if (!config.uname_release.empty() || !config.uname_version.empty()) {
                 const bool is_global = (config.uname_mode == "global");
                 const bool ok =
-                    is_global ? HymoFS::set_uname_global(config.uname_release, config.uname_version)
-                              : HymoFS::set_uname(config.uname_release, config.uname_version);
+                    is_global ? Kasumi::set_uname_global(config.uname_release, config.uname_version)
+                              : Kasumi::set_uname(config.uname_release, config.uname_version);
                 if (ok) {
                     LOG_VERBOSE(std::string("Applied kernel version spoofing (") +
                                 (is_global ? "global" : "scoped") + "): release=\"" +
@@ -1700,16 +1700,16 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         storage = setup_erofs_storage(MIRROR_DIR, staging_dir,
                                                       fs::path(BASE_DIR) / "modules.erofs");
                         mirror_success = true;
-                        hymofs_active = true;
+                        kasumi_active = true;
 
                         // Plan should be generated from the mirrored storage root.
                         plan = generate_plan(config, module_list, MIRROR_DIR);
                         segregate_custom_rules(plan, MIRROR_DIR);
-                        update_hymofs_mappings(config, module_list, MIRROR_DIR, plan);
-                        exec_result = execute_plan(plan, config, hymofs_active);
+                        update_kasumi_mappings(config, module_list, MIRROR_DIR, plan);
+                        exec_result = execute_plan(plan, config, kasumi_active);
 
                         if (config.enable_stealth) {
-                            if (HymoFS::fix_mounts()) {
+                            if (Kasumi::fix_mounts()) {
                                 LOG_INFO("Mount namespace fixed (mnt_id reordered).");
                             } else {
                                 LOG_WARN("Failed to fix mount namespace.");
@@ -1738,18 +1738,18 @@ int hymo::run_hymo_main(int argc, char** argv) {
                         }
 
                         mirror_success = true;
-                        hymofs_active = true;
+                        kasumi_active = true;
 
                         // Plan should be generated from the mirrored storage root.
                         plan = generate_plan(config, module_list, MIRROR_DIR);
 
                         // Prepare plan and update mappings
                         segregate_custom_rules(plan, MIRROR_DIR);
-                        update_hymofs_mappings(config, module_list, MIRROR_DIR, plan);
-                        exec_result = execute_plan(plan, config, hymofs_active);
+                        update_kasumi_mappings(config, module_list, MIRROR_DIR, plan);
+                        exec_result = execute_plan(plan, config, kasumi_active);
 
                         if (config.enable_stealth) {
-                            if (HymoFS::fix_mounts()) {
+                            if (Kasumi::fix_mounts()) {
                                 LOG_INFO("Mount namespace fixed (mnt_id reordered).");
                             } else {
                                 LOG_WARN("Failed to fix mount namespace.");
@@ -1776,7 +1776,7 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
                 // Manually construct a Magic Mount plan
                 plan.overlay_ops.clear();
-                plan.hymofs_module_ids.clear();
+                plan.kasumi_module_ids.clear();
                 plan.magic_module_paths.clear();
 
                 for (const auto& mod : module_list) {
@@ -1800,17 +1800,17 @@ int hymo::run_hymo_main(int argc, char** argv) {
                 }
 
                 // Execute plan
-                exec_result = execute_plan(plan, config, hymofs_active);
+                exec_result = execute_plan(plan, config, kasumi_active);
             }
 
         } else {
             // **Legacy/Overlay Path**
-            if (hymofs_status == HymoFSStatus::KernelTooOld) {
-                LOG_WARN("HymoFS Protocol Mismatch! Kernel is too old.");
+            if (kasumi_status == KasumiStatus::KernelTooOld) {
+                LOG_WARN("Kasumi Protocol Mismatch! Kernel is too old.");
                 warning_msg = "⚠️Kernel version is lower than module version. Please "
                               "update your kernel.";
-            } else if (hymofs_status == HymoFSStatus::ModuleTooOld) {
-                LOG_WARN("HymoFS Protocol Mismatch! Module is too old.");
+            } else if (kasumi_status == KasumiStatus::ModuleTooOld) {
+                LOG_WARN("Kasumi Protocol Mismatch! Module is too old.");
                 warning_msg = "⚠️Module version is lower than kernel version. Please "
                               "update your module.";
             }
@@ -1857,13 +1857,13 @@ int hymo::run_hymo_main(int argc, char** argv) {
             plan = generate_plan(config, module_list, storage.mount_point);
 
             // **Step 5: Execute Plan**
-            exec_result = execute_plan(plan, config, hymofs_active);
+            exec_result = execute_plan(plan, config, kasumi_active);
         }
 
         LOG_INFO("Plan: " + std::to_string(exec_result.overlay_module_ids.size()) +
                  " OverlayFS modules, " + std::to_string(exec_result.magic_module_ids.size()) +
-                 " Magic modules, " + std::to_string(plan.hymofs_module_ids.size()) +
-                 " HymoFS modules");
+                 " Magic modules, " + std::to_string(plan.kasumi_module_ids.size()) +
+                 " Kasumi modules");
 
         // **Step 6: KSU Nuke (Stealth)**
         bool nuke_active = false;
@@ -1883,20 +1883,20 @@ int hymo::run_hymo_main(int argc, char** argv) {
         state.mount_point = storage.mount_point.string();
         state.overlay_module_ids = exec_result.overlay_module_ids;
         state.magic_module_ids = exec_result.magic_module_ids;
-        state.hymofs_module_ids = plan.hymofs_module_ids;
+        state.kasumi_module_ids = plan.kasumi_module_ids;
         state.nuke_active = nuke_active;
         state.pid = getpid();
 
         // Track active mount partitions
-        if (!plan.hymofs_module_ids.empty()) {
+        if (!plan.kasumi_module_ids.empty()) {
             std::vector<std::string> all_parts = BUILTIN_PARTITIONS;
             for (const auto& p : config.partitions)
                 all_parts.push_back(p);
 
             for (const auto& part : all_parts) {
                 bool active = false;
-                // Check if any HymoFS module has this partition
-                for (const auto& mod_id : plan.hymofs_module_ids) {
+                // Check if any Kasumi module has this partition
+                for (const auto& mod_id : plan.kasumi_module_ids) {
                     // Find module by ID (inefficient but works)
                     for (const auto& m : module_list) {
                         if (m.id == mod_id) {
@@ -1967,12 +1967,12 @@ int hymo::run_hymo_main(int argc, char** argv) {
         }
 
         // Update mismatch state for UI
-        if (hymofs_status == HymoFSStatus::KernelTooOld ||
-            hymofs_status == HymoFSStatus::ModuleTooOld) {
-            state.hymofs_mismatch = true;
+        if (kasumi_status == KasumiStatus::KernelTooOld ||
+            kasumi_status == KasumiStatus::ModuleTooOld) {
+            state.kasumi_mismatch = true;
             state.mismatch_message = warning_msg;
         } else if (config.ignore_protocol_mismatch && !warning_msg.empty()) {
-            state.hymofs_mismatch = true;
+            state.kasumi_mismatch = true;
             state.mismatch_message = warning_msg;
         }
 
@@ -1984,15 +1984,15 @@ int hymo::run_hymo_main(int argc, char** argv) {
         update_module_description(true, storage.mode, nuke_active,
                                   exec_result.overlay_module_ids.size(),
                                   exec_result.magic_module_ids.size(),
-                                  plan.hymofs_module_ids.size(), warning_msg, hymofs_active);
+                                  plan.kasumi_module_ids.size(), warning_msg, kasumi_active);
 
-        // Apply HymoFS Enable/Disable at the very end to avoid race conditions/crashes during setup
-        if (can_use_hymofs) {
-            if (HymoFS::set_enabled(config.hymofs_enabled)) {
-                LOG_VERBOSE("HymoFS enabled set to: " +
-                            std::string(config.hymofs_enabled ? "true" : "false"));
+        // Apply Kasumi Enable/Disable at the very end to avoid race conditions/crashes during setup
+        if (can_use_kasumi) {
+            if (Kasumi::set_enabled(config.kasumi_enabled)) {
+                LOG_VERBOSE("Kasumi enabled set to: " +
+                            std::string(config.kasumi_enabled ? "true" : "false"));
             } else {
-                LOG_WARN("Failed to set HymoFS enabled state.");
+                LOG_WARN("Failed to set Kasumi enabled state.");
             }
         }
 

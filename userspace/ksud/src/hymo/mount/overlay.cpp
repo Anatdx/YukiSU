@@ -13,7 +13,7 @@
 #include <sstream>
 #include "../defs.hpp"
 #include "../utils.hpp"
-#include "hymofs.hpp"
+#include "kasumi.hpp"
 
 namespace hymo {
 
@@ -156,7 +156,7 @@ static bool mount_overlayfs_modern(const std::string& lowerdir_config,
         } else {
             if (hide_overlay_xattrs) {
                 // Hide overlay xattrs only for mounts we create ourselves.
-                HymoFS::hide_overlay_xattrs(dest);
+                Kasumi::hide_overlay_xattrs(dest);
             } else {
                 LOG_DEBUG("Skip hide_overlay_xattrs for existing overlay mount: " + dest);
             }
@@ -206,7 +206,7 @@ static bool mount_overlayfs_legacy(const std::string& lowerdir_config,
 
     if (hide_overlay_xattrs) {
         // Hide overlay xattrs only for mounts we create ourselves.
-        HymoFS::hide_overlay_xattrs(dest);
+        Kasumi::hide_overlay_xattrs(dest);
     } else {
         LOG_DEBUG("Skip hide_overlay_xattrs for existing overlay mount: " + dest);
     }
@@ -255,7 +255,7 @@ static std::vector<std::string> get_child_mounts(const std::string& target_root)
 static std::string get_mirror_path(const std::string& target_root) {
     std::string clean_path = target_root;
     std::replace(clean_path.begin(), clean_path.end(), '/', '_');
-    return "/dev/hymo_mirror/" + clean_path;
+    return "/dev/kasumi_mirror/" + clean_path;
 }
 
 bool bind_mount(const fs::path& from, const fs::path& to, bool disable_umount) {
@@ -419,8 +419,8 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
     std::string mirror_path = get_mirror_path(target_root);
 
     // Ensure mirror base exists
-    if (!fs::exists("/dev/hymo_mirror")) {
-        mkdir("/dev/hymo_mirror", 0755);
+    if (!fs::exists("/dev/kasumi_mirror")) {
+        mkdir("/dev/kasumi_mirror", 0755);
     }
     if (!fs::exists(mirror_path)) {
         mkdir(mirror_path.c_str(), 0755);
