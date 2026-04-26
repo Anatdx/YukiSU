@@ -36,26 +36,26 @@ constexpr uint64_t SUPERKEY_VERIFICATION_SIGNATURE_ONLY = 0;
 constexpr uint64_t SUPERKEY_VERIFICATION_SIGN_AND_KEY = 1;
 constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 
-// Arch suffix for HymoFS LKM asset name (must match lkm.cpp)
+// Arch suffix for Kasumi LKM asset name (must match lkm.cpp)
 #if defined(__aarch64__)
-#define HYMO_ARCH_SUFFIX "_arm64"
+#define KASUMI_ARCH_SUFFIX "_arm64"
 #elif defined(__arm__)
-#define HYMO_ARCH_SUFFIX "_armv7"
+#define KASUMI_ARCH_SUFFIX "_armv7"
 #elif defined(__x86_64__)
-#define HYMO_ARCH_SUFFIX "_x86_64"
+#define KASUMI_ARCH_SUFFIX "_x86_64"
 #else
-#define HYMO_ARCH_SUFFIX "_arm64"
+#define KASUMI_ARCH_SUFFIX "_arm64"
 #endif  // #if defined(__aarch64__)
 
 namespace {
 
-bool copy_embedded_hymofs_asset(const std::string& kmi, const std::string& dest_path,
+bool copy_embedded_kasumi_asset(const std::string& kmi, const std::string& dest_path,
                                 std::string* used_asset = nullptr) {
     std::vector<std::string> candidates;
     if (!kmi.empty()) {
-        candidates.push_back(kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko");
+        candidates.push_back(kmi + KASUMI_ARCH_SUFFIX "_kasumi_lkm.ko");
     }
-    candidates.push_back(std::string(HYMO_ARCH_SUFFIX) + "_hymofs_lkm.ko");
+    candidates.push_back(std::string(KASUMI_ARCH_SUFFIX) + "_kasumi_lkm.ko");
 
     for (const auto& asset_name : candidates) {
         if (copy_asset_to_file(asset_name, dest_path)) {
@@ -382,9 +382,9 @@ struct BootPatchArgs {
     bool allow_shell = false;       // --allow-shell
     bool enable_adbd = false;       // --enable-adbd
     std::string adb_debug_prop;     // --adb-debug-prop
-    bool hymofs_in_cpio =
-        false;  // --hymofs (experimental: embed HymoFS LKM in cpio, load after KernelSU)
-    std::string hymofs_module;  // --hymofs-module (custom HymoFS LKM path; overrides embedded)
+    bool kasumi_in_cpio =
+        false;  // --kasumi (experimental: embed Kasumi LKM in cpio, load after KernelSU)
+    std::string kasumi_module;  // --kasumi-module (custom Kasumi LKM path; overrides embedded)
 };
 
 namespace {
@@ -441,11 +441,11 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
         } else if (arg == "--adb-debug-prop") {
             if (i + 1 < args.size())
                 result.adb_debug_prop = args[++i];
-        } else if (arg == "--hymofs") {
-            result.hymofs_in_cpio = true;
-        } else if (arg == "--hymofs-module") {
+        } else if (arg == "--kasumi") {
+            result.kasumi_in_cpio = true;
+        } else if (arg == "--kasumi-module") {
             if (i + 1 < args.size())
-                result.hymofs_module = args[++i];
+                result.kasumi_module = args[++i];
         }
     }
 
@@ -892,40 +892,40 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         }
     }
 
-    // Experimental: add or remove HymoFS LKM in cpio (load after KernelSU in ksuinit)
-    if (parsed.hymofs_in_cpio) {
-        const std::string hymofs_file = workdir + "/hymofs.ko";
-        bool have_hymofs = false;
-        if (!parsed.hymofs_module.empty() && fs::exists(parsed.hymofs_module)) {
+    // Experimental: add or remove Kasumi LKM in cpio (load after KernelSU in ksuinit)
+    if (parsed.kasumi_in_cpio) {
+        const std::string kasumi_file = workdir + "/kasumi.ko";
+        bool have_kasumi = false;
+        if (!parsed.kasumi_module.empty() && fs::exists(parsed.kasumi_module)) {
             try {
-                fs::copy_file(parsed.hymofs_module, hymofs_file,
+                fs::copy_file(parsed.kasumi_module, kasumi_file,
                               fs::copy_options::overwrite_existing);
-                have_hymofs = true;
-                printf("- Adding HymoFS LKM (custom)\n");
+                have_kasumi = true;
+                printf("- Adding Kasumi LKM (custom)\n");
             } catch (const std::exception& e) {
-                LOGW("Failed to copy custom HymoFS LKM: %s", e.what());
+                LOGW("Failed to copy custom Kasumi LKM: %s", e.what());
             }
         }
-        if (!have_hymofs) {
+        if (!have_kasumi) {
             std::string used_asset;
-            if (copy_embedded_hymofs_asset(kmi, hymofs_file, &used_asset)) {
-                have_hymofs = true;
-                printf("- Adding HymoFS LKM (embedded: %s)\n", used_asset.c_str());
+            if (copy_embedded_kasumi_asset(kmi, kasumi_file, &used_asset)) {
+                have_kasumi = true;
+                printf("- Adding Kasumi LKM (embedded: %s)\n", used_asset.c_str());
             } else {
-                LOGW("HymoFS LKM asset for %s not found, skipping", kmi.c_str());
+                LOGW("Kasumi LKM asset for %s not found, skipping", kmi.c_str());
             }
         }
-        if (have_hymofs &&
-            !do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 hymofs.ko hymofs.ko")) {
-            LOGW("Failed to add hymofs.ko to cpio");
+        if (have_kasumi &&
+            !do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 kasumi.ko kasumi.ko")) {
+            LOGW("Failed to add kasumi.ko to cpio");
         }
     } else {
-        // User disabled HymoFS: remove hymofs.ko from cpio if it was previously
+        // User disabled Kasumi: remove kasumi.ko from cpio if it was previously
         // embedded (otherwise it stays forever after re-patch without the option).
-        auto hymofs_exists =
-            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists hymofs.ko"}, workdir);
-        if (hymofs_exists.exit_code == 0) {
-            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm hymofs.ko");
+        auto kasumi_exists =
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists kasumi.ko"}, workdir);
+        if (kasumi_exists.exit_code == 0) {
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kasumi.ko");
         }
     }
 
@@ -1217,11 +1217,11 @@ int boot_restore(const std::vector<std::string>& args) {
         // Remove kernelsu.ko
         do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kernelsu.ko");
 
-        // Remove hymofs.ko if present (experimental cpio embed)
-        auto hymofs_exists =
-            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists hymofs.ko"}, workdir);
-        if (hymofs_exists.exit_code == 0) {
-            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm hymofs.ko");
+        // Remove kasumi.ko if present (experimental cpio embed)
+        auto kasumi_exists =
+            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists kasumi.ko"}, workdir);
+        if (kasumi_exists.exit_code == 0) {
+            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kasumi.ko");
         }
 
         // Restore init if init.real exists
@@ -1296,7 +1296,7 @@ int boot_restore(const std::vector<std::string>& args) {
     return 0;
 }
 
-// Read real kernel release from sysfs. Not spoofed by HymoFS uname hiding (uname(2) is).
+// Read real kernel release from sysfs. Not spoofed by Kasumi uname hiding (uname(2) is).
 // Prefer this for KMI so LKM selection uses the actual kernel, not spoofed version.
 static std::string read_kernel_release_from_sysfs() {
     std::ifstream f("/proc/sys/kernel/osrelease");

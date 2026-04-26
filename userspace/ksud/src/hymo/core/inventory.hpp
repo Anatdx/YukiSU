@@ -12,7 +12,7 @@ namespace hymo {
 
 struct ModuleRule {
     std::string path;
-    std::string mode;  // "hymofs", "overlay", "magic", "none"
+    std::string mode;  // "kasumi", "overlay", "magic", "none"
 };
 
 struct Module {

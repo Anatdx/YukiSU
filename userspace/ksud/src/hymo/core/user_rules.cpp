@@ -1,10 +1,10 @@
-// core/user_rules.cpp - User-defined HymoFS rules management
+// core/user_rules.cpp - User-defined Kasumi rules management
 #include "user_rules.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include "../defs.hpp"
-#include "../mount/hymofs.hpp"
+#include "../mount/kasumi.hpp"
 #include "../utils.hpp"
 #include "json.hpp"
 
@@ -97,9 +97,9 @@ bool add_user_hide_rule(const std::string& path) {
         return false;
     }
 
-    // Apply to kernel immediately if HymoFS is available
-    if (HymoFS::is_available()) {
-        if (!HymoFS::hide_path(path)) {
+    // Apply to kernel immediately if Kasumi is available
+    if (Kasumi::is_available()) {
+        if (!Kasumi::hide_path(path)) {
             std::cerr << "Warning: Failed to apply hide rule to kernel (saved to file)\n";
             // We still return true because it was saved
         } else {
@@ -163,13 +163,13 @@ void apply_user_hide_rules() {
     int success = 0;
     int failed = 0;
 
-    if (!HymoFS::is_available()) {
-        LOG_WARN("HymoFS not available, cannot apply user hide rules");
+    if (!Kasumi::is_available()) {
+        LOG_WARN("Kasumi not available, cannot apply user hide rules");
         return;
     }
 
     for (const auto& rule : rules) {
-        if (HymoFS::hide_path(rule.path)) {
+        if (Kasumi::hide_path(rule.path)) {
             success++;
         } else {
             failed++;

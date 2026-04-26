@@ -40,7 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.KasumiConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -63,8 +63,8 @@ import com.anatdx.yukisu.ui.component.rememberSuperKeyDialog
 import com.anatdx.yukisu.ui.component.SuperKeyAuthResult
 import com.anatdx.yukisu.ui.util.KsuCli
 import com.anatdx.yukisu.ui.activity.util.AppData
-import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
-import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager.HymoFSStatus
+import com.anatdx.yukisu.ui.kasumi.util.KasumiManager
+import com.anatdx.yukisu.ui.kasumi.util.KasumiManager.KasumiStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,8 +167,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         }
                     }
                 }
-                val hymofsStatus by produceState(initialValue = HymoFSStatus.NOT_PRESENT) {
-                    value = HymoFSManager.getStatus()
+                val kasumiStatus by produceState(initialValue = KasumiStatus.NOT_PRESENT) {
+                    value = KasumiManager.getStatus()
                 }
                 var showKernelSpoofDialog by remember { mutableStateOf(false) }
                 
@@ -330,7 +330,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSimpleMode = viewModel.isSimpleMode,
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
-                        hymofsAvailable = hymofsStatus == HymoFSStatus.AVAILABLE,
+                        kasumiAvailable = kasumiStatus == KasumiStatus.AVAILABLE,
                         onKernelClick = { showKernelSpoofDialog = true },
                     )
 
@@ -451,13 +451,13 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
-                // HymoFS 配置按钮
+                // Kasumi 配置按钮
                 IconButton(onClick = {
-                    navigator.navigate(HymoFSConfigScreenDestination)
+                    navigator.navigate(KasumiConfigScreenDestination)
                 }) {
                     Icon(
                         imageVector = Icons.Filled.Tune,
-                        contentDescription = stringResource(R.string.hymofs_title)
+                        contentDescription = stringResource(R.string.kasumi_title)
                     )
                 }
 
@@ -903,7 +903,7 @@ private fun InfoCard(
     isSimpleMode: Boolean,
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
-    hymofsAvailable: Boolean = false,
+    kasumiAvailable: Boolean = false,
     onKernelClick: () -> Unit = {},
 ) {
     var showKsudDialog by remember { mutableStateOf(false) }
@@ -985,7 +985,7 @@ private fun InfoCard(
                 stringResource(R.string.home_kernel),
                 systemInfo.kernelRelease,
                 icon = Icons.Default.Memory,
-                onClick = if (hymofsAvailable) onKernelClick else null,
+                onClick = if (kasumiAvailable) onKernelClick else null,
             )
 
             if (!isSimpleMode) {
@@ -1170,21 +1170,24 @@ private fun KernelSpoofDialog(
 
     var unameRelease by remember { mutableStateOf("") }
     var unameVersion by remember { mutableStateOf("") }
+    var unameMode by remember { mutableStateOf("scoped") }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
     var loadFromSysfsTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         loading = true
-        val config = HymoFSManager.loadConfig()
+        val config = KasumiManager.loadConfig()
         unameRelease = config.unameRelease
         unameVersion = config.unameVersion
+        unameMode = config.unameMode.ifBlank { "scoped" }
         loading = false
     }
 
     LaunchedEffect(loadFromSysfsTrigger) {
         if (loadFromSysfsTrigger > 0) {
-            val (r, v) = HymoFSManager.readKernelUnameFromSysfs()
+            val (r, v) = KasumiManager.readKernelUnameFromSysfs()
             unameRelease = r
             unameVersion = v
         }
@@ -1192,7 +1195,7 @@ private fun KernelSpoofDialog(
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text(stringResource(R.string.hymofs_uname_title)) },
+        title = { Text(stringResource(R.string.kasumi_uname_title)) },
         text = {
             if (loading) {
                 Box(
@@ -1211,16 +1214,16 @@ private fun KernelSpoofDialog(
                     OutlinedTextField(
                         value = unameRelease,
                         onValueChange = { unameRelease = it },
-                        label = { Text(stringResource(R.string.hymofs_uname_release)) },
-                        supportingText = { Text(stringResource(R.string.hymofs_uname_release_desc)) },
+                        label = { Text(stringResource(R.string.kasumi_uname_release)) },
+                        supportingText = { Text(stringResource(R.string.kasumi_uname_release_desc)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = unameVersion,
                         onValueChange = { unameVersion = it },
-                        label = { Text(stringResource(R.string.hymofs_uname_version)) },
-                        supportingText = { Text(stringResource(R.string.hymofs_uname_version_desc)) },
+                        label = { Text(stringResource(R.string.kasumi_uname_version)) },
+                        supportingText = { Text(stringResource(R.string.kasumi_uname_version_desc)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
@@ -1228,7 +1231,57 @@ private fun KernelSpoofDialog(
                         onClick = { loadFromSysfsTrigger++ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(stringResource(R.string.hymofs_uname_use_current))
+                        Text(stringResource(R.string.kasumi_uname_use_current))
+                    }
+
+                    Text(
+                        text = stringResource(R.string.kasumi_uname_mode),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = unameMode == "scoped",
+                            onClick = { unameMode = "scoped" },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        ) { Text(stringResource(R.string.kasumi_uname_mode_scoped)) }
+                        SegmentedButton(
+                            selected = unameMode == "global",
+                            onClick = { unameMode = "global" },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        ) { Text(stringResource(R.string.kasumi_uname_mode_global)) }
+                    }
+                    Text(
+                        text = stringResource(
+                            if (unameMode == "global") R.string.kasumi_uname_mode_global_desc
+                            else R.string.kasumi_uname_mode_scoped_desc
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    if (unameMode == "global") {
+                        OutlinedButton(
+                            onClick = {
+                                if (restoring || saving) return@OutlinedButton
+                                restoring = true
+                                scope.launch {
+                                    val ok = KasumiManager.restoreUnameGlobal()
+                                    restoring = false
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            if (ok) R.string.kasumi_uname_restored
+                                            else R.string.kasumi_uname_restore_failed
+                                        ),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            enabled = !saving && !restoring,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.kasumi_uname_restore))
+                        }
                     }
                 }
             }
@@ -1245,14 +1298,19 @@ private fun KernelSpoofDialog(
                     if (loading || saving) return@TextButton
                     saving = true
                     scope.launch {
-                        val config = HymoFSManager.loadConfig()
+                        val config = KasumiManager.loadConfig()
                         val updated = config.copy(
                             unameRelease = unameRelease.trim(),
-                            unameVersion = unameVersion.trim()
+                            unameVersion = unameVersion.trim(),
+                            unameMode = unameMode,
                         )
-                        val ok = HymoFSManager.saveConfig(updated)
+                        val ok = KasumiManager.saveConfig(updated)
                         if (ok && unameRelease.isNotBlank() && unameVersion.isNotBlank()) {
-                            HymoFSManager.setUname(unameRelease.trim(), unameVersion.trim())
+                            KasumiManager.setUname(
+                                unameRelease.trim(),
+                                unameVersion.trim(),
+                                unameMode,
+                            )
                         }
                         saving = false
                         if (ok) {
@@ -1261,7 +1319,7 @@ private fun KernelSpoofDialog(
                         } else {
                             android.widget.Toast.makeText(
                                 context,
-                                context.getString(R.string.hymofs_toast_settings_failed),
+                                context.getString(R.string.kasumi_toast_settings_failed),
                                 android.widget.Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -1269,7 +1327,7 @@ private fun KernelSpoofDialog(
                 }
             ) {
                 Text(
-                    text = if (saving) stringResource(R.string.hymofs_saving) else stringResource(R.string.app_profile_template_save)
+                    text = if (saving) stringResource(R.string.kasumi_saving) else stringResource(R.string.app_profile_template_save)
                 )
             }
         }

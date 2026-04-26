@@ -3,12 +3,12 @@ name: Build Manager
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main", "dev", "feat/kasumi*" ]
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
-      - '.github/workflows/build-hymofs-lkm.yml'
-      - '.github/workflows/hymofs-lkm.yml'
+      - '.github/workflows/build-kasumi-lkm.yml'
+      - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - 'manager/**'
@@ -19,8 +19,8 @@ on:
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
-      - '.github/workflows/build-hymofs-lkm.yml'
-      - '.github/workflows/hymofs-lkm.yml'
+      - '.github/workflows/build-kasumi-lkm.yml'
+      - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - 'manager/**'
@@ -29,7 +29,7 @@ on:
   workflow_call:
     inputs:
       full_archs:
-        description: "Build extra ksud/ksuinit archs for release; HymoFS LKM is arm64-only in DDK CI"
+        description: "Build extra ksud/ksuinit archs for release; Kasumi LKM is arm64-only in DDK CI"
         required: false
         default: false
         type: boolean
@@ -39,8 +39,8 @@ jobs:
     uses: ./.github/workflows/build-lkm.yml
     secrets: inherit
 
-  build-hymofs-lkm:
-    uses: ./.github/workflows/build-hymofs-lkm.yml
+  build-kasumi-lkm:
+    uses: ./.github/workflows/build-kasumi-lkm.yml
     with:
       full_archs: ${{ inputs.full_archs == true || github.event_name == 'pull_request' }}
 
@@ -54,7 +54,7 @@ jobs:
       target: ${{ matrix.target }}
 
   build-ksud:
-    needs: [build-lkm, build-hymofs-lkm, build-ksuinit]
+    needs: [build-lkm, build-kasumi-lkm, build-ksuinit]
     strategy:
       matrix:
         include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"},{"target":"x86_64-linux-android","os":"ubuntu-latest"},{"target":"armv7-linux-androideabi","os":"ubuntu-latest"}]') || fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"}]') }}

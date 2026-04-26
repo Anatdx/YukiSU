@@ -167,9 +167,9 @@ fun InstallScreen(
     var signatureBypass by remember { mutableStateOf(false) }
     var allowShell by remember { mutableStateOf(false) }
     var enableAdb by remember { mutableStateOf(false) }
-    // Experimental: embed HymoFS LKM in cpio (init_boot)
-    var hymofsInCpio by remember { mutableStateOf(false) }
-    var hymofsLkmUri by remember { mutableStateOf<Uri?>(null) }
+    // Experimental: embed Kasumi LKM in cpio (init_boot)
+    var kasumiInCpio by remember { mutableStateOf(false) }
+    var kasumiLkmUri by remember { mutableStateOf<Uri?>(null) }
 
     val onInstall = {
         installMethod?.let { method ->
@@ -184,8 +184,8 @@ fun InstallScreen(
                 enableAdb = enableAdb,
                 superKey = superKey.ifBlank { null },
                 signatureBypass = signatureBypass,
-                hymofsInCpio = hymofsInCpio,
-                hymofsLkmUri = hymofsLkmUri
+                kasumiInCpio = kasumiInCpio,
+                kasumiLkmUri = kasumiLkmUri
             )
             navigator.navigate(FlashScreenDestination(flashIt))
         }
@@ -237,15 +237,15 @@ fun InstallScreen(
         })
     }
 
-    val selectHymofsLkmLauncher = rememberLauncherForActivityResult(
+    val selectKasumiLkmLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
         if (it.resultCode == Activity.RESULT_OK) {
             it.data?.data?.let { uri ->
                 if (isKoFile(context, uri)) {
-                    hymofsLkmUri = uri
+                    kasumiLkmUri = uri
                 } else {
-                    hymofsLkmUri = null
+                    kasumiLkmUri = null
                     Toast.makeText(
                         context,
                         context.getString(R.string.install_only_support_ko_file),
@@ -256,8 +256,8 @@ fun InstallScreen(
         }
     }
 
-    val onHymofsLkmUpload = {
-        selectHymofsLkmLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
+    val onKasumiLkmUpload = {
+        selectKasumiLkmLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "application/octet-stream"
         })
     }
@@ -690,7 +690,7 @@ fun InstallScreen(
                     )
                 }
 
-                // Experimental: embed HymoFS in init_boot
+                // Experimental: embed Kasumi in init_boot
                 AnimatedVisibility(
                     visible = installMethod != null,
                     enter = fadeIn() + expandVertically(),
@@ -704,24 +704,24 @@ fun InstallScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(id = R.string.hymofs_in_cpio_title),
+                                    text = stringResource(id = R.string.kasumi_in_cpio_title),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = stringResource(id = R.string.hymofs_in_cpio_desc),
+                                    text = stringResource(id = R.string.kasumi_in_cpio_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = hymofsInCpio,
-                                onCheckedChange = { hymofsInCpio = it }
+                                checked = kasumiInCpio,
+                                onCheckedChange = { kasumiInCpio = it }
                             )
                         }
-                        // Custom HymoFS LKM selection (when hymofs in cpio is enabled)
+                        // Custom Kasumi LKM selection (when kasumi in cpio is enabled)
                         AnimatedVisibility(
-                            visible = hymofsInCpio,
+                            visible = kasumiInCpio,
                             enter = fadeIn() + expandVertically(),
                             exit = shrinkVertically() + fadeOut()
                         ) {
@@ -734,17 +734,17 @@ fun InstallScreen(
                             ) {
                                 ListItem(
                                     headlineContent = {
-                                        Text(stringResource(id = R.string.hymofs_custom_lkm_title))
+                                        Text(stringResource(id = R.string.kasumi_custom_lkm_title))
                                     },
                                     supportingContent = {
-                                        hymofsLkmUri?.let { uri ->
+                                        kasumiLkmUri?.let { uri ->
                                             Text(
                                                 stringResource(
                                                     id = R.string.selected_lkm,
                                                     uri.lastPathSegment?.substringAfterLast('/') ?: "(file)"
                                                 )
                                             )
-                                        } ?: Text(stringResource(id = R.string.hymofs_custom_lkm_desc))
+                                        } ?: Text(stringResource(id = R.string.kasumi_custom_lkm_desc))
                                     },
                                     leadingContent = {
                                         Icon(
@@ -753,20 +753,20 @@ fun InstallScreen(
                                         )
                                     },
                                     trailingContent = {
-                                        if (hymofsLkmUri != null) {
+                                        if (kasumiLkmUri != null) {
                                             IconButton(
-                                                onClick = { hymofsLkmUri = null }
+                                                onClick = { kasumiLkmUri = null }
                                             ) {
                                                 Icon(
                                                     Icons.Default.Close,
-                                                    contentDescription = stringResource(R.string.hymofs_use_embedded)
+                                                    contentDescription = stringResource(R.string.kasumi_use_embedded)
                                                 )
                                             }
                                         }
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onHymofsLkmUpload() }
+                                        .clickable { onKasumiLkmUpload() }
                                 )
                             }
                         }
