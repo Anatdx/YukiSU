@@ -768,6 +768,11 @@
     <string name="partition_dangerous_flash_warning">⚠️ 警告：%1$s 是危险分区！\n\n刷写此分区可能导致：\n• 设备无法启动\n• 丢失重要数据\n• 网络/蓝牙功能失效\n\n请确保您知道自己在做什么！\n\n确定要刷写 %2$s 分区吗？</string>
     <string name="partition_confirm_flash">确定刷写</string>
     <string name="partition_backing_up">正在备份分区 %s…</string>
+    <string name="partition_backing_up_to">正在备份 %1$s 到 %2$s…</string>
+    <string name="partition_backup_directory">备份目录</string>
+    <string name="partition_backup_directory_desc">分区镜像会保存到这里，备份前可直接修改路径。</string>
+    <string name="partition_backup_directory_empty">备份目录不能为空</string>
+    <string name="partition_backup_directory_create_failed">无法创建备份目录：%s</string>
     <string name="partition_backup_success">备份成功：%s</string>
     <string name="partition_backup_failed">备份失败：%s</string>
     <string name="partition_backup_failed_check_log">备份失败，请查看 logcat 日志</string>

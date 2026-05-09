@@ -76,6 +76,27 @@ uint64_t get_file_size(const std::string& path) {
     return st.st_size;
 }
 
+bool is_block_device_path(const std::string& path) {
+    struct stat st{};
+    if (stat(path.c_str(), &st) != 0) {
+        return false;
+    }
+    return S_ISBLK(st.st_mode);
+}
+
+std::string shell_quote(const std::string& value) {
+    std::string quoted = "'";
+    for (const char c : value) {
+        if (c == '\'') {
+            quoted += "'\\''";
+        } else {
+            quoted.push_back(c);
+        }
+    }
+    quoted.push_back('\'');
+    return quoted;
+}
+
 // Helper: Execute command and get output
 std::string exec_cmd(const std::string& cmd) {
     auto result = exec_command_sync({"/system/bin/sh", "-c", cmd});
@@ -141,7 +162,7 @@ std::string find_partition_block_device(const std::string& partition_name,
     for (const auto& name : names_to_try) {
         for (const auto& base : base_paths) {
             const std::string path = base + name;
-            if (fs::exists(path)) {
+            if (is_block_device_path(path)) {
                 LOGD("Found partition %s at %s", partition_name.c_str(), path.c_str());
                 return path;
             }
@@ -168,7 +189,7 @@ PartitionInfo get_partition_info(const std::string& partition_name,
     PartitionInfo info;
     info.name = partition_name;
     info.block_device = find_partition_block_device(partition_name, slot_suffix);
-    info.exists = !info.block_device.empty() && fs::exists(info.block_device);
+    info.exists = !info.block_device.empty() && is_block_device_path(info.block_device);
 
     // 基于实际的块设备路径判断是否为逻辑分区
     info.is_logical =
@@ -191,6 +212,11 @@ std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
     const std::string by_name_dir = "/dev/block/by-name";
     if (fs::exists(by_name_dir)) {
         for (const auto& entry : fs::directory_iterator(by_name_dir)) {
+            if (!is_block_device_path(entry.path().string())) {
+                LOGD("Skipping non-block by-name entry: %s", entry.path().c_str());
+                continue;
+            }
+
             std::string name = entry.path().filename().string();
 
             // 只有当名字确实以 _a 或 _b 结尾时才去掉槽位后缀
@@ -220,6 +246,11 @@ std::vector<std::string> get_all_partitions(const std::string& slot_suffix) {
     const std::string mapper_dir = "/dev/block/mapper";
     if (fs::exists(mapper_dir)) {
         for (const auto& entry : fs::directory_iterator(mapper_dir)) {
+            if (!is_block_device_path(entry.path().string())) {
+                LOGD("Skipping non-block mapper entry: %s", entry.path().c_str());
+                continue;
+            }
+
             std::string name = entry.path().filename().string();
 
             // Skip control devices and virtual partitions
@@ -267,24 +298,25 @@ bool is_excluded_from_batch(const std::string& partition_name) {
                        [&partition_name](const char* p) { return partition_name == p; });
 }
 
-std::vector<std::string> get_available_partitions(bool scan_all) {
+std::vector<std::string> get_available_partitions(bool scan_all, const std::string& slot_suffix) {
     std::vector<std::string> available;
-    const std::string slot_suffix = get_current_slot_suffix();
+    const std::string effective_slot =
+        slot_suffix.empty() ? get_current_slot_suffix() : slot_suffix;
 
     if (scan_all) {
         // Scan all partitions from /dev/block/by-name
-        auto all_partitions = get_all_partitions(slot_suffix);
+        auto all_partitions = get_all_partitions(effective_slot);
         for (const auto& name : all_partitions) {
-            const std::string block_dev = find_partition_block_device(name, slot_suffix);
-            if (!block_dev.empty() && fs::exists(block_dev)) {
+            const std::string block_dev = find_partition_block_device(name, effective_slot);
+            if (!block_dev.empty() && is_block_device_path(block_dev)) {
                 available.push_back(name);
             }
         }
     } else {
         // Only check common partitions (silently skip if not found)
         for (const char* name : COMMON_PARTITIONS) {
-            const std::string block_dev = find_partition_block_device(name, slot_suffix);
-            if (!block_dev.empty() && fs::exists(block_dev)) {
+            const std::string block_dev = find_partition_block_device(name, effective_slot);
+            if (!block_dev.empty() && is_block_device_path(block_dev)) {
                 available.push_back(name);
             }
             // 找不到也不报错，有些设备可能没有某些常用分区（如recovery）
@@ -303,7 +335,7 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
         return "";
     }
 
-    if (!fs::exists(block_device)) {
+    if (!is_block_device_path(block_device)) {
         LOGE("Block device not found: %s", block_device.c_str());
         return "";
     }
@@ -320,7 +352,8 @@ std::string flash_physical_partition(const std::string& image_path, const std::s
     // Zero out partition if image is smaller
     if (image_size < partition_size) {
         LOGD("Zeroing partition before flash");
-        auto cmd = "dd bs=4096 if=/dev/zero of=" + block_device + " 2>/dev/null && sync";
+        auto cmd =
+            "dd bs=4096 if=/dev/zero of=" + shell_quote(block_device) + " 2>/dev/null && sync";
         exec_cmd(cmd);
     }
 
@@ -482,9 +515,19 @@ bool backup_partition(const std::string& partition_name, const std::string& outp
 
     LOGI("Backing up %s to %s", partition_name.c_str(), output_path.c_str());
 
+    const fs::path parent = fs::path(output_path).parent_path();
+    if (!parent.empty()) {
+        std::error_code ec;
+        fs::create_directories(parent, ec);
+        if (ec) {
+            LOGE("Failed to create backup directory %s: %s", parent.c_str(), ec.message().c_str());
+            return false;
+        }
+    }
+
     // Use dd for backup
-    const std::string cmd =
-        "dd if=" + info.block_device + " of=" + output_path + " bs=4096 2>/dev/null && sync";
+    const std::string cmd = "dd if=" + shell_quote(info.block_device) +
+                            " of=" + shell_quote(output_path) + " bs=4096 2>/dev/null && sync";
     (void)exec_cmd(cmd);
 
     if (fs::exists(output_path) && get_file_size(output_path) > 0) {
@@ -508,6 +551,11 @@ bool map_logical_partitions(const std::string& slot_suffix) {
 
     std::vector<std::string> logical_partitions;
     for (const auto& entry : fs::directory_iterator(mapper_dir)) {
+        if (!is_block_device_path(entry.path().string())) {
+            LOGD("Skipping non-block mapper entry while mapping: %s", entry.path().c_str());
+            continue;
+        }
+
         const std::string name = entry.path().filename().string();
 
         // Skip control devices
@@ -550,7 +598,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
 
         // Check if already mapped
         const std::string mapped_path = "/dev/block/mapper/" + part_name;
-        if (fs::exists(mapped_path)) {
+        if (is_block_device_path(mapped_path)) {
             LOGD("Partition %s already mapped", part_name.c_str());
             success_count++;
             continue;
@@ -560,7 +608,7 @@ bool map_logical_partitions(const std::string& slot_suffix) {
         const std::string cmd = "dmctl create " + part_name;
         (void)exec_cmd(cmd);
 
-        if (fs::exists(mapped_path)) {
+        if (is_block_device_path(mapped_path)) {
             LOGI("Successfully mapped %s", part_name.c_str());
             success_count++;
         } else {

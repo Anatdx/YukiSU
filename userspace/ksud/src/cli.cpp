@@ -568,7 +568,7 @@ int cmd_flash_new(const std::vector<std::string>& args) {
     } else if (filtered_args[0] == "list") {
         const std::string slot =
             target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
-        auto partitions = ksud::flash::get_available_partitions(scan_all);
+        auto partitions = ksud::flash::get_available_partitions(scan_all, slot);
 
         if (scan_all) {
             printf("All partitions");

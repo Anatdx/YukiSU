@@ -791,6 +791,11 @@
     <string name="partition_dangerous_flash_warning">⚠️ Warning: %1$s is a dangerous partition!\n\nFlashing this partition may cause:\n• Device unable to boot\n• Loss of important data\n• Network/Bluetooth malfunction\n\nPlease make sure you know what you are doing!\n\nAre you sure you want to flash %2$s partition?</string>
     <string name="partition_confirm_flash">Confirm Flash</string>
     <string name="partition_backing_up">Backing up partition %s…</string>
+    <string name="partition_backing_up_to">Backing up %1$s to %2$s…</string>
+    <string name="partition_backup_directory">Backup Directory</string>
+    <string name="partition_backup_directory_desc">Partition images are saved here. Edit the path before backing up.</string>
+    <string name="partition_backup_directory_empty">Backup directory cannot be empty</string>
+    <string name="partition_backup_directory_create_failed">Failed to create backup directory: %s</string>
     <string name="partition_backup_success">Backup successful: %s</string>
     <string name="partition_backup_failed">Backup failed: %s</string>
     <string name="partition_backup_failed_check_log">Backup failed, please check logcat logs</string>

@@ -56,7 +56,8 @@ PartitionInfo get_partition_info(const std::string& partition_name,
  * @param scan_all If true, scan all partitions; if false, only check common partitions
  * @return Vector of available partition names
  */
-std::vector<std::string> get_available_partitions(bool scan_all = false);
+std::vector<std::string> get_available_partitions(bool scan_all = false,
+                                                  const std::string& slot_suffix = "");
 
 /**
  * Scan all partitions from /dev/block/by-name

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import androidx.core.content.edit
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -46,6 +47,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+private const val PARTITION_MANAGER_PREFS = "partition_manager_prefs"
+private const val KEY_BACKUP_DIRECTORY = "backup_directory"
+
 /**
  * 分区管理界面
  * @author YukiSU
@@ -70,6 +74,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     var selectedPartitions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedSlot by remember { mutableStateOf<String?>(null) }  // 新增：选中的槽位
     var partitionTypeFilter by remember { mutableStateOf("all") }  // all, physical, logical
+    var backupDirectory by remember { mutableStateOf(loadPartitionBackupDirectory(context)) }
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     
@@ -103,7 +108,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                 context = context,
                                 imagePath = cacheFile.absolutePath,
                                 partition = partition.name,
-                                slot = slotInfo?.currentSlot,
+                                slot = selectedSlot,
                                 onStdout = { line -> 
                                     android.util.Log.d("PartitionFlash", "stdout: $line")
                                     logs.add(line)
@@ -324,6 +329,16 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                         }
                     }
                     
+                    item {
+                        BackupLocationCard(
+                            backupDirectory = backupDirectory,
+                            onBackupDirectoryChange = { newValue ->
+                                backupDirectory = newValue
+                                savePartitionBackupDirectory(context, newValue)
+                            }
+                        )
+                    }
+
                     // 分区类型筛选器
                     item {
                         Row(
@@ -443,6 +458,8 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                                                     context,
                                                     selectedPartitions,
                                                     if (showAllPartitions) allPartitionList else partitionList,
+                                                    selectedSlot,
+                                                    backupDirectory,
                                                     snackbarHost
                                                 )
                                             }
@@ -521,7 +538,13 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
             onBackup = {
                 showPartitionDialog = false
                 scope.launch {
-                    handlePartitionBackup(context, selectedPartition!!, slotInfo?.currentSlot, snackbarHost)
+                    handlePartitionBackup(
+                        context,
+                        selectedPartition!!,
+                        selectedSlot,
+                        backupDirectory,
+                        snackbarHost
+                    )
                 }
             },
             onFlash = {
@@ -530,6 +553,51 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                 filePickerLauncher.launch("*/*")
             }
         )
+    }
+}
+
+@Composable
+fun BackupLocationCard(
+    backupDirectory: String,
+    onBackupDirectoryChange: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = getCardColors(MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = CardConfig.cardElevation)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Folder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(R.string.partition_backup_directory),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            OutlinedTextField(
+                value = backupDirectory,
+                onValueChange = onBackupDirectoryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                supportingText = {
+                    Text(stringResource(R.string.partition_backup_directory_desc))
+                }
+            )
+        }
     }
 }
 
@@ -887,6 +955,7 @@ suspend fun handlePartitionBackup(
     context: Context,
     partition: PartitionInfo,
     slot: String?,
+    backupDirectory: String,
     snackbarHost: SnackbarHostState
 ) {
     // 生成备份文件名
@@ -894,11 +963,33 @@ suspend fun handlePartitionBackup(
     val timestamp = format.format(Date())
     val fileName = "${partition.name}_$timestamp.img"
     
-    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    val outputFile = File(downloadsDir, fileName)
+    val backupDir = File(backupDirectory.trim())
+    if (backupDir.path.isBlank()) {
+        withContext(Dispatchers.Main) {
+            snackbarHost.showSnackbar(context.getString(R.string.partition_backup_directory_empty))
+        }
+        return
+    }
+
+    val backupDirReady = withContext(Dispatchers.IO) {
+        ensureBackupDirectory(backupDir)
+    }
+
+    if (!backupDirReady) {
+        withContext(Dispatchers.Main) {
+            snackbarHost.showSnackbar(
+                context.getString(R.string.partition_backup_directory_create_failed, backupDir.absolutePath)
+            )
+        }
+        return
+    }
+
+    val outputFile = File(backupDir, fileName)
     
     withContext(Dispatchers.Main) {
-        snackbarHost.showSnackbar(context.getString(R.string.partition_backing_up, partition.name))
+        snackbarHost.showSnackbar(
+            context.getString(R.string.partition_backing_up_to, partition.name, outputFile.absolutePath)
+        )
     }
     
     withContext(Dispatchers.IO) {
@@ -920,7 +1011,9 @@ suspend fun handlePartitionBackup(
         
         withContext(Dispatchers.Main) {
             if (success) {
-                snackbarHost.showSnackbar(context.getString(R.string.partition_backup_success, fileName))
+                snackbarHost.showSnackbar(
+                    context.getString(R.string.partition_backup_success, outputFile.absolutePath)
+                )
             } else {
                 val errorMsg = if (logs.isNotEmpty()) {
                     context.getString(R.string.partition_backup_failed, logs.lastOrNull() ?: context.getString(R.string.partition_unknown))
@@ -940,6 +1033,8 @@ suspend fun handleBatchBackup(
     context: Context,
     selectedPartitionNames: Set<String>,
     allPartitions: List<PartitionInfo>,
+    slot: String?,
+    backupDirectory: String,
     snackbarHost: SnackbarHostState
 ) {
     val partitionsToBackup = allPartitions.filter { it.name in selectedPartitionNames }
@@ -955,11 +1050,27 @@ suspend fun handleBatchBackup(
     val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     val timestamp = format.format(Date())
     val backupDirName = "partition_backup_$timestamp"
-    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    val backupDir = File(downloadsDir, backupDirName)
+    val rootBackupDir = File(backupDirectory.trim())
+    if (rootBackupDir.path.isBlank()) {
+        withContext(Dispatchers.Main) {
+            snackbarHost.showSnackbar(context.getString(R.string.partition_backup_directory_empty))
+        }
+        return
+    }
+
+    val backupDir = File(rootBackupDir, backupDirName)
     
-    if (!backupDir.exists()) {
-        backupDir.mkdirs()
+    val backupDirReady = withContext(Dispatchers.IO) {
+        ensureBackupDirectory(backupDir)
+    }
+
+    if (!backupDirReady) {
+        withContext(Dispatchers.Main) {
+            snackbarHost.showSnackbar(
+                context.getString(R.string.partition_backup_directory_create_failed, backupDir.absolutePath)
+            )
+        }
+        return
     }
     
     withContext(Dispatchers.Main) {
@@ -982,7 +1093,7 @@ suspend fun handleBatchBackup(
                 context = context,
                 partition = partition.name,
                 outputPath = outputFile.absolutePath,
-                slot = null,
+                slot = slot,
                 onStdout = { line -> 
                     android.util.Log.d("BatchBackup", "[${partition.name}] stdout: $line")
                     logs.add(line)
@@ -1003,9 +1114,30 @@ suspend fun handleBatchBackup(
     
     withContext(Dispatchers.Main) {
         if (failedPartitions.isEmpty()) {
-            snackbarHost.showSnackbar(context.getString(R.string.partition_batch_backup_complete, successCount, backupDirName))
+            snackbarHost.showSnackbar(context.getString(R.string.partition_batch_backup_complete, successCount, backupDir.absolutePath))
         } else {
             snackbarHost.showSnackbar(context.getString(R.string.partition_batch_backup_partial, successCount, failedPartitions.size, failedPartitions.joinToString()))
         }
     }
+}
+
+fun defaultPartitionBackupDirectory(): String {
+    return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+}
+
+fun loadPartitionBackupDirectory(context: Context): String {
+    return context
+        .getSharedPreferences(PARTITION_MANAGER_PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_BACKUP_DIRECTORY, defaultPartitionBackupDirectory())
+        ?: defaultPartitionBackupDirectory()
+}
+
+fun savePartitionBackupDirectory(context: Context, path: String) {
+    context.getSharedPreferences(PARTITION_MANAGER_PREFS, Context.MODE_PRIVATE).edit {
+        putString(KEY_BACKUP_DIRECTORY, path)
+    }
+}
+
+fun ensureBackupDirectory(directory: File): Boolean {
+    return directory.exists() && directory.isDirectory || directory.mkdirs()
 }

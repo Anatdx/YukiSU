@@ -16,6 +16,10 @@ import java.io.File
  */
 object PartitionManagerHelper {
     private const val TAG = "PartitionManagerHelper"
+
+    private fun shellQuote(value: String): String {
+        return "'${value.replace("'", "'\\''")}'"
+    }
     
     /**
      * 获取槽位信息
@@ -221,9 +225,9 @@ object PartitionManagerHelper {
             val shell = getRootShell()
             
             val cmd = if (slot != null) {
-                "${getKsud()} flash backup $partition $outputPath --slot $slot"
+                "${getKsud()} flash backup ${shellQuote(partition)} ${shellQuote(outputPath)} --slot ${shellQuote(slot)}"
             } else {
-                "${getKsud()} flash backup $partition $outputPath"
+                "${getKsud()} flash backup ${shellQuote(partition)} ${shellQuote(outputPath)}"
             }
             
             Log.d(TAG, "Executing backup command: $cmd")
@@ -275,9 +279,9 @@ object PartitionManagerHelper {
             val shell = getRootShell()
             
             val cmd = if (slot != null) {
-                "${getKsud()} flash image $imagePath $partition --slot $slot"
+                "${getKsud()} flash image ${shellQuote(imagePath)} ${shellQuote(partition)} --slot ${shellQuote(slot)}"
             } else {
-                "${getKsud()} flash image $imagePath $partition"
+                "${getKsud()} flash image ${shellQuote(imagePath)} ${shellQuote(partition)}"
             }
             
             Log.d(TAG, "Executing flash command: $cmd")
