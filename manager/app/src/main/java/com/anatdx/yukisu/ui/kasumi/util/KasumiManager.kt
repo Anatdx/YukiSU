@@ -1,4 +1,4 @@
-package com.anatdx.yukisu.ui.hymofs.util
+package com.anatdx.yukisu.ui.kasumi.util
 
 import android.util.Log
 import com.anatdx.yukisu.ksuApp
@@ -11,10 +11,10 @@ import org.json.JSONArray
 import java.io.File
 
 /**
- * HymoFS Manager - Interfaces with ksud hymo commands
+ * Kasumi Manager - Interfaces with ksud hymo commands
  */
-object HymoFSManager {
-    private const val TAG = "HymoFSManager"
+object KasumiManager {
+    private const val TAG = "KasumiManager"
     
     // Paths
     const val HYMO_CONFIG_DIR = "/data/adb/hymo"
@@ -34,16 +34,16 @@ object HymoFSManager {
     }
     
     /**
-     * HymoFS status enum (codes only; UI text is i18n)
+     * Kasumi status enum (codes only; UI text is i18n)
      */
-    enum class HymoFSStatus(val code: Int) {
+    enum class KasumiStatus(val code: Int) {
         AVAILABLE(0),
         NOT_PRESENT(1),
         KERNEL_TOO_OLD(2),
         MODULE_TOO_OLD(3);
         
         companion object {
-            fun fromCode(code: Int): HymoFSStatus = entries.find { it.code == code } ?: NOT_PRESENT
+            fun fromCode(code: Int): KasumiStatus = entries.find { it.code == code } ?: NOT_PRESENT
         }
     }
     
@@ -61,8 +61,8 @@ object HymoFSManager {
         val version: String,
         val author: String,
         val description: String,
-        val mode: String,    // auto, hymofs, overlay, magic, none
-        val strategy: String, // resolved strategy: hymofs, overlay, magic
+        val mode: String,    // auto, kasumi, overlay, magic, none
+        val strategy: String, // resolved strategy: kasumi, overlay, magic
         val path: String,
         val enabled: Boolean = true,
         val rules: List<ModuleRule> = emptyList()
@@ -102,8 +102,8 @@ object HymoFSManager {
         val selinux: String,
         val mountBase: String,
         val activeMounts: List<String>,
-        val hymofsModuleIds: List<String>,
-        val hymofsMismatch: Boolean,
+        val kasumiModuleIds: List<String>,
+        val kasumiMismatch: Boolean,
         val mismatchMessage: String?,
         val mountStats: MountStats? = null,
         val detectedPartitions: List<PartitionInfo> = emptyList()
@@ -117,7 +117,7 @@ object HymoFSManager {
         val used: String,
         val avail: String,
         val percent: String,
-        val type: String  // tmpfs, ext4, hymofs
+        val type: String  // tmpfs, ext4, kasumi
     )
     
     /**
@@ -136,14 +136,15 @@ object HymoFSManager {
         val enableKernelDebug: Boolean = false,
         val enableStealth: Boolean = true,
         val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, stealth
-        val hymofsEnabled: Boolean = true,
+        val kasumiEnabled: Boolean = true,
         val mirrorPath: String = "",
         val partitions: List<String> = emptyList(),
         val unameRelease: String = "",
         val unameVersion: String = "",
+        val unameMode: String = "scoped",  // "scoped" (per-task ns) or "global" (init_uts_ns)
         val lkmAutoload: Boolean = true,
         val lkmKmiOverride: String = "",
-        val hymofsBuiltin: Boolean = false
+        val kasumiBuiltin: Boolean = false
     )
     
     /**
@@ -202,8 +203,8 @@ object HymoFSManager {
     // ==================== Commands ====================
     
     /**
-     * HymoFS feature bitmask and human-readable names.
-     * Parsed from `ksud hymo hymofs features` output: "features: 0xNN name1 name2 ..."
+     * Kasumi feature bitmask and human-readable names.
+     * Parsed from `ksud hymo kasumi features` output: "features: 0xNN name1 name2 ..."
      */
     data class FeaturesResult(
         val bitmask: Int,
@@ -211,14 +212,14 @@ object HymoFSManager {
     )
 
     /**
-     * Get HymoFS feature bitmask and feature names (mount_hide, maps_spoof, etc.).
-     * Returns null when HymoFS is not available or command fails.
+     * Get Kasumi feature bitmask and feature names (mount_hide, maps_spoof, etc.).
+     * Returns null when Kasumi is not available or command fails.
      */
     suspend fun getFeatures(): FeaturesResult? = withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
             val result = shell.newJob()
-                .add("${getKsud()} hymo hymofs features")
+                .add("${getKsud()} hymo kasumi features")
                 .to(ArrayList<String>(), null)
                 .exec()
             val line = (result.out + result.err).joinToString(" ").trim()
@@ -249,7 +250,7 @@ object HymoFSManager {
      */
     suspend fun clearMapsRules(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo hymofs maps clear").exec()
+            val result = Shell.cmd("${getKsud()} hymo kasumi maps clear").exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear maps rules", e)
@@ -271,7 +272,7 @@ object HymoFSManager {
         try {
             val path = spoofedPathname.replace("'", "'\\''")
             val result = Shell.cmd(
-                "${getKsud()} hymo hymofs maps add $targetIno $targetDev $spoofedIno $spoofedDev '$path'"
+                "${getKsud()} hymo kasumi maps add $targetIno $targetDev $spoofedIno $spoofedDev '$path'"
             ).exec()
             result.isSuccess
         } catch (e: Exception) {
@@ -281,12 +282,12 @@ object HymoFSManager {
     }
 
     /**
-     * Get HymoFS version from ksud
+     * Get Kasumi version from ksud
      */
     suspend fun getVersion(): String = withContext(Dispatchers.IO) {
         try {
-            // hymo: hymo hymofs version -> JSON
-            val result = Shell.cmd("${getKsud()} hymo hymofs version").exec()
+            // hymo: hymo kasumi version -> JSON
+            val result = Shell.cmd("${getKsud()} hymo kasumi version").exec()
             if (!result.isSuccess) {
                 return@withContext "Unknown"
             }
@@ -294,10 +295,10 @@ object HymoFSManager {
             val json = JSONObject(result.out.joinToString("\n"))
             val protocolVersion = json.optInt("protocol_version", -1)
             val kernelVersion = json.optInt("kernel_version", -1)
-            val hymofsAvailable = json.optBoolean("hymofs_available", false)
+            val kasumiAvailable = json.optBoolean("kasumi_available", false)
             val mismatch = json.optBoolean("protocol_mismatch", false)
 
-            if (!hymofsAvailable) {
+            if (!kasumiAvailable) {
                 return@withContext "Unavailable"
             }
 
@@ -324,7 +325,7 @@ object HymoFSManager {
     /**
      * Read real kernel uname info from sysfs (/proc/sys/kernel/osrelease and version).
      * Same approach as getSystemInfo() kernel field - uses cat to read raw sysfs,
-     * NOT uname (which returns spoofed values when HymoFS uname spoofing is active).
+     * NOT uname (which returns spoofed values when Kasumi uname spoofing is active).
      * Returns Pair(unameRelease, unameVersion).
      */
     suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
@@ -336,23 +337,23 @@ object HymoFSManager {
     }
     
     /**
-     * Get HymoFS status (check if kernel supports it)
+     * Get Kasumi status (check if kernel supports it)
      *
      * Uses `ksud hymo config show` JSON output, which includes:
-     *   "hymofs_status": int (0=Available, 1=NotPresent, 2=KernelTooOld, 3=ModuleTooOld)
+     *   "kasumi_status": int (0=Available, 1=NotPresent, 2=KernelTooOld, 3=ModuleTooOld)
      */
-    suspend fun getStatus(): HymoFSStatus = withContext(Dispatchers.IO) {
+    suspend fun getStatus(): KasumiStatus = withContext(Dispatchers.IO) {
         try {
             val result = Shell.cmd("${getKsud()} hymo config show").exec()
             if (!result.isSuccess) {
-                return@withContext HymoFSStatus.NOT_PRESENT
+                return@withContext KasumiStatus.NOT_PRESENT
             }
             val json = JSONObject(result.out.joinToString("\n"))
-            val code = json.optInt("hymofs_status", HymoFSStatus.NOT_PRESENT.code)
-            HymoFSStatus.fromCode(code)
+            val code = json.optInt("kasumi_status", KasumiStatus.NOT_PRESENT.code)
+            KasumiStatus.fromCode(code)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get status", e)
-            HymoFSStatus.NOT_PRESENT
+            KasumiStatus.NOT_PRESENT
         }
     }
     
@@ -377,7 +378,7 @@ object HymoFSManager {
                     enableKernelDebug = json.optBoolean("enable_kernel_debug", false),
                     enableStealth = json.optBoolean("enable_stealth", true),
                     enableHidexattr = json.optBoolean("enable_hidexattr", false),
-                    hymofsEnabled = json.optBoolean("hymofs_enabled", true),
+                    kasumiEnabled = json.optBoolean("kasumi_enabled", true),
                     mirrorPath = run {
                         val raw = json.optString("mirror_path", "")
                         if (raw == "/data/adb/hymo/img_mnt") "" else raw
@@ -387,9 +388,12 @@ object HymoFSManager {
                     } ?: emptyList(),
                     unameRelease = json.optString("uname_release", ""),
                     unameVersion = json.optString("uname_version", ""),
+                    unameMode = json.optString("uname_mode", "scoped").let {
+                        if (it == "global") "global" else "scoped"
+                    },
                     lkmAutoload = json.optBoolean("lkm_autoload", true),
                     lkmKmiOverride = json.optString("lkm_kmi_override", ""),
-                    hymofsBuiltin = json.optBoolean("hymofs_builtin", false)
+                    kasumiBuiltin = json.optBoolean("kasumi_builtin", false)
                 )
             } else {
                 HymoConfig()
@@ -418,7 +422,7 @@ object HymoFSManager {
                 put("enable_kernel_debug", config.enableKernelDebug)
                 put("enable_stealth", config.enableStealth)
                 put("enable_hidexattr", config.enableHidexattr)
-                put("hymofs_enabled", config.hymofsEnabled)
+                put("kasumi_enabled", config.kasumiEnabled)
                 if (config.mirrorPath.isNotEmpty()) {
                     put("mirror_path", config.mirrorPath)
                 }
@@ -427,6 +431,9 @@ object HymoFSManager {
                 }
                 if (config.unameRelease.isNotEmpty()) put("uname_release", config.unameRelease)
                 if (config.unameVersion.isNotEmpty()) put("uname_version", config.unameVersion)
+                if (config.unameMode.isNotEmpty() && config.unameMode != "scoped") {
+                    put("uname_mode", config.unameMode)
+                }
             }
             val content = json.toString(2)
 
@@ -495,8 +502,8 @@ object HymoFSManager {
      */
     suspend fun getActiveRules(): List<ActiveRule> = withContext(Dispatchers.IO) {
         try {
-            // hymo: hymo hymofs list -> JSON array of rules
-            val result = Shell.cmd("${getKsud()} hymo hymofs list").exec()
+            // hymo: hymo kasumi list -> JSON array of rules
+            val result = Shell.cmd("${getKsud()} hymo kasumi list").exec()
             if (result.isSuccess) {
                 val arr = JSONArray(result.out.joinToString("\n"))
                 val rules = mutableListOf<ActiveRule>()
@@ -519,7 +526,7 @@ object HymoFSManager {
                         }
                         else -> {
                             val args = obj.optString("args", "")
-                            if (args.isNotEmpty() && typeUpper != "HYMOFS" && !typeUpper.startsWith("ERROR")) {
+                            if (args.isNotEmpty() && typeUpper != "KASUMI" && !typeUpper.startsWith("ERROR")) {
                                 rules.add(ActiveRule(typeUpper.lowercase(), args, null, null))
                             }
                         }
@@ -607,7 +614,7 @@ object HymoFSManager {
     }
     
     /**
-     * Get system info including daemon state (aligned with WebUI: api system + hymofs version)
+     * Get system info including daemon state (aligned with WebUI: api system + kasumi version)
      */
     suspend fun getSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         try {
@@ -620,8 +627,8 @@ object HymoFSManager {
             
             var mountBase = "Unknown"
             var activeMounts = emptyList<String>()
-            var hymofsModuleIds = emptyList<String>()
-            var hymofsMismatch = false
+            var kasumiModuleIds = emptyList<String>()
+            var kasumiMismatch = false
             var mismatchMessage: String? = null
             var mountStats: MountStats? = null
             var detectedPartitions = emptyList<PartitionInfo>()
@@ -656,20 +663,20 @@ object HymoFSManager {
                 }
             }
             
-            // Call hymo hymofs version for active_modules, protocol_mismatch, mismatch_message
-            val hymofsVersionResult = Shell.cmd("${getKsud()} hymo hymofs version").exec()
-            if (hymofsVersionResult.isSuccess && hymofsVersionResult.out.isNotEmpty()) {
+            // Call hymo kasumi version for active_modules, protocol_mismatch, mismatch_message
+            val kasumiVersionResult = Shell.cmd("${getKsud()} hymo kasumi version").exec()
+            if (kasumiVersionResult.isSuccess && kasumiVersionResult.out.isNotEmpty()) {
                 try {
-                    val verText = (hymofsVersionResult.out + hymofsVersionResult.err).joinToString("\n")
-                    val ver = extractJsonObject(verText) ?: throw IllegalStateException("hymofs version json parse failed")
-                    hymofsModuleIds = ver.optJSONArray("active_modules")?.let { arr ->
+                    val verText = (kasumiVersionResult.out + kasumiVersionResult.err).joinToString("\n")
+                    val ver = extractJsonObject(verText) ?: throw IllegalStateException("kasumi version json parse failed")
+                    kasumiModuleIds = ver.optJSONArray("active_modules")?.let { arr ->
                         (0 until arr.length()).map { arr.getString(it) }
-                    } ?: hymofsModuleIds
-                    hymofsMismatch = ver.optBoolean("protocol_mismatch", hymofsMismatch)
+                    } ?: kasumiModuleIds
+                    kasumiMismatch = ver.optBoolean("protocol_mismatch", kasumiMismatch)
                     val mm = ver.optString("mismatch_message", "")
                     if (mm.isNotBlank()) mismatchMessage = mm
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to parse hymofs version", e)
+                    Log.w(TAG, "Failed to parse kasumi version", e)
                 }
             }
             
@@ -684,12 +691,12 @@ object HymoFSManager {
                         activeMounts = state.optJSONArray("active_mounts")?.let { arr ->
                             (0 until arr.length()).map { arr.getString(it) }
                         } ?: activeMounts
-                        if (hymofsModuleIds.isEmpty()) {
-                            hymofsModuleIds = state.optJSONArray("hymofs_module_ids")?.let { arr ->
+                        if (kasumiModuleIds.isEmpty()) {
+                            kasumiModuleIds = state.optJSONArray("kasumi_module_ids")?.let { arr ->
                                 (0 until arr.length()).map { arr.getString(it) }
                             } ?: emptyList()
                         }
-                        hymofsMismatch = state.optBoolean("hymofs_mismatch", hymofsMismatch)
+                        kasumiMismatch = state.optBoolean("kasumi_mismatch", kasumiMismatch)
                         if (mismatchMessage.isNullOrBlank()) {
                             val mm = state.optString("mismatch_message", "")
                             if (mm.isNotBlank()) mismatchMessage = mm
@@ -700,7 +707,7 @@ object HymoFSManager {
                 }
             }
             
-            SystemInfo(kernel, selinux, mountBase, activeMounts, hymofsModuleIds, hymofsMismatch, mismatchMessage, mountStats, detectedPartitions)
+            SystemInfo(kernel, selinux, mountBase, activeMounts, kasumiModuleIds, kasumiMismatch, mismatchMessage, mountStats, detectedPartitions)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get system info", e)
             SystemInfo("Unknown", "Unknown", "Unknown", emptyList(), emptyList(), false, null)
@@ -805,16 +812,34 @@ object HymoFSManager {
 
     /**
      * Apply kernel uname spoofing immediately (hymo debug set-uname).
-     * Call after saveConfig for immediate effect.
+     * mode: "scoped" (default, per-task uts_ns) or "global" (rewrite init_uts_ns).
      */
-    suspend fun setUname(release: String, version: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun setUname(release: String, version: String, mode: String = "scoped"): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val r = release.replace("'", "'\\''")
+                val v = version.replace("'", "'\\''")
+                val modeArg = if (mode == "global") "global" else "scoped"
+                val result = Shell.cmd(
+                    "${getKsud()} hymo debug set-uname $modeArg '$r' '$v'"
+                ).exec()
+                result.isSuccess
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set uname", e)
+                false
+            }
+        }
+
+    /**
+     * Restore original kernel uname captured on first global apply.
+     * Requires protocol >= 15 and a prior global apply.
+     */
+    suspend fun restoreUnameGlobal(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val r = release.replace("'", "'\\''")
-            val v = version.replace("'", "'\\''")
-            val result = Shell.cmd("${getKsud()} hymo debug set-uname '$r' '$v'").exec()
+            val result = Shell.cmd("${getKsud()} hymo debug set-uname-restore").exec()
             result.isSuccess
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to set uname", e)
+            Log.e(TAG, "Failed to restore global uname", e)
             false
         }
     }
@@ -848,7 +873,7 @@ object HymoFSManager {
     }
 
     /**
-     * Load HymoFS LKM manually.
+     * Load Kasumi LKM manually.
      */
     suspend fun loadLkm(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -874,7 +899,7 @@ object HymoFSManager {
     }
 
     /**
-     * Unload HymoFS LKM.
+     * Unload Kasumi LKM.
      */
     suspend fun unloadLkm(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -910,7 +935,7 @@ object HymoFSManager {
     }
 
     /**
-     * Get current LKM hooks (when HymoFS is available).
+     * Get current LKM hooks (when Kasumi is available).
      */
     suspend fun getLkmHooks(): String = withContext(Dispatchers.IO) {
         try {
@@ -927,7 +952,7 @@ object HymoFSManager {
     }
 
     /**
-     * Set HymoFS LKM boot autoload (post-fs-data).
+     * Set Kasumi LKM boot autoload (post-fs-data).
      * When enabled: ksud loads LKM at boot; failures are logged to /data/adb/hymo/lkm_autoload.log
      * When disabled: skip loading at boot
      */
@@ -981,7 +1006,7 @@ object HymoFSManager {
             if (fromLogcat.isNotEmpty())
                 "[Daemon log not found; showing logcat (ksud/hymo)]\n\n$fromLogcat"
             else
-                "[No daemon.log and no ksud/hymo logcat. Built-in HymoFS logs to ksud stderr/logcat.]"
+                "[No daemon.log and no ksud/hymo logcat. Built-in Kasumi logs to ksud stderr/logcat.]"
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read log", e)
             ""
@@ -989,18 +1014,18 @@ object HymoFSManager {
     }
     
     /**
-     * Read kernel log for HymoFS.
+     * Read kernel log for Kasumi.
      * Reads from KSU's saved dmesg (/data/adb/ksu/log/dmesg.log) and filters lines
-     * that start with HymoFS: (standardized kernel log prefix). Falls back to
+     * that start with Kasumi: (standardized kernel log prefix). Falls back to
      * live dmesg if the file is missing.
      */
     suspend fun readKernelLog(lines: Int = 200): String = withContext(Dispatchers.IO) {
         try {
             val result = Shell.cmd(
                 "if [ -r '$KSU_DMESG_LOG' ]; then " +
-                "grep 'HymoFS:' '$KSU_DMESG_LOG' | tail -n $lines; " +
+                "grep 'Kasumi:' '$KSU_DMESG_LOG' | tail -n $lines; " +
                 "else " +
-                "dmesg | grep 'HymoFS:' | tail -n $lines; " +
+                "dmesg | grep 'Kasumi:' | tail -n $lines; " +
                 "fi"
             ).exec()
             if (result.isSuccess) {

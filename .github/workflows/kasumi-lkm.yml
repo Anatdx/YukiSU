@@ -1,4 +1,4 @@
-name: Build HymoFS Kernel Module
+name: Build Kasumi Kernel Module
 
 on:
   workflow_call:
@@ -11,8 +11,8 @@ on:
         description: "Target architecture (DDK currently supports arm64 only)"
         required: true
         type: string
-      hymofs_ref:
-        description: "HymoFS git ref (branch/tag/commit)"
+      kasumi_ref:
+        description: "Kasumi git ref (branch/tag/commit)"
         required: false
         default: "main"
         type: string
@@ -24,7 +24,7 @@ on:
 
 jobs:
   build:
-    name: Build hymofs ${{ inputs.arch }} ${{ inputs.kmi }}
+    name: Build Kasumi ${{ inputs.arch }} ${{ inputs.kmi }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
@@ -33,8 +33,8 @@ jobs:
       KMI: ${{ inputs.kmi }}
       TARGET_ARCH: ${{ inputs.arch }}
       OUT: ${{ github.workspace }}/out
-      SRC_ROOT: ${{ github.workspace }}/hymofs_src
-      SRC: ${{ github.workspace }}/hymofs_src/src
+      SRC_ROOT: ${{ github.workspace }}/kasumi_src
+      SRC: ${{ github.workspace }}/kasumi_src/src
 
     steps:
       - name: Checkout
@@ -49,14 +49,14 @@ jobs:
             exit 1
           fi
 
-      - name: Clone HymoFS
+      - name: Clone Kasumi
         run: |
           set -euo pipefail
-          echo "Cloning HymoFS (ref: ${{ inputs.hymofs_ref }})..."
-          git clone --depth 1 "https://github.com/Anatdx/HymoFS.git" "$SRC_ROOT"
+          echo "Cloning Kasumi (ref: ${{ inputs.kasumi_ref }})..."
+          git clone --depth 1 "https://github.com/Anatdx/Kasumi.git" "$SRC_ROOT"
           (
             cd "$SRC_ROOT"
-            git fetch --depth 1 origin "${{ inputs.hymofs_ref }}"
+            git fetch --depth 1 origin "${{ inputs.kasumi_ref }}"
             git checkout FETCH_HEAD
           )
           ls -la "$SRC/"
@@ -68,7 +68,7 @@ jobs:
           VERSION=$((COMMIT_NUM + 200))
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build hymofs_lkm.ko
+      - name: Build kasumi_lkm.ko
         run: |
           set -euo pipefail
           if [ -z "${KDIR:-}" ] || [ ! -f "$KDIR/Makefile" ]; then
@@ -77,16 +77,16 @@ jobs:
           fi
 
           VERSION="${{ steps.parse_version.outputs.VERSION }}"
-          echo "Building hymofs_lkm.ko with KDIR=$KDIR"
+          echo "Building kasumi_lkm.ko with KDIR=$KDIR"
           (
             cd "$SRC_ROOT"
             make -j"$(nproc --all)" CC=clang \
-              CFLAGS_MODULE="-DHYMOFS_VERSION=\\\"0.1.${VERSION}\\\""
+              CFLAGS_MODULE="-DKASUMI_VERSION=\\\"0.1.${VERSION}\\\""
           )
 
           mkdir -p "$OUT"
-          KO_FILE="${KMI}_${TARGET_ARCH}_hymofs_lkm.ko"
-          cp "$SRC/hymofs_lkm.ko" "$OUT/$KO_FILE"
+          KO_FILE="${KMI}_${TARGET_ARCH}_kasumi_lkm.ko"
+          cp "$SRC/kasumi_lkm.ko" "$OUT/$KO_FILE"
           llvm-strip -d "$OUT/$KO_FILE" 2>/dev/null || true
           ls -la "$OUT/"
 
@@ -95,7 +95,7 @@ jobs:
           apt-get update
           apt-get install -y gnupg
 
-      - name: Import GPG key and Sign hymofs_lkm.ko
+      - name: Import GPG key and Sign kasumi_lkm.ko
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -104,14 +104,14 @@ jobs:
           mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
           if [ -z "${GPG_PRIVATE_KEY:-}" ]; then
             echo "GPG_PRIVATE_KEY not set, skipping signing."
-            touch "$OUT/${KMI}_${TARGET_ARCH}_hymofs_lkm.ko.asc"
+            touch "$OUT/${KMI}_${TARGET_ARCH}_kasumi_lkm.ko.asc"
             exit 0
           fi
           printf '%s\n' "$GPG_PRIVATE_KEY" > key.asc
           gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import key.asc
           rm -f key.asc
           cd "$OUT"
-          KO_FILE="${KMI}_${TARGET_ARCH}_hymofs_lkm.ko"
+          KO_FILE="${KMI}_${TARGET_ARCH}_kasumi_lkm.ko"
           echo "Signing $KO_FILE..."
           gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
             --passphrase "$GPG_PASSPHRASE" \
@@ -121,7 +121,7 @@ jobs:
       - name: Upload .ko
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.KMI }}-${{ env.TARGET_ARCH }}-hymofs-lkm
+          name: ${{ env.KMI }}-${{ env.TARGET_ARCH }}-kasumi-lkm
           path: |
-            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_hymofs_lkm.ko
-            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_hymofs_lkm.ko.asc
+            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_kasumi_lkm.ko
+            ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_kasumi_lkm.ko.asc

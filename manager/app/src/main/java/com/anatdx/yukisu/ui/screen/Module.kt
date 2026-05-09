@@ -94,7 +94,7 @@ import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.*
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
-import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
+import com.anatdx.yukisu.ui.kasumi.util.KasumiManager
 import com.anatdx.yukisu.ui.util.*
 import com.anatdx.yukisu.ui.util.module.ModuleModify
 import com.anatdx.yukisu.ui.util.module.ModuleUtils
@@ -159,7 +159,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
     var showShortcutTypeDialog by remember { mutableStateOf(false) }
     var hymoModuleIds by remember { mutableStateOf(emptySet<String>()) }
     var hymoBuiltinMountEnabled by remember { mutableStateOf(true) }
-    var hymoModules by remember { mutableStateOf(emptyMap<String, HymoFSManager.ModuleInfo>()) }
+    var hymoModules by remember { mutableStateOf(emptyMap<String, KasumiManager.ModuleInfo>()) }
     var hymoMountDialogModule by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val selectZipLauncher = rememberLauncherForActivityResult(
@@ -334,10 +334,10 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
-                val modules = HymoFSManager.getModules()
+                val modules = KasumiManager.getModules()
                 hymoModules = modules.associateBy { it.id }
                 hymoModuleIds = hymoModules.keys.toSet()
-                hymoBuiltinMountEnabled = HymoFSManager.isBuiltinMountEnabled()
+                hymoBuiltinMountEnabled = KasumiManager.isBuiltinMountEnabled()
             } catch (_: Exception) {
                 hymoModules = emptyMap()
                 hymoModuleIds = emptySet()
@@ -470,10 +470,10 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                         scope.launch {
                             withContext(Dispatchers.IO) {
                                 try {
-                                    val modules = HymoFSManager.getModules()
+                                    val modules = KasumiManager.getModules()
                                     hymoModules = modules.associateBy { it.id }
                                     hymoModuleIds = hymoModules.keys.toSet()
-                                    hymoBuiltinMountEnabled = HymoFSManager.isBuiltinMountEnabled()
+                                    hymoBuiltinMountEnabled = KasumiManager.isBuiltinMountEnabled()
                                 } catch (_: Exception) {
                                     hymoModules = emptyMap()
                                     hymoModuleIds = emptySet()
@@ -597,7 +597,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                 scope.launch {
                     withContext(Dispatchers.IO) {
                         try {
-                            val modules = HymoFSManager.getModules()
+                            val modules = KasumiManager.getModules()
                             hymoModules = modules.associateBy { it.id }
                             hymoModuleIds = hymoModules.keys.toSet()
                         } catch (_: Exception) { }
@@ -961,7 +961,7 @@ private fun ModuleList(
     listState: LazyListState,
     hymoModuleIds: Set<String> = emptySet(),
     hymoBuiltinMountEnabled: Boolean = true,
-    hymoModules: Map<String, HymoFSManager.ModuleInfo> = emptyMap(),
+    hymoModules: Map<String, KasumiManager.ModuleInfo> = emptyMap(),
     onShowHymoMountDialog: (moduleId: String, moduleName: String) -> Unit = { _, _ -> },
     onRefreshHymoModules: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -1254,11 +1254,11 @@ private fun ModuleList(
 
 }
 
-private val HYMO_MOUNT_MODES = listOf("auto", "hymofs", "overlay", "magic", "none")
+private val HYMO_MOUNT_MODES = listOf("auto", "kasumi", "overlay", "magic", "none")
 
 private val HYMO_MODE_COLORS = mapOf(
     "auto" to Color(0xFF1976D2),
-    "hymofs" to Color(0xFF388E3C),
+    "kasumi" to Color(0xFF388E3C),
     "overlay" to Color(0xFFF57C00),
     "magic" to Color(0xFF7B1FA2),
     "none" to Color(0xFF616161)
@@ -1269,7 +1269,7 @@ private val HYMO_MODE_COLORS = mapOf(
 private fun HymoMountConfigDialog(
     moduleId: String,
     moduleName: String,
-    initialInfo: HymoFSManager.ModuleInfo?,
+    initialInfo: KasumiManager.ModuleInfo?,
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
@@ -1281,7 +1281,7 @@ private fun HymoMountConfigDialog(
         mutableStateOf(initialInfo?.mode ?: "auto")
     }
     var rules by remember(moduleId) {
-        mutableStateOf(initialInfo?.rules ?: emptyList<HymoFSManager.ModuleRule>())
+        mutableStateOf(initialInfo?.rules ?: emptyList<KasumiManager.ModuleRule>())
     }
     var newPath by remember { mutableStateOf("") }
     var newMode by remember { mutableStateOf("auto") }
@@ -1290,18 +1290,18 @@ private fun HymoMountConfigDialog(
     var rulesExpanded by remember { mutableStateOf(false) }
 
     val modeLabels = mapOf(
-        "auto" to stringResource(R.string.hymofs_mount_mode_auto),
-        "hymofs" to stringResource(R.string.hymofs_mount_mode_hymofs),
-        "overlay" to stringResource(R.string.hymofs_mount_mode_overlay),
-        "magic" to stringResource(R.string.hymofs_mount_mode_magic),
-        "none" to stringResource(R.string.hymofs_mount_mode_none)
+        "auto" to stringResource(R.string.kasumi_mount_mode_auto),
+        "kasumi" to stringResource(R.string.kasumi_mount_mode_kasumi),
+        "overlay" to stringResource(R.string.kasumi_mount_mode_overlay),
+        "magic" to stringResource(R.string.kasumi_mount_mode_magic),
+        "none" to stringResource(R.string.kasumi_mount_mode_none)
     )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text(stringResource(R.string.hymofs_mount_config))
+                Text(stringResource(R.string.kasumi_mount_config))
                 Text(
                     text = moduleName,
                     style = MaterialTheme.typography.bodyMedium,
@@ -1317,7 +1317,7 @@ private fun HymoMountConfigDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.hymofs_mount_mode),
+                    text = stringResource(R.string.kasumi_mount_mode),
                     style = MaterialTheme.typography.titleSmall
                 )
                 FlowRow(
@@ -1355,7 +1355,7 @@ private fun HymoMountConfigDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.hymofs_module_rules_title),
+                        text = stringResource(R.string.kasumi_module_rules_title),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
@@ -1375,7 +1375,7 @@ private fun HymoMountConfigDialog(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                        rules.forEach { rule: HymoFSManager.ModuleRule ->
+                        rules.forEach { rule: KasumiManager.ModuleRule ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1398,7 +1398,7 @@ private fun HymoMountConfigDialog(
                         OutlinedTextField(
                             value = newPath,
                             onValueChange = { newPath = it },
-                            placeholder = { Text(stringResource(R.string.hymofs_module_rules_placeholder)) },
+                            placeholder = { Text(stringResource(R.string.kasumi_module_rules_placeholder)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -1433,13 +1433,13 @@ private fun HymoMountConfigDialog(
                             FilledTonalButton(
                                 onClick = {
                                     if (newPath.isNotBlank()) {
-                                        rules = rules + HymoFSManager.ModuleRule(newPath.trim(), newMode)
+                                        rules = rules + KasumiManager.ModuleRule(newPath.trim(), newMode)
                                         newPath = ""
                                     }
                                 },
                                 shape = RoundedCornerShape(20.dp)
                             ) {
-                                Text(stringResource(R.string.hymofs_module_rules_add))
+                                Text(stringResource(R.string.kasumi_module_rules_add))
                             }
                         }
                         }
@@ -1454,20 +1454,20 @@ private fun HymoMountConfigDialog(
                         isSaving = true
                         val rulesToSave = rules
                         try {
-                            val modeOk = HymoFSManager.setModuleMode(moduleId, selectedMode)
+                            val modeOk = KasumiManager.setModuleMode(moduleId, selectedMode)
                             if (!modeOk) {
-                                snackbarHost.showSnackbar(context.getString(R.string.hymofs_module_rules_add_failed))
+                                snackbarHost.showSnackbar(context.getString(R.string.kasumi_module_rules_add_failed))
                                 return@launch
                             }
-                            val oldRules = initialInfo?.rules ?: emptyList<HymoFSManager.ModuleRule>()
+                            val oldRules = initialInfo?.rules ?: emptyList<KasumiManager.ModuleRule>()
                             for (r in oldRules) {
                                 if (!rulesToSave.contains(r)) {
-                                    HymoFSManager.removeModuleRule(moduleId, r.path)
+                                    KasumiManager.removeModuleRule(moduleId, r.path)
                                 }
                             }
                             for (r in rulesToSave) {
                                 if (!oldRules.contains(r)) {
-                                    HymoFSManager.addModuleRule(moduleId, r.path, r.mode)
+                                    KasumiManager.addModuleRule(moduleId, r.path, r.mode)
                                 }
                             }
                             onSaved()
@@ -1497,7 +1497,7 @@ fun ModuleItem(
     module: ModuleViewModel.ModuleInfo,
     updateUrl: String,
     hasHymoMountConfig: Boolean = false,
-    hymoModuleInfo: HymoFSManager.ModuleInfo? = null,
+    hymoModuleInfo: KasumiManager.ModuleInfo? = null,
     onShowHymoMountDialog: (moduleId: String, moduleName: String) -> Unit = { _, _ -> },
     onUninstallClicked: (ModuleViewModel.ModuleInfo) -> Unit,
     onCheckChanged: suspend (Boolean) -> Boolean,
@@ -1717,13 +1717,13 @@ fun ModuleItem(
                         val mode = hymoModuleInfo?.mode
                         val strategy = hymoModuleInfo?.strategy
                         val (displayStrategy, strategyLabel) = if (mode == "none") {
-                            "none" to stringResource(R.string.hymofs_strategy_not_mounted)
+                            "none" to stringResource(R.string.kasumi_strategy_not_mounted)
                         } else {
-                            val s = strategy?.takeIf { it in listOf("hymofs", "overlay", "magic") } ?: "overlay"
+                            val s = strategy?.takeIf { it in listOf("kasumi", "overlay", "magic") } ?: "overlay"
                             val label = when (s) {
-                                "hymofs" -> stringResource(R.string.hymofs_mount_mode_hymofs)
-                                "overlay" -> stringResource(R.string.hymofs_mount_mode_overlay)
-                                "magic" -> stringResource(R.string.hymofs_strategy_magic_mount)
+                                "kasumi" -> stringResource(R.string.kasumi_mount_mode_kasumi)
+                                "overlay" -> stringResource(R.string.kasumi_mount_mode_overlay)
+                                "magic" -> stringResource(R.string.kasumi_strategy_magic_mount)
                                 else -> s
                             }
                             s to label
@@ -1767,7 +1767,7 @@ fun ModuleItem(
                         Icon(
                             modifier = Modifier.size(20.dp),
                             imageVector = Icons.Outlined.Folder,
-                            contentDescription = stringResource(R.string.hymofs_mount_config)
+                            contentDescription = stringResource(R.string.kasumi_mount_config)
                         )
                     }
                 }

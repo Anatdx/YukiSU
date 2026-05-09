@@ -288,7 +288,7 @@ set(KSUD_OUR_SOURCES
     src/hymo/core/sync.cpp
     src/hymo/core/user_rules.cpp
     src/hymo/core/webui.cpp
-    src/hymo/mount/hymofs.cpp
+    src/hymo/mount/kasumi.cpp
     src/hymo/mount/magic.cpp
     src/hymo/mount/overlay.cpp
     src/hymo/mount/mount_utils.cpp

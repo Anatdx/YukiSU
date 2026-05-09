@@ -150,7 +150,7 @@ void print_usage() {
     printf("  umount         Manage umount paths\n");
     printf("  kernel         Kernel interface\n");
     printf("  debug          For developers\n");
-    printf("  hymo           HymoFS module manager\n");
+    printf("  hymo           Kasumi module manager\n");
     printf("  help           Show this help\n");
     printf("  version        Show version\n");
 }

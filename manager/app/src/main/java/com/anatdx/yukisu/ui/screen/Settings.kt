@@ -46,7 +46,7 @@ import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestin
 import com.ramcosta.composedestinations.generated.destinations.LogViewerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.UmountManagerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MoreSettingsScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.HymoFSConfigScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.KasumiConfigScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
@@ -57,7 +57,7 @@ import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.theme.CardConfig.cardAlpha
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
-import com.anatdx.yukisu.ui.hymofs.util.HymoFSManager
+import com.anatdx.yukisu.ui.kasumi.util.KasumiManager
 import com.anatdx.yukisu.ui.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -142,13 +142,13 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
-                        // HymoFS 配置（模块挂载、Maps 伪装等）
+                        // Kasumi 配置（模块挂载、Maps 伪装等）
                         SettingItem(
                             icon = Icons.Filled.Tune,
-                            title = stringResource(R.string.hymofs_title),
-                            summary = stringResource(R.string.hymofs_settings_summary),
+                            title = stringResource(R.string.kasumi_title),
+                            summary = stringResource(R.string.kasumi_settings_summary),
                             onClick = {
-                                navigator.navigate(HymoFSConfigScreenDestination)
+                                navigator.navigate(KasumiConfigScreenDestination)
                             }
                         )
 
@@ -483,21 +483,21 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         // 内置 hymo 挂载开关
                         var builtinMountEnabled by remember { mutableStateOf(true) }
                         LaunchedEffect(Unit) {
-                            builtinMountEnabled = HymoFSManager.isBuiltinMountEnabled()
+                            builtinMountEnabled = KasumiManager.isBuiltinMountEnabled()
                         }
                         SwitchItem(
                             icon = Icons.Filled.Storage,
-                            title = stringResource(R.string.hymofs_builtin_mount),
-                            summary = stringResource(R.string.hymofs_builtin_mount_desc),
+                            title = stringResource(R.string.kasumi_builtin_mount),
+                            summary = stringResource(R.string.kasumi_builtin_mount_desc),
                             checked = builtinMountEnabled,
                             onCheckedChange = { enable ->
                                 scope.launch {
-                                    if (HymoFSManager.setBuiltinMountEnabled(enable)) {
+                                    if (KasumiManager.setBuiltinMountEnabled(enable)) {
                                         builtinMountEnabled = enable
-                                        val msgRes = if (enable) R.string.hymofs_toast_builtin_enabled else R.string.hymofs_toast_builtin_disabled
+                                        val msgRes = if (enable) R.string.kasumi_toast_builtin_enabled else R.string.kasumi_toast_builtin_disabled
                                         snackBarHost.showSnackbar(context.getString(msgRes))
                                     } else {
-                                        snackBarHost.showSnackbar(context.getString(R.string.hymofs_toast_builtin_failed))
+                                        snackBarHost.showSnackbar(context.getString(R.string.kasumi_toast_builtin_failed))
                                     }
                                 }
                             }

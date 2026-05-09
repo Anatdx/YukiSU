@@ -21,7 +21,7 @@ struct MountPlan {
     std::vector<fs::path> magic_module_paths;
     std::vector<std::string> overlay_module_ids;
     std::vector<std::string> magic_module_ids;
-    std::vector<std::string> hymofs_module_ids;
+    std::vector<std::string> kasumi_module_ids;
 
     bool is_covered_by_overlay(const std::string& path) const;
 };
@@ -29,7 +29,7 @@ struct MountPlan {
 MountPlan generate_plan(const Config& config, const std::vector<Module>& modules,
                         const fs::path& storage_root);
 
-void update_hymofs_mappings(const Config& config, const std::vector<Module>& modules,
+void update_kasumi_mappings(const Config& config, const std::vector<Module>& modules,
                             const fs::path& storage_root, MountPlan& plan);
 
 }  // namespace hymo

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU 本地构建: DDK LKM -> ksuinit -> ksud -> Manager App
 # 签名环境变量: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--skip-lkm] [-i] [-h]
+# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
 
 set -euo pipefail
 
@@ -11,9 +11,11 @@ OUT_DIR="$REPO_ROOT/out"
 KMI="android16-6.12"
 ABI="arm64-v8a"
 SKIP_LKM=false
-SKIP_HYMOFS=true
+SKIP_KASUMI=false
 DDK_RELEASE="20251104"
 DO_INSTALL=false
+# 默认从当前 Kasumi 主仓库编译 ko；可用 --kasumi-dir 覆盖
+KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -29,13 +31,17 @@ while [[ $# -gt 0 ]]; do
 		SKIP_LKM=true
 		shift
 		;;
-	--skip-hymofs)
-		SKIP_HYMOFS=true
+	--skip-kasumi)
+		SKIP_KASUMI=true
 		shift
 		;;
-	--build-hymofs)
-		SKIP_HYMOFS=false
+	--build-kasumi)
+		SKIP_KASUMI=false
 		shift
+		;;
+	--kasumi-dir)
+		KASUMI_DIR="$2"
+		shift 2
 		;;
 	-i | --install)
 		DO_INSTALL=true
@@ -145,6 +151,35 @@ cmake .. \
 ninja
 echo "    ksuinit 已构建"
 
+case "$TARGET_ARCH" in
+aarch64) arch_suffix="_arm64" ;;
+x86_64) arch_suffix="_x86_64" ;;
+armv7) arch_suffix="_armv7" ;;
+*) arch_suffix="_arm64" ;;
+esac
+
+if [[ "$SKIP_KASUMI" != "true" ]]; then
+	echo ">>> [2.5/5] 构建 Kasumi LKM (DDK) from $KASUMI_DIR ..."
+	if [[ ! -f "$KASUMI_DIR/src/Makefile" ]]; then
+		echo "    错误: 在 $KASUMI_DIR 找不到 src/Makefile，请用 --kasumi-dir 指定正确路径"
+		exit 1
+	fi
+	KASUMI_OUT_DIR="$OUT_DIR/${KMI}-kasumi-lkm"
+	mkdir -p "$KASUMI_OUT_DIR"
+	# 容器内 /src 即 Kasumi 仓库根；ddk 镜像 KDIR 已设好
+	docker run --rm -v "$KASUMI_DIR:/src" -w /src \
+		"ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}" \
+		bash -c "make -C src ARCH=arm64 -j${MAKE_JOBS} && \
+		         (llvm-strip -d src/kasumi_lkm.ko 2>/dev/null || true) && \
+		         cp src/kasumi_lkm.ko /src/.kasumi_built.ko"
+	# 拷出来并按 lkm.cpp 期望的命名: <KMI>${arch_suffix}_kasumi_lkm.ko
+	cp "$KASUMI_DIR/.kasumi_built.ko" "$KASUMI_OUT_DIR/${KMI}${arch_suffix}_kasumi_lkm.ko"
+	rm -f "$KASUMI_DIR/.kasumi_built.ko"
+	echo "    Kasumi LKM 已输出: $KASUMI_OUT_DIR/${KMI}${arch_suffix}_kasumi_lkm.ko"
+else
+	echo ">>> [2.5/5] 跳过 Kasumi LKM 构建"
+fi
+
 echo ">>> [3/5] 构建 ksud ..."
 KSUD_ASSETS="$REPO_ROOT/userspace/ksud/assets"
 mkdir -p "$KSUD_ASSETS"
@@ -156,15 +191,9 @@ else
 	echo "    警告: 未找到 ${KMI}_kernelsu.ko，ksud 可能无法正常加载内核模块"
 fi
 
-case "$TARGET_ARCH" in
-aarch64) arch_suffix="_arm64" ;;
-x86_64) arch_suffix="_x86_64" ;;
-armv7) arch_suffix="_armv7" ;;
-*) arch_suffix="_arm64" ;;
-esac
 shopt -s nullglob 2>/dev/null || true
-for d in "$OUT_DIR"/*-hymofs-lkm; do
-	[[ -d "$d" ]] && cp "$d"/*"${arch_suffix}_hymofs_lkm.ko" "$KSUD_ASSETS/" 2>/dev/null || true
+for d in "$OUT_DIR"/*-kasumi-lkm; do
+	[[ -d "$d" ]] && cp "$d"/*"${arch_suffix}_kasumi_lkm.ko" "$KSUD_ASSETS/" 2>/dev/null || true
 done
 
 cp "$KSUINIT_DIR/build/ksuinit" "$KSUD_ASSETS/"
@@ -216,12 +245,22 @@ ls -la "$APK_DIR"/*.apk 2>/dev/null || true
 echo ""
 
 if [[ "$DO_INSTALL" == "true" ]]; then
-	APK_FILE=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)
+	apk_files=("$APK_DIR"/*.apk)
+	APK_FILE=""
+	if [[ ${#apk_files[@]} -gt 0 ]]; then
+		APK_FILE="${apk_files[0]}"
+	fi
 	if [[ -n "$APK_FILE" ]]; then
 		echo ">>> 安装到设备 ..."
-		adb install -r "$APK_FILE" && echo "安装成功" || echo "安装失败"
+		adb install -r "$APK_FILE" && echo "APK 安装成功" || echo "APK 安装失败"
+		echo ""
+		echo "⚠️  ksud 已嵌入新 APK，但 /data/adb/ksud 不会自动替换。"
+		echo "   请打开 YukiSU 管理器，由 app 在合适时机替换 ksud 与内核模块。"
+		echo "   不要直接重启或手动覆盖 /data/adb/ksud。"
 	fi
 else
 	echo "安装命令: adb install -r $APK_DIR/*.apk"
-	echo "或: ./scripts/build.sh --skip-lkm -i"
+	echo "或: ./scripts/build.sh --skip-lkm --skip-kasumi -i"
+	echo ""
+	echo "⚠️  安装 APK 后请打开 app 手动触发 ksud 替换，不要直接重启或覆盖 /data/adb/ksud。"
 fi

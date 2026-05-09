@@ -1,7 +1,12 @@
-name: Build LKM for HymoFS
+name: Build LKM for Kasumi
 on:
   workflow_call:
     inputs:
+      kasumi_ref:
+        description: "Override Kasumi git ref (branch/tag/commit); auto-selects dev on feat/kasumi* refs when empty"
+        required: false
+        default: ""
+        type: string
       full_archs:
         description: "Reserved input; DDK workflow currently builds arm64 only"
         required: false
@@ -9,13 +14,18 @@ on:
         type: boolean
   workflow_dispatch:
     inputs:
+      kasumi_ref:
+        description: "Override Kasumi git ref (branch/tag/commit); leave empty to auto-select"
+        required: false
+        default: ""
+        type: string
       full_archs:
         description: "Reserved input; DDK workflow currently builds arm64 only"
         required: false
         default: false
         type: boolean
 jobs:
-  build-hymofs-lkm:
+  build-kasumi-lkm:
     strategy:
       fail-fast: false
       matrix:
@@ -29,9 +39,10 @@ jobs:
           - android16-6.12
         arch:
           - arm64
-    uses: ./.github/workflows/hymofs-lkm.yml
+    uses: ./.github/workflows/kasumi-lkm.yml
     secrets: inherit
     with:
       kmi: ${{ matrix.kmi }}
       arch: ${{ matrix.arch }}
+      kasumi_ref: ${{ inputs.kasumi_ref || (startsWith(github.head_ref || github.ref_name, 'feat/hymofs') && 'dev' || 'main') }}
       ddk_release: '20251104'

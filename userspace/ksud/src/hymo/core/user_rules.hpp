@@ -1,4 +1,4 @@
-// core/user_rules.hpp - User-defined HymoFS rules management
+// core/user_rules.hpp - User-defined Kasumi rules management
 #pragma once
 
 #include <string>

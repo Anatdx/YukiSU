@@ -4,7 +4,7 @@
 
 namespace hymo {
 
-// LKM management for HymoFS kernel module
+// LKM management for Kasumi kernel module
 bool lkm_load();
 bool lkm_unload();
 bool lkm_is_loaded();

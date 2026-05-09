@@ -63,11 +63,11 @@ Config Config::from_file(const fs::path& path) {
                 config.enable_stealth = o.at("enable_stealth").as_bool();
             if (o.count("enable_hidexattr"))
                 config.enable_hidexattr = o.at("enable_hidexattr").as_bool();
-            if (o.count("hymofs_enabled"))
-                config.hymofs_enabled = o.at("hymofs_enabled").as_bool();
+            if (o.count("kasumi_enabled"))
+                config.kasumi_enabled = o.at("kasumi_enabled").as_bool();
             if (o.count("mirror_path")) {
                 config.mirror_path = o.at("mirror_path").as_string();
-                // Treat legacy default as "auto" so HymoFS-on uses /dev/hymo_mirror
+                // Treat legacy default as "auto" so Kasumi-on uses /dev/kasumi_mirror
                 if (config.mirror_path == (std::string(HYMO_DATA_DIR) + "/img_mnt"))
                     config.mirror_path.clear();
             }
@@ -75,6 +75,11 @@ Config Config::from_file(const fs::path& path) {
                 config.uname_release = o.at("uname_release").as_string();
             if (o.count("uname_version"))
                 config.uname_version = o.at("uname_version").as_string();
+            if (o.count("uname_mode")) {
+                std::string mode = o.at("uname_mode").as_string();
+                if (mode == "scoped" || mode == "global")
+                    config.uname_mode = mode;
+            }
 
             if (o.count("partitions") && o.at("partitions").type == json::Type::Array) {
                 for (const auto& p : o.at("partitions").as_array()) {
@@ -116,13 +121,15 @@ bool Config::save_to_file(const fs::path& path) const {
     root["enable_kernel_debug"] = json::Value(enable_kernel_debug);
     root["enable_stealth"] = json::Value(enable_stealth);
     root["enable_hidexattr"] = json::Value(enable_hidexattr);
-    root["hymofs_enabled"] = json::Value(hymofs_enabled);
+    root["kasumi_enabled"] = json::Value(kasumi_enabled);
     if (!mirror_path.empty())
         root["mirror_path"] = json::Value(mirror_path);
     if (!uname_release.empty())
         root["uname_release"] = json::Value(uname_release);
     if (!uname_version.empty())
         root["uname_version"] = json::Value(uname_version);
+    if (!uname_mode.empty() && uname_mode != "scoped")
+        root["uname_mode"] = json::Value(uname_mode);
 
     if (!partitions.empty()) {
         json::Value parts = json::Value::array();

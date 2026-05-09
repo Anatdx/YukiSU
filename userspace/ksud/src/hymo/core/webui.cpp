@@ -115,7 +115,7 @@ std::string export_system_info_json() {
 
     // Get mount base from runtime state (actual path in use). Empty → default for display.
     auto state = load_runtime_state();
-    std::string mount_base = state.mount_point.empty() ? HYMO_MIRROR_DEV : state.mount_point;
+    std::string mount_base = state.mount_point.empty() ? KASUMI_MIRROR_DEV : state.mount_point;
 
     std::ostringstream json;
     json << "{"

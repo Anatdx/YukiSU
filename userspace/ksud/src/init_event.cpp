@@ -14,7 +14,7 @@
 #include "umount.hpp"
 #include "utils.hpp"
 
-// HymoFS integration
+// Kasumi integration
 #include "hymo/conf/config.hpp"
 #include "hymo/core/lkm.hpp"
 #include "hymo/defs.hpp"
@@ -31,41 +31,41 @@ namespace ksud {
 
 namespace {
 
-// Built-in HymoFS: mount at metamount stage only.
-void try_hymofs_metamount_mount() {
+// Built-in Kasumi: mount at metamount stage only.
+void try_kasumi_metamount_mount() {
     using hymo::Config;
 
     try {
         if (access("/data/adb/ksu/.disable_builtin_mount", F_OK) == 0) {
-            LOGI("HymoFS metamount: built-in mount disabled by .disable_builtin_mount, skip");
+            LOGI("Kasumi metamount: built-in mount disabled by .disable_builtin_mount, skip");
             return;
         }
         if (ksud::get_metamodule_id() == "hymo") {
-            LOGI("HymoFS metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
+            LOGI("Kasumi metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
             return;
         }
 
         const Config config = Config::load_default();
 
-        if (!config.hymofs_enabled) {
-            LOGI("HymoFS metamount: hymofs_enabled=false, skip");
+        if (!config.kasumi_enabled) {
+            LOGI("Kasumi metamount: kasumi_enabled=false, skip");
             return;
         }
 
         // Built-in hymo uses ksud log, no separate daemon.log
         std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
-        LOGI("HymoFS metamount: invoking hymod mount");
+        LOGI("Kasumi metamount: invoking hymod mount");
         const int ret = hymo::run_hymo_main(2, argv.data());
         if (ret != 0) {
-            LOGW("HymoFS metamount mount failed, ret=%d", ret);
+            LOGW("Kasumi metamount mount failed, ret=%d", ret);
         } else {
-            LOGI("HymoFS metamount mount succeeded");
+            LOGI("Kasumi metamount mount succeeded");
         }
     } catch (const std::exception& e) {
-        LOGW("HymoFS metamount mount threw exception: %s", e.what());
+        LOGW("Kasumi metamount mount threw exception: %s", e.what());
     } catch (...) {
-        LOGW("HymoFS metamount mount threw unknown exception");
+        LOGW("Kasumi metamount mount threw unknown exception");
     }
 }
 
@@ -217,7 +217,7 @@ int on_post_data_fs() {
     init_features();
     ensure_sulogd_running_if_enabled();
 
-    // HymoFS LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
+    // Kasumi LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
     hymo::lkm_autoload_post_fs_data();
 
     // KernelSU execution order (https://kernelsu.org/guide/metamodule.html):
@@ -238,7 +238,7 @@ int on_post_data_fs() {
 
     // When external metamodule exists, run hymod after metamodule metamount;
     // metamodule may not invoke hymo's metamount.sh. Mount only at metamount.
-    try_hymofs_metamount_mount();
+    try_kasumi_metamount_mount();
 
     umount_apply_config();
     run_stage("post-mount", true);

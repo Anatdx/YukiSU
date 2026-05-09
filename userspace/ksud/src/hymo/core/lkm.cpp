@@ -14,13 +14,13 @@
 #include <vector>
 #include "../../assets.hpp"
 #include "../defs.hpp"
-#include "../mount/hymofs.hpp"
+#include "../mount/kasumi.hpp"
 #include "../utils.hpp"
 
 namespace fs = std::filesystem;
 namespace hymo {
 
-static constexpr int HYMO_SYSCALL_NR = 142;
+// KSM_SYSCALL_NR is provided by kasumi_uapi.h (api15+).
 static std::string g_lkm_last_error;
 
 static void set_lkm_last_error(const std::string& msg) {
@@ -180,7 +180,7 @@ static bool ensure_base_dir() {
 
 #include <sys/utsname.h>
 
-// Read real kernel release from sysfs. Not spoofed by HymoFS uname hiding (uname(2) is).
+// Read real kernel release from sysfs. Not spoofed by Kasumi uname hiding (uname(2) is).
 // Use this for KMI matching so LKM installation picks the correct module for the real kernel.
 static std::string read_kernel_release_from_sysfs() {
     return read_file_first_line("/proc/sys/kernel/osrelease");
@@ -220,24 +220,24 @@ static std::string get_current_kmi() {
     return "";
 }
 
-// Arch suffix for embedded hymofs .ko
+// Arch suffix for embedded kasumi .ko
 #if defined(__aarch64__)
-#define HYMO_ARCH_SUFFIX "_arm64"
+#define KASUMI_ARCH_SUFFIX "_arm64"
 #elif defined(__arm__)
-#define HYMO_ARCH_SUFFIX "_armv7"
+#define KASUMI_ARCH_SUFFIX "_armv7"
 #elif defined(__x86_64__)
-#define HYMO_ARCH_SUFFIX "_x86_64"
+#define KASUMI_ARCH_SUFFIX "_x86_64"
 #else
-#define HYMO_ARCH_SUFFIX "_arm64"
+#define KASUMI_ARCH_SUFFIX "_arm64"
 #endif  // #if defined(__aarch64__)
 
-static bool copy_embedded_hymofs_asset(const std::string& kmi, const std::string& dest_path,
+static bool copy_embedded_kasumi_asset(const std::string& kmi, const std::string& dest_path,
                                        std::string* used_asset = nullptr) {
     std::vector<std::string> candidates;
     if (!kmi.empty()) {
-        candidates.push_back(kmi + HYMO_ARCH_SUFFIX "_hymofs_lkm.ko");
+        candidates.push_back(kmi + KASUMI_ARCH_SUFFIX "_kasumi_lkm.ko");
     }
-    candidates.push_back(std::string(HYMO_ARCH_SUFFIX) + "_hymofs_lkm.ko");
+    candidates.push_back(std::string(KASUMI_ARCH_SUFFIX) + "_kasumi_lkm.ko");
 
     for (const auto& asset_name : candidates) {
         if (ksud::copy_asset_to_file(asset_name, dest_path)) {
@@ -251,7 +251,7 @@ static bool copy_embedded_hymofs_asset(const std::string& kmi, const std::string
 }
 
 bool lkm_is_loaded() {
-    return HymoFS::is_available();
+    return Kasumi::is_available();
 }
 
 std::string lkm_get_last_error() {
@@ -299,9 +299,9 @@ bool lkm_load() {
         if (tmp_fd >= 0) {
             close(tmp_fd);
             std::string used_asset;
-            if (copy_embedded_hymofs_asset(kmi, tmp_path, &used_asset)) {
+            if (copy_embedded_kasumi_asset(kmi, tmp_path, &used_asset)) {
                 ko_path = tmp_path;
-                LOG_INFO("HymoFS LKM: using embedded asset " + used_asset);
+                LOG_INFO("Kasumi LKM: using embedded asset " + used_asset);
             } else {
                 unlink(tmp_path);
             }
@@ -315,12 +315,12 @@ bool lkm_load() {
 
     if (ko_path.empty()) {
         set_lkm_last_error("no matching module found for " + kmi);
-        LOG_ERROR("HymoFS LKM: " + g_lkm_last_error);
+        LOG_ERROR("Kasumi LKM: " + g_lkm_last_error);
         return false;
     }
 
     char params[64];
-    snprintf(params, sizeof(params), "hymo_syscall_nr=%d", HYMO_SYSCALL_NR);
+    snprintf(params, sizeof(params), "kasumi_syscall_nr=%d", KSM_SYSCALL_NR);
 
     bool ok = load_module_via_finit(ko_path.c_str(), params);
 
@@ -338,20 +338,20 @@ bool lkm_unload() {
     if (!lkm_is_loaded()) {
         return true;
     }
-    if (HymoFS::is_available()) {
+    if (Kasumi::is_available()) {
         // Disable first to reduce active hook traffic during unload window.
-        HymoFS::set_enabled(false);
-        if (!HymoFS::clear_rules()) {
-            set_lkm_last_error("failed to clear HymoFS rules before unload");
+        Kasumi::set_enabled(false);
+        if (!Kasumi::clear_rules()) {
+            set_lkm_last_error("failed to clear Kasumi rules before unload");
         }
-        // Release cached HymoFS anon-fd in this process. Otherwise the module may
+        // Release cached Kasumi anon-fd in this process. Otherwise the module may
         // stay busy until ksud exits, causing immediate unload attempts to fail.
-        HymoFS::release_connection();
+        Kasumi::release_connection();
         std::this_thread::sleep_for(std::chrono::milliseconds(120));
     }
     // delete_module may return EAGAIN/EBUSY while hooks are still being released.
     for (int i = 0; i < 5; ++i) {
-        if (unload_module_via_syscall("hymofs_lkm")) {
+        if (unload_module_via_syscall("kasumi_lkm")) {
             return true;
         }
         if (errno != EAGAIN && errno != EBUSY) {
@@ -360,7 +360,7 @@ bool lkm_unload() {
         std::this_thread::sleep_for(std::chrono::milliseconds(120));
     }
     LOG_WARN("lkm: delete_module failed, fallback to rmmod");
-    if (unload_module_via_rmmod("hymofs_lkm")) {
+    if (unload_module_via_rmmod("kasumi_lkm")) {
         return true;
     }
     if (g_lkm_last_error.find("delete_module") != std::string::npos ||

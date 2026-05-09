@@ -22,9 +22,9 @@ static fs::path extract_module_root(const fs::path& partition_path) {
     return fs::path();
 }
 
-ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool hymofs_active) {
-    if (!plan.hymofs_module_ids.empty()) {
-        LOG_INFO("HymoFS modules handled by Fast Path controller.");
+ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool kasumi_active) {
+    if (!plan.kasumi_module_ids.empty()) {
+        LOG_INFO("Kasumi modules handled by Fast Path controller.");
     }
 
     std::vector<fs::path> magic_queue = plan.magic_module_paths;
@@ -89,7 +89,7 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
             fs::path candidate = config.tempdir;
             bool candidate_ok = true;
 
-            if (!is_safe_temp_dir(candidate, hymofs_active)) {
+            if (!is_safe_temp_dir(candidate, kasumi_active)) {
                 candidate_ok = false;
             } else if (fs::exists(candidate) && !fs::is_directory(candidate)) {
                 candidate_ok = false;
@@ -112,7 +112,7 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
 
         LOG_INFO("Executing Magic Mount for " + std::to_string(magic_queue.size()) + " modules...");
 
-        if (!ensure_temp_dir(tempdir, hymofs_active)) {
+        if (!ensure_temp_dir(tempdir, kasumi_active)) {
             LOG_ERROR("Magic Mount aborted: temp dir prepare failed");
             final_magic_ids.clear();
         } else {
@@ -122,7 +122,7 @@ ExecutionResult execute_plan(const MountPlan& plan, const Config& config, bool h
                 final_magic_ids.clear();
             }
 
-            cleanup_temp_dir(tempdir, hymofs_active);
+            cleanup_temp_dir(tempdir, kasumi_active);
         }
     }
 

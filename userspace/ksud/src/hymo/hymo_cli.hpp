@@ -1,4 +1,4 @@
-// hymo_cli.hpp - HymoFS module management CLI wrapper (ksud integration)
+// hymo_cli.hpp - Kasumi module management CLI wrapper (ksud integration)
 #pragma once
 
 #include <string>
@@ -11,7 +11,7 @@ namespace hymo {
 int run_hymo_main(int argc, char** argv);
 
 // Main hymo command handler for ksud integration. Dispatches to run_hymo_main.
-// args: e.g. ["mount"], ["config", "show"], ["hymofs", "list"], etc.
+// args: e.g. ["mount"], ["config", "show"], ["kasumi", "list"], etc.
 // Returns: 0 on success, non-zero on failure
 int cmd_hymo(const std::vector<std::string>& args);
 
