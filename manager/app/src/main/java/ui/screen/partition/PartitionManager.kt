@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import androidx.core.content.edit
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -77,6 +78,24 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     var backupDirectory by remember { mutableStateOf(loadPartitionBackupDirectory(context)) }
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+
+    val backupDirectoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val selectedPath = resolveBackupDirectoryPath(uri)
+        scope.launch {
+            if (selectedPath == null) {
+                snackbarHost.showSnackbar(context.getString(R.string.partition_backup_directory_picker_unsupported))
+            } else {
+                backupDirectory = selectedPath
+                savePartitionBackupDirectory(context, selectedPath)
+                snackbarHost.showSnackbar(
+                    context.getString(R.string.partition_backup_directory_selected, selectedPath)
+                )
+            }
+        }
+    }
     
     // 文件选择器
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -335,6 +354,9 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                             onBackupDirectoryChange = { newValue ->
                                 backupDirectory = newValue
                                 savePartitionBackupDirectory(context, newValue)
+                            },
+                            onChooseDirectory = {
+                                backupDirectoryPickerLauncher.launch(null)
                             }
                         )
                     }
@@ -559,7 +581,8 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
 @Composable
 fun BackupLocationCard(
     backupDirectory: String,
-    onBackupDirectoryChange: (String) -> Unit
+    onBackupDirectoryChange: (String) -> Unit,
+    onChooseDirectory: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -573,6 +596,7 @@ fun BackupLocationCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -584,8 +608,14 @@ fun BackupLocationCard(
                 Text(
                     text = stringResource(R.string.partition_backup_directory),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
                 )
+                OutlinedButton(onClick = onChooseDirectory) {
+                    Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.partition_backup_directory_choose))
+                }
             }
             OutlinedTextField(
                 value = backupDirectory,
@@ -1140,4 +1170,30 @@ fun savePartitionBackupDirectory(context: Context, path: String) {
 
 fun ensureBackupDirectory(directory: File): Boolean {
     return directory.exists() && directory.isDirectory || directory.mkdirs()
+}
+
+fun resolveBackupDirectoryPath(uri: Uri): String? {
+    val treeDocumentId = runCatching {
+        DocumentsContract.getTreeDocumentId(uri)
+    }.getOrNull() ?: return null
+
+    if (treeDocumentId.startsWith("raw:")) {
+        return treeDocumentId.removePrefix("raw:").takeIf { it.isNotBlank() }
+    }
+
+    val splitIndex = treeDocumentId.indexOf(':')
+    val volume = if (splitIndex >= 0) treeDocumentId.substring(0, splitIndex) else treeDocumentId
+    val relativePath = if (splitIndex >= 0) treeDocumentId.substring(splitIndex + 1) else ""
+
+    val root = when (volume) {
+        "primary" -> Environment.getExternalStorageDirectory()
+        "home" -> File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOCUMENTS)
+        else -> File("/storage", volume).takeIf { it.exists() && it.isDirectory }
+    } ?: return null
+
+    return if (relativePath.isBlank()) {
+        root.absolutePath
+    } else {
+        File(root, relativePath).absolutePath
+    }
 }

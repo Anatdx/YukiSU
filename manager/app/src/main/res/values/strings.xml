@@ -793,7 +793,10 @@
     <string name="partition_backing_up">Backing up partition %s…</string>
     <string name="partition_backing_up_to">Backing up %1$s to %2$s…</string>
     <string name="partition_backup_directory">Backup Directory</string>
+    <string name="partition_backup_directory_choose">Choose</string>
     <string name="partition_backup_directory_desc">Partition images are saved here. Edit the path before backing up.</string>
+    <string name="partition_backup_directory_selected">Backup directory: %s</string>
+    <string name="partition_backup_directory_picker_unsupported">This folder provider cannot be used for raw partition backups. Choose a local storage folder or enter a filesystem path.</string>
     <string name="partition_backup_directory_empty">Backup directory cannot be empty</string>
     <string name="partition_backup_directory_create_failed">Failed to create backup directory: %s</string>
     <string name="partition_backup_success">Backup successful: %s</string>

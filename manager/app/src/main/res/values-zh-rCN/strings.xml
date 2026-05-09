@@ -770,7 +770,10 @@
     <string name="partition_backing_up">正在备份分区 %s…</string>
     <string name="partition_backing_up_to">正在备份 %1$s 到 %2$s…</string>
     <string name="partition_backup_directory">备份目录</string>
+    <string name="partition_backup_directory_choose">选择</string>
     <string name="partition_backup_directory_desc">分区镜像会保存到这里，备份前可直接修改路径。</string>
+    <string name="partition_backup_directory_selected">备份目录：%s</string>
+    <string name="partition_backup_directory_picker_unsupported">此目录提供方不能用于原始分区备份。请选择本机存储目录，或手动输入文件系统路径。</string>
     <string name="partition_backup_directory_empty">备份目录不能为空</string>
     <string name="partition_backup_directory_create_failed">无法创建备份目录：%s</string>
     <string name="partition_backup_success">备份成功：%s</string>
