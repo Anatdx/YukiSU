@@ -54,7 +54,6 @@ import kotlinx.parcelize.Parcelize
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.core.content.edit
 import com.anatdx.yukisu.ui.component.rememberCustomDialog
 import com.topjohnwu.superuser.io.SuFile
 
@@ -111,11 +110,6 @@ fun updateModuleInstallStatus(
 @Destination<RootGraph>
 fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     val context = LocalContext.current
-
-    val shouldAutoExit = remember {
-        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-        sharedPref.getBoolean("auto_exit_after_flash", false)
-    }
 
     // ??????????????
     val isExternalInstall = remember {
@@ -270,21 +264,6 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                 }
 
-                // ? shouldAutoExit ???????????????????????????
-                if (shouldAutoExit) {
-                    scope.launch {
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        kotlinx.coroutines.delay(1000)
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                        sharedPref.edit { remove("auto_exit_after_flash") }
-                        (context as? ComponentActivity)?.finish()
-                    }
-                }
             }, onStdout = {
                 tempText = "$it\n"
                 if (tempText.startsWith("[H[J")) { // clear command
@@ -386,32 +365,6 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     scope.launch {
                         kotlinx.coroutines.delay(500)
                         navigator.navigate(FlashScreenDestination(nextFlashIt))
-                    }
-                } else if (shouldAutoExit && flashIt is FlashIt.FlashModules && flashIt.currentIndex >= flashIt.uris.size - 1) {
-                    scope.launch {
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        kotlinx.coroutines.delay(1000)
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                        sharedPref.edit { remove("auto_exit_after_flash") }
-                        (context as? ComponentActivity)?.finish()
-                    }
-                } else if (shouldAutoExit && flashIt is FlashIt.FlashModule) {
-                    scope.launch {
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        kotlinx.coroutines.delay(1000)
-                        while (shouldWarningUserMetaModule) {
-                            kotlinx.coroutines.delay(100)
-                        }
-                        val sharedPref = context.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-                        sharedPref.edit { remove("auto_exit_after_flash") }
-                        (context as? ComponentActivity)?.finish()
                     }
                 }
             }, onStdout = {

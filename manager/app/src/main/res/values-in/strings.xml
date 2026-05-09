@@ -203,8 +203,6 @@
     <string name="color_pink">Ping</string>
     <string name="color_gray">Abu</string>
     <string name="color_yellow">Kuning</string>
-    <string name="horizon_kernel">Memasang Anykernel3</string>
-    <string name="horizon_kernel_summary">Memasang file kernel AnyKernel3</string>
     <string name="root_required">Butuh izin root</string>
     <string name="reboot_complete_title">Pembersihan selesai</string>
     <string name="reboot_complete_msg">Apakah ingin restart sekarang?</string>
@@ -245,33 +243,10 @@
     <string name="confirm_uninstall_content">KPM berikut akan diuninstall: %s</string>
     <string name="image_editor_hint">Gunakan dua jari untuk memperbesar gambar, dan satu jari untuk menggeser mengatur posisi</string>
     <string name="reprovision">Reprovisi</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash Selesai</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Mempersiapkan…</string>
-    <string name="horizon_cleaning_files">Membersihkan Berkas...</string>
-    <string name="horizon_copying_files">Menyalin file...</string>
-    <string name="horizon_extracting_tool">Mengekstrak alat flash…</string>
-    <string name="horizon_patching_script">Memperbaiki skrip flash…</string>
-    <string name="horizon_flashing">Mem-flash kernel…</string>
-    <string name="horizon_flash_complete_status">Flash selesai</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Pilih Slot Flash</string>
-    <string name="select_slot_description">Silakan pilih slot target untuk flash boot</string>
-    <string name="slot_a">Slot A</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">Slot yang dipilih: %1$s</string>
-    <string name="horizon_getting_original_slot">Mendapatkan slot asli</string>
-    <string name="horizon_setting_target_slot">Mengatur slot yang ditentukan</string>
-    <string name="horizon_restoring_original_slot">Pulihkan Slot Default</string>
-    <string name="current_slot">Slot default sistem saat ini：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Menyalin gagal</string>
-    <string name="horizon_unknown_error">Kesalahan yang tidak diketahui</string>
     <string name="flash_failed_message">Flash gagal</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Perbaikan/pemasangan LKM</string>
-    <string name="GKI_install_methods">Mem-flash AnyKernel3</string>
     <string name="kernel_version_log">Versi kernel: %1$s</string>
     <string name="tool_version_log">Menggunakan alat perbaikan：%1$s</string>
     <string name="configuration">Konfigurasi</string>
@@ -320,7 +295,6 @@
     <string name="installing_module">Modul yang dipasang %1$d/%2$d</string>
     <string name="module_failed_count">%d Gagal memasang modul baru</string>
     <string name="module_download_error">Download modul gagal</string>
-    <string name="kernel_flashing">Memasang Kernel</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">Semua</string>
     <string name="category_root_apps">Akar</string>

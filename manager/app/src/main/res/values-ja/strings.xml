@@ -202,8 +202,6 @@
     <string name="color_pink">ピンク</string>
     <string name="color_gray">グレー</string>
     <string name="color_yellow">イエロー</string>
-    <string name="horizon_kernel">AnyKernel3 をインストール</string>
-    <string name="horizon_kernel_summary">AnyKernel3 カーネルファイルをフラッシュします</string>
     <string name="root_required">root 権限が必要です</string>
     <string name="reboot_complete_title">スクラブが完了しました</string>
     <string name="reboot_complete_msg">すぐに再起動しますか？</string>
@@ -244,33 +242,10 @@
     <string name="confirm_uninstall_content">次の KPM がアンインストールされます: %s</string>
     <string name="image_editor_hint">2 本の指で画像を拡大、1 本の指でドラッグで位置を調整します。</string>
     <string name="reprovision">再プロビジョニング</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">フラッシュが完了しました</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">準備中…</string>
-    <string name="horizon_cleaning_files">ファイルを削除中…</string>
-    <string name="horizon_copying_files">ファイルをコピー中…</string>
-    <string name="horizon_extracting_tool">フラッシュツールを展開中…</string>
-    <string name="horizon_patching_script">フラッシュスクリプトをパッチ中…</string>
-    <string name="horizon_flashing">カーネルをフラッシュ中…</string>
-    <string name="horizon_flash_complete_status">フラッシュが完了しました</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">フラッシュ先のスロットを選択</string>
-    <string name="select_slot_description">フラッシュする boot のターゲットスロットを選択</string>
-    <string name="slot_a">スロット A</string>
-    <string name="slot_b">スロット B</string>
-    <string name="selected_slot">選択したスロット: %1$s</string>
-    <string name="horizon_getting_original_slot">オリジナルのスロットを取得</string>
-    <string name="horizon_setting_target_slot">指定するスロットを設定</string>
-    <string name="horizon_restoring_original_slot">デフォルトのスロットに復元</string>
-    <string name="current_slot">現在のシステムデフォルトスロット: %1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">コピーに失敗しました</string>
-    <string name="horizon_unknown_error">不明なエラー</string>
     <string name="flash_failed_message">フラッシュに失敗しました</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM の修復またはインストール</string>
-    <string name="GKI_install_methods">AnyKernel3 をフラッシュ</string>
     <string name="kernel_version_log">カーネル バージョン: %1$s</string>
     <string name="tool_version_log">パッチ適用ツールの使用: %1$s</string>
     <string name="configuration">設定</string>
@@ -319,7 +294,6 @@
     <string name="installing_module">モジュールをインストール中: %1$d/%2$d</string>
     <string name="module_failed_count">%d モジュールのインストールに失敗しました</string>
     <string name="module_download_error">モデルのダウンロードに失敗しました</string>
-    <string name="kernel_flashing">カーネルをフラッシュ中</string>
     <string name="warning_of_meta_module_title">メタモジュールが必要です</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">すべて</string>

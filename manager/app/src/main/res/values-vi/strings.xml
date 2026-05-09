@@ -209,8 +209,6 @@
     <string name="color_pink">Hồng</string>
     <string name="color_gray">Xám</string>
     <string name="color_yellow">Vàng</string>
-    <string name="horizon_kernel">Cài đặt AnyKernel3</string>
-    <string name="horizon_kernel_summary">Flash file AnyKernel3</string>
     <string name="root_required">Yêu cầu quyền root</string>
     <string name="reboot_complete_title">Khởi động lại để hoàn tất</string>
     <string name="reboot_complete_msg">Khởi động lại ngay lập tức?</string>
@@ -251,33 +249,10 @@
     <string name="confirm_uninstall_content">KPM sau đây sẽ được gỡ cài đặt: %s</string>
     <string name="image_editor_hint">Sử dụng hai ngón tay để phóng to hình ảnh và một ngón tay kéo thả để điều chỉnh vị trí</string>
     <string name="reprovision">Chọn lại</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash hoàn tất</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Chuẩn bị…</string>
-    <string name="horizon_cleaning_files">Đang dọn dẹp các file…</string>
-    <string name="horizon_copying_files">Đang sao chép các file…</string>
-    <string name="horizon_extracting_tool">Đang giải nén công cụ Flash…</string>
-    <string name="horizon_patching_script">Đang vá tập lệnh Flash…</string>
-    <string name="horizon_flashing">Flashing Kernel…</string>
-    <string name="horizon_flash_complete_status">Flash hoàn tất</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Chọn Slot Flash</string>
-    <string name="select_slot_description">Vui lòng chọn Slot để Flash Boot</string>
-    <string name="slot_a">Slot A</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">Slot đã chọn: %1$s</string>
-    <string name="horizon_getting_original_slot">Lấy Slot ban đầu</string>
-    <string name="horizon_setting_target_slot">Cài đặt Slot được chỉ định</string>
-    <string name="horizon_restoring_original_slot">Khôi phục Slot mặc định</string>
-    <string name="current_slot">Slot hiện tại: %1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Sao chép thất bại</string>
-    <string name="horizon_unknown_error">Lỗi không xác định</string>
     <string name="flash_failed_message">Flash thất bại</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM cài đặt</string>
-    <string name="GKI_install_methods">Flashing AnyKernel3</string>
     <string name="kernel_version_log">Phiên bản Kernel: %1$s</string>
     <string name="tool_version_log">Sử dụng công cụ vá lỗi: %1$s</string>
     <string name="configuration">Cấu hình</string>
@@ -326,7 +301,6 @@
     <string name="installing_module">Đang cài đặt module %1$d/%2$d</string>
     <string name="module_failed_count">Cài đặt module %d thất bại</string>
     <string name="module_download_error">Tải xuống module thất bại</string>
-    <string name="kernel_flashing">Kernel Flashing</string>
     <string name="warning_of_meta_module_title">Yêu cầu Siêu Module</string>
     <string name="warning_of_meta_module_summary">Module này muốn mount /system, Siêu Module sẽ xử lý việc đó. Nếu không, nó có thể không hoạt động</string>
     <!-- 分类相关 -->

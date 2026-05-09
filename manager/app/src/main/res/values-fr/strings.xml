@@ -190,8 +190,6 @@
     <string name="color_pink">Rose</string>
     <string name="color_gray">Gris</string>
     <string name="color_yellow">Jaune</string>
-    <string name="horizon_kernel">Install Anykernel3</string>
-    <string name="horizon_kernel_summary">Fichier noyau AnyKernel3</string>
     <string name="root_required">Nécessite les privilèges root</string>
     <string name="reboot_complete_title">Traitement terminé</string>
     <string name="reboot_complete_msg">Redémarrer immédiatement ?</string>
@@ -232,33 +230,10 @@
     <string name="confirm_uninstall_content">Le KPM suivant sera désinstallé : %s</string>
     <string name="image_editor_hint">Utilisez deux doigts pour zoomer l\'image, et un doigt pour le faire glisser pour ajuster la position</string>
     <string name="reprovision">Remise à disposition</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash terminé</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Préparation de…</string>
-    <string name="horizon_cleaning_files">Nettoyage des fichiers…</string>
-    <string name="horizon_copying_files">Copie des fichiers…</string>
-    <string name="horizon_extracting_tool">Extraction de l\'outil flash…</string>
-    <string name="horizon_patching_script">Mise à jour du script…</string>
-    <string name="horizon_flashing">Flash du noyau…</string>
-    <string name="horizon_flash_complete_status">Flash complété</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Sélectionnez l\'emplacement de Flash</string>
-    <string name="select_slot_description">Veuillez sélectionner l\'emplacement cible pour le démarrage du flash</string>
-    <string name="slot_a">Slot A</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">LKM sélectionné : %1$s</string>
-    <string name="horizon_getting_original_slot">Obtention de l\'emplacement original</string>
-    <string name="horizon_setting_target_slot">Définition de l\'emplacement spécifié</string>
-    <string name="horizon_restoring_original_slot">Restaurer l\'emplacement par défaut</string>
-    <string name="current_slot">Emplacement actuel</string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Copie échouée</string>
-    <string name="horizon_unknown_error">Erreur inconnue</string>
     <string name="flash_failed_message">Échec du flash</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Réparation/installation LKM</string>
-    <string name="GKI_install_methods">Flash du noyau…</string>
     <string name="kernel_version_log">Version du noyau：%1$s</string>
     <string name="tool_version_log">Utilisation de l\'outil de correctifs：%1$s</string>
     <string name="configuration">Configurer</string>
@@ -307,7 +282,6 @@
     <string name="installing_module">Module en cours d\'installation %1$d/%2$d</string>
     <string name="module_failed_count">%d a échoué à installer un nouveau module</string>
     <string name="module_download_error">Le téléchargement du modèle a échoué</string>
-    <string name="kernel_flashing">Clignotement du noyau</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">All</string>
     <string name="category_root_apps">Root</string>

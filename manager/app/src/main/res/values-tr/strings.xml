@@ -209,8 +209,6 @@
     <string name="color_pink">Pembe</string>
     <string name="color_gray">Gri</string>
     <string name="color_yellow">Sarı</string>
-    <string name="horizon_kernel">Anykernel3 yükle</string>
-    <string name="horizon_kernel_summary">AnyKernel3 çekirdek dosyasını yaz</string>
     <string name="root_required">Root ayrıcalıkları gerektirir</string>
     <string name="reboot_complete_title">Temizleme tamamlandı</string>
     <string name="reboot_complete_msg">Hemen yeniden başlatmak istiyor musunuz?</string>
@@ -251,33 +249,10 @@
     <string name="confirm_uninstall_content">Aşağıdaki KPM kaldırılacak: %s</string>
     <string name="image_editor_hint">Görüntüyü yaklaştırmak için iki parmağınızı kullanın ve bir parmağınızla sürükleyerek konumu ayarlayın</string>
     <string name="reprovision">Yeniden sağla</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash\'lama Tamamlandı</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Hazırlanıyor…</string>
-    <string name="horizon_cleaning_files">Dosyalar temizleniyor…</string>
-    <string name="horizon_copying_files">Dosyalar kopyalanıyor…</string>
-    <string name="horizon_extracting_tool">Yazma aracı çıkartılıyor…</string>
-    <string name="horizon_patching_script">Yazma betiği yamalanıyor…</string>
-    <string name="horizon_flashing">Çekirdek yazılıyor…</string>
-    <string name="horizon_flash_complete_status">Yazma tamamlandı</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Yazma Yuvası Seç</string>
-    <string name="select_slot_description">Lütfen boot yazma için hedef yuvayı seçin</string>
-    <string name="slot_a">Yuva A</string>
-    <string name="slot_b">Yuva B</string>
-    <string name="selected_slot">Seçilen yuva: %1$s</string>
-    <string name="horizon_getting_original_slot">Orijinal yuva alınıyor</string>
-    <string name="horizon_setting_target_slot">Belirtilen yuva ayarlanıyor</string>
-    <string name="horizon_restoring_original_slot">Varsayılan Yuvayı Geri Yükle</string>
-    <string name="current_slot">Geçerli varsayılan sistem yuvası: %1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Kopyalama başarısız</string>
-    <string name="horizon_unknown_error">Bilinmeyen hata</string>
     <string name="flash_failed_message">Flash\'lama başarısız</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM onarımı/yükle</string>
-    <string name="GKI_install_methods">AnyKernel3 Flaşlama</string>
     <string name="kernel_version_log">Çekirdek sürümü：%1$s</string>
     <string name="tool_version_log">Kullanılan yama aracı：%1$s</string>
     <string name="configuration">Yapılandır</string>
@@ -326,7 +301,6 @@
     <string name="installing_module">Modül yükleniyor %1$d/%2$d</string>
     <string name="module_failed_count">%d yeni modül yüklenemedi</string>
     <string name="module_download_error">Modül indirme başarısız</string>
-    <string name="kernel_flashing">Çekirdek Yükleniyor</string>
     <string name="warning_of_meta_module_title">Meta modül gerektirir</string>
     <string name="warning_of_meta_module_summary">Bu modül /system bölümünü bağlamak istiyor, meta modül bunu halledecektir. Aksi takdirde çalışmayabilir</string>
     <!-- 分类相关 -->

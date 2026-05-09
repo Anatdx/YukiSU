@@ -71,16 +71,8 @@ object UltraActivityUtils {
                         FlashIt.FlashModules(ArrayList(moduleUris))
                     )
                 )
-                // 不设置 auto_exit，刷入完成后停留在 FlashScreen 让用户查看结果
             }
         }
-    }
-
-    private fun setAutoExitAfterFlash(activity: Context) {
-        activity.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-            .edit {
-                putBoolean("auto_exit_after_flash", true)
-            }
     }
 }
 

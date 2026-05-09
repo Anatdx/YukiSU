@@ -207,8 +207,6 @@
     <string name="color_pink">Розовый</string>
     <string name="color_gray">Серый</string>
     <string name="color_yellow">Желтый</string>
-    <string name="horizon_kernel">Установка AnyKernel3</string>
-    <string name="horizon_kernel_summary">Прошить файл ядра AnyKernel3</string>
     <string name="root_required">Требуется root-права</string>
     <string name="reboot_complete_title">Скрабровка завершена</string>
     <string name="reboot_complete_msg">Будет ли перезагрузка немедленно?</string>
@@ -249,33 +247,10 @@
     <string name="confirm_uninstall_content">Следующие KPM будут удалены: %s</string>
     <string name="image_editor_hint">Используйте два пальца для увеличения изображения, и один палец для изменения положения</string>
     <string name="reprovision">Реализация</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Прошивка завершена</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Подготовка…</string>
-    <string name="horizon_cleaning_files">Очистка файлов…</string>
-    <string name="horizon_copying_files">Копирование файлов…</string>
-    <string name="horizon_extracting_tool">Извлечение флэш инструмента…</string>
-    <string name="horizon_patching_script">Изменение флэш-скрипта…</string>
-    <string name="horizon_flashing">Прошивка ядра…</string>
-    <string name="horizon_flash_complete_status">Прошивка завершена</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Выберите слот для прошивки</string>
-    <string name="select_slot_description">Пожалуйста, выберите целевой слот для прошивки загрузки</string>
-    <string name="slot_a">Слот A</string>
-    <string name="slot_b">Слот B</string>
-    <string name="selected_slot">Выбран LKM: %1$s</string>
-    <string name="horizon_getting_original_slot">Получение оригинальной ячейки</string>
-    <string name="horizon_setting_target_slot">Установка указанного слота</string>
-    <string name="horizon_restoring_original_slot">Восстановить</string>
-    <string name="current_slot">Текущий слот по умолчанию：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Копирование не удалось</string>
-    <string name="horizon_unknown_error">Неизвестная ошибка</string>
     <string name="flash_failed_message">Установка не выполнена</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Починить/установить LKM</string>
-    <string name="GKI_install_methods">Прошить AnyKernel3</string>
     <string name="kernel_version_log">Ядро</string>
     <string name="tool_version_log">С помощью инструмента патрулирования：%1$s</string>
     <string name="configuration">Настройка</string>
@@ -324,7 +299,6 @@
     <string name="installing_module">Модуль устанавливается %1$d/%2$d</string>
     <string name="module_failed_count">%d не удалось установить новый модуль</string>
     <string name="module_download_error">Ошибка загрузки модуля</string>
-    <string name="kernel_flashing">Прошить ядро</string>
     <string name="warning_of_meta_module_title">Требуется Мета-модуль</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">Все</string>
