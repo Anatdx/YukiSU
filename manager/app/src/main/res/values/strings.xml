@@ -635,7 +635,9 @@
     <string name="kasumi_stealth">Stealth Mode</string>
     <string name="kasumi_stealth_desc">Hide mount traces and reorder mount IDs</string>
     <string name="kasumi_hidexattr">Hide Extended Attributes</string>
-    <string name="kasumi_hidexattr_desc">Enable mount_hide, maps_spoof, statfs_spoof and stealth to hide traces from detection</string>
+    <string name="kasumi_hidexattr_desc">Enable mount_hide, maps_spoof, statfs_spoof, selinux_fix and stealth to hide traces from detection</string>
+    <string name="kasumi_selinux_fix">SELinux Guard</string>
+    <string name="kasumi_selinux_fix_desc">Block app_zygote SELinux policy probes (DirtySepolicy / Duck Detector)</string>
     <string name="kasumi_avc_spoof">AVC Log Spoofing</string>
     <string name="kasumi_avc_spoof_desc">Spoof SELinux AVC deny logs</string>
     <string name="kasumi_enable_nuke">Enable Nuke</string>

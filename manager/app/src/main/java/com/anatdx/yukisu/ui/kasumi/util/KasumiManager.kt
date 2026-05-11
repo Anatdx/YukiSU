@@ -135,7 +135,8 @@ object KasumiManager {
         val ignoreProtocolMismatch: Boolean = false,
         val enableKernelDebug: Boolean = false,
         val enableStealth: Boolean = true,
-        val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, stealth
+        val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, selinux_fix, stealth
+        val enableSelinuxFix: Boolean = false,
         val kasumiEnabled: Boolean = true,
         val mirrorPath: String = "",
         val partitions: List<String> = emptyList(),
@@ -378,6 +379,7 @@ object KasumiManager {
                     enableKernelDebug = json.optBoolean("enable_kernel_debug", false),
                     enableStealth = json.optBoolean("enable_stealth", true),
                     enableHidexattr = json.optBoolean("enable_hidexattr", false),
+                    enableSelinuxFix = json.optBoolean("enable_selinux_fix", false),
                     kasumiEnabled = json.optBoolean("kasumi_enabled", true),
                     mirrorPath = run {
                         val raw = json.optString("mirror_path", "")
@@ -422,6 +424,7 @@ object KasumiManager {
                 put("enable_kernel_debug", config.enableKernelDebug)
                 put("enable_stealth", config.enableStealth)
                 put("enable_hidexattr", config.enableHidexattr)
+                put("enable_selinux_fix", config.enableSelinuxFix)
                 put("kasumi_enabled", config.kasumiEnabled)
                 if (config.mirrorPath.isNotEmpty()) {
                     put("mirror_path", config.mirrorPath)

@@ -597,7 +597,9 @@
     <string name="kasumi_stealth">隐身模式</string>
     <string name="kasumi_stealth_desc">隐藏挂载痕迹并重新排序挂载 ID</string>
     <string name="kasumi_hidexattr">隐藏扩展属性</string>
-    <string name="kasumi_hidexattr_desc">启用 mount_hide、maps_spoof、statfs_spoof 和 stealth，随 hidexattr 自动隐藏其他特征</string>
+    <string name="kasumi_hidexattr_desc">启用 mount_hide、maps_spoof、statfs_spoof、selinux_fix 和 stealth，随 hidexattr 自动隐藏其他特征</string>
+    <string name="kasumi_selinux_fix">SELinux 守护</string>
+    <string name="kasumi_selinux_fix_desc">拦截 app_zygote 对 SELinux 策略的探测（DirtySepolicy / Duck Detector）</string>
     <string name="kasumi_avc_spoof">AVC 日志欺骗</string>
     <string name="kasumi_avc_spoof_desc">伪造 SELinux AVC 拒绝日志</string>
     <string name="kasumi_enable_nuke">启用 Nuke</string>

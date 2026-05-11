@@ -63,6 +63,8 @@ Config Config::from_file(const fs::path& path) {
                 config.enable_stealth = o.at("enable_stealth").as_bool();
             if (o.count("enable_hidexattr"))
                 config.enable_hidexattr = o.at("enable_hidexattr").as_bool();
+            if (o.count("enable_selinux_fix"))
+                config.enable_selinux_fix = o.at("enable_selinux_fix").as_bool();
             if (o.count("kasumi_enabled"))
                 config.kasumi_enabled = o.at("kasumi_enabled").as_bool();
             if (o.count("mirror_path")) {
@@ -121,6 +123,7 @@ bool Config::save_to_file(const fs::path& path) const {
     root["enable_kernel_debug"] = json::Value(enable_kernel_debug);
     root["enable_stealth"] = json::Value(enable_stealth);
     root["enable_hidexattr"] = json::Value(enable_hidexattr);
+    root["enable_selinux_fix"] = json::Value(enable_selinux_fix);
     root["kasumi_enabled"] = json::Value(kasumi_enabled);
     if (!mirror_path.empty())
         root["mirror_path"] = json::Value(mirror_path);
