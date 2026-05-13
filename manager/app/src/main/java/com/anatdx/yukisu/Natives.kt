@@ -131,6 +131,15 @@ object Natives {
     external fun isAdbRootEnabled(): Boolean
     external fun setAdbRootEnabled(enabled: Boolean): Boolean
 
+    /**
+     * SELinux Hide can be enabled/disabled.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isSelinuxHideEnabled(): Boolean
+    external fun setSelinuxHideEnabled(enabled: Boolean): Boolean
+
     external fun getHookType(): String
 
     external fun getUserName(uid: Int): String?

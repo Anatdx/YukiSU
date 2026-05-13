@@ -1,10 +1,13 @@
 #include <linux/gfp.h>
+#include <linux/err.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 
 #include "../klog.h" // IWYU pragma: keep
 #include "sepolicy.h"
+#include "ss/services.h"
 #include "ss/symtab.h"
 
 #define KSU_SUPPORT_ADD_TYPE
@@ -861,4 +864,78 @@ bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path,
 		  const char *ctx)
 {
 	return add_genfscon(db, fs_name, path, ctx);
+}
+
+void ksu_destroy_sepolicy(struct selinux_policy *pol)
+{
+	policydb_destroy(&pol->policydb);
+	kfree(pol);
+}
+
+struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
+{
+	int ret;
+	size_t len;
+	struct selinux_policy *new_pol;
+	void *data;
+	struct policy_file fp;
+
+	len = old_pol->policydb.len;
+	data = vmalloc(len);
+	if (!data) {
+		pr_err("sepolicy: alloc policy len %zu\n", len);
+		ret = -ENOMEM;
+		goto out_free_data;
+	}
+
+	fp.data = data;
+	fp.len = len;
+
+	ret = policydb_write(&old_pol->policydb, &fp);
+	if (ret) {
+		pr_err("sepolicy: policydb_write: %d\n", ret);
+		goto out_free_data;
+	}
+
+#ifdef POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE
+	if (len >= 24) {
+		__le32 *config_ptr = data + 20;
+		u32 config = le32_to_cpu(*config_ptr);
+
+		if (old_pol->policydb.android_netlink_route)
+			config |= POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE;
+#ifdef POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH
+		if (old_pol->policydb.android_netlink_getneigh)
+			config |= POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH;
+#endif // #ifdef POLICYDB_CONFIG_ANDROID_NETLINK_GET...
+		*config_ptr = cpu_to_le32(config);
+	}
+#endif // #ifdef POLICYDB_CONFIG_ANDROID_NETLINK_ROU...
+
+	new_pol = kmemdup(old_pol, sizeof(*old_pol), GFP_KERNEL);
+	if (!new_pol) {
+		pr_err("sepolicy: dup old policy failed\n");
+		ret = -ENOMEM;
+		goto out_free_data;
+	}
+	memset(&new_pol->policydb, 0, sizeof(new_pol->policydb));
+
+	fp.data = data;
+	fp.len = len;
+
+	ret = policydb_read(&new_pol->policydb, &fp);
+	if (ret) {
+		pr_err("sepolicy: policydb_read: %d\n", ret);
+		goto out_free_policy;
+	}
+	new_pol->policydb.len = old_pol->policydb.len;
+	kvfree(data);
+
+	return new_pol;
+
+out_free_policy:
+	kfree(new_pol);
+out_free_data:
+	kvfree(data);
+	return ERR_PTR(ret);
 }

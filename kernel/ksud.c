@@ -21,6 +21,7 @@
 
 #include "allowlist.h"
 #include "arch.h"
+#include "feature/selinux_hide.h"
 #include "hook/syscall_hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
@@ -115,6 +116,7 @@ void on_boot_completed(void)
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
+	ksu_selinux_hide_drop_backup_if_unused();
 }
 
 static void ksu_initialize_selinux(void)

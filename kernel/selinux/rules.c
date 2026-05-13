@@ -1,6 +1,8 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+#include <linux/err.h>
+#include <linux/slab.h>
 
 #include "../klog.h" // IWYU pragma: keep
 #include "linux/lsm_audit.h" // IWYU pragma: keep
@@ -13,6 +15,8 @@
 
 #define ALL NULL
 
+struct selinux_policy *backup_sepolicy;
+
 static struct policydb *get_policydb(void)
 {
 	struct policydb *db;
@@ -23,6 +27,43 @@ static struct policydb *get_policydb(void)
 
 static DEFINE_MUTEX(ksu_rules);
 
+static void backup_original_sepolicy_once(void)
+{
+	int ret;
+
+	if (backup_sepolicy)
+		return;
+
+	backup_sepolicy = ksu_dup_sepolicy(selinux_state.policy);
+	if (IS_ERR(backup_sepolicy)) {
+		pr_err("failed to create backup sepolicy: %ld\n",
+		       PTR_ERR(backup_sepolicy));
+		backup_sepolicy = NULL;
+		return;
+	}
+
+	backup_sepolicy->sidtab =
+	    kzalloc(sizeof(*backup_sepolicy->sidtab), GFP_KERNEL);
+	if (!backup_sepolicy->sidtab) {
+		pr_err("failed to alloc backup sidtab\n");
+		ksu_destroy_sepolicy(backup_sepolicy);
+		backup_sepolicy = NULL;
+		return;
+	}
+
+	ret = policydb_load_isids(&backup_sepolicy->policydb,
+				  backup_sepolicy->sidtab);
+	if (ret) {
+		pr_err("failed to load isids for backup sepolicy: %d\n", ret);
+		kfree(backup_sepolicy->sidtab);
+		ksu_destroy_sepolicy(backup_sepolicy);
+		backup_sepolicy = NULL;
+		return;
+	}
+
+	pr_info("backup sepolicy success\n");
+}
+
 void apply_kernelsu_rules(void)
 {
 	struct policydb *db;
@@ -32,6 +73,8 @@ void apply_kernelsu_rules(void)
 	}
 
 	mutex_lock(&ksu_rules);
+
+	backup_original_sepolicy_once();
 
 	db = get_policydb();
 
