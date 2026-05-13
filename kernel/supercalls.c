@@ -18,6 +18,7 @@
 #include "allowlist.h"
 #include "arch.h"
 #include "feature.h"
+#include "feature/selinux_hide.h"
 #include "file_wrapper.h"
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
@@ -128,6 +129,7 @@ static int do_report_event(void __user *arg)
 			boot_complete_lock = true;
 			if (ksu_late_loaded) {
 				pr_info("boot_complete skipped (late load)\n");
+				ksu_selinux_hide_drop_backup_if_unused();
 			} else {
 				pr_info("boot_complete triggered\n");
 				on_boot_completed();

@@ -66,6 +66,7 @@ enum class FeatureId : uint32_t {
     KernelUmount = 1,
     EnhancedSecurity = 2,
     AdbRoot = 3,
+    SelinuxHide = 4,
     SuLog = 100,
 };
 

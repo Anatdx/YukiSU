@@ -258,6 +258,63 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
+                        var selinuxHideMode by rememberSaveable {
+                            mutableIntStateOf(
+                                run {
+                                    val currentEnabled = Natives.isSelinuxHideEnabled()
+                                    val savedPersist = prefs.getInt("selinux_hide_mode", 0)
+                                    if (savedPersist == 2) 2 else if (currentEnabled) 1 else 0
+                                }
+                            )
+                        }
+                        val selinuxHideStatus by produceState(initialValue = "") {
+                            value = getFeatureStatus("selinux_hide")
+                        }
+                        val selinuxHideSummary = when (selinuxHideStatus) {
+                            "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
+                            "managed" -> stringResource(id = R.string.feature_status_managed_summary)
+                            else -> stringResource(id = R.string.settings_selinux_hide_summary)
+                        }
+                        SuperDropdown(
+                            icon = Icons.Rounded.EnhancedEncryption,
+                            title = stringResource(id = R.string.settings_selinux_hide),
+                            summary = selinuxHideSummary,
+                            items = modeItems,
+                            leftAction = {
+                                Icon(
+                                    Icons.Rounded.EnhancedEncryption,
+                                    modifier = Modifier.padding(end = 16.dp),
+                                    contentDescription = stringResource(id = R.string.settings_selinux_hide),
+                                    tint = MaterialTheme.colorScheme.onBackground
+                                )
+                            },
+                            enabled = selinuxHideStatus == "supported",
+                            selectedIndex = selinuxHideMode,
+                            onSelectedIndexChange = { index ->
+                                when (index) {
+                                    0 -> if (Natives.setSelinuxHideEnabled(false)) {
+                                        execKsud("feature save", true)
+                                        prefs.edit { putInt("selinux_hide_mode", 0) }
+                                        selinuxHideMode = 0
+                                    }
+
+                                    1 -> if (Natives.setSelinuxHideEnabled(false)) {
+                                        execKsud("feature save", true)
+                                        if (Natives.setSelinuxHideEnabled(true)) {
+                                            prefs.edit { putInt("selinux_hide_mode", 0) }
+                                            selinuxHideMode = 1
+                                        }
+                                    }
+
+                                    2 -> if (Natives.setSelinuxHideEnabled(true)) {
+                                        execKsud("feature save", true)
+                                        prefs.edit { putInt("selinux_hide_mode", 2) }
+                                        selinuxHideMode = 2
+                                    }
+                                }
+                            }
+                        )
+
                         var suCompatMode by rememberSaveable {
                             mutableIntStateOf(
                                 run {

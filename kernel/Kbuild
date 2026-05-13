@@ -6,6 +6,7 @@ kernelsu-objs += sucompat.o
 
 # TSR (Tracepoint Syscall Redirect) hook infrastructure
 kernelsu-objs += syscall_hook_manager.o
+kernelsu-objs += hook/lsm_hook.o
 kernelsu-objs += tp_marker.o
 
 ifeq ($(CONFIG_ARM64),y)
@@ -20,6 +21,8 @@ kernelsu-objs += kernel_umount.o
 kernelsu-objs += supercalls.o
 kernelsu-objs += feature.o
 kernelsu-objs += feature/adb_root.o
+kernelsu-objs += feature/selinux_hide.o
+kernelsu-objs += infra/symbol_resolver.o
 kernelsu-objs += ksud.o
 kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o

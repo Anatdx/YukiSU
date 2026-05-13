@@ -390,6 +390,14 @@ NativeBridge(setAdbRootEnabled, jboolean, jboolean enabled) {
   return set_adb_root_enabled(enabled);
 }
 
+NativeBridgeNP(isSelinuxHideEnabled, jboolean) {
+  return is_selinux_hide_enabled();
+}
+
+NativeBridge(setSelinuxHideEnabled, jboolean, jboolean enabled) {
+  return set_selinux_hide_enabled(enabled);
+}
+
 NativeBridge(getUserName, jstring, jint uid) {
   struct passwd *pw = getpwuid((uid_t)uid);
   if (pw && pw->pw_name && pw->pw_name[0] != '\0') {
