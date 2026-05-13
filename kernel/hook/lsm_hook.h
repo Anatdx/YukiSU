@@ -29,6 +29,7 @@ struct ksu_lsm_hook {
 	int offset;
 };
 
+// clang-format off
 #define KSU_LSM_HOOK_INIT(member, target_symbol, replacement_fn, off)          \
 	{                                                                      \
 	    .head_name = #member,                                              \
@@ -38,6 +39,7 @@ struct ksu_lsm_hook {
 	    .replacement = (void *)(replacement_fn),                           \
 	    .offset = off,                                                     \
 	}
+// clang-format on
 
 int ksu_lsm_hook(struct ksu_lsm_hook *hook);
 void ksu_lsm_unhook(struct ksu_lsm_hook *hook);
