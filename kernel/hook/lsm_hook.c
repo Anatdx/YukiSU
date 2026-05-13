@@ -142,7 +142,8 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 	if (!scalls_addr)
-		scalls_addr = kallsyms_lookup_name("static_calls_table");
+		scalls_addr =
+		    (unsigned long)ksu_lookup_symbol("static_calls_table");
 	if (!scalls_addr) {
 		pr_err("lsm_hook: failed to resolve static_calls_table\n");
 		ret = -ENOSYS;
@@ -157,7 +158,7 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
 		if (!kallsyms_lookup_size_offset(scalls_addr, &sym_size, NULL))
 			pr_err("failed to get size\n");
 
-		addr = kallsyms_lookup_name("lsm_active_cnt");
+		addr = (unsigned long)ksu_lookup_symbol("lsm_active_cnt");
 		if (!addr) {
 			pr_err("failed to get lsm_active_cnt\n");
 		} else {
@@ -296,7 +297,7 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
 		hook->head_name ?: "unknown", selected_slot, selected_origin,
 		hook->replacement);
 #else
-	heads_addr = kallsyms_lookup_name("security_hook_heads");
+	heads_addr = (unsigned long)ksu_lookup_symbol("security_hook_heads");
 	if (!heads_addr) {
 		pr_err("lsm_hook: failed to resolve security_hook_heads\n");
 		ret = -ENOENT;
