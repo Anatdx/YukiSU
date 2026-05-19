@@ -4,8 +4,11 @@ import android.util.Log
 import com.anatdx.yukisu.ksuApp
 import com.anatdx.yukisu.ui.util.getKsud
 import com.anatdx.yukisu.ui.util.getRootShell
+import com.anatdx.yukisu.ui.util.getSELinuxLabel
 import com.anatdx.yukisu.ui.util.ksudCmd
 import com.topjohnwu.superuser.Shell
+import com.topjohnwu.superuser.io.SuFile
+import com.topjohnwu.superuser.io.SuFileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -325,12 +328,12 @@ object KasumiManager {
      * Returns Pair(unameRelease, unameVersion).
      */
     suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
-        val releaseResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
-        val release = if (releaseResult.isSuccess) releaseResult.out.firstOrNull()?.trim() ?: "" else ""
-        val versionResult = Shell.cmd("cat /proc/sys/kernel/version 2>/dev/null").exec()
-        val version = if (versionResult.isSuccess) versionResult.out.firstOrNull()?.trim() ?: "" else ""
-        Pair(release, version)
+        Pair(readProcSysKernel("osrelease"), readProcSysKernel("version"))
     }
+
+    /** Read a world-readable file under /proc/sys/kernel without spawning `cat`. */
+    private fun readProcSysKernel(name: String): String =
+        runCatching { File("/proc/sys/kernel/$name").readText().trim() }.getOrDefault("")
     
     /**
      * Get Kasumi status (check if kernel supports it)
@@ -435,13 +438,9 @@ object KasumiManager {
             }
             val content = json.toString(2)
 
-            val result = Shell.cmd(
-                "mkdir -p '$HYMO_CONFIG_DIR'",
-                "cat > '$HYMO_CONFIG_FILE' << 'HYMO_CONFIG_EOF'",
-                content,
-                "HYMO_CONFIG_EOF"
-            ).exec()
-            result.isSuccess
+            SuFile.open(HYMO_CONFIG_DIR).mkdirs()
+            SuFileOutputStream.open(HYMO_CONFIG_FILE).bufferedWriter().use { it.write(content) }
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save config", e)
             false
@@ -617,11 +616,8 @@ object KasumiManager {
     suspend fun getSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         try {
             // Get kernel from /proc/sys (real kernel, not spoofed by uname)
-            val kernelResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
-            val kernel = if (kernelResult.isSuccess) kernelResult.out.firstOrNull()?.trim() ?: "Unknown" else "Unknown"
-            
-            val selinuxResult = Shell.cmd("getenforce").exec()
-            val selinux = if (selinuxResult.isSuccess) selinuxResult.out.firstOrNull() ?: "Unknown" else "Unknown"
+            val kernel = readProcSysKernel("osrelease").ifEmpty { "Unknown" }
+            val selinux = getSELinuxLabel()
             
             var mountBase = "Unknown"
             var activeMounts = emptyList<String>()
@@ -680,10 +676,12 @@ object KasumiManager {
             
             // Fallback: daemon state file (also used to populate active_mounts for status page).
             run {
-                val stateResult = Shell.cmd("cat '$HYMO_STATE_FILE' 2>/dev/null").exec()
-                if (stateResult.isSuccess && stateResult.out.isNotEmpty()) {
+                val stateText = runCatching {
+                    SuFile.open(HYMO_STATE_FILE).takeIf { it.exists() && it.canRead() }
+                        ?.newInputStream()?.bufferedReader()?.use { it.readText() }
+                }.getOrNull().orEmpty()
+                if (stateText.isNotBlank()) {
                     try {
-                        val stateText = (stateResult.out + stateResult.err).joinToString("\n")
                         val state = extractJsonObject(stateText) ?: throw IllegalStateException("state json parse failed")
                         if (mountBase == "Unknown") mountBase = state.optString("mount_point", "Unknown")
                         activeMounts = state.optJSONArray("active_mounts")?.let { arr ->
@@ -1057,27 +1055,25 @@ object KasumiManager {
      * Check if built-in mount is enabled (no disable file exists)
      */
     suspend fun isBuiltinMountEnabled(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val result = Shell.cmd("test -f '$DISABLE_BUILTIN_MOUNT_FILE' && echo 'disabled' || echo 'enabled'").exec()
-            result.isSuccess && result.out.firstOrNull()?.trim() == "enabled"
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to check builtin mount status", e)
-            true // Default to enabled
-        }
+        runCatching { !SuFile.open(DISABLE_BUILTIN_MOUNT_FILE).exists() }
+            .getOrElse { e ->
+                Log.e(TAG, "Failed to check builtin mount status", e)
+                true // Default to enabled
+            }
     }
-    
+
     /**
      * Set built-in mount state
      * @param enable true to enable built-in mount (remove disable file), false to disable (create disable file)
      */
     suspend fun setBuiltinMountEnabled(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = if (enable) {
-                Shell.cmd("rm -f '$DISABLE_BUILTIN_MOUNT_FILE'").exec()
+            val file = SuFile.open(DISABLE_BUILTIN_MOUNT_FILE)
+            if (enable) {
+                if (file.exists()) file.delete() else true
             } else {
-                Shell.cmd("touch '$DISABLE_BUILTIN_MOUNT_FILE'").exec()
+                if (file.exists()) true else file.createNewFile()
             }
-            result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set builtin mount state", e)
             false
