@@ -41,6 +41,7 @@ val androidSourceCompatibility = JavaVersion.VERSION_17
 val androidTargetCompatibility = JavaVersion.VERSION_17
 val managerVersionCode by extra(10000 - 3135 + getGitCommitCount())
 val managerVersionName by extra(computeManagerVersionName())
+val ksudBundledVersion by extra(computeKsudBundledVersion())
 
 fun getGitCommitCount(): Int {
     return providers.exec {
@@ -59,6 +60,18 @@ fun computeManagerVersionName(): String {
     } else {
         describe
     }
+}
+
+/**
+ * Mirror userspace/ksud/scripts/generate_version.py so the manager-bundled
+ * ksud version is known at build time and we don't need to exec the daemon
+ * at runtime just to find it out.
+ */
+fun computeKsudBundledVersion(): String {
+    val describe = providers.exec {
+        commandLine("git", "describe", "--tags", "--always")
+    }.standardOutput.asText.get().trim()
+    return describe.removePrefix("v")
 }
 
 subprojects {

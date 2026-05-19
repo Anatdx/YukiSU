@@ -16,6 +16,7 @@ plugins {
 
 val managerVersionCode: Int by rootProject.extra
 val managerVersionName: String by rootProject.extra
+val ksudBundledVersion: String by rootProject.extra
 val androidCmakeVersion: String by rootProject.extra
 
 fun exposeSigningProperty(propertyName: String, envName: String) {
@@ -49,6 +50,10 @@ android {
         }
     }**/
     namespace = "com.anatdx.yukisu"
+
+    defaultConfig {
+        buildConfigField("String", "KSUD_BUNDLED_VERSION", "\"$ksudBundledVersion\"")
+    }
 
     buildTypes {
         release {

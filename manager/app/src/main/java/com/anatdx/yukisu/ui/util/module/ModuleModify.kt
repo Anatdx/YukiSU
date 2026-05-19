@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.anatdx.yukisu.R
+import com.anatdx.yukisu.ksu.KsuPaths
 import com.anatdx.yukisu.ui.util.reboot
 import com.topjohnwu.superuser.io.SuFileInputStream
 import com.topjohnwu.superuser.io.SuFileOutputStream
@@ -25,10 +26,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object ModuleModify {
-    private const val ALLOWLIST_PATH = "/data/adb/ksu/.allowlist"
-    private const val MODULES_DIR = "/data/adb/modules"
-    private const val BUSYBOX_PATH = "/data/adb/ksu/bin/busybox"
-
     @Composable
     fun RestoreConfirmationDialog(
         showDialog: Boolean,
@@ -107,7 +104,7 @@ object ModuleModify {
         withContext(Dispatchers.IO) {
             try {
                 // busybox tar streams the module tree to stdout; we pipe that into the user-chosen URI.
-                val process = ProcessBuilder("su", "-c", "cd $MODULES_DIR && $BUSYBOX_PATH tar -cz .")
+                val process = ProcessBuilder("su", "-c", "cd ${KsuPaths.MODULES_DIR} && ${KsuPaths.BUSYBOX} tar -cz .")
                     .redirectErrorStream(false)
                     .start()
 
@@ -156,7 +153,7 @@ object ModuleModify {
 
         withContext(Dispatchers.IO) {
             try {
-                val process = ProcessBuilder("su", "-c", "$BUSYBOX_PATH tar -xz -C $MODULES_DIR")
+                val process = ProcessBuilder("su", "-c", "${KsuPaths.BUSYBOX} tar -xz -C ${KsuPaths.MODULES_DIR}")
                     .redirectErrorStream(false)
                     .start()
 
@@ -200,7 +197,7 @@ object ModuleModify {
     suspend fun backupAllowlist(context: Context, snackBarHost: SnackbarHostState, uri: Uri) {
         withContext(Dispatchers.IO) {
             try {
-                SuFileInputStream.open(ALLOWLIST_PATH).use { input ->
+                SuFileInputStream.open(KsuPaths.ALLOWLIST).use { input ->
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         input.copyTo(output)
                     } ?: throw IOException("Failed to open output uri")
@@ -243,7 +240,7 @@ object ModuleModify {
         withContext(Dispatchers.IO) {
             try {
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    SuFileOutputStream.open(ALLOWLIST_PATH).use { output ->
+                    SuFileOutputStream.open(KsuPaths.ALLOWLIST).use { output ->
                         input.copyTo(output)
                     }
                 } ?: throw IOException("Failed to open input uri")

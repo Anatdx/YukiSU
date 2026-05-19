@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
+import com.anatdx.yukisu.ksu.KsuPaths
 import com.anatdx.yukisu.ksuApp
 import com.anatdx.yukisu.utils.AssetsUtil
 import com.topjohnwu.superuser.io.SuFile
@@ -109,35 +110,13 @@ object KsuCli {
     }
     
     /**
-     * Get ksud version from APK's native library.
+     * The APK-bundled ksud version is pinned at build time by
+     * manager/build.gradle.kts (`computeKsudBundledVersion`), which mirrors
+     * userspace/ksud/scripts/generate_version.py. No need to fork-exec the
+     * daemon just to read its version.
      */
-    private fun getApkKsudVersion(): String? {
-        return try {
-            val ksudPath = getKsuDaemonPath()
-            // Run ksud from APK to get its version.
-            // Some builds may only print banner lines; we fall back to the first non-empty line.
-            val process = ProcessBuilder(ksudPath, "version")
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-
-            if (output.isBlank()) {
-                null
-            } else {
-                val lines = output.lines().map { it.trim() }.filter { it.isNotEmpty() }
-                // Try to parse "version xxx" pattern from any line
-                val regex = Regex("""version\s+([^\s]+)""", RegexOption.IGNORE_CASE)
-                val parsed = lines.firstNotNullOfOrNull { line ->
-                    regex.find(line)?.groupValues?.getOrNull(1)
-                }
-                parsed ?: lines.first()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get APK ksud version", e)
-            null
-        }
-    }
+    private fun getApkKsudVersion(): String? =
+        BuildConfig.KSUD_BUNDLED_VERSION.takeIf { it.isNotBlank() }
 
     /**
      * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
@@ -164,7 +143,7 @@ object KsuCli {
      */
     private fun getInstalledKsudVersion(): String? {
         return try {
-            val result = ShellUtils.fastCmd(SHELL, "/data/adb/ksud version 2>/dev/null")
+            val result = ShellUtils.fastCmd(SHELL, "${KsuPaths.KSUD_BIN} version 2>/dev/null")
             if (result.isBlank()) return null
             val match = Regex("""version\s+([^\s]+)""").find(result)
             match?.groupValues?.get(1)
@@ -216,19 +195,19 @@ object KsuCli {
 
         val cmds = arrayOf(
             // Ensure directories
-            "mkdir -p /data/adb/ksu/bin",
-            "mkdir -p /data/adb/ksu/log",
+            "mkdir -p ${KsuPaths.KSU_BIN_DIR}",
+            "mkdir -p ${KsuPaths.KSU_LOG_DIR}",
             // Copy new daemon binary (multi-call: ksud + magiskboot via argv0)
-            "cp -f ${ksudSo.absolutePath} /data/adb/ksud",
-            "chmod 0755 /data/adb/ksud",
+            "cp -f ${ksudSo.absolutePath} ${KsuPaths.KSUD_BIN}",
+            "chmod 0755 ${KsuPaths.KSUD_BIN}",
             // Symlinks in ksu/bin: ksud, magiskboot, bootctl, resetprop all point to the same binary (multi-call)
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/ksud",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/magiskboot",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/bootctl",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/resetprop",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/ksud",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/magiskboot",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/bootctl",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
-            "restorecon /data/adb/ksud || true",
-            "restorecon -R /data/adb/ksu || true"
+            "restorecon ${KsuPaths.KSUD_BIN} || true",
+            "restorecon -R ${KsuPaths.KSU_ROOT} || true"
         )
 
         Log.i(TAG, "installOrUpdateKsudDaemon: syncing ${ksudSo.absolutePath} -> /data/adb/ksud")
