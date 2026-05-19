@@ -10,10 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/**
- * 分区管理助手
- * 通过 ksud 命令获取分区信息
- */
 object PartitionManagerHelper {
     private const val TAG = "PartitionManagerHelper"
 
@@ -21,15 +17,11 @@ object PartitionManagerHelper {
         return "'${value.replace("'", "'\\''")}'"
     }
     
-    /**
-     * 获取槽位信息
-     */
     suspend fun getSlotInfo(context: Context): SlotInfo? = withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
             val result = mutableListOf<String>()
             
-            // 执行 ksud flash slots 命令
             val cmd = "${getKsud()} flash slots"
             Log.d(TAG, "Executing command: $cmd")
             val execResult = shell.newJob()
@@ -43,7 +35,6 @@ object PartitionManagerHelper {
             }
             
             if (result.isEmpty()) {
-                // 不是 A/B 设备
                 return@withContext SlotInfo(
                     isAbDevice = false,
                     currentSlot = null,
@@ -80,15 +71,11 @@ object PartitionManagerHelper {
         }
     }
     
-    /**
-     * 获取分区列表
-     */
     suspend fun getPartitionList(context: Context, slot: String?, scanAll: Boolean = false): List<PartitionInfo> = withContext(Dispatchers.IO) {
         try {
             val shell = getRootShell()
             val result = mutableListOf<String>()
             
-            // 执行 ksud flash list 命令
             val cmdParts = mutableListOf("${getKsud()} flash list")
             if (slot != null) {
                 cmdParts.add("--slot $slot")
@@ -126,7 +113,6 @@ object PartitionManagerHelper {
                 }
                 
                 try {
-                    // 提取分区名称
                     val parts = trimmed.split(Regex("\\s+"), limit = 2)
                     Log.d(TAG, "Split into ${parts.size} parts: ${parts.joinToString(" | ")}")
                     if (parts.size < 2) {
@@ -138,10 +124,8 @@ object PartitionManagerHelper {
                     val info = parts[1]
                     Log.d(TAG, "Partition name: '$name', info: '$info'")
                     
-                    // 检查是否为危险分区
                     val isDangerous = info.contains("[DANGEROUS]")
                     
-                    // 提取类型和大小
                     val typeMatch = Regex("\\[(.*?),\\s*(\\d+)\\s*bytes\\]").find(info)
                     if (typeMatch != null) {
                         val type = typeMatch.groupValues[1]
@@ -154,7 +138,6 @@ object PartitionManagerHelper {
                         
                         Log.d(TAG, "Matched type: '$type', size string: '$sizeStr', size: $size, dangerous: $isDangerous")
                         
-                        // 获取块设备路径
                         val blockDevice = getPartitionBlockDevice(shell, name, slot)
                         Log.d(TAG, "Block device: '$blockDevice'")
                         
@@ -184,9 +167,6 @@ object PartitionManagerHelper {
         }
     }
     
-    /**
-     * 获取分区的块设备路径
-     */
     private fun getPartitionBlockDevice(shell: Shell, partition: String, slot: String?): String {
         val result = mutableListOf<String>()
         
@@ -210,9 +190,6 @@ object PartitionManagerHelper {
         return ""
     }
     
-    /**
-     * 备份分区
-     */
     suspend fun backupPartition(
         context: Context,
         partition: String,
@@ -264,9 +241,6 @@ object PartitionManagerHelper {
         }
     }
     
-    /**
-     * 刷写分区
-     */
     suspend fun flashPartition(
         context: Context,
         imagePath: String,
