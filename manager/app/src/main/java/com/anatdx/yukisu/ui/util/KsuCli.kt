@@ -306,7 +306,10 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
     val shell = getRootShell()
     val out = shell.newJob()
         .add("${getKsuDaemonPath()} feature check $feature").to(ArrayList<String>(), null).exec().out
-    out.firstOrNull()?.trim().orEmpty()
+    out.asSequence()
+        .map { it.trim() }
+        .firstOrNull { it == "supported" || it == "unsupported" || it == "managed" }
+        .orEmpty()
 }
 
 fun install() {
