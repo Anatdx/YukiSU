@@ -804,4 +804,6 @@
     <string name="home_ksud_daemon_unknown">未知</string>
     <string name="home_ksud_daemon_sync">同步 ksud 守护进程</string>
     <string name="home_ksud_daemon_syncing">正在同步…</string>
+    <string name="setting_change_saved_reboot">设置成功，重启生效</string>
+    <string name="setting_change_failed">设置失败</string>
 </resources>

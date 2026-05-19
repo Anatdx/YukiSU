@@ -233,10 +233,17 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             checked = selinuxHideEnabled,
                             enabled = selinuxHideStatus == "supported",
                             onCheckedChange = { enabled ->
-                                if (Natives.setSelinuxHideEnabled(enabled)) {
+                                selinuxHideEnabled = enabled
+                                val ok = Natives.setSelinuxHideEnabled(enabled)
+                                if (ok) {
                                     execKsud("feature save", true)
-                                    selinuxHideEnabled = Natives.isSelinuxHideEnabled()
                                 }
+                                Toast.makeText(
+                                    context,
+                                    if (ok) R.string.setting_change_saved_reboot
+                                    else R.string.setting_change_failed,
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         )
 

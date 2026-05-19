@@ -827,4 +827,6 @@
     <string name="home_ksud_daemon_unknown">Unknown</string>
     <string name="home_ksud_daemon_sync">Sync ksud daemon</string>
     <string name="home_ksud_daemon_syncing">Syncing…</string>
+    <string name="setting_change_saved_reboot">Setting saved, reboot to take effect</string>
+    <string name="setting_change_failed">Setting failed</string>
 </resources>
