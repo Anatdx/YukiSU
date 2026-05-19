@@ -113,10 +113,8 @@
     <string name="select_file_tip">Ieteicams %1$s nodalījuma attēls</string>
     <string name="select_kmi">Izvēlieties KMI</string>
     <string name="settings_uninstall">Atinstalēt</string>
-    <string name="settings_uninstall_temporary">Pagaidu atinstalēšana</string>
     <string name="settings_uninstall_permanent">Neatgriezeniski atinstalēt</string>
     <string name="settings_restore_stock_image">Atjaunot oriģinālo attēlu</string>
-    <string name="settings_uninstall_temporary_message">Īslaicīgi atinstalēt KernelSU, pēc nākamās restartēšanas atjaunot sākotnējo stāvokli.</string>
     <string name="settings_uninstall_permanent_message">KernelSU (saknes un visu moduļu) pilnīga atinstalēšana.</string>
     <string name="settings_restore_stock_image_message">Atjaunojot rūpnīcas attēlu (ja ir dublējums), ko parasti izmanto pirms OTA; ja nepieciešams atinstalēt KernelSU, lūdzu, izmantojiet \"Neatgriezeniski atinstalēt\".</string>
     <string name="flashing">Instalē</string>

@@ -113,10 +113,8 @@
     <string name="select_file_tip">يوصى باستخدام صورة القسم %1$s</string>
     <string name="select_kmi">اختر KMI</string>
     <string name="settings_uninstall">إلغاء التثبيت</string>
-    <string name="settings_uninstall_temporary">إلغاء التثبيت مؤقتًا</string>
     <string name="settings_uninstall_permanent">إلغاء التثبيت بشكل دائم</string>
     <string name="settings_restore_stock_image">استعادة الصورة الاصلية</string>
-    <string name="settings_uninstall_temporary_message">قم بإلغاء تثبيت KernelSU مؤقتًا، واستعد إلى حالته الأصلية بعد إعادة التشغيل التالية.</string>
     <string name="settings_uninstall_permanent_message">‬إلغاء تثبيت KernelSU .(الجذر وجميع الوحدات) بشكل كامل ودائم.</string>
     <string name="settings_restore_stock_image_message">استعادة صورة المصنع المخزنة (في حالة وجود نسخة احتياطية)، والتي تُستخدم عادة قبل OTA؛ إذا كنت بحاجة إلى إلغاء تثبيت KernelSU، فيرجى استخدام \"إلغاء التثبيت الدائم\".</string>
     <string name="flashing">تركيب</string>

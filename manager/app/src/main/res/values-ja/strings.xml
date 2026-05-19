@@ -116,10 +116,8 @@
     <string name="select_file_tip">%1$s のパーティションイメージを推奨します。</string>
     <string name="select_kmi">KMI を選択してください</string>
     <string name="settings_uninstall">アンインストール</string>
-    <string name="settings_uninstall_temporary">一時的にアンインストールする</string>
     <string name="settings_uninstall_permanent">完全にアンインストールする</string>
     <string name="settings_restore_stock_image">ストックイメージを復元</string>
-    <string name="settings_uninstall_temporary_message">KernelSU を一時的にアンインストールし、次回の再起動後に元の状態に戻します。</string>
     <string name="flashing">フラッシュ</string>
     <string name="flash_success">フラッシュが成功しました</string>
     <string name="flash_failed">フラッシュに失敗しました</string>

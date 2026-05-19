@@ -111,10 +111,8 @@
     <string name="select_file_tip">Se recomienda la imagen de partición %1$s</string>
     <string name="select_kmi">Selecciona KMI</string>
     <string name="settings_uninstall">Desinstalar</string>
-    <string name="settings_uninstall_temporary">Desinstalar temporalmente</string>
     <string name="settings_uninstall_permanent">Desinstalar permanentemente</string>
     <string name="settings_restore_stock_image">Restaurar imagen de archivo</string>
-    <string name="settings_uninstall_temporary_message">Desinstalar temporalmente KernelSU, restaurar al estado original tras el siguiente reinicio.</string>
     <string name="settings_uninstall_permanent_message">Desinstalar KernelSU (Root y todos los módulos) completa y permanentemente.</string>
     <string name="settings_restore_stock_image_message">Restaurar la imagen de fábrica stock (Si existe una copia de seguridad), por lo general se utiliza antes de OTA; si necesita desinstalar KernelSU, por favor, utilice \"Desinstalar permanentemente\".</string>
     <string name="flashing">Intermitencia</string>

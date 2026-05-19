@@ -112,10 +112,8 @@
     <string name="select_file_tip">Рекомендується образ розділу %1$s</string>
     <string name="select_kmi">Вибрати KMI</string>
     <string name="settings_uninstall">Видалити</string>
-    <string name="settings_uninstall_temporary">Тимчасово видалити</string>
     <string name="settings_uninstall_permanent">Видалити назавжди</string>
     <string name="settings_restore_stock_image">Відновити стоковий образ</string>
-    <string name="settings_uninstall_temporary_message">Тимчасово видалити KernelSU, відновлення до початкового стану після наступного перезавантаження.</string>
     <string name="settings_uninstall_permanent_message">Повне та остаточне видалення KernelSU (Root та всі модулі).</string>
     <string name="settings_restore_stock_image_message">Відновити стоковий заводський образ (якщо існує резервна копія), зазвичай використовується перед OTA; якщо потрібно видалити KernelSU, використовуйте "Видалити назавжди".</string>
     <string name="flashing">Прошивка</string>

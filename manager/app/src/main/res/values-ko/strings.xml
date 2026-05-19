@@ -111,10 +111,8 @@
     <string name="select_file_tip">%1$s 파티션 이미지 권장됨</string>
     <string name="select_kmi">KMI 선택</string>
     <string name="settings_uninstall">삭제</string>
-    <string name="settings_uninstall_temporary">임시적 삭제</string>
     <string name="settings_uninstall_permanent">영구적 삭제</string>
     <string name="settings_restore_stock_image">순정 이미지 복구</string>
-    <string name="settings_uninstall_temporary_message">임시적으로 KernelSU를 삭제하고, 다음 재부팅에 원래대로 복구합니다.</string>
     <string name="settings_uninstall_permanent_message">완전히, 그리고 영구히 KernelSU (루트 및 모든 모듈)를 삭제합니다.</string>
     <string name="settings_restore_stock_image_message">순정 이미지 복구 (백업이 존재한다면), OTA 전에 사용합니다; KernelSU를 삭제해야 한다면, \"영구적 삭제\"를 사용해 주세요.</string>
     <string name="flashing">플래시 중</string>

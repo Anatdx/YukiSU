@@ -131,10 +131,6 @@ object CardConfig {
         updateShadow(isShadowEnabled, if (isShadowEnabled) cardElevation else 0.dp)
     }
 
-    @Deprecated("使用 updateShadow 替代", ReplaceWith("updateShadow(enabled)"))
-    fun updateShadowEnabled(enabled: Boolean) {
-        updateShadow(enabled)
-    }
 }
 
 object CardStyleProvider {

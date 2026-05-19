@@ -111,10 +111,8 @@
     <string name="select_file_tip">%1$s partitsioonitõmmis on soovitatud</string>
     <string name="select_kmi">Vali KMI</string>
     <string name="settings_uninstall">Eemalda</string>
-    <string name="settings_uninstall_temporary">Eemalda ajutiselt</string>
     <string name="settings_uninstall_permanent">Eemalda püsivalt</string>
     <string name="settings_restore_stock_image">Taasta vaikimisi tõmmis</string>
-    <string name="settings_uninstall_temporary_message">Eemalda KernelSU ajutiselt, taasta pärast taaskäivitust algseisu.</string>
     <string name="settings_uninstall_permanent_message">KernelSU eemaldamine (juurkasutaja ja kõik moodulid) täielikult ja püsivalt.</string>
     <string name="settings_restore_stock_image_message">Taasta tehase-vaiketõmmis (kui varundus eksisteerib), tavaliselt kasutatakse enne üle-õhu uuendust; kui soovid KernelSU-d eemaldada, palun kasuta \"Eemalda püsivalt\".</string>
     <string name="flashing">Välgutamine</string>

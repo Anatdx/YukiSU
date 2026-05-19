@@ -115,10 +115,8 @@
     <string name="select_file_tip">%1$s image partisi terekomendasi</string>
     <string name="select_kmi">Pilih KMI</string>
     <string name="settings_uninstall">Hapus</string>
-    <string name="settings_uninstall_temporary">Hapus sementara</string>
     <string name="settings_uninstall_permanent">Hapus permanen</string>
     <string name="settings_restore_stock_image">Pulihkan image bawaan</string>
-    <string name="settings_uninstall_temporary_message">Sementara menghapus KernelSU, memulihkan ke kondisi asal setelah reboot berikutnya.</string>
     <string name="settings_uninstall_permanent_message">Hapus permanen KernelSU (root dan modul).</string>
     <string name="settings_restore_stock_image_message">Pulihkan image bawaan ROM (jika cadangan tersedia), umumnya dilakukan sebelum OTA; jika ingin menghapus KernelSU, gunakan fungsi \"Hapus permanen\".</string>
     <string name="flashing">Pasang</string>

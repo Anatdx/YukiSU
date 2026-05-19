@@ -113,10 +113,8 @@
     <string name="select_file_tip">%1$s Partitionsabbild empfohlen</string>
     <string name="select_kmi">KMI auswählen</string>
     <string name="settings_uninstall">Deinstallieren</string>
-    <string name="settings_uninstall_temporary">Temporär deinstallieren</string>
     <string name="settings_uninstall_permanent">Permanent deinstallieren</string>
     <string name="settings_restore_stock_image">Standard-Abbild wiederherstellen</string>
-    <string name="settings_uninstall_temporary_message">KernelSU temporär deinstallieren, originalen Status nach dem nächsten Neustart wiederherstellen.</string>
     <string name="settings_uninstall_permanent_message">KernelSU (Root und alle Module) vollständig und dauerhaft deinstallieren.</string>
     <string name="settings_restore_stock_image_message">Das Standard Werksabbild wiederherstellen (falls ein Backup existiert), normalerweise vor einem OTA zu verwenden; falls Sie KernelSU deinstallieren müssen, nutzen Sie bitte \"Permanent deinstallieren\".</string>
     <string name="flashing">Schreibt</string>

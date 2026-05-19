@@ -113,10 +113,8 @@
     <string name="select_file_tip">Se recomandă imaginea partiției %1$s</string>
     <string name="select_kmi">Selectează KMI</string>
     <string name="settings_uninstall">Dezinstalează</string>
-    <string name="settings_uninstall_temporary">Dezinstalează temporar</string>
     <string name="settings_uninstall_permanent">Dezinstalează definitiv</string>
     <string name="settings_restore_stock_image">Restaurare imagine stoc</string>
-    <string name="settings_uninstall_temporary_message">Dezinstalează temporar KernelSU, se revine la starea inițială după următoarea repornire.</string>
     <string name="settings_uninstall_permanent_message">Dezinstalare KernelSU (Root și toate modulele) complet și permanent.</string>
     <string name="settings_restore_stock_image_message">Restaurează imaginea stoc din fabrică (dacă există o copie de rezervă), utilizată de obicei înainte de OTA; dacă trebuie să dezinstalezi KernelSU, utilizează „Dezinstalare permanentă”.</string>
     <string name="flashing">Instalare</string>

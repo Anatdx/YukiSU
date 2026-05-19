@@ -235,7 +235,7 @@ fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>)
                 selected.forEach { group ->
                     AssistChip(
                         modifier = Modifier.padding(3.dp),
-                        onClick = { /*TODO*/ },
+                        onClick = {},
                         label = { Text(group.display) })
                 }
             }
@@ -313,7 +313,7 @@ fun CapsPanel(
                 selected.forEach { group ->
                     AssistChip(
                         modifier = Modifier.padding(3.dp),
-                        onClick = { /*TODO*/ },
+                        onClick = {},
                         label = { Text(group.display) })
                 }
             }

@@ -114,10 +114,8 @@ Lanjutkan?</string>
     <string name="select_file_tip">Disarankan gambar partisi %1$s</string>
     <string name="select_kmi">Pilih KMI</string>
     <string name="settings_uninstall">Copot Pemasangan</string>
-    <string name="settings_uninstall_temporary">Copot Pemasangan Sementara</string>
     <string name="settings_uninstall_permanent">Copot Pemasangan Permanen</string>
     <string name="settings_restore_stock_image">Pulihkan Gambar Bawaan</string>
-    <string name="settings_uninstall_temporary_message">Copot pemasangan KernelSU secara sementara, kembalikan ke keadaan awal setelah reboot berikutnya.</string>
     <string name="settings_uninstall_permanent_message">Copot pemasangan KernelSU secara lengkap dan permanen (Root dan semua modul).</string>
     <string name="settings_restore_stock_image_message">Pulihkan gambar bawaan pabrik (jika cadangan tersedia), biasanya digunakan sebelum OTA; jika ingin mencopot KernelSU, gunakan \"Copot Pemasangan Permanen\".</string>
     <string name="flashing">Mem-flash</string>

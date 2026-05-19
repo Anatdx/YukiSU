@@ -111,10 +111,8 @@
     <string name="select_file_tip">%1$s partíció képfájl ajánlott</string>
     <string name="select_kmi">KMI kiválasztása</string>
     <string name="settings_uninstall">Eltávolítás</string>
-    <string name="settings_uninstall_temporary">Ideiglenes eltávolítás</string>
     <string name="settings_uninstall_permanent">Végleges eltávolítás</string>
     <string name="settings_restore_stock_image">Eredeti képfájl visszaállítása</string>
-    <string name="settings_uninstall_temporary_message">A KernelSU ideiglenes eltávolítása, az eredeti állapot visszaállítása a következő újraindítás után.</string>
     <string name="settings_uninstall_permanent_message">A KernelSU eltávolítása (root és az összes modul) teljesen és véglegesen.</string>
     <string name="settings_restore_stock_image_message">Állítsa vissza a gyári képfájlt (ha létezik biztonsági mentés). Általában OTA előtt használják. Ha a KernelSU-t szeretné eltávolítani, használja a végleges eltávolítás opciót.</string>
     <string name="flashing">Telepítés</string>

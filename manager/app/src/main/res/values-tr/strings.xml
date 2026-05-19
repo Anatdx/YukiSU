@@ -116,10 +116,8 @@
     <string name="select_file_tip">%1$s bölüm görüntüsü önerilir</string>
     <string name="select_kmi">KMI seçin</string>
     <string name="settings_uninstall">Kaldır</string>
-    <string name="settings_uninstall_temporary">Geçici olarak kaldır</string>
     <string name="settings_uninstall_permanent">Kalıcı olarak kaldır</string>
     <string name="settings_restore_stock_image">Fabrika görüntüsünü geri yükle</string>
-    <string name="settings_uninstall_temporary_message">KernelSU\'yu geçici olarak kaldırın, bir sonraki yeniden başlatmadan sonra orijinal duruma geri dönün.</string>
     <string name="settings_uninstall_permanent_message">KernelSU\'yu (root ve tüm modüller) tamamen ve kalıcı olarak kaldırma</string>
     <string name="settings_restore_stock_image_message">Fabrika imajını geri yükleyin (eğer bir yedeği varsa), genellikle OTA güncellemesinden önce kullanılır; KernelSU\'yu kaldırmanız gerekiyorsa, lütfen \"Kalıcı olarak kaldır\" seçeneğini kullanın</string>
     <string name="flashing">Kurulum işlemi</string>

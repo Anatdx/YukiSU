@@ -13,6 +13,7 @@ import com.dergoogler.mmrl.platform.model.ModuleConfig
 import com.dergoogler.mmrl.platform.model.ModuleConfig.Companion.asModuleConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.ui.util.HanziToPinyin
 import com.anatdx.yukisu.ui.util.listModules
 import com.anatdx.yukisu.ui.util.getRootShell
@@ -36,7 +37,7 @@ class ModuleViewModel : ViewModel() {
     companion object {
         private const val TAG = "ModuleViewModel"
         private var modules by mutableStateOf<List<ModuleInfo>>(emptyList())
-        private const val CUSTOM_USER_AGENT = "SukiSU-Ultra/2.0"
+        private val CUSTOM_USER_AGENT = "YukiSU/${BuildConfig.VERSION_NAME}"
     }
 
     // 模块大小缓存管理器

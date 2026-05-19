@@ -116,10 +116,8 @@
     <string name="select_file_tip">Phân vùng %1$s được khuyến nghị</string>
     <string name="select_kmi">Chọn KMI</string>
     <string name="settings_uninstall">Gỡ cài đặt</string>
-    <string name="settings_uninstall_temporary">Gỡ cài đặt tạm thời</string>
     <string name="settings_uninstall_permanent">Gỡ cài đặt vĩnh viễn</string>
     <string name="settings_restore_stock_image">Khôi phục phân vùng khởi động về mặc định</string>
-    <string name="settings_uninstall_temporary_message">Gỡ cài đặt tạm thời YukiSU, khôi phục lại trạng thái ban đầu sau lần khởi động lại tiếp theo</string>
     <string name="settings_uninstall_permanent_message">Gỡ cài đặt YukiSU (root và tất cả các module) sạch hoàn toàn, trả về trạng thái ban đầu</string>
     <string name="settings_restore_stock_image_message">Khôi phục lại boot lúc đầu (nếu có bản sao lưu), thường được sử dụng trước OTA; nếu bạn cần gỡ hẳn YukiSU, sử dụng \"Gỡ cài đặt vĩnh viễn\"</string>
     <string name="flashing">Đang Flash...</string>

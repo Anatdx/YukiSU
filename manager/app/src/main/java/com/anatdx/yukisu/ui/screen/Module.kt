@@ -89,6 +89,7 @@ import com.ramcosta.composedestinations.generated.destinations.ExecuteModuleActi
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
+import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.*
@@ -1008,7 +1009,7 @@ private fun ModuleList(
 
         val request = okhttp3.Request.Builder()
             .url(changelogUrl)
-            .header("User-Agent", "SukiSU-Ultra/2.0")
+            .header("User-Agent", "YukiSU/${BuildConfig.VERSION_NAME}")
             .build()
 
         val changelogResult = loadingDialog.withLoading {
