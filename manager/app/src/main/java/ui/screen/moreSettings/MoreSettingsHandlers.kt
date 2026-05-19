@@ -33,7 +33,11 @@ import com.anatdx.yukisu.ui.screen.SettingItem
 import com.anatdx.yukisu.ui.screen.SwitchItem
 import com.anatdx.yukisu.ui.theme.*
 import com.anatdx.yukisu.ui.util.*
-import com.topjohnwu.superuser.Shell
+import com.anatdx.yukisu.ui.util.execKsud
+import com.anatdx.yukisu.ui.util.getRootShell
+import com.anatdx.yukisu.ui.util.isSELinuxEnforcing
+import com.anatdx.yukisu.ui.util.ksudReadString
+import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,9 +88,8 @@ class MoreSettingsHandlers(
 
         CardConfig.save(context)
 
-        state.selinuxEnabled = Shell.cmd("getenforce").exec().out.firstOrNull() == "Enforcing"
-
-        state.hideBlEnabled = Shell.cmd("ksud feature hide-bl").exec().out.firstOrNull()?.contains("enabled") == true
+        state.selinuxEnabled = isSELinuxEnforcing()
+        state.hideBlEnabled = ksudReadString("feature hide-bl").contains("enabled")
     }
 
     fun handleThemeModeChange(index: Int) {
@@ -287,44 +290,24 @@ class MoreSettingsHandlers(
     }
 
     fun handleSelinuxChange(enabled: Boolean) {
-        val command = if (enabled) "setenforce 1" else "setenforce 0"
-        Shell.getShell().newJob().add(command).exec().let { result ->
-            if (result.isSuccess) {
-                state.selinuxEnabled = enabled
-                val message = if (enabled)
-                    context.getString(R.string.selinux_enabled_toast)
-                else
-                    context.getString(R.string.selinux_disabled_toast)
-
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.selinux_change_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+        val ok = ShellUtils.fastCmdResult(getRootShell(), if (enabled) "setenforce 1" else "setenforce 0")
+        if (ok) {
+            state.selinuxEnabled = enabled
+            val msg = if (enabled) R.string.selinux_enabled_toast else R.string.selinux_disabled_toast
+            Toast.makeText(context, context.getString(msg), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.selinux_change_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
     fun handleHideBlChange(enabled: Boolean) {
-        val command = if (enabled) "ksud feature hide-bl enable" else "ksud feature hide-bl disable"
-        Shell.getShell().newJob().add(command).exec().let { result ->
-            if (result.isSuccess) {
-                state.hideBlEnabled = enabled
-                val message = if (enabled)
-                    context.getString(R.string.hide_bl_enabled_toast)
-                else
-                    context.getString(R.string.hide_bl_disabled_toast)
-
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.hide_bl_change_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+        val ok = execKsud(if (enabled) "feature hide-bl enable" else "feature hide-bl disable")
+        if (ok) {
+            state.hideBlEnabled = enabled
+            val msg = if (enabled) R.string.hide_bl_enabled_toast else R.string.hide_bl_disabled_toast
+            Toast.makeText(context, context.getString(msg), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.hide_bl_change_failed), Toast.LENGTH_SHORT).show()
         }
     }
 }

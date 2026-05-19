@@ -17,3 +17,11 @@ fun getSELinuxStatus(context: Context) = SuFile("/sys/fs/selinux/enforce").run {
         }
     }
 }
+
+/** True iff /sys/fs/selinux/enforce reads as 1. Cheaper than getSELinuxStatus
+ *  when the caller only wants a boolean and doesn't care about i18n labels. */
+fun isSELinuxEnforcing(): Boolean = SuFile("/sys/fs/selinux/enforce").run {
+    runCatching {
+        newInputStream().bufferedReader().use { it.readLine()?.trim()?.toIntOrNull() }
+    }.getOrNull() == 1
+}

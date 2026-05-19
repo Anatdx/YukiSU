@@ -273,7 +273,7 @@ fun createRootShell(globalMnt: Boolean = false): Shell {
 
 /** Build a "ksud <args>" command string. Use this instead of pasting
  *  `${getKsuDaemonPath()}` next to a subcommand literal. */
-private fun ksudCmd(args: String): String = "${getKsuDaemonPath()} $args"
+internal fun ksudCmd(args: String): String = "${getKsuDaemonPath()} $args"
 
 fun execKsud(args: String, newShell: Boolean = false): Boolean {
     return if (newShell) {
@@ -286,11 +286,11 @@ fun execKsud(args: String, newShell: Boolean = false): Boolean {
 }
 
 /** Run a ksud subcommand and return its trimmed stdout (single value). */
-private fun ksudReadString(args: String, shell: Shell = getRootShell()): String =
+internal fun ksudReadString(args: String, shell: Shell = getRootShell()): String =
     ShellUtils.fastCmd(shell, ksudCmd(args)).trim()
 
 /** Run a ksud subcommand and return non-blank trimmed stdout lines. */
-private fun ksudReadLines(args: String, shell: Shell = getRootShell()): List<String> =
+internal fun ksudReadLines(args: String, shell: Shell = getRootShell()): List<String> =
     shell.newJob().add(ksudCmd(args)).to(ArrayList(), null).exec().out
         .filter { it.isNotBlank() }.map { it.trim() }
 
