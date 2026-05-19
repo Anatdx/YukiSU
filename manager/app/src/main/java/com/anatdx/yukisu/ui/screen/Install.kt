@@ -55,7 +55,6 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
-import com.anatdx.yukisu.getKernelVersion
 import com.anatdx.yukisu.magica.MagicaHelper
 import com.anatdx.yukisu.ui.component.DialogHandle
 import com.anatdx.yukisu.ui.component.SuperDropdown
@@ -94,8 +93,6 @@ fun InstallScreen(
     var lkmSelection by remember { mutableStateOf<LkmSelection>(LkmSelection.KmiNone) }
     var showRebootDialog by remember { mutableStateOf(false) }
 
-    val kernelVersion = getKernelVersion()
-    val isGKI = kernelVersion.isGKI()
     val seLinuxStatus by produceState(initialValue = context.getString(R.string.selinux_status_unknown)) {
         value = withContext(Dispatchers.IO) {
             runCatching { getSELinuxStatus(context) }
@@ -113,7 +110,7 @@ fun InstallScreen(
         }
     }
     val isSelinuxPermissive = seLinuxStatus == context.getString(R.string.selinux_status_permissive)
-    val canJailbreakInstall = isGKI && !isManager && isSelinuxPermissive
+    val canJailbreakInstall = !isManager && isSelinuxPermissive
     val onJailbreakInstall: () -> Unit = {
         loadingDialog.show()
         coroutineScope.launch {
@@ -204,7 +201,7 @@ fun InstallScreen(
     }
 
     val onClickNext = {
-        if (isGKI && lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank()) {
+        if (lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank()) {
             selectKmiDialog.show()
         } else {
             onInstall()
@@ -283,7 +280,6 @@ fun InstallScreen(
                 .padding(top = 12.dp)
         ) {
             SelectInstallMethod(
-                isGKI = isGKI,
                 onSelected = { installMethod = it },
                 selectedMethod = installMethod
             )
@@ -353,40 +349,38 @@ fun InstallScreen(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                if (isGKI) {
-                    // 使用本地的LKM文件
-                    ElevatedCard(
-                        colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                        elevation = getCardElevation(),
+                // 使用本地的LKM文件
+                ElevatedCard(
+                    colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
+                    elevation = getCardElevation(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                ) {
+                    ListItem(
+                        headlineContent = {
+                            Text(stringResource(id = R.string.install_upload_lkm_file))
+                        },
+                        supportingContent = {
+                            (lkmSelection as? LkmSelection.LkmUri)?.let {
+                                Text(
+                                    stringResource(
+                                        id = R.string.selected_lkm,
+                                        it.uri.lastPathSegment ?: "(file)"
+                                    )
+                                )
+                            }
+                        },
+                        leadingContent = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Input,
+                                contentDescription = null
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                    ) {
-                        ListItem(
-                            headlineContent = {
-                                Text(stringResource(id = R.string.install_upload_lkm_file))
-                            },
-                            supportingContent = {
-                                (lkmSelection as? LkmSelection.LkmUri)?.let {
-                                    Text(
-                                        stringResource(
-                                            id = R.string.selected_lkm,
-                                            it.uri.lastPathSegment ?: "(file)"
-                                        )
-                                    )
-                                }
-                            },
-                            leadingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Input,
-                                    contentDescription = null
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onLkmUpload() }
-                        )
-                    }
+                            .clickable { onLkmUpload() }
+                    )
                 }
 
                 // SuperKey 输入卡片 (仅在 LKM 安装模式下显示)
@@ -608,7 +602,7 @@ fun InstallScreen(
                 }
 
                 AnimatedVisibility(
-                    visible = isGKI && !isManager,
+                    visible = !isManager,
                     enter = fadeIn() + expandVertically(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
@@ -825,7 +819,6 @@ sealed class InstallMethod {
 
 @Composable
 private fun SelectInstallMethod(
-    isGKI: Boolean = false,
     onSelected: (InstallMethod) -> Unit = {},
     selectedMethod: InstallMethod? = null
 ) {
@@ -921,7 +914,6 @@ private fun SelectInstallMethod(
         modifier = Modifier.padding(horizontal = 16.dp)
     ) {
         // LKM 安装/修补
-        if (isGKI) {
             ElevatedCard(
                 colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
                 elevation = getCardElevation(),
@@ -1015,7 +1007,6 @@ private fun SelectInstallMethod(
                         }
                     }
                 }
-            }
         }
     }
 

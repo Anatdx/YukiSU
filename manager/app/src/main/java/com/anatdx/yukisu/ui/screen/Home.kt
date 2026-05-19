@@ -278,7 +278,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSignatureOk = isSignatureOk,
                         isLateLoadMode = isLateLoadMode,
                         canJailbreak = viewModel.systemStatus.ksuVersion == null &&
-                            viewModel.systemStatus.kernelVersion.isGKI() &&
                             viewModel.systemInfo.seLinuxStatus == stringResource(R.string.selinux_status_permissive),
                         onJailbreak = {
                             loadingDialog.show()
@@ -523,13 +522,7 @@ private fun StatusCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    when {
-                        // 点击未安装/未认证卡片时，跳转到安装界面（而不是直接弹出超级密钥对话框）
-                        needsSuperKeyAuth -> onClickInstall()
-                        systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI() -> onClickInstall()
-                    }
-                }
+                .clickable { onClickInstall() }
                 .padding(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -728,7 +721,7 @@ private fun StatusCard(
                     }
                 }
 
-                systemStatus.kernelVersion.isGKI() -> {
+                else -> {
                     Icon(
                         Icons.Outlined.Warning,
                         contentDescription = stringResource(R.string.home_not_installed),
@@ -772,33 +765,6 @@ private fun StatusCard(
                     }
                 }
 
-                else -> {
-                    Icon(
-                        Icons.Outlined.Block,
-                        contentDescription = stringResource(R.string.home_unsupported),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .padding(
-                                horizontal = 4.dp
-                            ),
-                    )
-
-                    Column(Modifier.padding(start = 20.dp)) {
-                        Text(
-                            text = stringResource(R.string.home_unsupported),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.home_unsupported_reason),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
             }
         }
     }

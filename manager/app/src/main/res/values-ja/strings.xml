@@ -5,8 +5,6 @@
     <string name="home_click_to_install">タップでインストール</string>
     <string name="home_working">動作中</string>
     <string name="home_working_version">バージョン: %s</string>
-    <string name="home_unsupported">非対応</string>
-    <string name="home_unsupported_reason">カーネルの KernelSU ドライバが未検出です。カーネルが間違っていませんか？</string>
     <string name="home_kernel">カーネル バージョン</string>
     <string name="home_manager_version">マネージャー バージョン</string>
     <string name="home_selinux_status">SELinux のステータス</string>
