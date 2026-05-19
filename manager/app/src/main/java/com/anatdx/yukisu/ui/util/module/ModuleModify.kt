@@ -143,7 +143,6 @@ object ModuleModify {
         showConfirmDialog: (Boolean) -> Unit,
         confirmResult: CompletableDeferred<Boolean>
     ) {
-        // 显示确认对话框
         withContext(Dispatchers.Main) {
             showConfirmDialog(true)
         }
@@ -229,7 +228,6 @@ object ModuleModify {
         showConfirmDialog: (Boolean) -> Unit,
         confirmResult: CompletableDeferred<Boolean>
     ) {
-        // 显示确认对话框
         withContext(Dispatchers.Main) {
             showConfirmDialog(true)
         }
@@ -294,7 +292,6 @@ object ModuleModify {
         var showRestoreDialog by remember { mutableStateOf(false) }
         var restoreConfirmResult by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
 
-        // 显示恢复确认对话框
         RestoreConfirmationDialog(
             showDialog = showRestoreDialog,
             onConfirm = {
@@ -359,7 +356,6 @@ object ModuleModify {
             )
         }
 
-        // 显示允许列表恢复确认对话框
         AllowlistRestoreConfirmationDialog(
             showDialog = showAllowlistRestoreDialog,
             onConfirm = {
