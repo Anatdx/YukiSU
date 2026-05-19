@@ -49,8 +49,8 @@ static void init_default_profiles(void)
 	default_root_profile.namespaces = KSU_NS_INHERITED;
 	strcpy(default_root_profile.selinux_domain, KSU_DEFAULT_SELINUX_DOMAIN);
 
-	// This means that we will umount modules by default!
-	default_non_root_profile.umount_modules = true;
+	// Keep modules mounted for apps without an explicit profile by default.
+	default_non_root_profile.umount_modules = false;
 }
 
 struct perm_data {
