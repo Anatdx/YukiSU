@@ -463,7 +463,6 @@ private fun DpiSliderControls(
             )
         )
 
-        // DPI 预设按钮行
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -537,7 +536,6 @@ private fun CustomBackgroundSettings(
     pickImageLauncher: ActivityResultLauncher<String>,
     coroutineScope: CoroutineScope
 ) {
-    // 自定义背景开关
     SwitchSettingItem(
         icon = Icons.Filled.Wallpaper,
         title = stringResource(id = R.string.settings_custom_background),
@@ -552,7 +550,6 @@ private fun CustomBackgroundSettings(
         }
     )
 
-    // 透明度和亮度调节
     AnimatedVisibility(
         visible = ThemeConfig.customBackgroundUri != null,
         enter = fadeIn() + slideInVertically(),
@@ -573,10 +570,8 @@ private fun BackgroundAdjustmentControls(
     coroutineScope: CoroutineScope
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        // 透明度滑动条
         AlphaSlider(state = state, handlers = handlers, coroutineScope = coroutineScope)
 
-        // 亮度调节滑动条
         DimSlider(state = state, handlers = handlers, coroutineScope = coroutineScope)
     }
 }

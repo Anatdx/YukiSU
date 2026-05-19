@@ -29,7 +29,6 @@ object Natives {
     const val ROOT_UID = 0
     const val ROOT_GID = 0
 
-    // 获取完整版本号
     external fun getFullVersion(): String
 
     fun isVersionLessThan(v1Full: String, v2Full: String): Boolean {

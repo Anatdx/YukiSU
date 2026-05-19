@@ -89,7 +89,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
-            // 应用自定义 DPI
             DisplayUtils.applyCustomDpi(this)
 
             // Enable edge to edge
@@ -107,7 +106,6 @@ class MainActivity : ComponentActivity() {
             // In SuperKey mode, isManager is false until authentication,
             // so we can't install ksud here.
 
-            // 使用标记控制初始化流程
             if (!isInitialized) {
                 initializeViewModels()
                 initializeData()
@@ -187,7 +185,6 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(zipUri) {
                         if (!zipUri.isNullOrEmpty()) {
-                            // 检测 ZIP 文件类型并显示确认对话框
                             lifecycleScope.launch {
                                 UltraActivityUtils.detectZipTypeAndShowConfirmation(this@MainActivity, zipUri) { infos ->
                                     if (infos.isNotEmpty()) {
@@ -288,7 +285,6 @@ class MainActivity : ComponentActivity() {
         superUserViewModel = SuperUserViewModel()
         homeViewModel = HomeViewModel()
 
-        // 设置主题变化监听器
         themeChangeObserver = ThemeUtils.registerThemeChangeObserver(this)
     }
 
@@ -301,11 +297,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 数据刷新协程
         DataRefreshUtils.startDataRefreshCoroutine(lifecycleScope)
         DataRefreshUtils.startSettingsMonitorCoroutine(lifecycleScope, this, settingsStateFlow)
 
-        // 初始化主题相关设置
         ThemeUtils.initializeThemeSettings(this, settingsStateFlow)
     }
 
@@ -315,7 +309,6 @@ class MainActivity : ComponentActivity() {
             resetTaskDescriptionToAppName()
             ThemeUtils.onActivityResume()
 
-            // 仅在需要时刷新数据
             if (isInitialized) {
                 refreshData()
             }
