@@ -62,26 +62,29 @@ bool save_umount_entries(const std::vector<UmountEntry>& entries) {
 
 }  // namespace
 
-int umount_remove_entry(const std::string& mnt) {
+int umount_del_entry(const std::string& mnt) {
+    // Always try to drop the entry from the kernel list first. Mount points
+    // contributed by the meta module (or other early-boot reporters) never
+    // hit the config file, so refusing to act on a missing config entry
+    // would leave the UI unable to remove them.
+    const int kernel_ret = umount_list_del(mnt);
+    if (kernel_ret < 0) {
+        LOGW("umount_del: kernel del failed for %s (ret=%d)", mnt.c_str(), kernel_ret);
+    }
+
     auto entries = load_umount_config();
-
-    auto it = std::remove_if(entries.begin(), entries.end(),
-                             [&mnt](const UmountEntry& e) { return e.path == mnt; });
-
+    const auto it = std::remove_if(entries.begin(), entries.end(),
+                                   [&mnt](const UmountEntry& e) { return e.path == mnt; });
     if (it == entries.end()) {
-        printf("Mount point %s not found in config\n", mnt.c_str());
-        return 1;
+        LOGD("umount_del: %s not present in config (kernel-only entry)", mnt.c_str());
+        return 0;
     }
 
     entries.erase(it, entries.end());
-
     if (!save_umount_entries(entries)) {
-        LOGE("Failed to save umount config");
+        LOGE("Failed to save umount config after removing %s", mnt.c_str());
         return 1;
     }
-
-    // Also remove from kernel
-    umount_list_del(mnt);
 
     return 0;
 }

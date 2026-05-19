@@ -320,22 +320,43 @@ int cmd_umount(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud umount <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
-        printf("  add <MNT> [-f FLAGS]  Add mount point\n");
-        printf("  remove <MNT>          Remove mount point\n");
-        printf("  list                  List all mount points\n");
-        printf("  save                  Save config\n");
-        printf("  apply                 Apply config\n");
-        printf("  clear-custom          Clear custom paths\n");
+        printf("  add <MNT> [-f|--flags <N>]  Add mount point (flags default: 0)\n");
+        printf("  del <MNT>                   Delete mount point (alias: remove)\n");
+        printf("  list                        List all mount points\n");
+        printf("  save                        Save kernel list to config\n");
+        printf("  apply                       Apply config to kernel\n");
+        printf("  clear-custom                Clear custom paths from kernel and config\n");
         return 1;
     }
 
     const std::string& subcmd = args[0];
 
-    if (subcmd == "add" && args.size() > 1) {
-        const uint32_t flags = (args.size() > 3 && args[2] == "-f") ? std::stoul(args[3]) : 0;
-        return umount_list_add(args[1], flags) < 0 ? 1 : 0;
-    } else if (subcmd == "remove" && args.size() > 1) {
-        return umount_remove_entry(args[1]);
+    if (subcmd == "add") {
+        std::string path;
+        uint32_t flags = 0;
+        for (size_t i = 1; i < args.size(); ++i) {
+            const std::string& a = args[i];
+            if ((a == "-f" || a == "--flags") && i + 1 < args.size()) {
+                try {
+                    flags = static_cast<uint32_t>(std::stoul(args[++i]));
+                } catch (const std::exception& e) {
+                    printf("Invalid flags value: %s\n", args[i].c_str());
+                    return 1;
+                }
+            } else if (path.empty()) {
+                path = a;
+            } else {
+                printf("Unexpected argument: %s\n", a.c_str());
+                return 1;
+            }
+        }
+        if (path.empty()) {
+            printf("USAGE: ksud umount add <MNT> [-f|--flags <N>]\n");
+            return 1;
+        }
+        return umount_list_add(path, flags) < 0 ? 1 : 0;
+    } else if ((subcmd == "del" || subcmd == "remove") && args.size() > 1) {
+        return umount_del_entry(args[1]);
     } else if (subcmd == "list") {
         auto list = umount_list_list();
         if (list) {
@@ -371,8 +392,29 @@ int cmd_kernel(const std::vector<std::string>& args) {
     } else if (subcmd == "umount" && args.size() > 1) {
         const std::string& op = args[1];
         if (op == "add" && args.size() > 2) {
-            const uint32_t flags = args.size() > 3 ? std::stoul(args[3]) : 0;
-            return umount_list_add(args[2], flags);
+            std::string path;
+            uint32_t flags = 0;
+            for (size_t i = 2; i < args.size(); ++i) {
+                const std::string& a = args[i];
+                if ((a == "-f" || a == "--flags") && i + 1 < args.size()) {
+                    try {
+                        flags = static_cast<uint32_t>(std::stoul(args[++i]));
+                    } catch (const std::exception& e) {
+                        printf("Invalid flags value: %s\n", args[i].c_str());
+                        return 1;
+                    }
+                } else if (path.empty()) {
+                    path = a;
+                } else {
+                    printf("Unexpected argument: %s\n", a.c_str());
+                    return 1;
+                }
+            }
+            if (path.empty()) {
+                printf("USAGE: ksud kernel umount add <MNT> [-f|--flags <N>]\n");
+                return 1;
+            }
+            return umount_list_add(path, flags);
         } else if (op == "del" && args.size() > 2) {
             return umount_list_del(args[2]);
         } else if (op == "wipe") {
