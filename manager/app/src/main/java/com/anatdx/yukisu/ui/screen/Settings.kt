@@ -2,12 +2,10 @@ package com.anatdx.yukisu.ui.screen
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -193,19 +191,8 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
-                        val modeItems = listOf(
-                            stringResource(id = R.string.settings_mode_default),
-                            stringResource(id = R.string.settings_mode_temp_enable),
-                            stringResource(id = R.string.settings_mode_always_enable),
-                        )
-                        var enhancedSecurityMode by rememberSaveable {
-                            mutableIntStateOf(
-                                run {
-                                    val currentEnabled = Natives.isEnhancedSecurityEnabled()
-                                    val savedPersist = prefs.getInt("enhanced_security_mode", 0)
-                                    if (savedPersist == 2) 2 else if (currentEnabled) 1 else 0
-                                }
-                            )
+                        var enhancedSecurityEnabled by remember {
+                            mutableStateOf(Natives.isEnhancedSecurityEnabled())
                         }
                         val enhancedStatus by produceState(initialValue = "") {
                             value = getFeatureStatus("enhanced_security")
@@ -215,57 +202,22 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             "managed" -> stringResource(id = R.string.feature_status_managed_summary)
                             else -> stringResource(id = R.string.settings_enable_enhanced_security_summary)
                         }
-                        SuperDropdown(
+                        SwitchItem(
                             icon = Icons.Rounded.EnhancedEncryption,
                             title = stringResource(id = R.string.settings_enable_enhanced_security),
                             summary = enhancedSummary,
-                            items = modeItems,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.EnhancedEncryption,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = stringResource(id = R.string.settings_enable_enhanced_security),
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
-                            },
+                            checked = enhancedSecurityEnabled,
                             enabled = enhancedStatus == "supported",
-                            selectedIndex = enhancedSecurityMode,
-                            onSelectedIndexChange = { index ->
-                                when (index) {
-                                    // Default: disable and save to persist
-                                    0 -> if (Natives.setEnhancedSecurityEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("enhanced_security_mode", 0) }
-                                        enhancedSecurityMode = 0
-                                    }
-
-                                    // Temporarily enable: save disabled state first, then enable
-                                    1 -> if (Natives.setEnhancedSecurityEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        if (Natives.setEnhancedSecurityEnabled(true)) {
-                                            prefs.edit { putInt("enhanced_security_mode", 0) }
-                                            enhancedSecurityMode = 1
-                                        }
-                                    }
-
-                                    // Permanently enable: enable and save
-                                    2 -> if (Natives.setEnhancedSecurityEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("enhanced_security_mode", 2) }
-                                        enhancedSecurityMode = 2
-                                    }
+                            onCheckedChange = { enabled ->
+                                if (Natives.setEnhancedSecurityEnabled(enabled)) {
+                                    execKsud("feature save", true)
+                                    enhancedSecurityEnabled = Natives.isEnhancedSecurityEnabled()
                                 }
                             }
                         )
 
-                        var selinuxHideMode by rememberSaveable {
-                            mutableIntStateOf(
-                                run {
-                                    val currentEnabled = Natives.isSelinuxHideEnabled()
-                                    val savedPersist = prefs.getInt("selinux_hide_mode", 0)
-                                    if (savedPersist == 2) 2 else if (currentEnabled) 1 else 0
-                                }
-                            )
+                        var selinuxHideEnabled by remember {
+                            mutableStateOf(Natives.isSelinuxHideEnabled())
                         }
                         val selinuxHideStatus by produceState(initialValue = "") {
                             value = getFeatureStatus("selinux_hide")
@@ -275,54 +227,22 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             "managed" -> stringResource(id = R.string.feature_status_managed_summary)
                             else -> stringResource(id = R.string.settings_selinux_hide_summary)
                         }
-                        SuperDropdown(
-                            icon = Icons.Rounded.EnhancedEncryption,
+                        SwitchItem(
+                            icon = Icons.Filled.Security,
                             title = stringResource(id = R.string.settings_selinux_hide),
                             summary = selinuxHideSummary,
-                            items = modeItems,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.EnhancedEncryption,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = stringResource(id = R.string.settings_selinux_hide),
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
-                            },
+                            checked = selinuxHideEnabled,
                             enabled = selinuxHideStatus == "supported",
-                            selectedIndex = selinuxHideMode,
-                            onSelectedIndexChange = { index ->
-                                when (index) {
-                                    0 -> if (Natives.setSelinuxHideEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("selinux_hide_mode", 0) }
-                                        selinuxHideMode = 0
-                                    }
-
-                                    1 -> if (Natives.setSelinuxHideEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        if (Natives.setSelinuxHideEnabled(true)) {
-                                            prefs.edit { putInt("selinux_hide_mode", 0) }
-                                            selinuxHideMode = 1
-                                        }
-                                    }
-
-                                    2 -> if (Natives.setSelinuxHideEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("selinux_hide_mode", 2) }
-                                        selinuxHideMode = 2
-                                    }
+                            onCheckedChange = { enabled ->
+                                if (Natives.setSelinuxHideEnabled(enabled)) {
+                                    execKsud("feature save", true)
+                                    selinuxHideEnabled = Natives.isSelinuxHideEnabled()
                                 }
                             }
                         )
 
-                        var suCompatMode by rememberSaveable {
-                            mutableIntStateOf(
-                                run {
-                                    val currentEnabled = Natives.isSuEnabled()
-                                    val savedPersist = prefs.getInt("su_compat_mode", 0)
-                                    if (savedPersist == 2) 2 else if (!currentEnabled) 1 else 0
-                                }
-                            )
+                        var suCompatDisabled by remember {
+                            mutableStateOf(!Natives.isSuEnabled())
                         }
                         val suStatus by produceState(initialValue = "") {
                             value = getFeatureStatus("su_compat")
@@ -332,57 +252,22 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             "managed" -> stringResource(id = R.string.feature_status_managed_summary)
                             else -> stringResource(id = R.string.settings_disable_su_summary)
                         }
-                        SuperDropdown(
+                        SwitchItem(
                             icon = Icons.Rounded.RemoveModerator,
                             title = stringResource(id = R.string.settings_disable_su),
                             summary = suSummary,
-                            items = modeItems,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.RemoveModerator,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = stringResource(id = R.string.settings_disable_su),
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
-                            },
+                            checked = suCompatDisabled,
                             enabled = suStatus == "supported",
-                            selectedIndex = suCompatMode,
-                            onSelectedIndexChange = { index ->
-                                when (index) {
-                                    // Default: enable and save to persist
-                                    0 -> if (Natives.setSuEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("su_compat_mode", 0) }
-                                        suCompatMode = 0
-                                    }
-
-                                    // Temporarily disable: save enabled state first, then disable
-                                    1 -> if (Natives.setSuEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        if (Natives.setSuEnabled(false)) {
-                                            prefs.edit { putInt("su_compat_mode", 0) }
-                                            suCompatMode = 1
-                                        }
-                                    }
-
-                                    // Permanently disable: disable and save
-                                    2 -> if (Natives.setSuEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("su_compat_mode", 2) }
-                                        suCompatMode = 2
-                                    }
+                            onCheckedChange = { disabled ->
+                                if (Natives.setSuEnabled(!disabled)) {
+                                    execKsud("feature save", true)
+                                    suCompatDisabled = !Natives.isSuEnabled()
                                 }
                             }
                         )
 
-                        var kernelUmountMode by rememberSaveable {
-                            mutableIntStateOf(
-                                run {
-                                    val currentEnabled = Natives.isKernelUmountEnabled()
-                                    val savedPersist = prefs.getInt("kernel_umount_mode", 0)
-                                    if (savedPersist == 2) 2 else if (!currentEnabled) 1 else 0
-                                }
-                            )
+                        var kernelUmountDisabled by remember {
+                            mutableStateOf(!Natives.isKernelUmountEnabled())
                         }
                         val umountStatus by produceState(initialValue = "") {
                             value = getFeatureStatus("kernel_umount")
@@ -392,57 +277,22 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             "managed" -> stringResource(id = R.string.feature_status_managed_summary)
                             else -> stringResource(id = R.string.settings_disable_kernel_umount_summary)
                         }
-                        SuperDropdown(
+                        SwitchItem(
                             icon = Icons.Rounded.RemoveCircle,
                             title = stringResource(id = R.string.settings_disable_kernel_umount),
                             summary = umountSummary,
-                            items = modeItems,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.RemoveCircle,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = stringResource(id = R.string.settings_disable_kernel_umount),
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
-                            },
+                            checked = kernelUmountDisabled,
                             enabled = umountStatus == "supported",
-                            selectedIndex = kernelUmountMode,
-                            onSelectedIndexChange = { index ->
-                                when (index) {
-                                    // Default: enable and save to persist
-                                    0 -> if (Natives.setKernelUmountEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("kernel_umount_mode", 0) }
-                                        kernelUmountMode = 0
-                                    }
-
-                                    // Temporarily disable: save enabled state first, then disable
-                                    1 -> if (Natives.setKernelUmountEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        if (Natives.setKernelUmountEnabled(false)) {
-                                            prefs.edit { putInt("kernel_umount_mode", 0) }
-                                            kernelUmountMode = 1
-                                        }
-                                    }
-
-                                    // Permanently disable: disable and save
-                                    2 -> if (Natives.setKernelUmountEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("kernel_umount_mode", 2) }
-                                        kernelUmountMode = 2
-                                    }
+                            onCheckedChange = { disabled ->
+                                if (Natives.setKernelUmountEnabled(!disabled)) {
+                                    execKsud("feature save", true)
+                                    kernelUmountDisabled = !Natives.isKernelUmountEnabled()
                                 }
                             }
                         )
 
-                        var suLogMode by rememberSaveable {
-                            mutableIntStateOf(
-                                run {
-                                    val currentEnabled = Natives.isSuLogEnabled()
-                                    val savedPersist = prefs.getInt("sulog_mode", 0)
-                                    if (savedPersist == 2) 2 else if (!currentEnabled) 1 else 0
-                                }
-                            )
+                        var suLogEnabled by remember {
+                            mutableStateOf(Natives.isSuLogEnabled())
                         }
                         val suLogStatus by produceState(initialValue = "") {
                             value = getFeatureStatus("sulog")
@@ -452,47 +302,17 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             "managed" -> stringResource(id = R.string.feature_status_managed_summary)
                             else -> stringResource(id = R.string.settings_disable_sulog_summary)
                         }
-                        SuperDropdown(
+                        SwitchItem(
+                            icon = Icons.Filled.Visibility,
                             title = stringResource(id = R.string.settings_disable_sulog),
                             summary = suLogSummary,
-                            items = modeItems,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.RemoveCircle,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = stringResource(id = R.string.settings_disable_sulog),
-                                    tint = MaterialTheme.colorScheme.onBackground
-                                )
-                            },
+                            checked = suLogEnabled,
                             enabled = suLogStatus == "supported",
-                            selectedIndex = suLogMode,
-                            onSelectedIndexChange = { index ->
-                                when (index) {
-                                    // Default: enable and save to persist
-                                    0 -> if (Natives.setSuLogEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("sulog_mode", 0) }
-                                        suLogMode = 0
-                                        isSuLogEnabled = true
-                                    }
-
-                                    // Temporarily disable: save enabled state first, then disable
-                                    1 -> if (Natives.setSuLogEnabled(true)) {
-                                        execKsud("feature save", true)
-                                        if (Natives.setSuLogEnabled(false)) {
-                                            prefs.edit { putInt("sulog_mode", 0) }
-                                            suLogMode = 1
-                                            isSuLogEnabled = false
-                                        }
-                                    }
-
-                                    // Permanently disable: disable and save
-                                    2 -> if (Natives.setSuLogEnabled(false)) {
-                                        execKsud("feature save", true)
-                                        prefs.edit { putInt("sulog_mode", 2) }
-                                        suLogMode = 2
-                                        isSuLogEnabled = false
-                                    }
+                            onCheckedChange = { enabled ->
+                                if (Natives.setSuLogEnabled(enabled)) {
+                                    execKsud("feature save", true)
+                                    suLogEnabled = Natives.isSuLogEnabled()
+                                    isSuLogEnabled = suLogEnabled
                                 }
                             }
                         )
@@ -593,14 +413,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         )
                     }
 
-                    // Web调试和Web X Eruda 开关
-                    var enableWebDebugging by rememberSaveable {
-                        mutableStateOf(prefs.getBoolean("enable_web_debugging", false))
-                    }
-                    var useWebUIXEruda by rememberSaveable {
-                        mutableStateOf(prefs.getBoolean("use_webuix_eruda", false))
-                    }
-
                     SwitchItem(
                         icon = Icons.Filled.ElectricalServices,
                         title = stringResource(R.string.settings_auto_jailbreak),
@@ -611,36 +423,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             autoJailbreak = enabled
                         }
                     )
-
-                    KsuIsValid {
-                        SwitchItem(
-                            icon = Icons.Filled.DeveloperMode,
-                            title = stringResource(R.string.enable_web_debugging),
-                            summary = stringResource(R.string.enable_web_debugging_summary),
-                            checked = enableWebDebugging,
-                            onCheckedChange = { enabled ->
-                                prefs.edit { putBoolean("enable_web_debugging", enabled) }
-                                enableWebDebugging = enabled
-                            }
-                        )
-
-                        AnimatedVisibility(
-                            visible = enableWebDebugging && selectedEngine == "wx",
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
-                        ) {
-                            SwitchItem(
-                                icon = Icons.Filled.FormatListNumbered,
-                                title = stringResource(R.string.use_webuix_eruda),
-                                summary = stringResource(R.string.use_webuix_eruda_summary),
-                                checked = useWebUIXEruda,
-                                onCheckedChange = { enabled ->
-                                    prefs.edit { putBoolean("use_webuix_eruda", enabled) }
-                                    useWebUIXEruda = enabled
-                                }
-                            )
-                        }
-                    }
 
                     // 更多设置
                     SettingItem(

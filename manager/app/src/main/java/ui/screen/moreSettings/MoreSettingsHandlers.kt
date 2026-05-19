@@ -341,6 +341,22 @@ class MoreSettingsHandlers(
     }
 
     /**
+     * 处理 WebView 调试变更
+     */
+    fun handleWebDebuggingChange(newValue: Boolean) {
+        prefs.edit { putBoolean("enable_web_debugging", newValue) }
+        state.enableWebDebugging = newValue
+    }
+
+    /**
+     * 处理 WebUI X Eruda 注入变更
+     */
+    fun handleWebUIXErudaChange(newValue: Boolean) {
+        prefs.edit { putBoolean("use_webuix_eruda", newValue) }
+        state.useWebUIXEruda = newValue
+    }
+
+    /**
      * 处理SELinux变更
      */
     fun handleSelinuxChange(enabled: Boolean) {
