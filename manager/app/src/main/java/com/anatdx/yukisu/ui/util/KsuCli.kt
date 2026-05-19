@@ -632,6 +632,10 @@ fun installBoot(
     return result.isSuccess
 }
 
+fun restartAdbd() {
+    ShellUtils.fastCmd(getRootShell(), "setprop ctl.restart adbd")
+}
+
 fun reboot(reason: String = "") {
     val shell = getRootShell()
     if (reason == "soft_reboot") {

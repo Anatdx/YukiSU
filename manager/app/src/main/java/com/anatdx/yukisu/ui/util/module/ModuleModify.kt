@@ -13,18 +13,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.util.reboot
+import com.topjohnwu.superuser.io.SuFileInputStream
+import com.topjohnwu.superuser.io.SuFileOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 import java.io.IOException
-import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.*
 
 object ModuleModify {
+    private const val ALLOWLIST_PATH = "/data/adb/ksu/.allowlist"
+    private const val MODULES_DIR = "/data/adb/modules"
+    private const val BUSYBOX_PATH = "/data/adb/ksu/bin/busybox"
+
     @Composable
     fun RestoreConfirmationDialog(
         showDialog: Boolean,
@@ -102,24 +106,17 @@ object ModuleModify {
     suspend fun backupModules(context: Context, snackBarHost: SnackbarHostState, uri: Uri) {
         withContext(Dispatchers.IO) {
             try {
-                val busyboxPath = "/data/adb/ksu/bin/busybox"
-                val moduleDir = "/data/adb/modules"
+                // busybox tar streams the module tree to stdout; we pipe that into the user-chosen URI.
+                val process = ProcessBuilder("su", "-c", "cd $MODULES_DIR && $BUSYBOX_PATH tar -cz .")
+                    .redirectErrorStream(false)
+                    .start()
 
-                // 直接将tar输出重定向到用户选择的文件
-                val command = """
-                    cd "$moduleDir" &&
-                    $busyboxPath tar -cz ./* > /proc/self/fd/1
-                """.trimIndent()
-
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-
-                // 直接将tar输出写入到用户选择的文件
                 context.contentResolver.openOutputStream(uri)?.use { output ->
                     process.inputStream.copyTo(output)
-                }
+                } ?: throw IOException("Failed to open output uri")
 
-                val error = BufferedReader(InputStreamReader(process.errorStream)).readText()
-                if (process.exitValue() != 0) {
+                val error = process.errorStream.bufferedReader().readText()
+                if (process.waitFor() != 0) {
                     throw IOException(context.getString(R.string.command_execution_failed, error))
                 }
 
@@ -159,22 +156,18 @@ object ModuleModify {
 
         withContext(Dispatchers.IO) {
             try {
-                val busyboxPath = "/data/adb/ksu/bin/busybox"
-                val moduleDir = "/data/adb/modules"
-
-                // 直接从用户选择的文件读取并解压
-                val process = Runtime.getRuntime()
-                    .exec(arrayOf("su", "-c", "$busyboxPath tar -xz -C $moduleDir"))
+                val process = ProcessBuilder("su", "-c", "$BUSYBOX_PATH tar -xz -C $MODULES_DIR")
+                    .redirectErrorStream(false)
+                    .start()
 
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    input.copyTo(process.outputStream)
-                }
-                process.outputStream.close()
+                    process.outputStream.use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw IOException("Failed to open input uri")
 
-                process.waitFor()
-
-                val error = BufferedReader(InputStreamReader(process.errorStream)).readText()
-                if (process.exitValue() != 0) {
+                val error = process.errorStream.bufferedReader().readText()
+                if (process.waitFor() != 0) {
                     throw IOException(context.getString(R.string.command_execution_failed, error))
                 }
 
@@ -207,18 +200,10 @@ object ModuleModify {
     suspend fun backupAllowlist(context: Context, snackBarHost: SnackbarHostState, uri: Uri) {
         withContext(Dispatchers.IO) {
             try {
-                val allowlistPath = "/data/adb/ksu/.allowlist"
-
-                // 直接复制文件到用户选择的位置
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat $allowlistPath"))
-
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    process.inputStream.copyTo(output)
-                }
-
-                val error = BufferedReader(InputStreamReader(process.errorStream)).readText()
-                if (process.exitValue() != 0) {
-                    throw IOException(context.getString(R.string.command_execution_failed, error))
+                SuFileInputStream.open(ALLOWLIST_PATH).use { input ->
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        input.copyTo(output)
+                    } ?: throw IOException("Failed to open output uri")
                 }
 
                 withContext(Dispatchers.Main) {
@@ -257,22 +242,11 @@ object ModuleModify {
 
         withContext(Dispatchers.IO) {
             try {
-                val allowlistPath = "/data/adb/ksu/.allowlist"
-
-                // 直接从用户选择的文件读取并写入到目标位置
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $allowlistPath"))
-
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    input.copyTo(process.outputStream)
-                }
-                process.outputStream.close()
-
-                process.waitFor()
-
-                val error = BufferedReader(InputStreamReader(process.errorStream)).readText()
-                if (process.exitValue() != 0) {
-                    throw IOException(context.getString(R.string.command_execution_failed, error))
-                }
+                    SuFileOutputStream.open(ALLOWLIST_PATH).use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw IOException("Failed to open input uri")
 
                 withContext(Dispatchers.Main) {
                     snackBarHost.showSnackbar(

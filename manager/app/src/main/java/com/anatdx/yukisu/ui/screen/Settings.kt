@@ -34,7 +34,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
-import com.topjohnwu.superuser.ShellUtils
 import com.maxkeppeker.sheets.core.models.base.IconSource
 import com.maxkeppeler.sheets.list.models.ListOption
 import com.ramcosta.composedestinations.annotation.Destination
@@ -337,7 +336,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             onCheckedChange = { enabled ->
                                 if (Natives.setAdbRootEnabled(enabled)) {
                                     execKsud("feature save", true)
-                                    ShellUtils.fastCmd(getRootShell(), "setprop ctl.restart adbd")
+                                    restartAdbd()
                                     adbRootEnabled = enabled
                                 }
                             }

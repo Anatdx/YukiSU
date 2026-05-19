@@ -140,15 +140,7 @@ fun InstallScreen(
             onDismiss = { showRebootDialog = false },
             onConfirm = {
                 showRebootDialog = false
-                try {
-                    val process = Runtime.getRuntime().exec("su")
-                    process.outputStream.bufferedWriter().use { writer ->
-                        writer.write("svc power reboot\n")
-                        writer.write("exit\n")
-                    }
-                } catch (_: Exception) {
-                    Toast.makeText(context, R.string.failed_reboot, Toast.LENGTH_SHORT).show()
-                }
+                reboot()
             }
         )
     }
