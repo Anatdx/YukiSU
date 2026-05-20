@@ -295,11 +295,7 @@ internal fun ksudReadLines(args: String, shell: Shell = getRootShell()): List<St
         .filter { it.isNotBlank() }.map { it.trim() }
 
 suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val out = shell.newJob()
-        .add(ksudCmd("feature check $feature")).to(ArrayList<String>(), null).exec().out
-    out.asSequence()
-        .map { it.trim() }
+    ksudReadLines("feature check $feature")
         .firstOrNull { it == "supported" || it == "unsupported" || it == "managed" }
         .orEmpty()
 }
@@ -332,13 +328,8 @@ fun hasMetaModule(): Boolean {
     }
 }
 
-fun listModules(): String {
-    val shell = getRootShell()
-
-    val out = shell.newJob()
-        .add(ksudCmd("module list")).to(ArrayList(), null).exec().out
-    return out.joinToString("\n").ifBlank { "[]" }
-}
+fun listModules(): String =
+    ksudReadLines("module list").joinToString("\n").ifBlank { "[]" }
 
 fun getModuleCount(): Int {
     val result = listModules()
