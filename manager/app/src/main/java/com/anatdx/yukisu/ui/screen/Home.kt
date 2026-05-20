@@ -108,7 +108,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    // 监听数据刷新状态流
     LaunchedEffect(viewModel.dataRefreshTrigger) {
         viewModel.dataRefreshTrigger.collect { _ ->
             // 数据刷新时的额外处理可以在这里添加
@@ -172,7 +171,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 }
                 var showKernelSpoofDialog by remember { mutableStateOf(false) }
                 
-                // 保存 SuperKey 的 SharedPreferences
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
                 
                 SuperKeyDialog(
@@ -183,10 +181,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 val success = Natives.authenticateSuperKey(superKey)
                                 if (success) {
-                                    // 检查是否允许保存 SuperKey
                                     val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
                                     if (!skipStore) {
-                                        // 保存 SuperKey 到本地
                                         superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
                                     }
                                 }
@@ -211,7 +207,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     }
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
-                                    // 刷新底栏状态
                                     withContext(Dispatchers.IO) {
                                         AppData.DataRefreshManager.refreshData()
                                     }
@@ -246,7 +241,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     superKeyAuthSuccess = true
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
-                                    // 刷新底栏状态
                                     withContext(Dispatchers.IO) {
                                         AppData.DataRefreshManager.refreshData()
                                     }
@@ -315,7 +309,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                             (viewModel.systemStatus.ksuVersion != null && !viewModel.systemStatus.isRootAvailable)
                 }
 
-                // 更新检查
                 if (viewModel.isExtendedDataLoaded) {
                     val checkUpdate = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
                         .getBoolean("check_update", true)

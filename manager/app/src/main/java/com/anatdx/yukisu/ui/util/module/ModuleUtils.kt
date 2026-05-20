@@ -90,7 +90,6 @@ object ModuleUtils {
         }
     }
 
-    // 获取URI的持久权限
     fun takePersistableUriPermission(context: Context, uri: Uri) {
         try {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION

@@ -749,7 +749,6 @@ private fun LogList(
             LogEntryCard(entry = entry)
         }
 
-        // 加载更多按钮或加载指示器
         if (pageInfo.hasMore) {
             item {
                 Box(

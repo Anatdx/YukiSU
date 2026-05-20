@@ -36,7 +36,6 @@ object CardConfig {
     var isUserLightModeEnabled by mutableStateOf(false)
         internal set
 
-    // 配置键名
     private object Keys {
         const val CARD_ALPHA = "card_alpha"
         const val CARD_DIM = "card_dim"
@@ -127,7 +126,6 @@ object CardConfig {
         isUserDarkModeEnabled = prefs.getBoolean(Keys.IS_USER_DARK_MODE_ENABLED, false)
         isUserLightModeEnabled = prefs.getBoolean(Keys.IS_USER_LIGHT_MODE_ENABLED, false)
 
-        // 应用阴影设置
         updateShadow(isShadowEnabled, if (isShadowEnabled) cardElevation else 0.dp)
     }
 

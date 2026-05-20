@@ -108,7 +108,6 @@ fun SuperKeyDialog(
     
     val context = LocalContext.current
     
-    // 获取字符串资源
     val authFailedMessage = stringResource(id = R.string.superkey_auth_failed)
     val emptyKeyMessage = stringResource(id = R.string.superkey_input_hint)
     

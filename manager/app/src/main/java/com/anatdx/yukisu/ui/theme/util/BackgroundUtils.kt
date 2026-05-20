@@ -36,13 +36,11 @@ fun Context.applyTransformationToBitmap(bitmap: Bitmap, transformation: Backgrou
     val width = bitmap.width
     val height = bitmap.height
 
-    // 创建与屏幕比例相同的目标位图
     val displayMetrics = resources.displayMetrics
     val screenWidth = displayMetrics.widthPixels
     val screenHeight = displayMetrics.heightPixels
     val screenRatio = screenHeight.toFloat() / screenWidth.toFloat()
 
-    // 计算目标宽高
     val targetWidth: Int
     val targetHeight: Int
     if (width.toFloat() / height.toFloat() > screenRatio) {
@@ -53,7 +51,6 @@ fun Context.applyTransformationToBitmap(bitmap: Bitmap, transformation: Backgrou
         targetHeight = (width * screenRatio).toInt()
     }
 
-    // 创建与目标相同大小的位图
     val scaledBitmap = createBitmap(targetWidth, targetHeight)
     val canvas = Canvas(scaledBitmap)
 
@@ -77,7 +74,6 @@ fun Context.applyTransformationToBitmap(bitmap: Bitmap, transformation: Backgrou
     val safeOffsetY = if (maxOffsetY > 0)
         transformation.offsetY.coerceIn(-maxOffsetY, maxOffsetY) else 0f
 
-    // 应用偏移量到矩阵
     val translationX = -widthDiff / 2 + safeOffsetX
     val translationY = -heightDiff / 2 + safeOffsetY
 

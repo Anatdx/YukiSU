@@ -725,7 +725,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                         singleLine = true
                     )
 
-                    // 删除快捷方式按钮（如果存在）
                     if (hasExistingShortcut) {
                         FilledTonalButton(
                             onClick = {
@@ -1093,7 +1092,6 @@ private fun ModuleList(
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
                 if (isUninstall) {
-                    // 删除快捷方式
                     Shortcut.deleteModuleActionShortcut(context, module.id)
                     Shortcut.deleteModuleWebUiShortcut(context, module.id)
                     uninstallModule(module.dirId)

@@ -124,12 +124,10 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            // 配置卡片
             KsuIsValid {
                 SettingsGroupCard(
                     title = stringResource(R.string.configuration),
                     content = {
-                        // 配置文件模板入口
                         SettingItem(
                             icon = Icons.Filled.Fence,
                             title = stringResource(R.string.settings_profile_template),
@@ -389,11 +387,9 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                 )
             }
 
-            // 应用设置卡片
             SettingsGroupCard(
                 title = stringResource(R.string.app_settings),
                 content = {
-                    // 更新检查开关
                     var checkUpdate by rememberSaveable {
                         mutableStateOf(prefs.getBoolean("check_update", true))
                     }
