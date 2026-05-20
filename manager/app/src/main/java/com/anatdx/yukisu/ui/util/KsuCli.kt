@@ -684,58 +684,32 @@ fun hasMagisk(): Boolean {
 }
 
 fun isSepolicyValid(rules: String?): Boolean {
-    if (rules == null) {
-        return true
-    }
-    val shell = getRootShell()
-    val result =
-        shell.newJob().add(ksudCmd("sepolicy check '$rules'")).to(ArrayList(), null)
-            .exec()
-    return result.isSuccess
+    if (rules == null) return true
+    return execKsud("sepolicy check '$rules'")
 }
 
-fun getSepolicy(pkg: String): String {
-    val shell = getRootShell()
-    val result =
-        shell.newJob().add(ksudCmd("profile get-sepolicy $pkg")).to(ArrayList(), null)
-            .exec()
-    Log.i(TAG, "code: ${result.code}, out: ${result.out}, err: ${result.err}")
-    return result.out.joinToString("\n")
-}
+fun getSepolicy(pkg: String): String =
+    ksudReadLines("profile get-sepolicy $pkg").joinToString("\n")
 
 fun setSepolicy(pkg: String, rules: String): Boolean {
-    val shell = getRootShell()
-    val result = shell.newJob().add(ksudCmd("profile set-sepolicy $pkg '$rules'"))
-        .to(ArrayList(), null).exec()
-    Log.i(TAG, "set sepolicy result: ${result.code}")
-    return result.isSuccess
+    val ok = execKsud("profile set-sepolicy $pkg '$rules'")
+    Log.i(TAG, "set sepolicy $pkg result: $ok")
+    return ok
 }
 
-fun listAppProfileTemplates(): List<String> {
-    val shell = getRootShell()
-    return shell.newJob().add(ksudCmd("profile list-templates")).to(ArrayList(), null)
-        .exec().out
-}
+fun listAppProfileTemplates(): List<String> =
+    ksudReadLines("profile list-templates")
 
-fun getAppProfileTemplate(id: String): String {
-    val shell = getRootShell()
-    return shell.newJob().add(ksudCmd("profile get-template '${id}'"))
-        .to(ArrayList(), null).exec().out.joinToString("\n")
-}
+fun getAppProfileTemplate(id: String): String =
+    ksudReadLines("profile get-template '$id'").joinToString("\n")
 
 fun setAppProfileTemplate(id: String, template: String): Boolean {
-    val shell = getRootShell()
     val escapedTemplate = template.replace("\"", "\\\"")
-    val cmd = ksudCmd("""profile set-template "$id" "$escapedTemplate"""")
-    return shell.newJob().add(cmd)
-        .to(ArrayList(), null).exec().isSuccess
+    return execKsud("""profile set-template "$id" "$escapedTemplate"""")
 }
 
-fun deleteAppProfileTemplate(id: String): Boolean {
-    val shell = getRootShell()
-    return shell.newJob().add(ksudCmd("profile delete-template '${id}'"))
-        .to(ArrayList(), null).exec().isSuccess
-}
+fun deleteAppProfileTemplate(id: String): Boolean =
+    execKsud("profile delete-template '$id'")
 
 fun forceStopApp(packageName: String) {
     val shell = getRootShell()
