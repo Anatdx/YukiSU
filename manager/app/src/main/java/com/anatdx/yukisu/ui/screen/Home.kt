@@ -15,16 +15,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,7 +73,7 @@ import kotlin.random.Random
  * @author ShirkNeko
  * @date 2025/9/29.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>(start = true)
 @Composable
 fun HomeScreen(navigator: DestinationsNavigator) {
@@ -83,13 +81,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     val viewModel = viewModel<HomeViewModel>()
     val coroutineScope = rememberCoroutineScope()
     val loadingDialog = rememberLoadingDialog()
-
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = viewModel.isRefreshing,
-        onRefresh = {
-            viewModel.onPullRefresh(context)
-        }
-    )
 
     LaunchedEffect(key1 = navigator) {
         viewModel.loadUserSettings(context)
@@ -129,11 +120,12 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             WindowInsetsSides.Top + WindowInsetsSides.Horizontal
         )
     ) { innerPadding ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = viewModel.isRefreshing,
+            onRefresh = { viewModel.onPullRefresh(context) },
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .pullRefresh(pullRefreshState)
         ) {
             Column(
                 modifier = Modifier
