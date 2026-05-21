@@ -475,6 +475,15 @@ bool Kasumi::set_statfs_spoof(bool enable) {
     return ret;
 }
 
+bool Kasumi::set_selinux_fix(bool enable) {
+    int val = enable ? 1 : 0;
+    bool ret = kasumi_execute_cmd(KSM_IOC_SELINUX_FIX, &val) == 0;
+    if (!ret) {
+        LOG_ERROR("Kasumi: selinux_fix failed: " + std::string(strerror(errno)));
+    }
+    return ret;
+}
+
 bool Kasumi::add_maps_rule(unsigned long target_ino, unsigned long target_dev,
                            unsigned long spoofed_ino, unsigned long spoofed_dev,
                            const std::string& spoofed_pathname) {

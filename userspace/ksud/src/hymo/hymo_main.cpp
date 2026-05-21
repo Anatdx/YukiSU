@@ -355,6 +355,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                           << ",\n";
                 std::cout << "  \"enable_hidexattr\": "
                           << (config.enable_hidexattr ? "true" : "false") << ",\n";
+                std::cout << "  \"enable_selinux_fix\": "
+                          << (config.enable_selinux_fix ? "true" : "false") << ",\n";
                 std::cout << "  \"kasumi_enabled\": " << (config.kasumi_enabled ? "true" : "false")
                           << ",\n";
                 std::cout << "  \"uname_release\": \"" << config.uname_release << "\",\n";
@@ -796,13 +798,15 @@ int hymo::run_hymo_main(int argc, char** argv) {
 
         case Command::KASUMI: {
             if (cli.args.empty()) {
-                std::cerr << "Usage: ksud hymo kasumi <enable|disable|list|version|features|"
-                             "mount-hide|maps-spoof|statfs-spoof|set-mirror|maps|raw>\n";
+                std::cerr
+                    << "Usage: ksud hymo kasumi <enable|disable|list|version|features|"
+                       "mount-hide|maps-spoof|statfs-spoof|selinux-fix|set-mirror|maps|raw>\n";
                 return 1;
             }
             const std::string subcmd = cli.args[0];
 
-            if (subcmd == "mount-hide" || subcmd == "maps-spoof" || subcmd == "statfs-spoof") {
+            if (subcmd == "mount-hide" || subcmd == "maps-spoof" || subcmd == "statfs-spoof" ||
+                subcmd == "selinux-fix") {
                 if (cli.args.size() < 2) {
                     std::cerr << "Usage: ksud hymo kasumi " << subcmd << " <on|off>\n";
                     return 1;
@@ -826,8 +830,10 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     ok = Kasumi::set_mount_hide(enable);
                 else if (subcmd == "maps-spoof")
                     ok = Kasumi::set_maps_spoof(enable);
-                else
+                else if (subcmd == "statfs-spoof")
                     ok = Kasumi::set_statfs_spoof(enable);
+                else
+                    ok = Kasumi::set_selinux_fix(enable);
                 if (ok) {
                     std::cout << subcmd << " " << (enable ? "on" : "off") << "\n";
                     return 0;
@@ -861,6 +867,8 @@ int hymo::run_hymo_main(int argc, char** argv) {
                     std::cout << " merge_dir";
                 if (f & KSM_FEATURE_SELINUX_BYPASS)
                     std::cout << " selinux_bypass";
+                if (f & KSM_FEATURE_SELINUX_FIX)
+                    std::cout << " selinux_fix";
                 std::cout << "\n";
                 return 0;
             } else if (subcmd == "maps") {
@@ -1581,6 +1589,16 @@ int hymo::run_hymo_main(int argc, char** argv) {
             }
 
             // Apply Hidexattr: mount_hide, maps_spoof, statfs_spoof (with stealth)
+            const bool effective_selinux_fix = config.enable_hidexattr || config.enable_selinux_fix;
+            if (Kasumi::is_available()) {
+                if (Kasumi::set_selinux_fix(effective_selinux_fix)) {
+                    LOG_VERBOSE("selinux_fix set to: " +
+                                std::string(effective_selinux_fix ? "true" : "false"));
+                } else {
+                    LOG_WARN("Failed to set selinux_fix");
+                }
+            }
+
             if (config.enable_hidexattr && Kasumi::is_available()) {
                 if (Kasumi::set_mount_hide(true)) {
                     LOG_VERBOSE("mount_hide enabled (hidexattr)");

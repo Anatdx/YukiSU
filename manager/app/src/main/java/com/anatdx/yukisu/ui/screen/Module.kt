@@ -89,6 +89,7 @@ import com.ramcosta.composedestinations.generated.destinations.ExecuteModuleActi
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
+import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.*
@@ -346,8 +347,12 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    val isSafeMode = Natives.isSafeMode
-    val hasMagisk = hasMagisk()
+    // Both checks were re-running on every recomposition; cache them.
+    // hasMagisk() shells out, so push it to IO via produceState.
+    val isSafeMode = remember { Natives.isSafeMode }
+    val hasMagisk by produceState(initialValue = false) {
+        value = withContext(Dispatchers.IO) { hasMagisk() }
+    }
     val hideInstallButton = isSafeMode || hasMagisk
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -724,7 +729,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                         singleLine = true
                     )
 
-                    // 删除快捷方式按钮（如果存在）
                     if (hasExistingShortcut) {
                         FilledTonalButton(
                             onClick = {
@@ -1008,7 +1012,7 @@ private fun ModuleList(
 
         val request = okhttp3.Request.Builder()
             .url(changelogUrl)
-            .header("User-Agent", "SukiSU-Ultra/2.0")
+            .header("User-Agent", "YukiSU/${BuildConfig.VERSION_NAME}")
             .build()
 
         val changelogResult = loadingDialog.withLoading {
@@ -1092,7 +1096,6 @@ private fun ModuleList(
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
                 if (isUninstall) {
-                    // 删除快捷方式
                     Shortcut.deleteModuleActionShortcut(context, module.id)
                     Shortcut.deleteModuleWebUiShortcut(context, module.id)
                     uninstallModule(module.dirId)

@@ -8,8 +8,6 @@
     <string name="home_working">工作中</string>
     <string name="home_gki_builtin_unsupported">YukiSU 已不支持 built-in KernelSU！请使用 LKM 模式！</string>
     <string name="home_working_version">版本：%s</string>
-    <string name="home_unsupported">不支持</string>
-    <string name="home_unsupported_reason">内核上未检测到 KernelSU 驱动程序，内核错误？</string>
     <string name="home_kernel">内核版本</string>
     <string name="home_manager_version">管理器版本</string>
     <string name="home_selinux_status">SELinux 状态</string>
@@ -144,10 +142,8 @@
     <string name="select_file_tip">建议选择 %1$s 分区镜像</string>
     <string name="select_kmi">选择 KMI</string>
     <string name="settings_uninstall">卸载</string>
-    <string name="settings_uninstall_temporary">临时卸载</string>
     <string name="settings_uninstall_permanent">永久卸载</string>
     <string name="settings_restore_stock_image">恢复原厂镜像</string>
-    <string name="settings_uninstall_temporary_message">临时卸载 KernelSU，下次重启后恢复至原始状态。</string>
     <string name="settings_uninstall_permanent_message">完全并永久卸载 KernelSU（Root 权限和所有模块）。</string>
     <string name="settings_restore_stock_image_message">恢复原厂镜像（若存在备份），一般在 OTA 前使用；如果你需要卸载 KernelSU，请使用"永久卸载"。</string>
     <string name="flashing">刷写中</string>
@@ -209,13 +205,12 @@
     <string name="settings_disable_su_summary">禁止任何应用通过 su 命令获取 root 权限（已运行的 root 进程不受影响）。</string>
     <string name="settings_disable_kernel_umount">关闭内核 umount</string>
     <string name="settings_disable_kernel_umount_summary">关闭 KernelSU 控制的内核级 umount 行为。</string>
-    <string name="settings_enable_enhanced_security">增强安全性</string>
-    <string name="settings_enable_enhanced_security_summary">使用更严格的安全策略。</string>
+    <string name="settings_enable_enhanced_security">使用严格安全策略</string>
+    <string name="settings_enable_enhanced_security_summary">阻止非 KernelSU 域的提权及未授权 app UID 降低行为</string>
+    <string name="settings_selinux_hide">启用 SELinux 隐藏</string>
+    <string name="settings_selinux_hide_summary">对应用侧 SELinux 探测隐藏 KernelSU 策略改动。</string>
     <string name="feature_status_unsupported_summary">内核不支持此功能。</string>
     <string name="feature_status_managed_summary">此功能由模块管理。</string>
-    <string name="settings_mode_default">默认</string>
-    <string name="settings_mode_temp_enable">临时启用</string>
-    <string name="settings_mode_always_enable">始终启用</string>
     <string name="module_install_multiple_confirm_with_names">确定要安装以下 %1$d 个模块吗？\n\n%2$s</string>
     <string name="more_settings">更多设置</string>
     <string name="selinux">SELinux</string>
@@ -226,7 +221,7 @@
     <string name="hide_kernel_kernelsu_version">隐藏内核版本号</string>
     <string name="hide_kernel_kernelsu_version_summary">隐藏内核部分的 KernelSU 版本号</string>
     <string name="hide_other_info">强迫症开关</string>
-    <string name="hide_other_info_summary">隐藏导航栏上的超级用户数、模块数和 KPM 模块数红点</string>
+    <string name="hide_other_info_summary">隐藏导航栏上的超级用户数和模块数红点</string>
     <string name="hide_zygisk_implement">隐藏 Zygisk 状态信息</string>
     <string name="hide_zygisk_implement_summary">隐藏主页上的 Zygisk 实现状态信息</string>
     <string name="hide_meta_module_implement">隐藏元模块状态信息</string>
@@ -252,8 +247,6 @@
     <string name="color_gray">高级灰</string>
     <string name="color_yellow">黄色</string>
     <string name="color_trans_pride">Trans Pride</string>
-    <string name="horizon_kernel">刷写 AnyKernel3 压缩包</string>
-    <string name="horizon_kernel_summary">刷入 Anykernel3 内核</string>
     <string name="root_required">需要 root 权限</string>
     <string name="reboot_complete_title">刷写完成</string>
     <string name="reboot_complete_msg">是否立即重启？</string>
@@ -294,33 +287,10 @@
     <string name="confirm_uninstall_content">将卸载以下 KPM 模块：\n%s</string>
     <string name="image_editor_hint">使用双指缩放图片，单指拖动调整位置</string>
     <string name="reprovision">重置</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">刷写完成</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">准备中…</string>
-    <string name="horizon_cleaning_files">清理文件…</string>
-    <string name="horizon_copying_files">复制文件…</string>
-    <string name="horizon_extracting_tool">提取刷写工具…</string>
-    <string name="horizon_patching_script">修补刷写脚本…</string>
-    <string name="horizon_flashing">刷写内核中…</string>
-    <string name="horizon_flash_complete_status">刷写完成</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">选择刷写槽位</string>
-    <string name="select_slot_description">请选择要刷写 boot 的目标槽位</string>
-    <string name="slot_a">A 槽位</string>
-    <string name="slot_b">B 槽位</string>
-    <string name="selected_slot">已选择槽位: %1$s</string>
-    <string name="horizon_getting_original_slot">获取原有槽位</string>
-    <string name="horizon_setting_target_slot">设置指定槽位</string>
-    <string name="horizon_restoring_original_slot">恢复默认槽位</string>
-    <string name="current_slot">当前系统默认槽位：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">复制失败</string>
-    <string name="horizon_unknown_error">未知错误</string>
     <string name="flash_failed_message">刷写失败</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 修补/安装</string>
-    <string name="GKI_install_methods">刷写 AnyKernel3</string>
     <string name="kernel_version_log">内核版本：%1$s</string>
     <string name="tool_version_log">使用修补工具：%1$s</string>
     <string name="configuration">配置</string>
@@ -375,7 +345,6 @@
     <string name="installing_module">正在安装模块 %1$d/%2$d</string>
     <string name="module_failed_count">%d 个模块安装失败</string>
     <string name="module_download_error">模块下载失败</string>
-    <string name="kernel_flashing">内核刷写</string>
     <!-- Kasumi status text -->
     <string name="kasumi_status_available">可用</string>
     <string name="kasumi_status_builtin">Kasumi 内置</string>
@@ -535,8 +504,8 @@
     <string name="config_applied">配置已应用到内核</string>
     <string name="mnt_detach">MNT_DETACH</string>
     <string name="group_contains_apps">包含 %1$d 个应用</string>
-    <string name="settings_disable_sulog"> 禁用超级用户日志 </string>
-    <string name="settings_disable_sulog_summary">禁用 KernelSU 超级用户访问记录</string>
+    <string name="settings_disable_sulog">超级用户日志</string>
+    <string name="settings_disable_sulog_summary">记录 KernelSU 超级用户访问</string>
 
     <!-- SuperKey 认证 -->
     <string name="superkey_auth_title">超级密钥认证</string>
@@ -555,7 +524,7 @@
     
     <!-- SuperKey 设置 -->
     <string name="settings_donot_store_superkey">不存储超级密钥</string>
-    <string name="settings_donot_store_superkey_summary">启用后，管理器不会保存您的超级密钥。每次重启后都需要手动输入密钥进行认证。</string>
+    <string name="settings_donot_store_superkey_summary">启用后管理器不会保存超级密钥，每次重启都需手动输入。</string>
     <string name="clear_super_key">清除超级密钥</string>
     <string name="settings_clear_super_key_dialog">确定要清除已存储的超级密钥吗？</string>
     <string name="signature_bypass_title">仅超级密钥模式</string>
@@ -623,7 +592,9 @@
     <string name="kasumi_stealth">隐身模式</string>
     <string name="kasumi_stealth_desc">隐藏挂载痕迹并重新排序挂载 ID</string>
     <string name="kasumi_hidexattr">隐藏扩展属性</string>
-    <string name="kasumi_hidexattr_desc">启用 mount_hide、maps_spoof、statfs_spoof 和 stealth，随 hidexattr 自动隐藏其他特征</string>
+    <string name="kasumi_hidexattr_desc">启用 mount_hide、maps_spoof、statfs_spoof、selinux_fix 和 stealth，随 hidexattr 自动隐藏其他特征</string>
+    <string name="kasumi_selinux_fix">SELinux 守护</string>
+    <string name="kasumi_selinux_fix_desc">拦截 app_zygote 对 SELinux 策略的探测（DirtySepolicy / Duck Detector）</string>
     <string name="kasumi_avc_spoof">AVC 日志欺骗</string>
     <string name="kasumi_avc_spoof_desc">伪造 SELinux AVC 拒绝日志</string>
     <string name="kasumi_enable_nuke">启用 Nuke</string>
@@ -794,6 +765,14 @@
     <string name="partition_dangerous_flash_warning">⚠️ 警告：%1$s 是危险分区！\n\n刷写此分区可能导致：\n• 设备无法启动\n• 丢失重要数据\n• 网络/蓝牙功能失效\n\n请确保您知道自己在做什么！\n\n确定要刷写 %2$s 分区吗？</string>
     <string name="partition_confirm_flash">确定刷写</string>
     <string name="partition_backing_up">正在备份分区 %s…</string>
+    <string name="partition_backing_up_to">正在备份 %1$s 到 %2$s…</string>
+    <string name="partition_backup_directory">备份目录</string>
+    <string name="partition_backup_directory_choose">选择</string>
+    <string name="partition_backup_directory_desc">分区镜像会保存到这里，备份前可直接修改路径。</string>
+    <string name="partition_backup_directory_selected">备份目录：%s</string>
+    <string name="partition_backup_directory_picker_unsupported">此目录提供方不能用于原始分区备份。请选择本机存储目录，或手动输入文件系统路径。</string>
+    <string name="partition_backup_directory_empty">备份目录不能为空</string>
+    <string name="partition_backup_directory_create_failed">无法创建备份目录：%s</string>
     <string name="partition_backup_success">备份成功：%s</string>
     <string name="partition_backup_failed">备份失败：%s</string>
     <string name="partition_backup_failed_check_log">备份失败，请查看 logcat 日志</string>
@@ -825,4 +804,8 @@
     <string name="home_ksud_daemon_unknown">未知</string>
     <string name="home_ksud_daemon_sync">同步 ksud 守护进程</string>
     <string name="home_ksud_daemon_syncing">正在同步…</string>
+    <string name="setting_change_saved_reboot">设置成功，重启生效</string>
+    <string name="setting_change_failed">设置失败</string>
+    <string name="settings_auto_update_ksud">自动更新 ksud</string>
+    <string name="settings_auto_update_ksud_summary">应用冷启动时自动将内置的 ksud 同步到 /data/adb/ksud。默认关闭，需要时去主页手动同步。</string>
 </resources>

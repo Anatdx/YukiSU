@@ -28,16 +28,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import ui.screen.moreSettings.util.LocaleHelper
-import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.theme.component.ImageEditorDialog
 import com.anatdx.yukisu.ui.component.KsuIsValid
-import com.anatdx.yukisu.ui.screen.SwitchItem
 import com.anatdx.yukisu.ui.theme.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -325,11 +322,6 @@ private fun AdvancedSettings(
     state: MoreSettingsState,
     handlers: MoreSettingsHandlers
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackBarHost = remember { SnackbarHostState() }
-    val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
-
     SettingsCard(title = stringResource(R.string.advanced_settings)) {
 
         SwitchSettingItem(
@@ -351,6 +343,30 @@ private fun AdvancedSettings(
             checked = state.hideBlEnabled,
             onChange = handlers::handleHideBlChange
         )
+
+        SettingsDivider()
+
+        SwitchSettingItem(
+            icon = Icons.Filled.DeveloperMode,
+            title = stringResource(R.string.enable_web_debugging),
+            summary = stringResource(R.string.enable_web_debugging_summary),
+            checked = state.enableWebDebugging,
+            onChange = handlers::handleWebDebuggingChange
+        )
+
+        AnimatedVisibility(
+            visible = state.enableWebDebugging && state.webuiEngine == "wx",
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            SwitchSettingItem(
+                icon = Icons.Filled.FormatListNumbered,
+                title = stringResource(R.string.use_webuix_eruda),
+                summary = stringResource(R.string.use_webuix_eruda_summary),
+                checked = state.useWebUIXEruda,
+                onChange = handlers::handleWebUIXErudaChange
+            )
+        }
     }
 }
 
@@ -447,7 +463,6 @@ private fun DpiSliderControls(
             )
         )
 
-        // DPI 预设按钮行
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -521,7 +536,6 @@ private fun CustomBackgroundSettings(
     pickImageLauncher: ActivityResultLauncher<String>,
     coroutineScope: CoroutineScope
 ) {
-    // 自定义背景开关
     SwitchSettingItem(
         icon = Icons.Filled.Wallpaper,
         title = stringResource(id = R.string.settings_custom_background),
@@ -536,7 +550,6 @@ private fun CustomBackgroundSettings(
         }
     )
 
-    // 透明度和亮度调节
     AnimatedVisibility(
         visible = ThemeConfig.customBackgroundUri != null,
         enter = fadeIn() + slideInVertically(),
@@ -557,10 +570,8 @@ private fun BackgroundAdjustmentControls(
     coroutineScope: CoroutineScope
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        // 透明度滑动条
         AlphaSlider(state = state, handlers = handlers, coroutineScope = coroutineScope)
 
-        // 亮度调节滑动条
         DimSlider(state = state, handlers = handlers, coroutineScope = coroutineScope)
     }
 }

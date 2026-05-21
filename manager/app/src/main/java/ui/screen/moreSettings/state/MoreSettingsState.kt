@@ -10,21 +10,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import ui.screen.moreSettings.util.LocaleHelper
-import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.theme.ThemeConfig
 
-/**
- * 更多设置状态管理
- */
 @Stable
 class MoreSettingsState(
     val context: Context,
     val prefs: SharedPreferences,
     val systemIsDark: Boolean
 ) {
-    // 主题模式选择
     var themeMode by mutableIntStateOf(
         when (ThemeConfig.forceDarkMode) {
             true -> 2 // 深色
@@ -33,20 +28,16 @@ class MoreSettingsState(
         }
     )
 
-    // 动态颜色开关状态
     var useDynamicColor by mutableStateOf(ThemeConfig.useDynamicColor)
 
-    // 语言设置
     var showLanguageDialog by mutableStateOf(false)
     var currentAppLocale by mutableStateOf(LocaleHelper.getCurrentAppLocale(context))
 
-    // 对话框显示状态
     var showThemeModeDialog by mutableStateOf(false)
     var showThemeColorDialog by mutableStateOf(false)
     var showDpiConfirmDialog by mutableStateOf(false)
     var showImageEditor by mutableStateOf(false)
 
-    // 各种设置开关状态
     var isSimpleMode by mutableStateOf(prefs.getBoolean("is_simple_mode", false))
     var isHideVersion by mutableStateOf(prefs.getBoolean("is_hide_version", false))
     var isHideOtherInfo by mutableStateOf(prefs.getBoolean("is_hide_other_info", false))
@@ -56,35 +47,31 @@ class MoreSettingsState(
     var isHideTagRow by mutableStateOf(prefs.getBoolean("is_hide_tag_row", false))
     var isKernelSimpleMode by mutableStateOf(prefs.getBoolean("is_kernel_simple_mode", false))
     var showMoreModuleInfo by mutableStateOf(prefs.getBoolean("show_more_module_info", false))
+    var enableWebDebugging by mutableStateOf(prefs.getBoolean("enable_web_debugging", false))
+    var useWebUIXEruda by mutableStateOf(prefs.getBoolean("use_webuix_eruda", false))
+    var webuiEngine by mutableStateOf(prefs.getString("webui_engine", "default") ?: "default")
 
-    // SELinux状态
     var selinuxEnabled by mutableStateOf(false)
 
-    // 弱BL隐藏状态
     var hideBlEnabled by mutableStateOf(false)
 
-    // 卡片配置状态
     var cardAlpha by mutableFloatStateOf(CardConfig.cardAlpha)
     var cardDim by mutableFloatStateOf(CardConfig.cardDim)
     var isCustomBackgroundEnabled by mutableStateOf(ThemeConfig.customBackgroundUri != null)
 
-    // 图片选择状态
     var selectedImageUri by mutableStateOf<Uri?>(null)
 
-    // DPI 设置
     val systemDpi = context.resources.displayMetrics.densityDpi
     var currentDpi by mutableIntStateOf(prefs.getInt("app_dpi", systemDpi))
     var tempDpi by mutableIntStateOf(currentDpi)
     var isDpiCustom by mutableStateOf(true)
 
-    // 主题模式选项
     val themeOptions = listOf(
         context.getString(R.string.theme_follow_system),
         context.getString(R.string.theme_light),
         context.getString(R.string.theme_dark)
     )
 
-    // 预设 DPI 选项
     val dpiPresets = mapOf(
         context.getString(R.string.dpi_size_small) to 240,
         context.getString(R.string.dpi_size_medium) to 320,

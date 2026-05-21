@@ -93,6 +93,7 @@ enum ksu_feature_id {
   KSU_FEATURE_KERNEL_UMOUNT = 1,
   KSU_FEATURE_ENHANCED_SECURITY = 2,
   KSU_FEATURE_ADB_ROOT = 3,
+  KSU_FEATURE_SELINUX_HIDE = 4,
   KSU_FEATURE_SULOG = 100,
 };
 
@@ -191,6 +192,10 @@ bool is_sulog_enabled();
 bool set_adb_root_enabled(bool enabled);
 bool is_adb_root_enabled();
 
+// SELinux hide
+bool set_selinux_hide_enabled(bool enabled);
+bool is_selinux_hide_enabled();
+
 // Other command structures
 struct ksu_get_full_version_cmd {
   char version_full[KSU_FULL_VERSION_STRING]; // Output: full version string
@@ -261,11 +266,14 @@ struct ksu_prctl_get_fd_cmd {
   int result; // Output: 0 = success, negative = error
   int fd;     // Output: fd on success, -1 on failure
 };
-// SuperKey auth structure for prctl hook
+// SuperKey auth structure for prctl hook. Layout MUST match
+// kernel/supercalls.h::ksu_superkey_prctl_cmd.
 struct ksu_superkey_prctl_cmd {
-  char superkey[65]; // Input: SuperKey string (null-terminated)
-  int result;        // Output: 0 = success, negative = error
-  int fd;            // Output: fd on success
+  char superkey[65];  // Input: SuperKey string (null-terminated)
+  uint64_t timestamp; // Input: Unix epoch seconds; kernel rejects ts outside
+                      // [now-30, now]
+  int result;         // Output: 0 = success, negative = error
+  int fd;             // Output: fd on success
 };
 
 // SuperKey auth structure for reboot hook
@@ -295,23 +303,5 @@ bool get_allow_list(struct ksu_get_allow_list_cmd *);
 // Returns total allow-list count only (no full list fetch). Uses new allowlist
 // API.
 int get_superuser_count(void);
-
-// Legacy Compatible
-struct ksu_version_info legacy_get_info();
-
-struct ksu_version_info {
-  int32_t version;
-  int32_t flags;
-};
-
-bool legacy_get_allow_list(int *uids, int *size);
-bool legacy_is_safe_mode();
-bool legacy_uid_should_umount(int uid);
-bool legacy_set_app_profile(const struct app_profile *profile);
-bool legacy_get_app_profile(char *key, struct app_profile *profile);
-bool legacy_set_su_enabled(bool enabled);
-bool legacy_is_su_enabled();
-bool legacy_get_hook_type(char *hook_type, size_t size);
-void legacy_get_full_version(char *buff);
 
 #endif // #ifndef KERNELSU_KSU_H

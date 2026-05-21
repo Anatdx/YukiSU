@@ -5,8 +5,6 @@
     <string name="home_click_to_install">Clique para instalar</string>
     <string name="home_working">Funcionando</string>
     <string name="home_working_version">Versão: %s</string>
-    <string name="home_unsupported">Sem suporte</string>
-    <string name="home_unsupported_reason">KernelSU suporta apenas kernels GKI agora</string>
     <string name="home_kernel">Kernel</string>
     <string name="home_manager_version">Versão do aplicativo</string>
     <string name="home_selinux_status">Status do SELinux</string>
@@ -111,10 +109,8 @@
     <string name="select_file_tip">A imagem da partição %1$s é recomendada</string>
     <string name="select_kmi">Selecionar KMI</string>
     <string name="settings_uninstall">Desinstalar</string>
-    <string name="settings_uninstall_temporary">Desinstalar temporariamente</string>
     <string name="settings_uninstall_permanent">Desinstalar permanentemente</string>
     <string name="settings_restore_stock_image">Restaurar imagem de fábrica</string>
-    <string name="settings_uninstall_temporary_message">Desinstale temporariamente o KernelSU e restaure ao estado original após a próxima reinicialização</string>
     <string name="settings_uninstall_permanent_message">Desinstale o KernelSU (root e todos os módulos) completamente e permanentemente</string>
     <string name="settings_restore_stock_image_message">Restaure a imagem de fábrica (se existir um backup), geralmente usada antes do OTA. Se você precisar desinstalar o KernelSU, use \"Desinstalar permanentemente\".</string>
     <string name="flashing">Flasheando</string>
@@ -188,8 +184,6 @@
     <string name="color_pink">Rosa</string>
     <string name="color_gray">Cinza</string>
     <string name="color_yellow">Amarelo</string>
-    <string name="horizon_kernel">Install Anykernel3</string>
-    <string name="horizon_kernel_summary">Instalar o arquivo kernel AnyKernel3</string>
     <string name="root_required">Requer privilégios de superusuário</string>
     <string name="reboot_complete_title">Esboço completo</string>
     <string name="reboot_complete_msg">Reiniciar imediatamente?</string>
@@ -230,33 +224,10 @@
     <string name="confirm_uninstall_content">O seguinte KPM será desinstalado: %s</string>
     <string name="image_editor_hint">Use dois dedos para ampliar a imagem e um dedo para arrastá-la para ajustar a posição</string>
     <string name="reprovision">Restituição</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash concluído</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Preparando…</string>
-    <string name="horizon_cleaning_files">limpando arquivos…</string>
-    <string name="horizon_copying_files">Copiando arquivo…</string>
-    <string name="horizon_extracting_tool">Extraindo a ferramenta flash…</string>
-    <string name="horizon_patching_script">Atualizando o script flash…</string>
-    <string name="horizon_flashing">Flasheando kernel…</string>
-    <string name="horizon_flash_complete_status">Flash completo</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Selecionar Slot em Flash</string>
-    <string name="select_slot_description">Por favor, selecione o slot de destino para flashear a inicialização</string>
-    <string name="slot_a">Slot B</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">Slot selecionado: %1$s</string>
-    <string name="horizon_getting_original_slot">Obtendo o espaço original</string>
-    <string name="horizon_setting_target_slot">Configurando o slot especificado</string>
-    <string name="horizon_restoring_original_slot">Restaurar Slot Padrão</string>
-    <string name="current_slot">Slot padrão do sistema atual：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Falha ao copiar</string>
-    <string name="horizon_unknown_error">Você parece estar convertendo de um formato com degradação para&#10;&#10;um sem perdas. Esteja ciente que a perda de qualidade não pode ser desfeita,&#10;&#10;então este processo não melhorará a qualidade do áudio e provavelmente&#10;&#10;aumentará o tamanho do arquivo. Continuar assim mesmo?</string>
     <string name="flash_failed_message">Flash falhou</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM reparo/instalação</string>
-    <string name="GKI_install_methods">Flasheando kernel</string>
     <string name="kernel_version_log">Kernel</string>
     <string name="tool_version_log">Usando a ferramenta de correção：%1$s</string>
     <string name="configuration">Configurar</string>
@@ -305,7 +276,6 @@
     <string name="installing_module">Módulo sendo instalado %1$d/%2$d</string>
     <string name="module_failed_count">%d Falha ao instalar um novo módulo</string>
     <string name="module_download_error">Falha ao baixar módulo</string>
-    <string name="kernel_flashing">Kernel Flashing</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">All</string>
     <string name="category_root_apps">Root</string>

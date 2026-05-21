@@ -38,7 +38,6 @@ object ThemeUtils {
             prefs.edit { putBoolean("is_first_run", false) }
         }
 
-        // 加载保存的背景设置
         loadThemeMode()
         loadThemeColors()
         loadDynamicColorState()

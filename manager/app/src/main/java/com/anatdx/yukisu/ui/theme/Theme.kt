@@ -257,10 +257,8 @@ fun KernelSUTheme(
     val context = LocalContext.current
     val systemIsDark = isSystemInDarkTheme()
 
-    // 初始化主题
     ThemeInitializer(context = context, systemIsDark = systemIsDark)
 
-    // 创建颜色方案
     val colorScheme = createColorScheme(context, darkTheme, dynamicColor)
 
     // 系统栏样式
@@ -286,7 +284,6 @@ private fun ThemeInitializer(context: Context, systemIsDark: Boolean) {
     val themeChanged = ThemeConfig.detectThemeChange(systemIsDark)
     val scope = rememberCoroutineScope()
 
-    // 处理系统主题变化
     LaunchedEffect(systemIsDark, themeChanged) {
         if (ThemeConfig.forceDarkMode == null && themeChanged) {
             Log.d("ThemeSystem", "系统主题变化: $systemIsDark")

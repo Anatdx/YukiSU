@@ -5,8 +5,6 @@
     <string name="home_click_to_install">이 곳을 눌러 설치하기</string>
     <string name="home_working">정상 작동 중</string>
     <string name="home_working_version">버전: %s</string>
-    <string name="home_unsupported">지원되지 않음</string>
-    <string name="home_unsupported_reason">KernelSU는 현재 GKI 커널만 지원합니다</string>
     <string name="home_kernel">커널</string>
     <string name="home_manager_version">매니저 버전</string>
     <string name="home_selinux_status">SELinux 상태</string>
@@ -111,10 +109,8 @@
     <string name="select_file_tip">%1$s 파티션 이미지 권장됨</string>
     <string name="select_kmi">KMI 선택</string>
     <string name="settings_uninstall">삭제</string>
-    <string name="settings_uninstall_temporary">임시적 삭제</string>
     <string name="settings_uninstall_permanent">영구적 삭제</string>
     <string name="settings_restore_stock_image">순정 이미지 복구</string>
-    <string name="settings_uninstall_temporary_message">임시적으로 KernelSU를 삭제하고, 다음 재부팅에 원래대로 복구합니다.</string>
     <string name="settings_uninstall_permanent_message">완전히, 그리고 영구히 KernelSU (루트 및 모든 모듈)를 삭제합니다.</string>
     <string name="settings_restore_stock_image_message">순정 이미지 복구 (백업이 존재한다면), OTA 전에 사용합니다; KernelSU를 삭제해야 한다면, \"영구적 삭제\"를 사용해 주세요.</string>
     <string name="flashing">플래시 중</string>
@@ -188,8 +184,6 @@
     <string name="color_pink">Pink</string>
     <string name="color_gray">Gray</string>
     <string name="color_yellow">Yellow</string>
-    <string name="horizon_kernel">Install Anykernel3</string>
-    <string name="horizon_kernel_summary">Flash AnyKernel3 kernel file</string>
     <string name="root_required">Requires root privileges</string>
     <string name="reboot_complete_title">Scrubbing complete</string>
     <string name="reboot_complete_msg">Whether to reboot immediately？</string>
@@ -230,33 +224,10 @@
     <string name="confirm_uninstall_content">The following KPM will be uninstalled: %s</string>
     <string name="image_editor_hint">Use two fingers to zoom the image, and one finger to drag it to adjust the position</string>
     <string name="reprovision">Reprovision</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash Complete</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Preparing…</string>
-    <string name="horizon_cleaning_files">Cleaning files…</string>
-    <string name="horizon_copying_files">Copying files…</string>
-    <string name="horizon_extracting_tool">Extracting flash tool…</string>
-    <string name="horizon_patching_script">Patching flash script…</string>
-    <string name="horizon_flashing">Flashing kernel…</string>
-    <string name="horizon_flash_complete_status">Flash completed</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Select Flash Slot</string>
-    <string name="select_slot_description">Please select the target slot for flashing boot</string>
-    <string name="slot_a">Slot A</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">Selected slot: %1$s</string>
-    <string name="horizon_getting_original_slot">Getting the original slot</string>
-    <string name="horizon_setting_target_slot">Setting the specified slot</string>
-    <string name="horizon_restoring_original_slot">Restore Default Slot</string>
-    <string name="current_slot">Current Slot：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Copy failed</string>
-    <string name="horizon_unknown_error">Unknown error</string>
     <string name="flash_failed_message">Flash failed</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repair/installation</string>
-    <string name="GKI_install_methods">Flashing AnyKernel3</string>
     <string name="kernel_version_log">Kernel version：%1$s</string>
     <string name="tool_version_log">Using the patching tool：%1$s</string>
     <string name="configuration">Configure</string>
@@ -305,7 +276,6 @@
     <string name="installing_module">Module being installed %1$d/%2$d</string>
     <string name="module_failed_count">%d Failed to install a new module</string>
     <string name="module_download_error">Module download failed</string>
-    <string name="kernel_flashing">Kernel Flashing</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">All</string>
     <string name="category_root_apps">Root</string>

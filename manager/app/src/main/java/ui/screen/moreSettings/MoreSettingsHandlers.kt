@@ -33,33 +33,29 @@ import com.anatdx.yukisu.ui.screen.SettingItem
 import com.anatdx.yukisu.ui.screen.SwitchItem
 import com.anatdx.yukisu.ui.theme.*
 import com.anatdx.yukisu.ui.util.*
-import com.topjohnwu.superuser.Shell
+import com.anatdx.yukisu.ui.util.execKsud
+import com.anatdx.yukisu.ui.util.getRootShell
+import com.anatdx.yukisu.ui.util.isSELinuxEnforcing
+import com.anatdx.yukisu.ui.util.ksudReadString
+import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ui.screen.moreSettings.state.MoreSettingsState
 
-/**
- * 更多设置处理器
- */
 class MoreSettingsHandlers(
     val context: Context,
     private val prefs: SharedPreferences,
     private val state: MoreSettingsState
 ) {
 
-    /**
-     * 初始化设置
-     */
     fun initializeSettings() {
-        // 加载设置
         CardConfig.load(context)
         state.cardAlpha = CardConfig.cardAlpha
         state.cardDim = CardConfig.cardDim
         state.isCustomBackgroundEnabled = ThemeConfig.customBackgroundUri != null
 
-        // 设置主题模式
         state.themeMode = when (ThemeConfig.forceDarkMode) {
             true -> 2
             false -> 1
@@ -92,16 +88,10 @@ class MoreSettingsHandlers(
 
         CardConfig.save(context)
 
-        // 初始化 SELinux 状态
-        state.selinuxEnabled = Shell.cmd("getenforce").exec().out.firstOrNull() == "Enforcing"
-
-        // 初始化弱BL隐藏状态
-        state.hideBlEnabled = Shell.cmd("ksud feature hide-bl").exec().out.firstOrNull()?.contains("enabled") == true
+        state.selinuxEnabled = isSELinuxEnforcing()
+        state.hideBlEnabled = ksudReadString("feature hide-bl").contains("enabled")
     }
 
-    /**
-     * 处理主题模式变更
-     */
     fun handleThemeModeChange(index: Int) {
         state.themeMode = index
         val newThemeMode = when (index) {
@@ -136,9 +126,6 @@ class MoreSettingsHandlers(
         }
     }
 
-    /**
-     * 处理主题色变更
-     */
     fun handleThemeColorChange(theme: ThemeColors) {
         context.saveThemeColors(when (theme) {
             ThemeColors.Green -> "green"
@@ -153,18 +140,12 @@ class MoreSettingsHandlers(
         ThemeConfig.updateTheme(theme = theme)
     }
 
-    /**
-     * 处理动态颜色变更
-     */
     fun handleDynamicColorChange(enabled: Boolean) {
         state.useDynamicColor = enabled
         context.saveDynamicColorState(enabled)
         ThemeConfig.updateTheme(dynamicColor = enabled)
     }
 
-    /**
-     * 获取DPI大小友好名称
-     */
     @Composable
     fun getDpiFriendlyName(dpi: Int): String {
         return when (dpi) {
@@ -176,9 +157,6 @@ class MoreSettingsHandlers(
         }
     }
 
-    /**
-     * 应用 DPI 设置
-     */
     fun handleDpiApply() {
         if (state.tempDpi != state.currentDpi) {
             prefs.edit {
@@ -200,9 +178,6 @@ class MoreSettingsHandlers(
         }
     }
 
-    /**
-     * 处理自定义背景
-     */
     fun handleCustomBackground(transformedUri: Uri) {
         context.saveAndApplyCustomBackground(transformedUri)
         state.isCustomBackgroundEnabled = true
@@ -217,9 +192,6 @@ class MoreSettingsHandlers(
         ).show()
     }
 
-    /**
-     * 处理移除自定义背景
-     */
     fun handleRemoveCustomBackground() {
         context.saveCustomBackground(null)
         state.isCustomBackgroundEnabled = false
@@ -242,9 +214,6 @@ class MoreSettingsHandlers(
         ).show()
     }
 
-    /**
-     * 处理卡片透明度变更
-     */
     fun handleCardAlphaChange(newValue: Float) {
         state.cardAlpha = newValue
         CardConfig.cardAlpha = newValue
@@ -255,9 +224,6 @@ class MoreSettingsHandlers(
         }
     }
 
-    /**
-     * 处理卡片亮度变更
-     */
     fun handleCardDimChange(newValue: Float) {
         state.cardDim = newValue
         CardConfig.cardDim = newValue
@@ -268,123 +234,80 @@ class MoreSettingsHandlers(
         }
     }
 
-    /**
-     * 处理简洁模式变更
-     */
     fun handleSimpleModeChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_simple_mode", newValue) }
         state.isSimpleMode = newValue
     }
 
-    /**
-     * 处理内核简洁模式变更
-     */
     fun handleKernelSimpleModeChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_kernel_simple_mode", newValue) }
         state.isKernelSimpleMode = newValue
     }
 
-    /**
-     * 处理隐藏版本变更
-     */
     fun handleHideVersionChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_version", newValue) }
         state.isHideVersion = newValue
     }
 
-    /**
-     * 处理隐藏其他信息变更
-     */
     fun handleHideOtherInfoChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_other_info", newValue) }
         state.isHideOtherInfo = newValue
     }
 
-    /**
-     * 处理隐藏Zygisk实现变更
-     */
     fun handleHideZygiskImplementChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_zygisk_Implement", newValue) }
         state.isHideZygiskImplement = newValue
     }
 
-    /**
-     * 处理隐藏元模块实现变更
-     */
     fun handleHideMetaModuleImplementChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_meta_module_Implement", newValue) }
         state.isHideMetaModuleImplement = newValue
     }
 
-    /**
-     * 处理隐藏链接卡片变更
-     */
     fun handleHideLinkCardChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_link_card", newValue) }
         state.isHideLinkCard = newValue
     }
 
-    /**
-     * 处理隐藏标签行变更
-     */
     fun handleHideTagRowChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_tag_row", newValue) }
         state.isHideTagRow = newValue
     }
 
-    /**
-     * 处理显示更多模块信息变更
-     */
     fun handleShowMoreModuleInfoChange(newValue: Boolean) {
         prefs.edit { putBoolean("show_more_module_info", newValue) }
         state.showMoreModuleInfo = newValue
     }
 
-    /**
-     * 处理SELinux变更
-     */
-    fun handleSelinuxChange(enabled: Boolean) {
-        val command = if (enabled) "setenforce 1" else "setenforce 0"
-        Shell.getShell().newJob().add(command).exec().let { result ->
-            if (result.isSuccess) {
-                state.selinuxEnabled = enabled
-                val message = if (enabled)
-                    context.getString(R.string.selinux_enabled_toast)
-                else
-                    context.getString(R.string.selinux_disabled_toast)
+    fun handleWebDebuggingChange(newValue: Boolean) {
+        prefs.edit { putBoolean("enable_web_debugging", newValue) }
+        state.enableWebDebugging = newValue
+    }
 
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.selinux_change_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+    fun handleWebUIXErudaChange(newValue: Boolean) {
+        prefs.edit { putBoolean("use_webuix_eruda", newValue) }
+        state.useWebUIXEruda = newValue
+    }
+
+    fun handleSelinuxChange(enabled: Boolean) {
+        val ok = ShellUtils.fastCmdResult(getRootShell(), if (enabled) "setenforce 1" else "setenforce 0")
+        if (ok) {
+            state.selinuxEnabled = enabled
+            val msg = if (enabled) R.string.selinux_enabled_toast else R.string.selinux_disabled_toast
+            Toast.makeText(context, context.getString(msg), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.selinux_change_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
-    /**
-     * 处理弱BL隐藏变更
-     */
     fun handleHideBlChange(enabled: Boolean) {
-        val command = if (enabled) "ksud feature hide-bl enable" else "ksud feature hide-bl disable"
-        Shell.getShell().newJob().add(command).exec().let { result ->
-            if (result.isSuccess) {
-                state.hideBlEnabled = enabled
-                val message = if (enabled)
-                    context.getString(R.string.hide_bl_enabled_toast)
-                else
-                    context.getString(R.string.hide_bl_disabled_toast)
-
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.hide_bl_change_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+        val ok = execKsud(if (enabled) "feature hide-bl enable" else "feature hide-bl disable")
+        if (ok) {
+            state.hideBlEnabled = enabled
+            val msg = if (enabled) R.string.hide_bl_enabled_toast else R.string.hide_bl_disabled_toast
+            Toast.makeText(context, context.getString(msg), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.hide_bl_change_failed), Toast.LENGTH_SHORT).show()
         }
     }
 }

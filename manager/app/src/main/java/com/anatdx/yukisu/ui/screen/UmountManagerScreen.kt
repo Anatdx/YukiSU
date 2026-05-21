@@ -99,8 +99,7 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
             }
-        },
-        snackbarHost = { SnackbarHost(snackBarHost) }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -388,18 +387,22 @@ fun AddUmountPathDialog(
 }
 
 private fun parseUmountPaths(output: String): List<UmountPathEntry> {
-    val lines = output.lines().filter { it.isNotBlank() }
-    if (lines.size < 2) return emptyList()
-
-    return lines.drop(2).mapNotNull { line ->
-        val parts = line.trim().split(Regex("\\s+"))
-        if (parts.size >= 2) {
-            UmountPathEntry(
-                path = parts[0],
-                flags = parts[1].toIntOrNull() ?: 0
-            )
-        } else null
-    }
+    // ksud `umount list` prints a 2-line header from the kernel followed by
+    // "<path>\t<flags>" rows. ksud's own log lines may bleed onto stdout
+    // depending on how the shell wrapper merges stderr, so identify rows by
+    // content (absolute path + decimal flags) rather than by line index.
+    return output.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .mapNotNull { line ->
+            val parts = line.split(Regex("\\s+"))
+            if (parts.size < 2) return@mapNotNull null
+            val path = parts[0]
+            val flags = parts[1].toIntOrNull() ?: return@mapNotNull null
+            if (!path.startsWith("/")) return@mapNotNull null
+            UmountPathEntry(path = path, flags = flags)
+        }
+        .toList()
 }
 
 private fun Int.toUmountFlagName(context: Context): String {

@@ -71,34 +71,21 @@ object UltraActivityUtils {
                         FlashIt.FlashModules(ArrayList(moduleUris))
                     )
                 )
-                // 不设置 auto_exit，刷入完成后停留在 FlashScreen 让用户查看结果
             }
         }
-    }
-
-    private fun setAutoExitAfterFlash(activity: Context) {
-        activity.getSharedPreferences("kernel_flash_prefs", Context.MODE_PRIVATE)
-            .edit {
-                putBoolean("auto_exit_after_flash", true)
-            }
     }
 }
 
 object AppData {
     object DataRefreshManager {
-        // 私有状态流
         private val _superuserCount = MutableStateFlow(0)
         private val _moduleCount = MutableStateFlow(0)
         private val _isFullFeatured = MutableStateFlow(false)
 
-        // 公开的只读状态流
         val superuserCount: StateFlow<Int> = _superuserCount.asStateFlow()
         val moduleCount: StateFlow<Int> = _moduleCount.asStateFlow()
         val isFullFeatured: StateFlow<Boolean> = _isFullFeatured.asStateFlow()
 
-        /**
-         * 刷新所有数据计数（仅在实际变化时更新，减少 recomposition）
-         */
         fun refreshData() {
             val sc = getSuperuserCountUse()
             val mc = getModuleCountUse()
@@ -109,9 +96,6 @@ object AppData {
         }
     }
 
-    /**
-     * 获取超级用户应用计数
-     */
     fun getSuperuserCountUse(): Int {
         return try {
             if (!rootAvailable()) return 0
@@ -121,9 +105,6 @@ object AppData {
         }
     }
 
-    /**
-     * 获取模块计数
-     */
     fun getModuleCountUse(): Int {
         return try {
             if (!rootAvailable()) return 0
@@ -133,9 +114,6 @@ object AppData {
         }
     }
 
-    /**
-     * 检查是否是完整功能模式
-     */
     fun isFullFeatured(): Boolean {
         val isManager = Natives.isManager
         return isManager && !Natives.requireNewKernel() && rootAvailable()

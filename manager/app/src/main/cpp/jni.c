@@ -11,14 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-NativeBridgeNP(getVersion, jint) {
-  uint32_t version = get_version();
-  if (version > 0) {
-    return (jint)version;
-  }
-  // try legacy method as fallback
-  return legacy_get_info().version;
-}
+NativeBridgeNP(getVersion, jint) { return (jint)get_version(); }
 
 // get VERSION FULL
 NativeBridgeNP(getFullVersion, jstring) {
@@ -388,6 +381,14 @@ NativeBridgeNP(isAdbRootEnabled, jboolean) { return is_adb_root_enabled(); }
 
 NativeBridge(setAdbRootEnabled, jboolean, jboolean enabled) {
   return set_adb_root_enabled(enabled);
+}
+
+NativeBridgeNP(isSelinuxHideEnabled, jboolean) {
+  return is_selinux_hide_enabled();
+}
+
+NativeBridge(setSelinuxHideEnabled, jboolean, jboolean enabled) {
+  return set_selinux_hide_enabled(enabled);
 }
 
 NativeBridge(getUserName, jstring, jint uid) {

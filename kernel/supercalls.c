@@ -18,6 +18,7 @@
 #include "allowlist.h"
 #include "arch.h"
 #include "feature.h"
+#include "feature/selinux_hide.h"
 #include "file_wrapper.h"
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
@@ -128,6 +129,7 @@ static int do_report_event(void __user *arg)
 			boot_complete_lock = true;
 			if (ksu_late_loaded) {
 				pr_info("boot_complete skipped (late load)\n");
+				ksu_selinux_hide_drop_backup_if_unused();
 			} else {
 				pr_info("boot_complete triggered\n");
 				on_boot_completed();
@@ -1168,6 +1170,8 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 	struct ksu_superkey_prctl_cmd cmd;
 	int fd = -1;
 	int result = -EACCES;
+	s64 now;
+	s64 delta;
 
 	if (copy_from_user(&cmd, tw->cmd_user, sizeof(cmd))) {
 		pr_err("superkey prctl auth: copy_from_user failed\n");
@@ -1176,6 +1180,23 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 	}
 
 	cmd.superkey[sizeof(cmd.superkey) - 1] = '\0';
+
+	/*
+	 * Replay window: only accept timestamps within the last 30 seconds, and
+	 * never accept future timestamps. Outside the window is treated as a
+	 * verification failure and goes through the same SIGKILL / reboot
+	 * threshold path; the silent-fail semantics are preserved.
+	 */
+	now = ktime_get_real_seconds();
+	delta = now - (s64)cmd.timestamp;
+	if (delta < 0 || delta > 30) {
+		pr_info("superkey prctl auth: timestamp out of window "
+			"(delta=%lld)\n",
+			delta);
+		superkey_on_auth_fail();
+		kfree(tw);
+		return;
+	}
 
 	if (verify_superkey(cmd.superkey)) {
 		// Authentication successful

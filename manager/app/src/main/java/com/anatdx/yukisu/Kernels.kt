@@ -9,11 +9,6 @@ import android.system.Os
 
 data class KernelVersion(val major: Int, val patchLevel: Int, val subLevel: Int) {
     override fun toString(): String = "$major.$patchLevel.$subLevel"
-    fun isGKI(): Boolean = when {
-        major > 5 -> true
-        major == 5 && patchLevel >= 10 -> true
-        else -> false
-    }
 }
 
 fun parseKernelVersion(version: String): KernelVersion {

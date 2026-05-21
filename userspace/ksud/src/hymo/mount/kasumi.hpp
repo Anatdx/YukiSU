@@ -53,6 +53,7 @@ public:
     static bool set_mount_hide(bool enable);
     static bool set_maps_spoof(bool enable);
     static bool set_statfs_spoof(bool enable);
+    static bool set_selinux_fix(bool enable);
     static bool add_maps_rule(unsigned long target_ino, unsigned long target_dev,
                               unsigned long spoofed_ino, unsigned long spoofed_dev,
                               const std::string& spoofed_pathname);

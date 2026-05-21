@@ -15,16 +15,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,7 +73,7 @@ import kotlin.random.Random
  * @author ShirkNeko
  * @date 2025/9/29.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>(start = true)
 @Composable
 fun HomeScreen(navigator: DestinationsNavigator) {
@@ -83,13 +81,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     val viewModel = viewModel<HomeViewModel>()
     val coroutineScope = rememberCoroutineScope()
     val loadingDialog = rememberLoadingDialog()
-
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = viewModel.isRefreshing,
-        onRefresh = {
-            viewModel.onPullRefresh(context)
-        }
-    )
 
     LaunchedEffect(key1 = navigator) {
         viewModel.loadUserSettings(context)
@@ -108,7 +99,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    // 监听数据刷新状态流
     LaunchedEffect(viewModel.dataRefreshTrigger) {
         viewModel.dataRefreshTrigger.collect { _ ->
             // 数据刷新时的额外处理可以在这里添加
@@ -130,11 +120,12 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             WindowInsetsSides.Top + WindowInsetsSides.Horizontal
         )
     ) { innerPadding ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = viewModel.isRefreshing,
+            onRefresh = { viewModel.onPullRefresh(context) },
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .pullRefresh(pullRefreshState)
         ) {
             Column(
                 modifier = Modifier
@@ -172,7 +163,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 }
                 var showKernelSpoofDialog by remember { mutableStateOf(false) }
                 
-                // 保存 SuperKey 的 SharedPreferences
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
                 
                 SuperKeyDialog(
@@ -183,10 +173,8 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 val success = Natives.authenticateSuperKey(superKey)
                                 if (success) {
-                                    // 检查是否允许保存 SuperKey
                                     val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
                                     if (!skipStore) {
-                                        // 保存 SuperKey 到本地
                                         superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
                                     }
                                 }
@@ -211,7 +199,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     }
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
-                                    // 刷新底栏状态
                                     withContext(Dispatchers.IO) {
                                         AppData.DataRefreshManager.refreshData()
                                     }
@@ -246,7 +233,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                     superKeyAuthSuccess = true
                                     // 强制刷新数据
                                     viewModel.refreshData(context, forceRefresh = true)
-                                    // 刷新底栏状态
                                     withContext(Dispatchers.IO) {
                                         AppData.DataRefreshManager.refreshData()
                                     }
@@ -278,7 +264,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSignatureOk = isSignatureOk,
                         isLateLoadMode = isLateLoadMode,
                         canJailbreak = viewModel.systemStatus.ksuVersion == null &&
-                            viewModel.systemStatus.kernelVersion.isGKI() &&
                             viewModel.systemInfo.seLinuxStatus == stringResource(R.string.selinux_status_permissive),
                         onJailbreak = {
                             loadingDialog.show()
@@ -316,7 +301,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                             (viewModel.systemStatus.ksuVersion != null && !viewModel.systemStatus.isRootAvailable)
                 }
 
-                // 更新检查
                 if (viewModel.isExtendedDataLoaded) {
                     val checkUpdate = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
                         .getBoolean("check_update", true)
@@ -523,13 +507,7 @@ private fun StatusCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    when {
-                        // 点击未安装/未认证卡片时，跳转到安装界面（而不是直接弹出超级密钥对话框）
-                        needsSuperKeyAuth -> onClickInstall()
-                        systemStatus.isRootAvailable || systemStatus.kernelVersion.isGKI() -> onClickInstall()
-                    }
-                }
+                .clickable { onClickInstall() }
                 .padding(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -728,7 +706,7 @@ private fun StatusCard(
                     }
                 }
 
-                systemStatus.kernelVersion.isGKI() -> {
+                else -> {
                     Icon(
                         Icons.Outlined.Warning,
                         contentDescription = stringResource(R.string.home_not_installed),
@@ -772,33 +750,6 @@ private fun StatusCard(
                     }
                 }
 
-                else -> {
-                    Icon(
-                        Icons.Outlined.Block,
-                        contentDescription = stringResource(R.string.home_unsupported),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .padding(
-                                horizontal = 4.dp
-                            ),
-                    )
-
-                    Column(Modifier.padding(start = 20.dp)) {
-                        Text(
-                            text = stringResource(R.string.home_unsupported),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.home_unsupported_reason),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
             }
         }
     }

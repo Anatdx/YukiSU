@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
+import com.anatdx.yukisu.ksu.KsuPaths
 import com.anatdx.yukisu.ksuApp
 import com.anatdx.yukisu.utils.AssetsUtil
 import com.topjohnwu.superuser.io.SuFile
@@ -109,35 +110,13 @@ object KsuCli {
     }
     
     /**
-     * Get ksud version from APK's native library.
+     * The APK-bundled ksud version is pinned at build time by
+     * manager/build.gradle.kts (`computeKsudBundledVersion`), which mirrors
+     * userspace/ksud/scripts/generate_version.py. No need to fork-exec the
+     * daemon just to read its version.
      */
-    private fun getApkKsudVersion(): String? {
-        return try {
-            val ksudPath = getKsuDaemonPath()
-            // Run ksud from APK to get its version.
-            // Some builds may only print banner lines; we fall back to the first non-empty line.
-            val process = ProcessBuilder(ksudPath, "version")
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-
-            if (output.isBlank()) {
-                null
-            } else {
-                val lines = output.lines().map { it.trim() }.filter { it.isNotEmpty() }
-                // Try to parse "version xxx" pattern from any line
-                val regex = Regex("""version\s+([^\s]+)""", RegexOption.IGNORE_CASE)
-                val parsed = lines.firstNotNullOfOrNull { line ->
-                    regex.find(line)?.groupValues?.getOrNull(1)
-                }
-                parsed ?: lines.first()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get APK ksud version", e)
-            null
-        }
-    }
+    private fun getApkKsudVersion(): String? =
+        BuildConfig.KSUD_BUNDLED_VERSION.takeIf { it.isNotBlank() }
 
     /**
      * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
@@ -164,7 +143,7 @@ object KsuCli {
      */
     private fun getInstalledKsudVersion(): String? {
         return try {
-            val result = ShellUtils.fastCmd(SHELL, "/data/adb/ksud version 2>/dev/null")
+            val result = ShellUtils.fastCmd(SHELL, "${KsuPaths.KSUD_BIN} version 2>/dev/null")
             if (result.isBlank()) return null
             val match = Regex("""version\s+([^\s]+)""").find(result)
             match?.groupValues?.get(1)
@@ -193,6 +172,19 @@ object KsuCli {
     }
 
     /**
+     * Cold-start auto-sync entry point: only runs the version-aware install
+     * path when we actually have a root shell. Cheap to call from
+     * MainActivity's first LaunchedEffect.
+     */
+    suspend fun autoSyncKsudIfNeeded(): Unit = withContext(Dispatchers.IO) {
+        if (!SHELL.isRoot) {
+            Log.d(TAG, "autoSyncKsudIfNeeded: no root shell, skip")
+            return@withContext
+        }
+        checkAndInstallKsud()
+    }
+
+    /**
      * Install or update the ksud daemon binary itself, without touching boot image.
      *
      * This mirrors APatch's "安装/升级系统补丁(apd)" flow:
@@ -216,19 +208,19 @@ object KsuCli {
 
         val cmds = arrayOf(
             // Ensure directories
-            "mkdir -p /data/adb/ksu/bin",
-            "mkdir -p /data/adb/ksu/log",
+            "mkdir -p ${KsuPaths.KSU_BIN_DIR}",
+            "mkdir -p ${KsuPaths.KSU_LOG_DIR}",
             // Copy new daemon binary (multi-call: ksud + magiskboot via argv0)
-            "cp -f ${ksudSo.absolutePath} /data/adb/ksud",
-            "chmod 0755 /data/adb/ksud",
+            "cp -f ${ksudSo.absolutePath} ${KsuPaths.KSUD_BIN}",
+            "chmod 0755 ${KsuPaths.KSUD_BIN}",
             // Symlinks in ksu/bin: ksud, magiskboot, bootctl, resetprop all point to the same binary (multi-call)
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/ksud",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/magiskboot",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/bootctl",
-            "ln -sf /data/adb/ksud /data/adb/ksu/bin/resetprop",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/ksud",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/magiskboot",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/bootctl",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
-            "restorecon /data/adb/ksud || true",
-            "restorecon -R /data/adb/ksu || true"
+            "restorecon ${KsuPaths.KSUD_BIN} || true",
+            "restorecon -R ${KsuPaths.KSU_ROOT} || true"
         )
 
         Log.i(TAG, "installOrUpdateKsudDaemon: syncing ${ksudSo.absolutePath} -> /data/adb/ksud")
@@ -292,21 +284,33 @@ fun createRootShell(globalMnt: Boolean = false): Shell {
     }
 }
 
+/** Build a "ksud <args>" command string. Use this instead of pasting
+ *  `${getKsuDaemonPath()}` next to a subcommand literal. */
+internal fun ksudCmd(args: String): String = "${getKsuDaemonPath()} $args"
+
 fun execKsud(args: String, newShell: Boolean = false): Boolean {
     return if (newShell) {
         withNewRootShell {
-            ShellUtils.fastCmdResult(this, "${getKsuDaemonPath()} $args")
+            ShellUtils.fastCmdResult(this, ksudCmd(args))
         }
     } else {
-        ShellUtils.fastCmdResult(getRootShell(), "${getKsuDaemonPath()} $args")
+        ShellUtils.fastCmdResult(getRootShell(), ksudCmd(args))
     }
 }
 
+/** Run a ksud subcommand and return its trimmed stdout (single value). */
+internal fun ksudReadString(args: String, shell: Shell = getRootShell()): String =
+    ShellUtils.fastCmd(shell, ksudCmd(args)).trim()
+
+/** Run a ksud subcommand and return non-blank trimmed stdout lines. */
+internal fun ksudReadLines(args: String, shell: Shell = getRootShell()): List<String> =
+    shell.newJob().add(ksudCmd(args)).to(ArrayList(), null).exec().out
+        .filter { it.isNotBlank() }.map { it.trim() }
+
 suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val out = shell.newJob()
-        .add("${getKsuDaemonPath()} feature check $feature").to(ArrayList<String>(), null).exec().out
-    out.firstOrNull()?.trim().orEmpty()
+    ksudReadLines("feature check $feature")
+        .firstOrNull { it == "supported" || it == "unsupported" || it == "managed" }
+        .orEmpty()
 }
 
 fun install() {
@@ -337,13 +341,8 @@ fun hasMetaModule(): Boolean {
     }
 }
 
-fun listModules(): String {
-    val shell = getRootShell()
-
-    val out = shell.newJob()
-        .add("${getKsuDaemonPath()} module list").to(ArrayList(), null).exec().out
-    return out.joinToString("\n").ifBlank { "[]" }
-}
+fun listModules(): String =
+    ksudReadLines("module list").joinToString("\n").ifBlank { "[]" }
 
 fun getModuleCount(): Int {
     val result = listModules()
@@ -429,7 +428,7 @@ fun flashModule(
             this?.copyTo(output)
         }
         val cmd = "module install ${file.absolutePath}"
-        val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
+        val result = flashWithIO(ksudCmd(cmd), onStdout, onStderr)
         Log.i("KernelSU", "install module $uri result: $result")
 
         file.delete()
@@ -456,7 +455,7 @@ fun runModuleAction(
         }
     }
 
-    val result = shell.newJob().add("${getKsuDaemonPath()} module action $moduleId")
+    val result = shell.newJob().add(ksudCmd("module action $moduleId"))
         .to(stdoutCallback, stderrCallback).exec()
     Log.i("KernelSU", "Module runAction result: $result")
 
@@ -468,7 +467,7 @@ fun restoreBoot(
 ): Boolean {
     val ksudPath = getKsuDaemonPath()
     val result = flashWithIO(
-        "${getKsuDaemonPath()} boot-restore -f --magiskboot $ksudPath",
+        ksudCmd("boot-restore -f --magiskboot $ksudPath"),
         onStdout,
         onStderr
     )
@@ -481,7 +480,7 @@ fun uninstallPermanently(
 ): Boolean {
     val ksudPath = getKsuDaemonPath()
     val result =
-        flashWithIO("${getKsuDaemonPath()} uninstall --magiskboot $ksudPath", onStdout, onStderr)
+        flashWithIO(ksudCmd("uninstall --magiskboot $ksudPath"), onStdout, onStderr)
     onFinish(result.isSuccess, result.code)
     return result.isSuccess
 }
@@ -612,7 +611,7 @@ fun installBoot(
         }
     }
 
-    val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
+    val result = flashWithIO(ksudCmd(cmd), onStdout, onStderr)
     Log.i("KernelSU", "install boot result: ${result.isSuccess}")
 
     bootFile?.delete()
@@ -627,6 +626,10 @@ fun installBoot(
     }
 
     return result.isSuccess
+}
+
+fun restartAdbd() {
+    ShellUtils.fastCmd(getRootShell(), "setprop ctl.restart adbd")
 }
 
 fun reboot(reason: String = "") {
@@ -649,49 +652,32 @@ fun rootAvailable(): Boolean {
 
 
 suspend fun getCurrentKmi(): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info current-kmi"
-    ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} $cmd")
+    ksudReadString("boot-info current-kmi")
 }
 
 suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info supported-kmis"
-    val out = shell.newJob().add("${getKsuDaemonPath()} $cmd").to(ArrayList(), null).exec().out
-    out.filter { it.isNotBlank() }.map { it.trim() }
+    ksudReadLines("boot-info supported-kmis")
 }
 
 suspend fun isAbDevice(): Boolean = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info is-ab-device"
-    ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} $cmd").trim().toBoolean()
+    ksudReadString("boot-info is-ab-device").toBoolean()
 }
 
 suspend fun getDefaultPartition(): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    if (shell.isRoot) {
-        val cmd = "boot-info default-partition"
-        ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} $cmd").trim()
+    if (getRootShell().isRoot) {
+        ksudReadString("boot-info default-partition")
     } else {
         if (!Os.uname().release.contains("android12-")) "init_boot" else "boot"
     }
 }
 
 suspend fun getSlotSuffix(ota: Boolean): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = if (ota) {
-        "boot-info slot-suffix --ota"
-    } else {
-        "boot-info slot-suffix"
-    }
-    ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} $cmd").trim()
+    val args = if (ota) "boot-info slot-suffix --ota" else "boot-info slot-suffix"
+    ksudReadString(args)
 }
 
 suspend fun getAvailablePartitions(): List<String> = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info available-partitions"
-    val out = shell.newJob().add("${getKsuDaemonPath()} $cmd").to(ArrayList(), null).exec().out
-    out.filter { it.isNotBlank() }.map { it.trim() }
+    ksudReadLines("boot-info available-partitions")
 }
 
 fun hasMagisk(): Boolean {
@@ -702,58 +688,32 @@ fun hasMagisk(): Boolean {
 }
 
 fun isSepolicyValid(rules: String?): Boolean {
-    if (rules == null) {
-        return true
-    }
-    val shell = getRootShell()
-    val result =
-        shell.newJob().add("${getKsuDaemonPath()} sepolicy check '$rules'").to(ArrayList(), null)
-            .exec()
-    return result.isSuccess
+    if (rules == null) return true
+    return execKsud("sepolicy check '$rules'")
 }
 
-fun getSepolicy(pkg: String): String {
-    val shell = getRootShell()
-    val result =
-        shell.newJob().add("${getKsuDaemonPath()} profile get-sepolicy $pkg").to(ArrayList(), null)
-            .exec()
-    Log.i(TAG, "code: ${result.code}, out: ${result.out}, err: ${result.err}")
-    return result.out.joinToString("\n")
-}
+fun getSepolicy(pkg: String): String =
+    ksudReadLines("profile get-sepolicy $pkg").joinToString("\n")
 
 fun setSepolicy(pkg: String, rules: String): Boolean {
-    val shell = getRootShell()
-    val result = shell.newJob().add("${getKsuDaemonPath()} profile set-sepolicy $pkg '$rules'")
-        .to(ArrayList(), null).exec()
-    Log.i(TAG, "set sepolicy result: ${result.code}")
-    return result.isSuccess
+    val ok = execKsud("profile set-sepolicy $pkg '$rules'")
+    Log.i(TAG, "set sepolicy $pkg result: $ok")
+    return ok
 }
 
-fun listAppProfileTemplates(): List<String> {
-    val shell = getRootShell()
-    return shell.newJob().add("${getKsuDaemonPath()} profile list-templates").to(ArrayList(), null)
-        .exec().out
-}
+fun listAppProfileTemplates(): List<String> =
+    ksudReadLines("profile list-templates")
 
-fun getAppProfileTemplate(id: String): String {
-    val shell = getRootShell()
-    return shell.newJob().add("${getKsuDaemonPath()} profile get-template '${id}'")
-        .to(ArrayList(), null).exec().out.joinToString("\n")
-}
+fun getAppProfileTemplate(id: String): String =
+    ksudReadLines("profile get-template '$id'").joinToString("\n")
 
 fun setAppProfileTemplate(id: String, template: String): Boolean {
-    val shell = getRootShell()
     val escapedTemplate = template.replace("\"", "\\\"")
-    val cmd = """${getKsuDaemonPath()} profile set-template "$id" "$escapedTemplate""""
-    return shell.newJob().add(cmd)
-        .to(ArrayList(), null).exec().isSuccess
+    return execKsud("""profile set-template "$id" "$escapedTemplate"""")
 }
 
-fun deleteAppProfileTemplate(id: String): Boolean {
-    val shell = getRootShell()
-    return shell.newJob().add("${getKsuDaemonPath()} profile delete-template '${id}'")
-        .to(ArrayList(), null).exec().isSuccess
-}
+fun deleteAppProfileTemplate(id: String): Boolean =
+    execKsud("profile delete-template '$id'")
 
 fun forceStopApp(packageName: String) {
     val shell = getRootShell()
@@ -817,7 +777,6 @@ fun getZygiskImplement(): String {
         // 忽略禁用/即将删除
         if (SuFile.open("/data/adb/modules/$moduleId/disable").isFile || SuFile.open("/data/adb/modules/$moduleId/remove").isFile) continue
 
-        // 读取prop
         val propFile = SuFile.open("/data/adb/modules/$moduleId/module.prop")
         if (!propFile.isFile) continue
 
@@ -836,14 +795,14 @@ fun getZygiskImplement(): String {
 fun addUmountPath(path: String, flags: Int): Boolean {
     val shell = getRootShell()
     val flagsArg = if (flags >= 0) "--flags $flags" else ""
-    val cmd = "${getKsuDaemonPath()} umount add $path $flagsArg"
+    val cmd = ksudCmd("umount add $path $flagsArg")
     val result = ShellUtils.fastCmdResult(shell, cmd)
     Log.i(TAG, "add umount path $path result: $result")
     return result
 }
 fun removeUmountPath(path: String): Boolean {
     val shell = getRootShell()
-    val cmd = "${getKsuDaemonPath()} umount remove $path"
+    val cmd = ksudCmd("umount remove $path")
     val result = ShellUtils.fastCmdResult(shell, cmd)
     Log.i(TAG, "remove umount path $path result: $result")
     return result
@@ -851,7 +810,7 @@ fun removeUmountPath(path: String): Boolean {
 
 fun listUmountPaths(): String {
     val shell = getRootShell()
-    val cmd = "${getKsuDaemonPath()} umount list"
+    val cmd = ksudCmd("umount list")
     return try {
         runCmd(shell, cmd).trim()
     } catch (e: Exception) {
@@ -862,7 +821,7 @@ fun listUmountPaths(): String {
 
 fun clearCustomUmountPaths(): Boolean {
     val shell = getRootShell()
-    val cmd = "${getKsuDaemonPath()} umount clear-custom"
+    val cmd = ksudCmd("umount clear-custom")
     val result = ShellUtils.fastCmdResult(shell, cmd)
     Log.i(TAG, "clear custom umount paths result: $result")
     return result
@@ -870,7 +829,7 @@ fun clearCustomUmountPaths(): Boolean {
 
 fun saveUmountConfig(): Boolean {
     val shell = getRootShell()
-    val cmd = "${getKsuDaemonPath()} umount save"
+    val cmd = ksudCmd("umount save")
     val result = ShellUtils.fastCmdResult(shell, cmd)
     Log.i(TAG, "save umount config result: $result")
     return result
@@ -878,7 +837,7 @@ fun saveUmountConfig(): Boolean {
 
 fun applyUmountConfigToKernel(): Boolean {
     val shell = getRootShell()
-    val cmd = "${getKsuDaemonPath()} umount apply"
+    val cmd = ksudCmd("umount apply")
     val result = ShellUtils.fastCmdResult(shell, cmd)
     Log.i(TAG, "apply umount config to kernel result: $result")
     return result

@@ -26,8 +26,6 @@ class WebUIXActivity : ComponentActivity() {
 
     private val userAgent
         get(): String {
-            val ksuVersion = BuildConfig.VERSION_CODE
-
             val platform = Platform.get("Unknown") {
                 platform.name
             }
@@ -39,7 +37,7 @@ class WebUIXActivity : ComponentActivity() {
             val osVersion = Build.VERSION.RELEASE
             val deviceModel = Build.MODEL
 
-            return "SukiSU-Ultra /$ksuVersion (Linux; Android $osVersion; $deviceModel; $platform/$platformVersion)"
+            return "YukiSU/${BuildConfig.VERSION_NAME} (Linux; Android $osVersion; $deviceModel; $platform/$platformVersion)"
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {

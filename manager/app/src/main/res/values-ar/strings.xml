@@ -5,8 +5,6 @@
     <string name="home_click_to_install">إضغط للتثبيت</string>
     <string name="home_working">يعمل</string>
     <string name="home_working_version">الإصدار: %s</string>
-    <string name="home_unsupported">غير مدعوم</string>
-    <string name="home_unsupported_reason">KernelSU يدعم GKI kernels فقط</string>
     <string name="home_kernel">إصدار النواة</string>
     <string name="home_manager_version">إصدار المدير</string>
     <string name="home_selinux_status">وضع SELinux</string>
@@ -113,10 +111,8 @@
     <string name="select_file_tip">يوصى باستخدام صورة القسم %1$s</string>
     <string name="select_kmi">اختر KMI</string>
     <string name="settings_uninstall">إلغاء التثبيت</string>
-    <string name="settings_uninstall_temporary">إلغاء التثبيت مؤقتًا</string>
     <string name="settings_uninstall_permanent">إلغاء التثبيت بشكل دائم</string>
     <string name="settings_restore_stock_image">استعادة الصورة الاصلية</string>
-    <string name="settings_uninstall_temporary_message">قم بإلغاء تثبيت KernelSU مؤقتًا، واستعد إلى حالته الأصلية بعد إعادة التشغيل التالية.</string>
     <string name="settings_uninstall_permanent_message">‬إلغاء تثبيت KernelSU .(الجذر وجميع الوحدات) بشكل كامل ودائم.</string>
     <string name="settings_restore_stock_image_message">استعادة صورة المصنع المخزنة (في حالة وجود نسخة احتياطية)، والتي تُستخدم عادة قبل OTA؛ إذا كنت بحاجة إلى إلغاء تثبيت KernelSU، فيرجى استخدام \"إلغاء التثبيت الدائم\".</string>
     <string name="flashing">تركيب</string>
@@ -190,8 +186,6 @@
     <string name="color_pink">وردي</string>
     <string name="color_gray">رمادي</string>
     <string name="color_yellow">الأصفر</string>
-    <string name="horizon_kernel">Anykernel3 yükle</string>
-    <string name="horizon_kernel_summary">فلاش AnyKernel3 ملف kernel</string>
     <string name="root_required">يتطلب امتيازات الجذر</string>
     <string name="reboot_complete_title">اكتمل التشويش</string>
     <string name="reboot_complete_msg">هل تريد إعادة التشغيل فوراً؟</string>
@@ -232,33 +226,10 @@
     <string name="confirm_uninstall_content">سيتم إلغاء تثبيت KPM التالية: %s</string>
     <string name="image_editor_hint">استخدم إصبعين لتكبير الصورة، وأصبع واحد لسحبها لضبط الموضع</string>
     <string name="reprovision">إعادة</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">الفلاش اكتمل</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">جار التحضير</string>
-    <string name="horizon_cleaning_files">تنظيف الملفات…</string>
-    <string name="horizon_copying_files">جارٍ نسخ الملف…</string>
-    <string name="horizon_extracting_tool">استخراج أداة فلاش…</string>
-    <string name="horizon_patching_script">تعديل البرنامج النصي الفلاش…</string>
-    <string name="horizon_flashing">نواة رمادية…</string>
-    <string name="horizon_flash_complete_status">الفلاش اكتمل</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">حدد فتحة الفلاش</string>
-    <string name="select_slot_description">الرجاء تحديد الخانة المستهدفة للتشغيل المبطن</string>
-    <string name="slot_a">خانة A</string>
-    <string name="slot_b">الخانة B</string>
-    <string name="selected_slot">الفتحة المحددة: %1$s</string>
-    <string name="horizon_getting_original_slot">الحصول على الفتحة الأصلية</string>
-    <string name="horizon_setting_target_slot">تعيين الفتحة المحددة</string>
-    <string name="horizon_restoring_original_slot">استعادة الخانة الافتراضية</string>
-    <string name="current_slot">فتحة النظام الحالية الافتراضية：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">فشل النسخ</string>
-    <string name="horizon_unknown_error">خطأ غير معروف</string>
     <string name="flash_failed_message">فشل التركيب</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">إصلاح/تثبيت LKM</string>
-    <string name="GKI_install_methods">نواة رمادية</string>
     <string name="kernel_version_log">إصدار النواة：%1$s</string>
     <string name="tool_version_log">استخدام أداة التصحيح：%1$s</string>
     <string name="configuration">تعيين</string>
@@ -307,7 +278,6 @@
     <string name="installing_module">تم تثبيت الوحدة %1$d/%2$d</string>
     <string name="module_failed_count">أخفق %d في تثبيت وحدة جديدة</string>
     <string name="module_download_error">فشل تحميل الوحدة</string>
-    <string name="kernel_flashing">ضرب النواة</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">All</string>
     <string name="category_root_apps">Root</string>

@@ -2,8 +2,13 @@ package com.anatdx.yukisu.ui.kasumi.util
 
 import android.util.Log
 import com.anatdx.yukisu.ksuApp
+import com.anatdx.yukisu.ui.util.getKsud
 import com.anatdx.yukisu.ui.util.getRootShell
+import com.anatdx.yukisu.ui.util.getSELinuxLabel
+import com.anatdx.yukisu.ui.util.ksudCmd
 import com.topjohnwu.superuser.Shell
+import com.topjohnwu.superuser.io.SuFile
+import com.topjohnwu.superuser.io.SuFileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -25,13 +30,6 @@ object KasumiManager {
     const val DISABLE_BUILTIN_MOUNT_FILE = "/data/adb/ksu/.disable_builtin_mount"
     /** KSU saves dmesg to this path at boot */
     private const val KSU_DMESG_LOG = "/data/adb/ksu/log/dmesg.log"
-    
-    /**
-     * Get ksud path
-     */
-    private fun getKsud(): String {
-        return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
-    }
     
     /**
      * Kasumi status enum (codes only; UI text is i18n)
@@ -135,7 +133,8 @@ object KasumiManager {
         val ignoreProtocolMismatch: Boolean = false,
         val enableKernelDebug: Boolean = false,
         val enableStealth: Boolean = true,
-        val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, stealth
+        val enableHidexattr: Boolean = false,  // When true: mount_hide, maps_spoof, statfs_spoof, selinux_fix, stealth
+        val enableSelinuxFix: Boolean = false,
         val kasumiEnabled: Boolean = true,
         val mirrorPath: String = "",
         val partitions: List<String> = emptyList(),
@@ -219,7 +218,7 @@ object KasumiManager {
         try {
             val shell = getRootShell()
             val result = shell.newJob()
-                .add("${getKsud()} hymo kasumi features")
+                .add(ksudCmd("hymo kasumi features"))
                 .to(ArrayList<String>(), null)
                 .exec()
             val line = (result.out + result.err).joinToString(" ").trim()
@@ -250,7 +249,7 @@ object KasumiManager {
      */
     suspend fun clearMapsRules(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo kasumi maps clear").exec()
+            val result = Shell.cmd(ksudCmd("hymo kasumi maps clear")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear maps rules", e)
@@ -272,7 +271,7 @@ object KasumiManager {
         try {
             val path = spoofedPathname.replace("'", "'\\''")
             val result = Shell.cmd(
-                "${getKsud()} hymo kasumi maps add $targetIno $targetDev $spoofedIno $spoofedDev '$path'"
+                ksudCmd("hymo kasumi maps add $targetIno $targetDev $spoofedIno $spoofedDev '$path'")
             ).exec()
             result.isSuccess
         } catch (e: Exception) {
@@ -287,7 +286,7 @@ object KasumiManager {
     suspend fun getVersion(): String = withContext(Dispatchers.IO) {
         try {
             // hymo: hymo kasumi version -> JSON
-            val result = Shell.cmd("${getKsud()} hymo kasumi version").exec()
+            val result = Shell.cmd(ksudCmd("hymo kasumi version")).exec()
             if (!result.isSuccess) {
                 return@withContext "Unknown"
             }
@@ -329,12 +328,12 @@ object KasumiManager {
      * Returns Pair(unameRelease, unameVersion).
      */
     suspend fun readKernelUnameFromSysfs(): Pair<String, String> = withContext(Dispatchers.IO) {
-        val releaseResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
-        val release = if (releaseResult.isSuccess) releaseResult.out.firstOrNull()?.trim() ?: "" else ""
-        val versionResult = Shell.cmd("cat /proc/sys/kernel/version 2>/dev/null").exec()
-        val version = if (versionResult.isSuccess) versionResult.out.firstOrNull()?.trim() ?: "" else ""
-        Pair(release, version)
+        Pair(readProcSysKernel("osrelease"), readProcSysKernel("version"))
     }
+
+    /** Read a world-readable file under /proc/sys/kernel without spawning `cat`. */
+    private fun readProcSysKernel(name: String): String =
+        runCatching { File("/proc/sys/kernel/$name").readText().trim() }.getOrDefault("")
     
     /**
      * Get Kasumi status (check if kernel supports it)
@@ -344,7 +343,7 @@ object KasumiManager {
      */
     suspend fun getStatus(): KasumiStatus = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo config show").exec()
+            val result = Shell.cmd(ksudCmd("hymo config show")).exec()
             if (!result.isSuccess) {
                 return@withContext KasumiStatus.NOT_PRESENT
             }
@@ -362,7 +361,7 @@ object KasumiManager {
      */
     suspend fun loadConfig(): HymoConfig = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo config show").exec()
+            val result = Shell.cmd(ksudCmd("hymo config show")).exec()
             if (result.isSuccess) {
                 val json = JSONObject(result.out.joinToString("\n"))
                 HymoConfig(
@@ -378,6 +377,7 @@ object KasumiManager {
                     enableKernelDebug = json.optBoolean("enable_kernel_debug", false),
                     enableStealth = json.optBoolean("enable_stealth", true),
                     enableHidexattr = json.optBoolean("enable_hidexattr", false),
+                    enableSelinuxFix = json.optBoolean("enable_selinux_fix", false),
                     kasumiEnabled = json.optBoolean("kasumi_enabled", true),
                     mirrorPath = run {
                         val raw = json.optString("mirror_path", "")
@@ -422,6 +422,7 @@ object KasumiManager {
                 put("enable_kernel_debug", config.enableKernelDebug)
                 put("enable_stealth", config.enableStealth)
                 put("enable_hidexattr", config.enableHidexattr)
+                put("enable_selinux_fix", config.enableSelinuxFix)
                 put("kasumi_enabled", config.kasumiEnabled)
                 if (config.mirrorPath.isNotEmpty()) {
                     put("mirror_path", config.mirrorPath)
@@ -437,13 +438,9 @@ object KasumiManager {
             }
             val content = json.toString(2)
 
-            val result = Shell.cmd(
-                "mkdir -p '$HYMO_CONFIG_DIR'",
-                "cat > '$HYMO_CONFIG_FILE' << 'HYMO_CONFIG_EOF'",
-                content,
-                "HYMO_CONFIG_EOF"
-            ).exec()
-            result.isSuccess
+            SuFile.open(HYMO_CONFIG_DIR).mkdirs()
+            SuFileOutputStream.open(HYMO_CONFIG_FILE).bufferedWriter().use { it.write(content) }
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save config", e)
             false
@@ -455,7 +452,7 @@ object KasumiManager {
      */
     suspend fun getModules(): List<ModuleInfo> = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo module list").exec()
+            val result = Shell.cmd(ksudCmd("hymo module list")).exec()
             if (result.isSuccess) {
                 val output = (result.out + result.err).joinToString("\n")
                 val json = JSONObject(output)
@@ -503,7 +500,7 @@ object KasumiManager {
     suspend fun getActiveRules(): List<ActiveRule> = withContext(Dispatchers.IO) {
         try {
             // hymo: hymo kasumi list -> JSON array of rules
-            val result = Shell.cmd("${getKsud()} hymo kasumi list").exec()
+            val result = Shell.cmd(ksudCmd("hymo kasumi list")).exec()
             if (result.isSuccess) {
                 val arr = JSONArray(result.out.joinToString("\n"))
                 val rules = mutableListOf<ActiveRule>()
@@ -547,7 +544,7 @@ object KasumiManager {
      */
     suspend fun listUserHideRules(): List<String> = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo hide list").exec()
+            val result = Shell.cmd(ksudCmd("hymo hide list")).exec()
             if (result.isSuccess) {
                 val json = JSONArray(result.out.joinToString("\n"))
                 (0 until json.length()).map { idx -> json.getString(idx) }
@@ -565,7 +562,7 @@ object KasumiManager {
      */
     suspend fun addUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo hide add '$path'").exec()
+            val result = Shell.cmd(ksudCmd("hymo hide add '$path'")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add user hide rule", e)
@@ -578,7 +575,7 @@ object KasumiManager {
      */
     suspend fun removeUserHideRule(path: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo hide remove '$path'").exec()
+            val result = Shell.cmd(ksudCmd("hymo hide remove '$path'")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to remove user hide rule", e)
@@ -592,7 +589,7 @@ object KasumiManager {
     suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.IO) {
         try {
             // hymo: hymo api storage -> JSON (needs root)
-            val result = getRootShell().newJob().add("${getKsud()} hymo api storage").exec()
+            val result = getRootShell().newJob().add(ksudCmd("hymo api storage")).exec()
             val text = (result.out + result.err).joinToString("\n").trim()
             if (result.isSuccess && text.isNotEmpty()) {
                 val json = JSONObject(text)
@@ -619,11 +616,8 @@ object KasumiManager {
     suspend fun getSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         try {
             // Get kernel from /proc/sys (real kernel, not spoofed by uname)
-            val kernelResult = Shell.cmd("cat /proc/sys/kernel/osrelease 2>/dev/null").exec()
-            val kernel = if (kernelResult.isSuccess) kernelResult.out.firstOrNull()?.trim() ?: "Unknown" else "Unknown"
-            
-            val selinuxResult = Shell.cmd("getenforce").exec()
-            val selinux = if (selinuxResult.isSuccess) selinuxResult.out.firstOrNull() ?: "Unknown" else "Unknown"
+            val kernel = readProcSysKernel("osrelease").ifEmpty { "Unknown" }
+            val selinux = getSELinuxLabel()
             
             var mountBase = "Unknown"
             var activeMounts = emptyList<String>()
@@ -634,7 +628,7 @@ object KasumiManager {
             var detectedPartitions = emptyList<PartitionInfo>()
             
             // Call hymo api system for mountStats, detectedPartitions, mount_base
-            val apiSystemResult = Shell.cmd("${getKsud()} hymo api system").exec()
+            val apiSystemResult = Shell.cmd(ksudCmd("hymo api system")).exec()
             if (apiSystemResult.isSuccess && apiSystemResult.out.isNotEmpty()) {
                 try {
                     val sysText = (apiSystemResult.out + apiSystemResult.err).joinToString("\n")
@@ -649,14 +643,14 @@ object KasumiManager {
 
             // WebUI-compatible fallback path: pull dedicated endpoints if system payload is partial.
             if (mountStats == null) {
-                val mountStatsResult = Shell.cmd("${getKsud()} hymo api mount-stats").exec()
+                val mountStatsResult = Shell.cmd(ksudCmd("hymo api mount-stats")).exec()
                 if (mountStatsResult.isSuccess) {
                     val msText = (mountStatsResult.out + mountStatsResult.err).joinToString("\n")
                     mountStats = parseMountStats(extractJsonObject(msText))
                 }
             }
             if (detectedPartitions.isEmpty()) {
-                val partitionsResult = Shell.cmd("${getKsud()} hymo api partitions").exec()
+                val partitionsResult = Shell.cmd(ksudCmd("hymo api partitions")).exec()
                 if (partitionsResult.isSuccess) {
                     val partsText = (partitionsResult.out + partitionsResult.err).joinToString("\n")
                     detectedPartitions = parsePartitions(extractJsonArray(partsText))
@@ -664,7 +658,7 @@ object KasumiManager {
             }
             
             // Call hymo kasumi version for active_modules, protocol_mismatch, mismatch_message
-            val kasumiVersionResult = Shell.cmd("${getKsud()} hymo kasumi version").exec()
+            val kasumiVersionResult = Shell.cmd(ksudCmd("hymo kasumi version")).exec()
             if (kasumiVersionResult.isSuccess && kasumiVersionResult.out.isNotEmpty()) {
                 try {
                     val verText = (kasumiVersionResult.out + kasumiVersionResult.err).joinToString("\n")
@@ -682,10 +676,12 @@ object KasumiManager {
             
             // Fallback: daemon state file (also used to populate active_mounts for status page).
             run {
-                val stateResult = Shell.cmd("cat '$HYMO_STATE_FILE' 2>/dev/null").exec()
-                if (stateResult.isSuccess && stateResult.out.isNotEmpty()) {
+                val stateText = runCatching {
+                    SuFile.open(HYMO_STATE_FILE).takeIf { it.exists() && it.canRead() }
+                        ?.newInputStream()?.bufferedReader()?.use { it.readText() }
+                }.getOrNull().orEmpty()
+                if (stateText.isNotBlank()) {
                     try {
-                        val stateText = (stateResult.out + stateResult.err).joinToString("\n")
                         val state = extractJsonObject(stateText) ?: throw IllegalStateException("state json parse failed")
                         if (mountBase == "Unknown") mountBase = state.optString("mount_point", "Unknown")
                         activeMounts = state.optJSONArray("active_mounts")?.let { arr ->
@@ -720,7 +716,7 @@ object KasumiManager {
     suspend fun setModuleMode(moduleId: String, mode: String): Boolean = withContext(Dispatchers.IO) {
         try {
             // hymo: delegate to CLI: hymo module set-mode <id> <mode>
-            val result = Shell.cmd("${getKsud()} hymo module set-mode $moduleId $mode").exec()
+            val result = Shell.cmd(ksudCmd("hymo module set-mode $moduleId $mode")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set module mode", e)
@@ -739,7 +735,7 @@ object KasumiManager {
                 val safePath = path.trim()
                 if (safePath.isEmpty()) return@withContext false
                 val result =
-                    Shell.cmd("${getKsud()} hymo module add-rule $moduleId '$safePath' $mode").exec()
+                    Shell.cmd(ksudCmd("hymo module add-rule $moduleId '$safePath' $mode")).exec()
                 result.isSuccess
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to add module rule for $moduleId", e)
@@ -758,7 +754,7 @@ object KasumiManager {
                 val safePath = path.trim()
                 if (safePath.isEmpty()) return@withContext false
                 val result =
-                    Shell.cmd("${getKsud()} hymo module remove-rule $moduleId '$safePath'").exec()
+                    Shell.cmd(ksudCmd("hymo module remove-rule $moduleId '$safePath'")).exec()
                 result.isSuccess
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to remove module rule for $moduleId", e)
@@ -771,7 +767,7 @@ object KasumiManager {
      */
     suspend fun syncPartitionsWithDaemon(): HymoConfig? = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo config sync-partitions").exec()
+            val result = Shell.cmd(ksudCmd("hymo config sync-partitions")).exec()
             if (!result.isSuccess) {
                 Log.w(TAG, "sync-partitions failed: ${result.err.joinToString(";")}")
                 return@withContext null
@@ -789,7 +785,8 @@ object KasumiManager {
      */
     suspend fun setKernelDebug(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo debug ${if (enable) "enable" else "disable"}").exec()
+            val sub = if (enable) "enable" else "disable"
+            val result = Shell.cmd(ksudCmd("hymo debug $sub")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set kernel debug", e)
@@ -802,7 +799,8 @@ object KasumiManager {
      */
     suspend fun setStealth(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo debug stealth ${if (enable) "enable" else "disable"}").exec()
+            val sub = if (enable) "enable" else "disable"
+            val result = Shell.cmd(ksudCmd("hymo debug stealth $sub")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set stealth mode", e)
@@ -821,7 +819,7 @@ object KasumiManager {
                 val v = version.replace("'", "'\\''")
                 val modeArg = if (mode == "global") "global" else "scoped"
                 val result = Shell.cmd(
-                    "${getKsud()} hymo debug set-uname $modeArg '$r' '$v'"
+                    ksudCmd("hymo debug set-uname $modeArg '$r' '$v'")
                 ).exec()
                 result.isSuccess
             } catch (e: Exception) {
@@ -836,7 +834,7 @@ object KasumiManager {
      */
     suspend fun restoreUnameGlobal(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo debug set-uname-restore").exec()
+            val result = Shell.cmd(ksudCmd("hymo debug set-uname-restore")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore global uname", e)
@@ -851,7 +849,7 @@ object KasumiManager {
         try {
             // Escape single quotes for shell: ' -> '\''
             val escaped = kmi.replace("'", "'\\''")
-            val result = Shell.cmd("${getKsud()} hymo lkm set-kmi '$escaped'").exec()
+            val result = Shell.cmd(ksudCmd("hymo lkm set-kmi '$escaped'")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set LKM KMI override", e)
@@ -864,7 +862,7 @@ object KasumiManager {
      */
     suspend fun clearLkmKmiOverride(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo lkm clear-kmi").exec()
+            val result = Shell.cmd(ksudCmd("hymo lkm clear-kmi")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear LKM KMI override", e)
@@ -879,7 +877,7 @@ object KasumiManager {
         try {
             val marker = "__KSUD_EC__:"
             val uidMarker = "__UID__:"
-            val cmd = "${getKsud()} hymo lkm load"
+            val cmd = ksudCmd("hymo lkm load")
             val result = Shell.cmd("{ echo ${uidMarker}\$(id -u); $cmd 2>&1; ec=$?; echo ${marker}\$ec; exit \$ec; }").exec()
             val exitCode = result.out.firstOrNull { it.startsWith(marker) }
                 ?.removePrefix(marker)?.trim()?.toIntOrNull()
@@ -905,7 +903,7 @@ object KasumiManager {
         try {
             val marker = "__KSUD_EC__:"
             val uidMarker = "__UID__:"
-            val cmd = "${getKsud()} hymo lkm unload"
+            val cmd = ksudCmd("hymo lkm unload")
             val result = Shell.cmd("{ echo ${uidMarker}\$(id -u); $cmd 2>&1; ec=$?; echo ${marker}\$ec; exit \$ec; }").exec()
             val exitCode = result.out.firstOrNull { it.startsWith(marker) }
                 ?.removePrefix(marker)?.trim()?.toIntOrNull()
@@ -918,7 +916,7 @@ object KasumiManager {
                 )
                 // Some devices report non-zero on unload path even though module is gone.
                 // Verify real state before surfacing failure to UI.
-                val statusResult = Shell.cmd("${getKsud()} hymo lkm status").exec()
+                val statusResult = Shell.cmd(ksudCmd("hymo lkm status")).exec()
                 if (statusResult.isSuccess) {
                     val statusJson = JSONObject(statusResult.out.joinToString("\n"))
                     if (!statusJson.optBoolean("loaded", true)) {
@@ -939,7 +937,7 @@ object KasumiManager {
      */
     suspend fun getLkmHooks(): String = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo api hooks").exec()
+            val result = Shell.cmd(ksudCmd("hymo api hooks")).exec()
             if (result.isSuccess) {
                 (result.out + result.err).joinToString("\n").trim()
             } else {
@@ -958,7 +956,8 @@ object KasumiManager {
      */
     suspend fun setLkmAutoload(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo lkm set-autoload ${if (enable) "on" else "off"}").exec()
+            val sub = if (enable) "on" else "off"
+            val result = Shell.cmd(ksudCmd("hymo lkm set-autoload $sub")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set LKM autoload", e)
@@ -971,7 +970,7 @@ object KasumiManager {
      */
     suspend fun fixMounts(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo fix-mounts").exec()
+            val result = Shell.cmd(ksudCmd("hymo fix-mounts")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fix mounts", e)
@@ -984,7 +983,7 @@ object KasumiManager {
      */
     suspend fun clearAllRules(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo clear").exec()
+            val result = Shell.cmd(ksudCmd("hymo clear")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear rules", e)
@@ -1044,7 +1043,7 @@ object KasumiManager {
      */
     suspend fun triggerMount(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = Shell.cmd("${getKsud()} hymo mount").exec()
+            val result = Shell.cmd(ksudCmd("hymo mount")).exec()
             result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger mount", e)
@@ -1056,27 +1055,25 @@ object KasumiManager {
      * Check if built-in mount is enabled (no disable file exists)
      */
     suspend fun isBuiltinMountEnabled(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val result = Shell.cmd("test -f '$DISABLE_BUILTIN_MOUNT_FILE' && echo 'disabled' || echo 'enabled'").exec()
-            result.isSuccess && result.out.firstOrNull()?.trim() == "enabled"
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to check builtin mount status", e)
-            true // Default to enabled
-        }
+        runCatching { !SuFile.open(DISABLE_BUILTIN_MOUNT_FILE).exists() }
+            .getOrElse { e ->
+                Log.e(TAG, "Failed to check builtin mount status", e)
+                true // Default to enabled
+            }
     }
-    
+
     /**
      * Set built-in mount state
      * @param enable true to enable built-in mount (remove disable file), false to disable (create disable file)
      */
     suspend fun setBuiltinMountEnabled(enable: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val result = if (enable) {
-                Shell.cmd("rm -f '$DISABLE_BUILTIN_MOUNT_FILE'").exec()
+            val file = SuFile.open(DISABLE_BUILTIN_MOUNT_FILE)
+            if (enable) {
+                if (file.exists()) file.delete() else true
             } else {
-                Shell.cmd("touch '$DISABLE_BUILTIN_MOUNT_FILE'").exec()
+                if (file.exists()) true else file.createNewFile()
             }
-            result.isSuccess
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set builtin mount state", e)
             false

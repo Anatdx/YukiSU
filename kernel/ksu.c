@@ -55,7 +55,9 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #include "allowlist.h"
 #include "feature.h"
 #include "feature/adb_root.h"
+#include "feature/selinux_hide.h"
 #include "file_wrapper.h"
+#include "hook/lsm_hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "ksud.h"
@@ -167,7 +169,9 @@ int __init kernelsu_init(void)
 	}
 
 	ksu_feature_init();
+	ksu_lsm_hook_init();
 	ksu_adb_root_init();
+	ksu_selinux_hide_init();
 
 	ksu_supercalls_init();
 
@@ -232,7 +236,9 @@ void kernelsu_exit(void)
 	ksu_hook_exit();
 	yukisu_custom_config_exit();
 	ksu_supercalls_exit();
+	ksu_selinux_hide_exit();
 	ksu_adb_root_exit();
+	ksu_lsm_hook_exit();
 	ksu_feature_exit();
 
 	if (ksu_cred) {

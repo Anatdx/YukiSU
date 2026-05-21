@@ -6,8 +6,6 @@
     <string name="home_click_to_install">Yüklemek için tıklayın</string>
     <string name="home_working">Çalışıyor</string>
     <string name="home_working_version">Sürüm: %s</string>
-    <string name="home_unsupported">Desteklenmiyor</string>
-    <string name="home_unsupported_reason">Kernel\'inizde KernelSU sürücüsü algılanmadı, yanlış çekirdek mi?</string>
     <string name="home_kernel">Kernel sürümü</string>
     <string name="home_manager_version">Yönetici sürümü</string>
     <string name="home_selinux_status">SELinux durumu</string>
@@ -116,10 +114,8 @@
     <string name="select_file_tip">%1$s bölüm görüntüsü önerilir</string>
     <string name="select_kmi">KMI seçin</string>
     <string name="settings_uninstall">Kaldır</string>
-    <string name="settings_uninstall_temporary">Geçici olarak kaldır</string>
     <string name="settings_uninstall_permanent">Kalıcı olarak kaldır</string>
     <string name="settings_restore_stock_image">Fabrika görüntüsünü geri yükle</string>
-    <string name="settings_uninstall_temporary_message">KernelSU\'yu geçici olarak kaldırın, bir sonraki yeniden başlatmadan sonra orijinal duruma geri dönün.</string>
     <string name="settings_uninstall_permanent_message">KernelSU\'yu (root ve tüm modüller) tamamen ve kalıcı olarak kaldırma</string>
     <string name="settings_restore_stock_image_message">Fabrika imajını geri yükleyin (eğer bir yedeği varsa), genellikle OTA güncellemesinden önce kullanılır; KernelSU\'yu kaldırmanız gerekiyorsa, lütfen \"Kalıcı olarak kaldır\" seçeneğini kullanın</string>
     <string name="flashing">Kurulum işlemi</string>
@@ -167,13 +163,10 @@
     <string name="settings_disable_su_summary">Herhangi bir uygulamanın ⁠su komutu aracılığıyla root ayrıcalıkları kazanma yeteneğini devre dışı bırakın (mevcut root işlemleri etkilenmeyecektir)</string>
     <string name="settings_disable_kernel_umount">Çekirdek ayırmasını devre dışı bırak</string>
     <string name="settings_disable_kernel_umount_summary">KernelSU tarafından kontrol edilen çekirdek seviyesindeki ayırma davranışını devre dışı bırakın</string>
-    <string name="settings_enable_enhanced_security">Gelişmiş güvenliği etkinleştir</string>
-    <string name="settings_enable_enhanced_security_summary">Daha sıkı güvenlik politikalarını etkinleştirin</string>
+    <string name="settings_enable_enhanced_security">Katı güvenlik politikası kullan</string>
+    <string name="settings_enable_enhanced_security_summary">KernelSU alanı dışındaki yetki yükseltmeyi ve yetkisiz app UID düşürmeyi engeller</string>
     <string name="feature_status_unsupported_summary">Çekirdek bu özelliği desteklemiyor</string>
     <string name="feature_status_managed_summary">Bu özellik bir modül tarafından yönetiliyor</string>
-    <string name="settings_mode_default">Varsayılan</string>
-    <string name="settings_mode_temp_enable">Geçici olarak etkinleştir</string>
-    <string name="settings_mode_always_enable">Kalıcı olarak etkinleştir</string>
     <string name="module_install_multiple_confirm_with_names">Aşağıdaki %1$d modülü yüklemek istediğinizden emin misiniz? \n\n%2$s</string>
     <string name="more_settings">Daha fazla ayar</string>
     <string name="selinux">SELinux</string>
@@ -209,8 +202,6 @@
     <string name="color_pink">Pembe</string>
     <string name="color_gray">Gri</string>
     <string name="color_yellow">Sarı</string>
-    <string name="horizon_kernel">Anykernel3 yükle</string>
-    <string name="horizon_kernel_summary">AnyKernel3 çekirdek dosyasını yaz</string>
     <string name="root_required">Root ayrıcalıkları gerektirir</string>
     <string name="reboot_complete_title">Temizleme tamamlandı</string>
     <string name="reboot_complete_msg">Hemen yeniden başlatmak istiyor musunuz?</string>
@@ -251,33 +242,10 @@
     <string name="confirm_uninstall_content">Aşağıdaki KPM kaldırılacak: %s</string>
     <string name="image_editor_hint">Görüntüyü yaklaştırmak için iki parmağınızı kullanın ve bir parmağınızla sürükleyerek konumu ayarlayın</string>
     <string name="reprovision">Yeniden sağla</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash\'lama Tamamlandı</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Hazırlanıyor…</string>
-    <string name="horizon_cleaning_files">Dosyalar temizleniyor…</string>
-    <string name="horizon_copying_files">Dosyalar kopyalanıyor…</string>
-    <string name="horizon_extracting_tool">Yazma aracı çıkartılıyor…</string>
-    <string name="horizon_patching_script">Yazma betiği yamalanıyor…</string>
-    <string name="horizon_flashing">Çekirdek yazılıyor…</string>
-    <string name="horizon_flash_complete_status">Yazma tamamlandı</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Yazma Yuvası Seç</string>
-    <string name="select_slot_description">Lütfen boot yazma için hedef yuvayı seçin</string>
-    <string name="slot_a">Yuva A</string>
-    <string name="slot_b">Yuva B</string>
-    <string name="selected_slot">Seçilen yuva: %1$s</string>
-    <string name="horizon_getting_original_slot">Orijinal yuva alınıyor</string>
-    <string name="horizon_setting_target_slot">Belirtilen yuva ayarlanıyor</string>
-    <string name="horizon_restoring_original_slot">Varsayılan Yuvayı Geri Yükle</string>
-    <string name="current_slot">Geçerli varsayılan sistem yuvası: %1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Kopyalama başarısız</string>
-    <string name="horizon_unknown_error">Bilinmeyen hata</string>
     <string name="flash_failed_message">Flash\'lama başarısız</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM onarımı/yükle</string>
-    <string name="GKI_install_methods">AnyKernel3 Flaşlama</string>
     <string name="kernel_version_log">Çekirdek sürümü：%1$s</string>
     <string name="tool_version_log">Kullanılan yama aracı：%1$s</string>
     <string name="configuration">Yapılandır</string>
@@ -326,7 +294,6 @@
     <string name="installing_module">Modül yükleniyor %1$d/%2$d</string>
     <string name="module_failed_count">%d yeni modül yüklenemedi</string>
     <string name="module_download_error">Modül indirme başarısız</string>
-    <string name="kernel_flashing">Çekirdek Yükleniyor</string>
     <string name="warning_of_meta_module_title">Meta modül gerektirir</string>
     <string name="warning_of_meta_module_summary">Bu modül /system bölümünü bağlamak istiyor, meta modül bunu halledecektir. Aksi takdirde çalışmayabilir</string>
     <!-- 分类相关 -->
@@ -461,6 +428,6 @@
     <string name="config_applied">Yapılandırma çekirdeğe uygulandı</string>
     <string name="mnt_detach">MNT_DETACH</string>
     <string name="group_contains_apps">%d uygulama içeriyor</string>
-    <string name="settings_disable_sulog">Süper kullanıcı günlük kaydını devre dışı bırak</string>
-    <string name="settings_disable_sulog_summary">KernelSU süper kullanıcı erişim günlük kaydını devre dışı bırakır</string>
+    <string name="settings_disable_sulog">Süper kullanıcı günlük kaydı</string>
+    <string name="settings_disable_sulog_summary">KernelSU süper kullanıcı erişimini günlüğe kaydeder</string>
 </resources>

@@ -23,6 +23,8 @@ struct ksu_prctl_get_fd_cmd {
 
 struct ksu_superkey_prctl_cmd {
 	char superkey[65];
+	__u64 timestamp; // user-supplied Unix epoch seconds; kernel rejects
+			 // |now - timestamp| > 30
 	int result;
 	int fd;
 };

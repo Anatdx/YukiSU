@@ -32,7 +32,6 @@ fun MoreSettingsDialogs(
     state: MoreSettingsState,
     handlers: MoreSettingsHandlers
 ) {
-    // 主题模式选择对话框
     if (state.showThemeModeDialog) {
         SingleChoiceDialog(
             title = stringResource(R.string.theme_mode),
@@ -45,7 +44,6 @@ fun MoreSettingsDialogs(
         )
     }
 
-    // DPI 设置确认对话框
     if (state.showDpiConfirmDialog) {
         ConfirmDialog(
             title = stringResource(R.string.dpi_confirm_title),
@@ -61,7 +59,6 @@ fun MoreSettingsDialogs(
         )
     }
 
-    // 主题色选择对话框
     if (state.showThemeColorDialog) {
         ThemeColorDialog(
             onColorSelected = { theme ->
@@ -339,7 +336,6 @@ fun ThemeColorDialog(
                         }
                         Text(name)
                         Spacer(modifier = Modifier.weight(1f))
-                        // 当前选中的主题显示选中标记
                         if (ThemeConfig.currentTheme::class == theme::class) {
                             Icon(
                                 Icons.Default.Check,

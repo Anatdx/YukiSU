@@ -41,11 +41,9 @@
     <string name="about">אודות</string>
     <string name="home_working_version">גרסה: %s</string>
     <string name="reboot">הפעלה מחדש</string>
-    <string name="home_unsupported_reason">KernelSU תומך רק בליבת GKI כעת</string>
     <string name="home_selinux_status">סטטוס SELinux</string>
     <string name="hide_system_apps">הסתר אפליקציות מערכת</string>
     <string name="module_version">גרסה</string>
-    <string name="home_unsupported">אינו נתמך</string>
     <string name="profile_selinux_domain">תחום</string>
     <string name="home">בית</string>
     <string name="profile_custom">מותאם אישית</string>

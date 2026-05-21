@@ -5,8 +5,6 @@
     <string name="home_click_to_install">Натисніть, щоб встановити</string>
     <string name="home_working">Працює</string>
     <string name="home_working_version">Версія: %s</string>
-    <string name="home_unsupported">Не підтримується</string>
-    <string name="home_unsupported_reason">Драйвер KernelSU не виявлено у вашому ядрі. Можливо, у вас неправильне ядро.</string>
     <string name="home_kernel">Версія ядра</string>
     <string name="home_manager_version">Версія менеджера</string>
     <string name="home_selinux_status">Статус SELinux</string>
@@ -112,10 +110,8 @@
     <string name="select_file_tip">Рекомендується образ розділу %1$s</string>
     <string name="select_kmi">Вибрати KMI</string>
     <string name="settings_uninstall">Видалити</string>
-    <string name="settings_uninstall_temporary">Тимчасово видалити</string>
     <string name="settings_uninstall_permanent">Видалити назавжди</string>
     <string name="settings_restore_stock_image">Відновити стоковий образ</string>
-    <string name="settings_uninstall_temporary_message">Тимчасово видалити KernelSU, відновлення до початкового стану після наступного перезавантаження.</string>
     <string name="settings_uninstall_permanent_message">Повне та остаточне видалення KernelSU (Root та всі модулі).</string>
     <string name="settings_restore_stock_image_message">Відновити стоковий заводський образ (якщо існує резервна копія), зазвичай використовується перед OTA; якщо потрібно видалити KernelSU, використовуйте "Видалити назавжди".</string>
     <string name="flashing">Прошивка</string>
@@ -191,8 +187,6 @@
     <string name="color_pink">Рожевий</string>
     <string name="color_gray">Сірий</string>
     <string name="color_yellow">Жовтий</string>
-    <string name="horizon_kernel">Встановити Anykernel3</string>
-    <string name="horizon_kernel_summary">Прошити файл ядра AnyKernel3</string>
     <string name="root_required">Потрібні права суперкористувача</string>
     <string name="reboot_complete_title">Очищення завершено</string>
     <string name="reboot_complete_msg">Перезавантажитися негайно?</string>
@@ -233,33 +227,10 @@
     <string name="confirm_uninstall_content">Буде видалено наступний KPM: %s</string>
     <string name="image_editor_hint">Використовуйте два пальці для масштабування зображення та один палець для перетягування, щоб налаштувати положення</string>
     <string name="reprovision">Переналаштувати</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Прошивка завершена</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Підготовка…</string>
-    <string name="horizon_cleaning_files">Очищення файлів…</string>
-    <string name="horizon_copying_files">Копіювання файлів…</string>
-    <string name="horizon_extracting_tool">Розпакування інструменту прошивки…</string>
-    <string name="horizon_patching_script">Патчинг скрипту прошивки…</string>
-    <string name="horizon_flashing">Прошивка ядра…</string>
-    <string name="horizon_flash_complete_status">Прошивка завершена</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Вибрати слот для прошивки</string>
-    <string name="select_slot_description">Будь ласка, виберіть цільовий слот для прошивки boot</string>
-    <string name="slot_a">Слот A</string>
-    <string name="slot_b">Слот B</string>
-    <string name="selected_slot">Вибраний слот: %1$s</string>
-    <string name="horizon_getting_original_slot">Отримання оригінального слоту</string>
-    <string name="horizon_setting_target_slot">Встановлення вказаного слоту</string>
-    <string name="horizon_restoring_original_slot">Відновити слот за замовчуванням</string>
-    <string name="current_slot">Поточний системний слот за замовчуванням: %1$s</string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Не вдалося скопіювати</string>
-    <string name="horizon_unknown_error">Невідома помилка</string>
     <string name="flash_failed_message">Прошивка не вдалася</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Відновлення/встановлення LKM</string>
-    <string name="GKI_install_methods">Прошивка AnyKernel3</string>
     <string name="kernel_version_log">Версія ядра: %1$s</string>
     <string name="tool_version_log">Використовується інструмент для патчингу: %1$s</string>
     <string name="configuration">Налаштувати</string>
@@ -308,7 +279,6 @@
     <string name="installing_module">Встановлення модуля %1$d/%2$d</string>
     <string name="module_failed_count">Не вдалося встановити %d новий модуль</string>
     <string name="module_download_error">Не вдалося завантажити модуль</string>
-    <string name="kernel_flashing">Прошивка ядра</string>
     <!-- 分类相关 -->
     <string name="category_all_apps">Всі</string>
     <string name="category_root_apps">Root</string>

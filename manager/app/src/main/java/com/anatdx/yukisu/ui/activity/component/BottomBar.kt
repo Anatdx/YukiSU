@@ -31,7 +31,6 @@ fun BottomBar(navController: NavHostController) {
     val activity = LocalContext.current as MainActivity
     val settings by activity.settingsStateFlow.collectAsState()
 
-    // 检查是否隐藏红点
     val isHideOtherInfo = settings.isHideOtherInfo
 
     // 收集计数数据

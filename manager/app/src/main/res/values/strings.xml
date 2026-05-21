@@ -9,8 +9,6 @@
     <string name="home_working">Working</string>
     <string name="home_gki_builtin_unsupported">YukiSU no longer supports built-in KernelSU! Please use LKM mode!</string>
     <string name="home_working_version">Version: %s</string>
-    <string name="home_unsupported">Unsupported</string>
-    <string name="home_unsupported_reason">No KernelSU driver detected on your kernel, wrong kernel?</string>
     <string name="home_kernel">Kernel version</string>
     <string name="home_manager_version">Manager version</string>
     <string name="home_selinux_status">SELinux status</string>
@@ -186,10 +184,8 @@
     <string name="select_file_tip">%1$s partition image is recommended</string>
     <string name="select_kmi">Select KMI</string>
     <string name="settings_uninstall">Uninstall</string>
-    <string name="settings_uninstall_temporary">Uninstall temporarily</string>
     <string name="settings_uninstall_permanent">Uninstall permanently</string>
     <string name="settings_restore_stock_image">Restore stock image</string>
-    <string name="settings_uninstall_temporary_message">Temporarily uninstall KernelSU, restore to original state after next reboot</string>
     <string name="settings_uninstall_permanent_message">Uninstalling KernelSU (root and all modules) completely and permanently</string>
     <string name="settings_restore_stock_image_message">Restore the stock factory image (if a backup exists), usually used before OTA; if you need to uninstall KernelSU, please use "Uninstall permanently"</string>
     <string name="flashing">Flashing</string>
@@ -251,13 +247,12 @@
     <string name="settings_disable_su_summary">Disable the ability of any app to gain root privileges via the ⁠su command (existing root processes won\'t be affected)</string>
     <string name="settings_disable_kernel_umount">Disable kernel umount</string>
     <string name="settings_disable_kernel_umount_summary">Disable kernel-level umount behavior controlled by KernelSU</string>
-    <string name="settings_enable_enhanced_security">Enable enhanced security</string>
-    <string name="settings_enable_enhanced_security_summary">Enable stricter security policies</string>
+    <string name="settings_enable_enhanced_security">Use strict security policy</string>
+    <string name="settings_enable_enhanced_security_summary">Block privilege elevation outside the KernelSU domain and unauthorized app UID downgrades</string>
+    <string name="settings_selinux_hide">Enable SELinux hide</string>
+    <string name="settings_selinux_hide_summary">Hide KernelSU SELinux policy changes from app-facing probes</string>
     <string name="feature_status_unsupported_summary">Kernel does not support this feature</string>
     <string name="feature_status_managed_summary">This feature is managed by a module</string>
-    <string name="settings_mode_default">Default</string>
-    <string name="settings_mode_temp_enable">Temporarily enable</string>
-    <string name="settings_mode_always_enable">Permanently enable</string>
     <string name="module_install_multiple_confirm_with_names">Sure you want to install the following %1$d modules? \n\n%2$s</string>
     <string name="more_settings">More settings</string>
     <string name="selinux">SELinux</string>
@@ -268,7 +263,7 @@
     <string name="hide_kernel_kernelsu_version">Hide kernel version</string>
     <string name="hide_kernel_kernelsu_version_summary">Hide kernel version</string>
     <string name="hide_other_info">Hide other info</string>
-    <string name="hide_other_info_summary">Hides Red dot about the number of super users, modules and KPM modules on the navigation bar page</string>
+    <string name="hide_other_info_summary">Hides Red dot about the number of super users and modules on the navigation bar page</string>
     <string name="hide_zygisk_implement">Hide Zygisk status</string>
     <string name="hide_zygisk_implement_summary">Hide Zygisk implementation information on the home page</string>
     <string name="hide_meta_module_implement">Hide Meta Module status</string>
@@ -294,8 +289,6 @@
     <string name="color_gray">Gray</string>
     <string name="color_yellow">Yellow</string>
     <string name="color_trans_pride">Trans Pride</string>
-    <string name="horizon_kernel">Install Anykernel3</string>
-    <string name="horizon_kernel_summary">Flash AnyKernel3 kernel file</string>
     <string name="root_required">Requires root privileges</string>
     <string name="reboot_complete_title">Scrubbing complete</string>
     <string name="reboot_complete_msg">Whether to reboot immediately？</string>
@@ -336,33 +329,10 @@
     <string name="confirm_uninstall_content">The following KPM will be uninstalled: %s</string>
     <string name="image_editor_hint">Use two fingers to zoom the image, and one finger to drag it to adjust the position</string>
     <string name="reprovision">Reprovision</string>
-    <!-- Kernel Flash Progress Related -->
-    <string name="horizon_flash_complete">Flash Complete</string>
-    <!-- Flash Status Related -->
-    <string name="horizon_preparing">Preparing…</string>
-    <string name="horizon_cleaning_files">Cleaning files…</string>
-    <string name="horizon_copying_files">Copying files…</string>
-    <string name="horizon_extracting_tool">Extracting flash tool…</string>
-    <string name="horizon_patching_script">Patching flash script…</string>
-    <string name="horizon_flashing">Flashing kernel…</string>
-    <string name="horizon_flash_complete_status">Flash completed</string>
-    <!-- Slot selection related strings -->
-    <string name="select_slot_title">Select Flash Slot</string>
-    <string name="select_slot_description">Please select the target slot for flashing boot</string>
-    <string name="slot_a">Slot A</string>
-    <string name="slot_b">Slot B</string>
-    <string name="selected_slot">Selected slot: %1$s</string>
-    <string name="horizon_getting_original_slot">Getting the original slot</string>
-    <string name="horizon_setting_target_slot">Setting the specified slot</string>
-    <string name="horizon_restoring_original_slot">Restore Default Slot</string>
-    <string name="current_slot">Current system default slot：%1$s </string>
     <!-- Error Messages -->
-    <string name="horizon_copy_failed">Copy failed</string>
-    <string name="horizon_unknown_error">Unknown error</string>
     <string name="flash_failed_message">Flash failed</string>
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repair/installation</string>
-    <string name="GKI_install_methods">Flashing AnyKernel3</string>
     <string name="kernel_version_log">Kernel version：%1$s</string>
     <string name="tool_version_log">Using the patching tool：%1$s</string>
     <string name="configuration">Configure</string>
@@ -417,7 +387,6 @@
     <string name="installing_module">Module being installed %1$d/%2$d</string>
     <string name="module_failed_count">%d Failed to install a new module</string>
     <string name="module_download_error">Module download failed</string>
-    <string name="kernel_flashing">Kernel Flashing</string>
     <!-- Kasumi status text -->
     <string name="kasumi_status_available">Available</string>
     <string name="kasumi_status_builtin">Kasumi builtin</string>
@@ -575,8 +544,8 @@
     <string name="config_applied">Configuration applied to kernel</string>
     <string name="mnt_detach">MNT_DETACH</string>
     <string name="group_contains_apps">Contains %d apps</string>
-    <string name="settings_disable_sulog">Disable superuser logging</string>
-    <string name="settings_disable_sulog_summary">Disable KernelSU superuser access logging</string>
+    <string name="settings_disable_sulog">Superuser logging</string>
+    <string name="settings_disable_sulog_summary">Log KernelSU superuser access</string>
 
     <!-- SuperKey authentication -->
     <string name="superkey_auth_title">SuperKey Authentication</string>
@@ -595,7 +564,7 @@
     
     <!-- SuperKey settings -->
     <string name="settings_donot_store_superkey">Do not store SuperKey</string>
-    <string name="settings_donot_store_superkey_summary">When enabled, the manager will not save your SuperKey. You will need to manually enter the key for authentication after every reboot.</string>
+    <string name="settings_donot_store_superkey_summary">When enabled, the manager will not save your SuperKey. You will need to enter it manually after every reboot.</string>
     <string name="clear_super_key">Clear SuperKey</string>
     <string name="settings_clear_super_key_dialog">Do you really want to clear the stored SuperKey?</string>
     <string name="signature_bypass_title">SuperKey Only Mode</string>
@@ -661,7 +630,9 @@
     <string name="kasumi_stealth">Stealth Mode</string>
     <string name="kasumi_stealth_desc">Hide mount traces and reorder mount IDs</string>
     <string name="kasumi_hidexattr">Hide Extended Attributes</string>
-    <string name="kasumi_hidexattr_desc">Enable mount_hide, maps_spoof, statfs_spoof and stealth to hide traces from detection</string>
+    <string name="kasumi_hidexattr_desc">Enable mount_hide, maps_spoof, statfs_spoof, selinux_fix and stealth to hide traces from detection</string>
+    <string name="kasumi_selinux_fix">SELinux Guard</string>
+    <string name="kasumi_selinux_fix_desc">Block app_zygote SELinux policy probes (DirtySepolicy / Duck Detector)</string>
     <string name="kasumi_avc_spoof">AVC Log Spoofing</string>
     <string name="kasumi_avc_spoof_desc">Spoof SELinux AVC deny logs</string>
     <string name="kasumi_enable_nuke">Enable Nuke</string>
@@ -817,6 +788,14 @@
     <string name="partition_dangerous_flash_warning">⚠️ Warning: %1$s is a dangerous partition!\n\nFlashing this partition may cause:\n• Device unable to boot\n• Loss of important data\n• Network/Bluetooth malfunction\n\nPlease make sure you know what you are doing!\n\nAre you sure you want to flash %2$s partition?</string>
     <string name="partition_confirm_flash">Confirm Flash</string>
     <string name="partition_backing_up">Backing up partition %s…</string>
+    <string name="partition_backing_up_to">Backing up %1$s to %2$s…</string>
+    <string name="partition_backup_directory">Backup Directory</string>
+    <string name="partition_backup_directory_choose">Choose</string>
+    <string name="partition_backup_directory_desc">Partition images are saved here. Edit the path before backing up.</string>
+    <string name="partition_backup_directory_selected">Backup directory: %s</string>
+    <string name="partition_backup_directory_picker_unsupported">This folder provider cannot be used for raw partition backups. Choose a local storage folder or enter a filesystem path.</string>
+    <string name="partition_backup_directory_empty">Backup directory cannot be empty</string>
+    <string name="partition_backup_directory_create_failed">Failed to create backup directory: %s</string>
     <string name="partition_backup_success">Backup successful: %s</string>
     <string name="partition_backup_failed">Backup failed: %s</string>
     <string name="partition_backup_failed_check_log">Backup failed, please check logcat logs</string>
@@ -848,4 +827,8 @@
     <string name="home_ksud_daemon_unknown">Unknown</string>
     <string name="home_ksud_daemon_sync">Sync ksud daemon</string>
     <string name="home_ksud_daemon_syncing">Syncing…</string>
+    <string name="setting_change_saved_reboot">Setting saved, reboot to take effect</string>
+    <string name="setting_change_failed">Setting failed</string>
+    <string name="settings_auto_update_ksud">Auto-update ksud daemon</string>
+    <string name="settings_auto_update_ksud_summary">Sync the bundled ksud binary to /data/adb/ksud on app cold-start. Off by default; otherwise use the manual button on the home page.</string>
 </resources>

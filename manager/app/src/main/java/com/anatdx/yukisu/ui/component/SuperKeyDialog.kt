@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -108,7 +109,6 @@ fun SuperKeyDialog(
     
     val context = LocalContext.current
     
-    // 获取字符串资源
     val authFailedMessage = stringResource(id = R.string.superkey_auth_failed)
     val emptyKeyMessage = stringResource(id = R.string.superkey_input_hint)
     
@@ -124,8 +124,9 @@ fun SuperKeyDialog(
     }
     
     if (state.isVisible) {
-        var superKeyInput by remember { mutableStateOf("") }
-        var isPasswordVisible by remember { mutableStateOf(false) }
+        // SuperKey is user input that must survive process death / config change.
+        var superKeyInput by rememberSaveable { mutableStateOf("") }
+        var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
         var isLoading by remember { mutableStateOf(false) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
         val focusRequester = remember { FocusRequester() }

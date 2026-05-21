@@ -13,6 +13,7 @@ import com.dergoogler.mmrl.platform.model.ModuleConfig
 import com.dergoogler.mmrl.platform.model.ModuleConfig.Companion.asModuleConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.ui.util.HanziToPinyin
 import com.anatdx.yukisu.ui.util.listModules
 import com.anatdx.yukisu.ui.util.getRootShell
@@ -36,10 +37,9 @@ class ModuleViewModel : ViewModel() {
     companion object {
         private const val TAG = "ModuleViewModel"
         private var modules by mutableStateOf<List<ModuleInfo>>(emptyList())
-        private const val CUSTOM_USER_AGENT = "SukiSU-Ultra/2.0"
+        private val CUSTOM_USER_AGENT = "YukiSU/${BuildConfig.VERSION_NAME}"
     }
 
-    // 模块大小缓存管理器
     private lateinit var moduleSizeCache: ModuleSizeCache
 
     fun initializeCache(context: Context) {
@@ -56,10 +56,6 @@ class ModuleViewModel : ViewModel() {
         return formatFileSize(size)
     }
 
-    /**
-     * 刷新所有模块的大小缓存
-     * 只在安装、卸载、更新模块后调用
-     */
     fun refreshModuleSizeCache() {
         if (!::moduleSizeCache.isInitialized) return
 
@@ -130,7 +126,6 @@ class ModuleViewModel : ViewModel() {
 
     fun markNeedRefresh() {
         isNeedRefresh = true
-        // 标记需要刷新时，同时刷新大小缓存
         refreshModuleSizeCache()
     }
 
@@ -208,7 +203,6 @@ class ModuleViewModel : ViewModel() {
                     }
                 }
 
-                // 首次加载模块列表时，初始化缓存
                 if (::moduleSizeCache.isInitialized) {
                     val currentModules = modules.map { it.dirId }
                     moduleSizeCache.initializeCacheIfNeeded(currentModules)
@@ -319,9 +313,6 @@ fun ModuleViewModel.ModuleInfo.copy(
     )
 }
 
-/**
- * 模块大小缓存管理器
- */
 class ModuleSizeCache(context: Context) {
     companion object {
         private const val TAG = "ModuleSizeCache"
@@ -338,9 +329,6 @@ class ModuleSizeCache(context: Context) {
         loadCacheFromPrefs()
     }
 
-    /**
-     * 从SharedPreferences加载缓存
-     */
     private fun loadCacheFromPrefs() {
         try {
             val cacheVersion = cachePrefs.getInt(CACHE_VERSION_KEY, 0)
@@ -363,9 +351,6 @@ class ModuleSizeCache(context: Context) {
         }
     }
 
-    /**
-     * 保存缓存到SharedPreferences
-     */
     private fun saveCacheToPrefs() {
         try {
             cachePrefs.edit {
@@ -383,23 +368,16 @@ class ModuleSizeCache(context: Context) {
         }
     }
 
-    /**
-     * 获取模块大小（从缓存）
-     */
     fun getModuleSize(dirId: String): Long {
         return sizeCache[dirId] ?: 0L
     }
 
-    /**
-     * 检查缓存是否已初始化，如果没有则初始化
-     */
     fun initializeCacheIfNeeded(currentModules: List<String>) {
         val isInitialized = cachePrefs.getBoolean(CACHE_INITIALIZED_KEY, false)
         if (!isInitialized || sizeCache.isEmpty()) {
             Log.d(TAG, "首次初始化缓存，计算所有模块大小")
             refreshCache(currentModules)
         } else {
-            // 检查是否有新模块需要计算大小
             val newModules = currentModules.filter { !sizeCache.containsKey(it) }
             if (newModules.isNotEmpty()) {
                 Log.d(TAG, "发现 ${newModules.size} 个新模块，计算大小: $newModules")
@@ -413,12 +391,8 @@ class ModuleSizeCache(context: Context) {
         }
     }
 
-    /**
-     * 刷新所有模块的大小缓存
-     */
     fun refreshCache(currentModules: List<String>) {
         try {
-            // 清理不存在的模块缓存
             val toRemove = sizeCache.keys.filter { it !in currentModules }
             toRemove.forEach { sizeCache.remove(it) }
 
@@ -426,32 +400,24 @@ class ModuleSizeCache(context: Context) {
                 Log.d(TAG, "清理了 ${toRemove.size} 个不存在的模块缓存: $toRemove")
             }
 
-            // 计算所有当前模块的大小
             for (dirId in currentModules) {
                 val size = calculateModuleFolderSize(dirId)
                 sizeCache[dirId] = size
                 Log.d(TAG, "更新模块 $dirId 大小: ${formatFileSize(size)}")
             }
 
-            // 保存到持久化存储
             saveCacheToPrefs()
         } catch (e: Exception) {
             Log.e(TAG, "刷新缓存失败", e)
         }
     }
 
-    /**
-     * 清空所有缓存
-     */
     private fun clearCache() {
         sizeCache.clear()
         cachePrefs.edit { clear() }
         Log.d(TAG, "清空所有缓存")
     }
 
-    /**
-     * 实际计算模块文件夹大小
-     */
     private fun calculateModuleFolderSize(dirId: String): Long {
         return try {
             val shell = getRootShell()
@@ -491,9 +457,6 @@ private fun JSONObject.getIntCompat(key: String, default: Int = 0): Int {
     }
 }
 
-/**
- * 格式化文件大小的工具函数
- */
 fun formatFileSize(bytes: Long): String {
     if (bytes <= 0) return "0 KB"
 

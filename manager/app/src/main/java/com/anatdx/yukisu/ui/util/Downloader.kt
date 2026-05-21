@@ -256,7 +256,7 @@ fun checkNewVersion(): LatestVersionInfo {
                 val name = asset.getString("name")
                 if (!name.endsWith(".apk")) continue
 
-                val regex = Regex("SukiSU.*_(\\d+)-release")
+                val regex = Regex("YukiSU.*_(\\d+)-release")
                 val matchResult = regex.find(name)
                 if (matchResult == null) {
                     Log.d("CheckUpdate", "No matches found: $name, skip over")

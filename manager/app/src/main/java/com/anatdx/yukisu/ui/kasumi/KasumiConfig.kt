@@ -1446,9 +1446,21 @@ private fun SettingsTab(
                         updateAndSave(config.copy(enableHidexattr = it))
                     }
                 )
-                
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
+
+                SettingSwitch(
+                    title = stringResource(R.string.kasumi_selinux_fix),
+                    subtitle = stringResource(R.string.kasumi_selinux_fix_desc),
+                    checked = config.enableSelinuxFix,
+                    enabled = kasumiAvailable,
+                    onCheckedChange = {
+                        updateAndSave(config.copy(enableSelinuxFix = it))
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
                 SettingSwitch(
                     title = stringResource(R.string.kasumi_enable_nuke),
                     subtitle = stringResource(R.string.kasumi_enable_nuke_desc),
