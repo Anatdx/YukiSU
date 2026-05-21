@@ -149,8 +149,18 @@ fun InstallScreen(
     var partitionsState by remember { mutableStateOf<List<String>>(emptyList()) }
     var hasCustomSelected by remember { mutableStateOf(false) }
     
-    // SuperKey for APatch-style authentication
+    // SuperKey for APatch-style authentication.
+    // If we've already saved one (previous patch), prefill with a `********`
+    // placeholder so the user can re-patch with the same key by just hitting
+    // next; any keystroke clears it and falls back to manual input.
+    val savedSuperKey = remember {
+        context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
+            .getString("saved_superkey", null)
+            ?.takeIf { it.isNotBlank() }
+    }
+    var usingSavedKey by remember { mutableStateOf(savedSuperKey != null) }
     var superKey by remember { mutableStateOf("") }
+    val effectiveSuperKey = if (usingSavedKey) savedSuperKey.orEmpty() else superKey
     var showSuperKeyInput by remember { mutableStateOf(false) }
     // Signature bypass - when enabled, only SuperKey authentication works
     var signatureBypass by remember { mutableStateOf(false) }
@@ -171,7 +181,7 @@ fun InstallScreen(
                 partition = partitionSelection,
                 allowShell = allowShell,
                 enableAdb = enableAdb,
-                superKey = superKey.ifBlank { null },
+                superKey = effectiveSuperKey.ifBlank { null },
                 signatureBypass = signatureBypass,
                 kasumiInCpio = kasumiInCpio,
                 kasumiLkmUri = kasumiLkmUri
@@ -416,8 +426,15 @@ fun InstallScreen(
                                 modifier = Modifier.padding(bottom = 12.dp)
                             )
                             OutlinedTextField(
-                                value = superKey,
+                                value = if (usingSavedKey) "********" else superKey,
                                 onValueChange = { newValue ->
+                                    if (usingSavedKey) {
+                                        // First edit drops the placeholder; the user has to
+                                        // type the new key from scratch.
+                                        usingSavedKey = false
+                                        superKey = ""
+                                        return@OutlinedTextField
+                                    }
                                     superKey = newValue
                                     if (newValue.equals("transright", ignoreCase = true) && !ThemeConfig.isTransPrideUnlocked) {
                                         ThemeManager.unlockTransPride(context)
@@ -455,7 +472,7 @@ fun InstallScreen(
                                 Switch(
                                     checked = signatureBypass,
                                     onCheckedChange = { signatureBypass = it },
-                                    enabled = superKey.isNotBlank()
+                                    enabled = effectiveSuperKey.isNotBlank()
                                 )
                             }
                         }

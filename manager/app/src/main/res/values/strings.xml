@@ -564,7 +564,7 @@
     
     <!-- SuperKey settings -->
     <string name="settings_donot_store_superkey">Do not store SuperKey</string>
-    <string name="settings_donot_store_superkey_summary">When enabled, the manager will not save your SuperKey. You will need to manually enter the key for authentication after every reboot.</string>
+    <string name="settings_donot_store_superkey_summary">When enabled, the manager will not save your SuperKey. You will need to enter it manually after every reboot.</string>
     <string name="clear_super_key">Clear SuperKey</string>
     <string name="settings_clear_super_key_dialog">Do you really want to clear the stored SuperKey?</string>
     <string name="signature_bypass_title">SuperKey Only Mode</string>

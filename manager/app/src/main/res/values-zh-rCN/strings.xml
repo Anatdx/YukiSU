@@ -524,7 +524,7 @@
     
     <!-- SuperKey 设置 -->
     <string name="settings_donot_store_superkey">不存储超级密钥</string>
-    <string name="settings_donot_store_superkey_summary">启用后，管理器不会保存您的超级密钥。每次重启后都需要手动输入密钥进行认证。</string>
+    <string name="settings_donot_store_superkey_summary">启用后管理器不会保存超级密钥，每次重启都需手动输入。</string>
     <string name="clear_super_key">清除超级密钥</string>
     <string name="settings_clear_super_key_dialog">确定要清除已存储的超级密钥吗？</string>
     <string name="signature_bypass_title">仅超级密钥模式</string>
