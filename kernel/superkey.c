@@ -2,6 +2,8 @@
 #include "superkey.h"
 #include "klog.h"
 #include "manager.h"
+#include <crypto/hash.h>
+#include <linux/err.h>
 #include <linux/module.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
@@ -15,19 +17,68 @@
 
 struct superkey_data {
 	volatile u64 magic;
-	volatile u64 hash;
-	volatile u64 flags; // bit 0 = signature bypass
+	volatile u8 salt[SUPERKEY_SALT_LEN]; // +8: random salt injected by ksud
+					     // LKM patcher
+	volatile u64 hash; // +24: first 8 bytes of SHA-256(salt || key)
+	volatile u64 flags; // +32: bit 0 = signature bypass
 } __attribute__((packed, aligned(8)));
 
 static volatile struct superkey_data
     __attribute__((used, section(".data"))) superkey_store = {
 	.magic = SUPERKEY_MAGIC,
+	.salt = {0},
 	.hash = 0,
 	.flags = 0,
 };
 
 u64 ksu_superkey_hash __read_mostly = 0;
+u8 ksu_superkey_salt[SUPERKEY_SALT_LEN] __read_mostly = {0};
 bool ksu_signature_bypass __read_mostly = false;
+
+/*
+ * SHA-256(salt || key)[0..8] as u64. Computing inline rather than caching a
+ * derived key keeps the salt confined to .data; a memory dump still has to
+ * brute-force the original key (no pre-hashed material exposed).
+ */
+u64 hash_superkey(const char *key)
+{
+	struct crypto_shash *tfm;
+	SHASH_DESC_ON_STACK(desc, NULL);
+	u8 digest[32] = {0};
+	u64 out = 0;
+	int ret;
+
+	if (!key)
+		return 0;
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("superkey: sha256 alloc failed: %ld\n", PTR_ERR(tfm));
+		return 0;
+	}
+
+	desc->tfm = tfm;
+	ret = crypto_shash_init(desc);
+	if (!ret)
+		ret = crypto_shash_update(desc, ksu_superkey_salt,
+					  SUPERKEY_SALT_LEN);
+	if (!ret)
+		ret = crypto_shash_finup(desc, key, strlen(key), digest);
+
+	crypto_free_shash(tfm);
+
+	if (ret) {
+		pr_err("superkey: sha256 op failed: %d\n", ret);
+		return 0;
+	}
+
+	/* Little-endian load of first 8 bytes; matches ksud-side patcher. */
+	out = ((u64)digest[0]) | ((u64)digest[1] << 8) |
+	      ((u64)digest[2] << 16) | ((u64)digest[3] << 24) |
+	      ((u64)digest[4] << 32) | ((u64)digest[5] << 40) |
+	      ((u64)digest[6] << 48) | ((u64)digest[7] << 56);
+	return out;
+}
 
 /*
  * SuperKey verification mode (injected from userspace LKM patch).
@@ -64,6 +115,9 @@ void superkey_init(void)
 		    ksu_superkey_verification_mode != 0) {
 			/* SuperKey is configured (modes 1 or 2). */
 			ksu_superkey_hash = superkey_store.hash;
+			memcpy(ksu_superkey_salt,
+			       (const void *)superkey_store.salt,
+			       SUPERKEY_SALT_LEN);
 			ksu_signature_bypass =
 			    (ksu_superkey_verification_mode == 2);
 			pr_info("superkey: loaded from LKM patch: hash=0x%llx, "

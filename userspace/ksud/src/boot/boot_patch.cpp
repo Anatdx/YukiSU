@@ -21,6 +21,8 @@
 #include <regex>
 #include <vector>
 
+#include <mbedtls/sha256.h>
+
 namespace fs = std::filesystem;
 
 namespace ksud {
@@ -71,20 +73,53 @@ bool copy_embedded_kasumi_asset(const std::string& kmi, const std::string& dest_
 // LZ4 legacy ramdisk magic (reject before cpio to avoid huge cache/hang).
 constexpr std::array<unsigned char, 4> LZ4_LEGACY_MAGIC = {0x02, 0x21, 0x4c, 0x18};
 
-uint64_t hash_superkey(const std::string& key) {
-    uint64_t hash = 1000000007;
-    for (const char c : key) {
-        hash = hash * 31 + static_cast<uint8_t>(c);
+constexpr size_t SUPERKEY_SALT_LEN = 16;
+
+// SHA-256(salt || key), truncated to first 8 bytes (little-endian u64). Must
+// match the kernel-side hash_superkey() in kernel/superkey.c.
+uint64_t hash_superkey(const std::array<uint8_t, SUPERKEY_SALT_LEN>& salt, const std::string& key) {
+    unsigned char digest[32] = {0};
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts(&ctx, 0);
+    mbedtls_sha256_update(&ctx, salt.data(), salt.size());
+    mbedtls_sha256_update(&ctx, reinterpret_cast<const unsigned char*>(key.data()), key.size());
+    mbedtls_sha256_finish(&ctx, digest);
+    mbedtls_sha256_free(&ctx);
+
+    uint64_t out = 0;
+    for (size_t i = 0; i < 8; ++i) {
+        out |= static_cast<uint64_t>(digest[i]) << (i * 8);
     }
-    return hash;
+    return out;
 }
 
-// Inject superkey hash and verification mode into LKM file.
+bool fill_random(uint8_t* buf, size_t len) {
+    std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
+    if (!urandom)
+        return false;
+    urandom.read(reinterpret_cast<char*>(buf), static_cast<std::streamsize>(len));
+    return static_cast<size_t>(urandom.gcount()) == len;
+}
+
+// Inject superkey salt+hash and verification mode into LKM file.
+// Layout in the LKM .data section (matches struct superkey_data in kernel):
+//   [+0]  u64 magic   (SUPERKEY_MAGIC)
+//   [+8]  u8  salt[16]
+//   [+24] u64 hash    (first 8 bytes of SHA-256(salt || key))
+//   [+32] u64 flags   (verification mode)
 // The verification mode is always injected, even when superkey is empty.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) path then superkey
 bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& superkey,
                             bool signature_bypass) {
-    uint64_t hash = hash_superkey(superkey);
+    std::array<uint8_t, SUPERKEY_SALT_LEN> salt{};
+    if (!superkey.empty()) {
+        if (!fill_random(salt.data(), salt.size())) {
+            LOGE("Failed to read /dev/urandom for SuperKey salt");
+            return false;
+        }
+    }
+    uint64_t hash = superkey.empty() ? 0 : hash_superkey(salt, superkey);
 
     uint64_t flags;
     if (superkey.empty()) {
@@ -123,15 +158,15 @@ bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& supe
     std::array<uint8_t, 8> magic_bytes{};
     memcpy(magic_bytes.data(), &SUPERKEY_MAGIC, magic_bytes.size());
 
+    constexpr size_t SUPERKEY_BLOCK_LEN = 40;  // magic(8) + salt(16) + hash(8) + flags(8)
     bool found = false;
-    for (size_t i = 0; i + 24 <= size; i++) {
+    for (size_t i = 0; i + SUPERKEY_BLOCK_LEN <= size; i++) {
         if (memcmp(&content[i], magic_bytes.data(), magic_bytes.size()) == 0) {
-            // Found magic, patch the hash at offset +8
-            memcpy(&content[i + 8], &hash, sizeof(hash));
-            // Patch the flags at offset +16
-            memcpy(&content[i + 16], &flags, sizeof(flags));
+            memcpy(&content[i + 8], salt.data(), salt.size());
+            memcpy(&content[i + 24], &hash, sizeof(hash));
+            memcpy(&content[i + 32], &flags, sizeof(flags));
             found = true;
-            printf("- Injected SuperKey data at offset 0x%zx\n", i);
+            printf("- Injected SuperKey data at offset 0x%zx (40 bytes)\n", i);
             break;
         }
     }

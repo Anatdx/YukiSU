@@ -5,23 +5,18 @@
 #include <linux/types.h>
 
 #define SUPERKEY_MAX_LEN 64
+#define SUPERKEY_SALT_LEN 16
 
 extern u64 ksu_superkey_hash;
+extern u8 ksu_superkey_salt[SUPERKEY_SALT_LEN];
 extern bool ksu_signature_bypass;
 
-static inline u64 hash_superkey(const char *key)
-{
-	u64 hash = 1000000007ULL;
-	int i;
-
-	if (!key)
-		return 0;
-
-	for (i = 0; key[i]; i++) {
-		hash = hash * 31ULL + (u64)key[i];
-	}
-	return hash;
-}
+/*
+ * Compute SHA-256(salt || key), truncated to the first 8 bytes (matches the
+ * u64 hash slot in the LKM-patched superkey store). Returns 0 on key == NULL
+ * so verify_superkey rejects empty input without needing an explicit guard.
+ */
+u64 hash_superkey(const char *key);
 
 static inline bool verify_superkey(const char *key)
 {
