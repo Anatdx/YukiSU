@@ -404,6 +404,20 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         }
                     )
 
+                    var autoUpdateKsud by rememberSaveable {
+                        mutableStateOf(prefs.getBoolean("auto_update_ksud", false))
+                    }
+                    SwitchItem(
+                        icon = Icons.Filled.Sync,
+                        title = stringResource(R.string.settings_auto_update_ksud),
+                        summary = stringResource(R.string.settings_auto_update_ksud_summary),
+                        checked = autoUpdateKsud,
+                        onCheckedChange = { enabled ->
+                            prefs.edit { putBoolean("auto_update_ksud", enabled) }
+                            autoUpdateKsud = enabled
+                        }
+                    )
+
                     // WebUI引擎选择
                     KsuIsValid {
                         WebUIEngineSelector(

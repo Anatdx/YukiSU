@@ -172,6 +172,19 @@ object KsuCli {
     }
 
     /**
+     * Cold-start auto-sync entry point: only runs the version-aware install
+     * path when we actually have a root shell. Cheap to call from
+     * MainActivity's first LaunchedEffect.
+     */
+    suspend fun autoSyncKsudIfNeeded(): Unit = withContext(Dispatchers.IO) {
+        if (!SHELL.isRoot) {
+            Log.d(TAG, "autoSyncKsudIfNeeded: no root shell, skip")
+            return@withContext
+        }
+        checkAndInstallKsud()
+    }
+
+    /**
      * Install or update the ksud daemon binary itself, without touching boot image.
      *
      * This mirrors APatch's "安装/升级系统补丁(apd)" flow:

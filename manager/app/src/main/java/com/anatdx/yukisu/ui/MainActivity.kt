@@ -56,6 +56,7 @@ import com.anatdx.yukisu.ui.component.InstallConfirmationDialog
 import com.anatdx.yukisu.ui.component.ZipFileInfo
 import com.anatdx.yukisu.ui.screen.BottomBarDestination
 import com.anatdx.yukisu.ui.theme.KernelSUTheme
+import com.anatdx.yukisu.ui.util.KsuCli
 import com.anatdx.yukisu.ui.util.LocalSnackbarHost
 import com.anatdx.yukisu.ui.util.install
 import com.anatdx.yukisu.ui.util.resetTaskDescriptionToAppName
@@ -211,6 +212,11 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(Unit) {
                         initPlatform()
+                        if (getSharedPreferences("settings", MODE_PRIVATE)
+                                .getBoolean("auto_update_ksud", false)
+                        ) {
+                            KsuCli.autoSyncKsudIfNeeded()
+                        }
                     }
 
                     CompositionLocalProvider(
