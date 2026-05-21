@@ -221,7 +221,7 @@
     <string name="hide_kernel_kernelsu_version">隐藏内核版本号</string>
     <string name="hide_kernel_kernelsu_version_summary">隐藏内核部分的 KernelSU 版本号</string>
     <string name="hide_other_info">强迫症开关</string>
-    <string name="hide_other_info_summary">隐藏导航栏上的超级用户数、模块数和 KPM 模块数红点</string>
+    <string name="hide_other_info_summary">隐藏导航栏上的超级用户数和模块数红点</string>
     <string name="hide_zygisk_implement">隐藏 Zygisk 状态信息</string>
     <string name="hide_zygisk_implement_summary">隐藏主页上的 Zygisk 实现状态信息</string>
     <string name="hide_meta_module_implement">隐藏元模块状态信息</string>
