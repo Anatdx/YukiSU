@@ -289,7 +289,6 @@ fun LogViewerScreen(navigator: DestinationsNavigator) {
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackBarHost) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { paddingValues ->
         Column(

@@ -72,9 +72,12 @@ fun AppProfileScreen(
     val suNotAllowed = stringResource(R.string.su_not_allowed).format(appInfo.label)
 
     val packageName = appInfo.packageName
-    val initialProfile = Natives.getAppProfile(packageName, appInfo.uid)
-    if (initialProfile.allowSu) {
-        initialProfile.rules = getSepolicy(packageName)
+    // Fetch the profile (and sepolicy rules, if applicable) once per package
+    // instead of on every recomposition; both calls cross JNI/shell.
+    val initialProfile = remember(packageName, appInfo.uid) {
+        Natives.getAppProfile(packageName, appInfo.uid).also { p ->
+            if (p.allowSu) p.rules = getSepolicy(packageName)
+        }
     }
     var profile by rememberSaveable {
         mutableStateOf(initialProfile)
@@ -101,7 +104,6 @@ fun AppProfileScreen(
                 scrollBehavior = scrollBehavior
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackBarHost) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { paddingValues ->
         AppProfileInner(

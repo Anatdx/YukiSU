@@ -99,8 +99,7 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
             }
-        },
-        snackbarHost = { SnackbarHost(snackBarHost) }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier

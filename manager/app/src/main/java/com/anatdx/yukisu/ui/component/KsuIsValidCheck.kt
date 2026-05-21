@@ -1,16 +1,18 @@
 package com.anatdx.yukisu.ui.component
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import com.anatdx.yukisu.Natives
-import com.anatdx.yukisu.ksuApp
 
 @Composable
 fun KsuIsValid(
     content: @Composable () -> Unit
 ) {
-    val isManager = Natives.isManager
-    val ksuVersion = if (isManager) Natives.version else null
-
+    // Cache the JNI roundtrip; manager status and KSU version do not change
+    // for the lifetime of this composition.
+    val ksuVersion = remember {
+        if (Natives.isManager) Natives.version else null
+    }
     if (ksuVersion != null) {
         content()
     }

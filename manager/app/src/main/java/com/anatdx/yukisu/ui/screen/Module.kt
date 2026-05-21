@@ -347,8 +347,12 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    val isSafeMode = Natives.isSafeMode
-    val hasMagisk = hasMagisk()
+    // Both checks were re-running on every recomposition; cache them.
+    // hasMagisk() shells out, so push it to IO via produceState.
+    val isSafeMode = remember { Natives.isSafeMode }
+    val hasMagisk by produceState(initialValue = false) {
+        value = withContext(Dispatchers.IO) { hasMagisk() }
+    }
     val hideInstallButton = isSafeMode || hasMagisk
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
