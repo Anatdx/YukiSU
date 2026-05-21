@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ksu.h"
@@ -323,6 +324,7 @@ bool authenticate_superkey(const char *superkey) {
   struct ksu_superkey_prctl_cmd prctl_cmd = {};
   strncpy(prctl_cmd.superkey, superkey, sizeof(prctl_cmd.superkey) - 1);
   prctl_cmd.superkey[sizeof(prctl_cmd.superkey) - 1] = '\0';
+  prctl_cmd.timestamp = (uint64_t)time(NULL);
   prctl_cmd.result = -1; // Initialize with error
   prctl_cmd.fd = -1;
 

@@ -266,11 +266,14 @@ struct ksu_prctl_get_fd_cmd {
   int result; // Output: 0 = success, negative = error
   int fd;     // Output: fd on success, -1 on failure
 };
-// SuperKey auth structure for prctl hook
+// SuperKey auth structure for prctl hook. Layout MUST match
+// kernel/supercalls.h::ksu_superkey_prctl_cmd.
 struct ksu_superkey_prctl_cmd {
-  char superkey[65]; // Input: SuperKey string (null-terminated)
-  int result;        // Output: 0 = success, negative = error
-  int fd;            // Output: fd on success
+  char superkey[65];  // Input: SuperKey string (null-terminated)
+  uint64_t timestamp; // Input: Unix epoch seconds; kernel rejects ts outside
+                      // [now-30, now]
+  int result;         // Output: 0 = success, negative = error
+  int fd;             // Output: fd on success
 };
 
 // SuperKey auth structure for reboot hook
