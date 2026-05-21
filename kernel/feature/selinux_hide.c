@@ -386,15 +386,19 @@ static int selinux_hide_feature_get(u64 *value)
 static int selinux_hide_feature_set(u64 value)
 {
 	bool enable = value != 0;
-	int ret = 0;
 	pr_info("selinux_hide: set to %d\n", enable);
 	mutex_lock(&selinux_hide_mutex);
 	ksu_selinux_hide_enabled = enable;
 	if (enable) {
 		if (!ksu_selinux_hide_running) {
-			ret = ksu_selinux_hide_enable();
+			int ret = ksu_selinux_hide_enable();
 			if (!ret) {
 				ksu_selinux_hide_running = true;
+			} else {
+				pr_warn("selinux_hide: runtime enable failed: "
+					"%d (intent recorded, will retry at "
+					"next boot)\n",
+					ret);
 			}
 		}
 	} else {
@@ -404,7 +408,14 @@ static int selinux_hide_feature_set(u64 value)
 		}
 	}
 	mutex_unlock(&selinux_hide_mutex);
-	return ret;
+	/*
+	 * The user-visible toggle semantics are fire-and-forget: once the
+	 * enabled flag has been recorded, manager wants a success result so
+	 * `ksud feature save` can persist it. If the runtime patch_text dance
+	 * fails (e.g. backup_sepolicy not yet captured), boot-time apply will
+	 * retry the actual enable; either way the set ioctl itself is done.
+	 */
+	return 0;
 }
 
 static const struct ksu_feature_handler selinux_hide_handler = {
