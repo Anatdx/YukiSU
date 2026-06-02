@@ -96,6 +96,7 @@ int su_main(int argc, char** argv) {
     gid_t target_gid = 0;
     bool gid_specified = false;
     std::vector<gid_t> groups;
+    std::vector<std::string> exec_args;
 
     // Preprocess: replace -mm with -M, -cn with -z
     // AND merge everything after -c into a single argument (matching Rust behavior)
@@ -149,7 +150,8 @@ int su_main(int argc, char** argv) {
 
     optind = 1;  // Reset getopt
     int opt;
-    while ((opt = getopt_long(argc, argv, "c:hlps:vVMg:G:W", long_options.data(), nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "+c:hlps:vVMg:G:W", long_options.data(), nullptr)) !=
+           -1) {
         switch (opt) {
         case 'c':
             command = optarg;
@@ -217,6 +219,13 @@ int su_main(int argc, char** argv) {
         optind++;
     }
 
+    if (optind < argc) {
+        exec_args.reserve(static_cast<size_t>(argc - optind));
+        for (int i = optind; i < argc; ++i) {
+            exec_args.emplace_back(argv[i]);
+        }
+    }
+
     // If no gid specified, use first supplementary group or uid
     if (!gid_specified) {
         if (!groups.empty()) {
@@ -278,25 +287,28 @@ int su_main(int argc, char** argv) {
     umask(022);
     set_identity(target_uid, target_gid, groups);
 
-    // Build argv for shell (matching Rust behavior)
-    // arg0 is "-" for login shell, otherwise the shell path itself
-    const std::string arg0 = is_login ? "-" : shell;
+    const bool has_exec_args = command.empty() && !exec_args.empty();
+    const std::string executable = has_exec_args ? exec_args.front() : shell;
+    const std::string arg0 = is_login ? "-" : executable;
 
-    std::vector<const char*> shell_argv;
-    shell_argv.push_back(arg0.c_str());
+    std::vector<const char*> exec_argv;
+    exec_argv.push_back(arg0.c_str());
 
     // If command specified, add -c and command
     if (!command.empty()) {
-        shell_argv.push_back("-c");
-        shell_argv.push_back(command.c_str());
+        exec_argv.push_back("-c");
+        exec_argv.push_back(command.c_str());
+    } else if (has_exec_args) {
+        for (size_t i = 1; i < exec_args.size(); ++i) {
+            exec_argv.push_back(exec_args[i].c_str());
+        }
     }
 
-    shell_argv.push_back(nullptr);
+    exec_argv.push_back(nullptr);
 
-    // Execute shell
-    execv(shell.c_str(), const_cast<char* const*>(shell_argv.data()));
+    execvp(executable.c_str(), const_cast<char* const*>(exec_argv.data()));
 
-    LOGE("Failed to exec shell %s: %s", shell.c_str(), strerror(errno));
+    LOGE("Failed to exec %s: %s", executable.c_str(), strerror(errno));
     return 127;
 }
 

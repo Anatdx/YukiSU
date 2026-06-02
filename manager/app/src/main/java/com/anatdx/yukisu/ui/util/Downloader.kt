@@ -61,22 +61,31 @@ fun download(
             }
         }
     }
-    val downloadFile = File(
+    var downloadFile = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
         fileName
     )
-    if (downloadFile.exists()) {
-        downloadFile.delete()
+    val dotIndex = fileName.lastIndexOf('.')
+    val baseName = if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
+    val extension = if (dotIndex > 0) fileName.substring(dotIndex) else ""
+    var index = 1
+    while (downloadFile.exists()) {
+        downloadFile = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "$baseName ($index)$extension"
+        )
+        index++
     }
+    val targetFileName = downloadFile.name
 
     val request = DownloadManager.Request(url.toUri())
         .setDestinationInExternalPublicDir(
             Environment.DIRECTORY_DOWNLOADS,
-            fileName
+            targetFileName
         )
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setMimeType("application/zip")
-        .setTitle(fileName)
+        .setTitle(targetFileName)
         .setDescription(description)
         .addRequestHeader("User-Agent", CUSTOM_USER_AGENT)
         .setAllowedOverMetered(true)
@@ -86,7 +95,7 @@ fun download(
     try {
         val downloadId = downloadManager.enqueue(request)
         Log.d(TAG, "Successful launch of the download，ID: $downloadId")
-        monitorDownload(context, downloadManager, downloadId, url, fileName, description, onDownloaded, onDownloading, onError)
+        monitorDownload(context, downloadManager, downloadId, url, targetFileName, description, onDownloaded, onDownloading, onError)
     } catch (e: Exception) {
         Log.e(TAG, "Download startup failure", e)
         onError("Download startup failure: ${e.message}")
