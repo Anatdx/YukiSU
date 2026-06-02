@@ -142,6 +142,7 @@ void print_usage() {
     printf("  sepolicy       SELinux policy patch tool\n");
     printf("  profile        Manage app profiles\n");
     printf("  feature        Manage kernel features\n");
+    printf("  initrc         Manage init.rc injection\n");
     printf("  sulogd         Run sulog reader daemon\n");
     printf("  boot-patch     Patch boot image\n");
     printf("  boot-restore   Restore boot image\n");
@@ -205,6 +206,23 @@ int cmd_module(const std::vector<std::string>& args) {
     }
 
     printf("Unknown module subcommand: %s\n", subcmd.c_str());
+    return 1;
+}
+
+int cmd_initrc(const std::vector<std::string>& args) {
+    if (args.empty()) {
+        printf("USAGE: ksud initrc <SUBCOMMAND>\n\n");
+        printf("SUBCOMMANDS:\n");
+        printf("  refresh        Regenerate preinit modules.rc\n");
+        return 1;
+    }
+
+    const std::string& subcmd = args[0];
+    if (subcmd == "refresh") {
+        return regenerate_preinit_rc();
+    }
+
+    printf("Unknown initrc subcommand: %s\n", subcmd.c_str());
     return 1;
 }
 
@@ -882,6 +900,8 @@ int cli_run(int argc, char** argv) {
         return cmd_profile(args);
     } else if (cmd == "feature") {
         return cmd_feature(args);
+    } else if (cmd == "initrc") {
+        return cmd_initrc(args);
     } else if (cmd == "sulogd") {
         return run_sulogd();
     } else if (cmd == "boot-patch") {

@@ -204,6 +204,12 @@ int on_post_data_fs() {
     // Prune modules marked for removal
     prune_modules();
 
+    // Refresh custom init rc for the next boot. This also covers manual edits in
+    // /data/adb/initrc.d.
+    if (regenerate_preinit_rc() != 0) {
+        LOGW("regenerate preinit rc failed");
+    }
+
     // Restorecon
     restorecon("/data/adb", true);
 

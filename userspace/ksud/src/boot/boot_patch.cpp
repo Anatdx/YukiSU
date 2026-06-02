@@ -415,6 +415,7 @@ struct BootPatchArgs {
     std::string partition;          // --partition
     std::string out_name;           // --out-name
     bool allow_shell = false;       // --allow-shell
+    bool no_custom_rc = false;      // --no-custom-rc
     bool enable_adbd = false;       // --enable-adbd
     std::string adb_debug_prop;     // --adb-debug-prop
     bool kasumi_in_cpio =
@@ -471,6 +472,8 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
                 result.out_name = args[++i];
         } else if (arg == "--allow-shell") {
             result.allow_shell = true;
+        } else if (arg == "--no-custom-rc") {
+            result.no_custom_rc = true;
         } else if (arg == "--enable-adbd") {
             result.enable_adbd = true;
         } else if (arg == "--adb-debug-prop") {
@@ -861,21 +864,43 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         return 1;
     }
 
+    std::vector<std::string> ksu_config;
     if (parsed.allow_shell) {
         printf("- Adding allow shell config\n");
-        std::ofstream(workdir + "/ksu_allow_shell").close();
-        if (!do_cpio_cmd(magiskboot, workdir, ramdisk,
-                         "add 0644 ksu_allow_shell ksu_allow_shell")) {
+        ksu_config.emplace_back("allow_shell=1");
+    }
+    if (parsed.no_custom_rc) {
+        printf("- Adding no custom rc config\n");
+        ksu_config.emplace_back("norc=1");
+    }
+
+    if (!ksu_config.empty()) {
+        std::ofstream config_file(workdir + "/ksu_config", std::ios::binary | std::ios::trunc);
+        if (!config_file.is_open()) {
+            LOGE("Failed to create ksu_config");
+            cleanup();
+            return 1;
+        }
+        for (size_t i = 0; i < ksu_config.size(); ++i) {
+            if (i != 0) {
+                config_file << ' ';
+            }
+            config_file << ksu_config[i];
+        }
+        config_file.close();
+        if (!do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 ksu_config ksu_config")) {
             cleanup();
             return 1;
         }
     } else {
-        auto allow_shell_exists = exec_command_magiskboot(
-            magiskboot, {"cpio", ramdisk, "exists ksu_allow_shell"}, workdir);
-        if (allow_shell_exists.exit_code == 0) {
-            printf("- Removing allow shell config\n");
-            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm ksu_allow_shell");
-        }
+        do_cpio_cmd(magiskboot, workdir, ramdisk, "rm ksu_config");
+    }
+
+    auto allow_shell_exists =
+        exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists ksu_allow_shell"}, workdir);
+    if (allow_shell_exists.exit_code == 0) {
+        printf("- Removing legacy allow shell config\n");
+        do_cpio_cmd(magiskboot, workdir, ramdisk, "rm ksu_allow_shell");
     }
 
     if (parsed.enable_adbd || !parsed.adb_debug_prop.empty()) {

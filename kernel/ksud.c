@@ -7,11 +7,13 @@
 #include <linux/fs.h>
 #include <linux/input-event-codes.h>
 #include <linux/kprobes.h>
+#include <linux/mm.h>
 #include <linux/namei.h>
 #include <linux/printk.h>
 #include <linux/rcupdate.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
+#include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -80,6 +82,7 @@ void on_post_fs_data(void)
 	// Keep this as a fallback in case second_stage sid cache is delayed.
 	ksu_file_sid = ksu_get_ksu_file_sid();
 	pr_info("ksu_file sid: %u\n", ksu_file_sid);
+	ksu_selinux_hide_handle_post_fs_data();
 }
 
 extern void ext4_unregister_sysfs(struct super_block *sb);
@@ -121,6 +124,7 @@ void on_boot_completed(void)
 
 static void ksu_initialize_selinux(void)
 {
+	ksu_selinux_hide_handle_second_stage();
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
@@ -336,6 +340,102 @@ static struct file_operations fops_proxy;
 static ssize_t ksu_rc_pos = 0;
 const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
 
+#define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
+#define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
+
+static char *module_rc_buf;
+static size_t module_rc_len;
+static ssize_t module_rc_pos;
+
+static struct file *open_module_rc(const char **chosen_path)
+{
+	struct file *f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
+
+	if (!IS_ERR(f)) {
+		*chosen_path = MODULE_RC_PATH_WATCHDOG;
+		return f;
+	}
+
+	f = filp_open(MODULE_RC_PATH_DEFAULT, O_RDONLY, 0);
+	if (!IS_ERR(f)) {
+		*chosen_path = MODULE_RC_PATH_DEFAULT;
+		return f;
+	}
+
+	*chosen_path = MODULE_RC_PATH_DEFAULT;
+	return f;
+}
+
+static void load_module_rc_once(void)
+{
+	static bool loaded = false;
+	struct file *f;
+	const char *path = NULL;
+	loff_t pos = 0;
+	ssize_t ret;
+	size_t file_size;
+	const struct cred *old_cred;
+
+	if (loaded)
+		return;
+	loaded = true;
+
+	if (ksu_no_custom_rc) {
+		pr_info("module rc: custom rc is disabled\n");
+		return;
+	}
+
+	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
+
+	f = open_module_rc(&path);
+	if (IS_ERR(f)) {
+		pr_info("module rc: open %s failed: %ld\n", path, PTR_ERR(f));
+		goto out_revert_creds;
+	}
+
+	if (!S_ISREG(file_inode(f)->i_mode)) {
+		pr_warn("module rc: %s is not a regular file\n", path);
+		goto out_close_file;
+	}
+
+	file_size = i_size_read(file_inode(f));
+	if (!file_size) {
+		pr_warn("module rc: skip empty module rc\n");
+		goto out_close_file;
+	}
+
+	module_rc_buf = kvmalloc(file_size, GFP_KERNEL);
+	if (!module_rc_buf) {
+		pr_err("module rc: alloc %zu failed\n", file_size);
+		goto out_close_file;
+	}
+
+	ret = kernel_read(f, module_rc_buf, file_size, &pos);
+	if (ret <= 0) {
+		pr_err("module rc: read failed: %zd\n", ret);
+		kvfree(module_rc_buf);
+		module_rc_buf = NULL;
+		goto out_close_file;
+	}
+
+	module_rc_len = ret;
+	pr_info("module rc: loaded %zu bytes from %s\n", module_rc_len, path);
+
+out_close_file:
+	filp_close(f, NULL);
+
+out_revert_creds:
+	if (old_cred)
+		revert_creds(old_cred);
+}
+
+static void free_module_rc(void)
+{
+	kvfree(module_rc_buf);
+	module_rc_buf = NULL;
+	module_rc_len = 0;
+}
+
 static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
 			  loff_t *pos)
 {
@@ -343,28 +443,55 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
 	size_t append_count;
 	if (ksu_rc_pos && ksu_rc_pos < ksu_rc_len)
 		goto append_ksu_rc;
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos < module_rc_len)
+		goto append_module_rc;
 
 	ret = orig_read(file, buf, count, pos);
-	if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
+	if (ret != 0)
 		return ret;
-	} else {
-		pr_info("read_proxy: orig read finished, start append rc\n");
-	}
-append_ksu_rc:
-	append_count = ksu_rc_len - ksu_rc_pos;
-	if (append_count > count - ret)
-		append_count = count - ret;
-	if (copy_to_user(buf + ret, KERNEL_SU_RC + ksu_rc_pos, append_count)) {
-		pr_info("read_proxy: append error, totally appended %ld\n",
-			ksu_rc_pos);
-	} else {
-		pr_info("read_proxy: append %ld\n", append_count);
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= module_rc_len)
+		return ret;
 
-		ksu_rc_pos += append_count;
-		if (ksu_rc_pos == ksu_rc_len) {
-			pr_info("read_proxy: append done\n");
+	pr_info("read_proxy: orig read finished, start append rc\n");
+
+append_ksu_rc:
+	if (ksu_rc_pos < ksu_rc_len) {
+		append_count = ksu_rc_len - ksu_rc_pos;
+		if (append_count > count - ret)
+			append_count = count - ret;
+		if (copy_to_user(buf + ret, KERNEL_SU_RC + ksu_rc_pos,
+				 append_count)) {
+			pr_info(
+			    "read_proxy: append error, totally appended %ld\n",
+			    ksu_rc_pos);
+			return ret;
 		}
+		pr_info("read_proxy: append static %zu\n", append_count);
+		ksu_rc_pos += append_count;
 		ret += append_count;
+		if (ksu_rc_pos == ksu_rc_len)
+			pr_info("read_proxy: static append done\n");
+	}
+
+append_module_rc:
+	if (module_rc_pos < module_rc_len && (size_t)ret < count) {
+		append_count = module_rc_len - module_rc_pos;
+		if (append_count > count - ret)
+			append_count = count - ret;
+		if (copy_to_user(buf + ret, module_rc_buf + module_rc_pos,
+				 append_count)) {
+			pr_info("read_proxy: module append error, totally "
+				"appended %zd\n",
+				module_rc_pos);
+			return ret;
+		}
+		pr_info("read_proxy: append module %zu\n", append_count);
+		module_rc_pos += append_count;
+		ret += append_count;
+		if (module_rc_pos == (ssize_t)module_rc_len) {
+			pr_info("read_proxy: module append done\n");
+			free_module_rc();
+		}
 	}
 
 	return ret;
@@ -376,28 +503,51 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 	size_t append_count;
 	if (ksu_rc_pos && ksu_rc_pos < ksu_rc_len)
 		goto append_ksu_rc;
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos < module_rc_len)
+		goto append_module_rc;
 
 	ret = orig_read_iter(iocb, to);
-	if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
+	if (ret != 0)
 		return ret;
-	} else {
-		pr_info(
-		    "read_iter_proxy: orig read finished, start append rc\n");
-	}
-append_ksu_rc:
-	append_count = copy_to_iter(KERNEL_SU_RC + ksu_rc_pos,
-				    ksu_rc_len - ksu_rc_pos, to);
-	if (!append_count) {
-		pr_info("read_iter_proxy: append error, totally appended %ld\n",
-			ksu_rc_pos);
-	} else {
-		pr_info("read_iter_proxy: append %ld\n", append_count);
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= module_rc_len)
+		return ret;
 
-		ksu_rc_pos += append_count;
-		if (ksu_rc_pos == ksu_rc_len) {
-			pr_info("read_iter_proxy: append done\n");
+	pr_info("read_iter_proxy: orig read finished, start append rc\n");
+
+append_ksu_rc:
+	if (ksu_rc_pos < ksu_rc_len) {
+		append_count = copy_to_iter(KERNEL_SU_RC + ksu_rc_pos,
+					    ksu_rc_len - ksu_rc_pos, to);
+		if (!append_count) {
+			pr_info("read_iter_proxy: append error, totally "
+				"appended %ld\n",
+				ksu_rc_pos);
+			return ret;
 		}
+		pr_info("read_iter_proxy: append static %zu\n", append_count);
+		ksu_rc_pos += append_count;
 		ret += append_count;
+		if (ksu_rc_pos == ksu_rc_len)
+			pr_info("read_iter_proxy: static append done\n");
+	}
+
+append_module_rc:
+	if (module_rc_pos < module_rc_len) {
+		append_count = copy_to_iter(module_rc_buf + module_rc_pos,
+					    module_rc_len - module_rc_pos, to);
+		if (!append_count) {
+			pr_info("read_iter_proxy: module append error, "
+				"appended %zd\n",
+				module_rc_pos);
+			return ret;
+		}
+		pr_info("read_iter_proxy: append module %zu\n", append_count);
+		module_rc_pos += append_count;
+		ret += append_count;
+		if (module_rc_pos == (ssize_t)module_rc_len) {
+			pr_info("read_iter_proxy: module append done\n");
+			free_module_rc();
+		}
 	}
 	return ret;
 }
@@ -448,8 +598,10 @@ static void ksu_handle_sys_read(unsigned int fd)
 	}
 	rc_hooked = true;
 
-	pr_info("read init.rc, comm: %s, rc_count: %zu\n", current->comm,
-		ksu_rc_len);
+	load_module_rc_once();
+
+	pr_info("read init.rc, comm: %s, rc_count: %zu, module_rc: %zu\n",
+		current->comm, ksu_rc_len, module_rc_len);
 
 	memcpy(&fops_proxy, file->f_op, sizeof(struct file_operations));
 	orig_read = file->f_op->read;
@@ -500,10 +652,14 @@ static long __nocfi ksu_sys_fstat(const struct pt_regs *regs)
 		void __user *st_size_ptr =
 		    statbuf + offsetof(struct stat, st_size);
 		long size, new_size;
+		size_t extra;
+		load_module_rc_once();
+		extra = ksu_rc_len + module_rc_len;
 		if (!copy_from_user_nofault(&size, st_size_ptr, sizeof(long))) {
-			new_size = size + ksu_rc_len;
-			pr_info("adding ksu_rc_len: %ld -> %ld", size,
-				new_size);
+			new_size = size + extra;
+			pr_info(
+			    "adding rc len: %ld -> %ld (static=%zu module=%zu)",
+			    size, new_size, ksu_rc_len, module_rc_len);
 			copy_to_user_nofault(st_size_ptr, &new_size,
 					     sizeof(long));
 		}

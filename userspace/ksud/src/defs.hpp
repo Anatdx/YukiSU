@@ -37,12 +37,17 @@ constexpr const char* SULOGD_LOCK_PATH = "/data/adb/ksu/sulogd.lock";
 constexpr const char* MODULE_DIR = "/data/adb/modules/";
 constexpr const char* MODULE_UPDATE_DIR = "/data/adb/modules_update/";
 constexpr const char* METAMODULE_DIR = "/data/adb/metamodule/";
+constexpr const char* PREINIT_DIR_WATCHDOG = "/metadata/watchdog/ksu/";
+constexpr const char* PREINIT_DIR_DEFAULT = "/metadata/ksu/";
+constexpr const char* MODULES_RC_FILE = "modules.rc";
+constexpr const char* MODULES_RC_TMP_FILE = ".modules.rc.tmp";
 
 constexpr const char* MODULE_WEB_DIR = "webroot";
 constexpr const char* MODULE_ACTION_SH = "action.sh";
 constexpr const char* DISABLE_FILE_NAME = "disable";
 constexpr const char* UPDATE_FILE_NAME = "update";
 constexpr const char* REMOVE_FILE_NAME = "remove";
+constexpr const char* MODULE_INIT_RC_DIR = "initrc";
 
 // Module config system
 constexpr const char* MODULE_CONFIG_DIR = "/data/adb/ksu/module_configs/";

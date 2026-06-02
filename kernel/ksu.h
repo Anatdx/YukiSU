@@ -41,6 +41,7 @@ static inline int endswith(const char *s, const char *t)
 
 extern struct cred *ksu_cred;
 extern bool ksu_late_loaded;
+extern bool ksu_no_custom_rc;
 extern struct selinux_policy *backup_sepolicy;
 
 #endif // #ifndef __KSU_H_KSU

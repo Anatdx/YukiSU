@@ -228,14 +228,31 @@ bool load_module(const char* path) {
         sym->st_value = it->second;
     }
 
-    const char* param_values = "";
+    std::string param_values;
+    {
+        std::ifstream config("/ksu_config", std::ios::binary);
+        if (config.is_open()) {
+            std::ostringstream buffer;
+            buffer << config.rdbuf();
+            param_values = buffer.str();
+            while (!param_values.empty() &&
+                   (param_values.back() == '\n' || param_values.back() == '\r' ||
+                    param_values.back() == '\0')) {
+                param_values.pop_back();
+            }
+        }
+    }
     if (access("/ksu_allow_shell", F_OK) == 0) {
         KLOGW("ksu allow shell at init");
-        param_values = "allow_shell=1";
+        if (!param_values.empty()) {
+            param_values += " ";
+        }
+        param_values += "allow_shell=1";
     }
+    KLOGI("load module params: %s", param_values.c_str());
 
     // Load the module
-    if (init_module_syscall(buffer.data(), buffer.size(), param_values) != 0) {
+    if (init_module_syscall(buffer.data(), buffer.size(), param_values.c_str()) != 0) {
         KLOGE("init_module failed: %s", strerror(errno));
         return false;
     }

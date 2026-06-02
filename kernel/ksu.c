@@ -58,6 +58,7 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #include "feature/selinux_hide.h"
 #include "file_wrapper.h"
 #include "hook/lsm_hook.h"
+#include "infra/symbol_resolver.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "ksud.h"
@@ -77,6 +78,9 @@ bool allow_shell = true;
 bool allow_shell = false;
 #endif // #ifdef CONFIG_KSU_DEBUG
 module_param(allow_shell, bool, 0);
+
+bool ksu_no_custom_rc = false;
+module_param_named(norc, ksu_no_custom_rc, bool, 0);
 
 void yukisu_custom_config_init(void)
 {
@@ -162,6 +166,8 @@ int __init kernelsu_init(void)
 	if (allow_shell) {
 		pr_alert("shell is allowed at init!");
 	}
+
+	ksu_init_symbol_resolver();
 
 	ksu_cred = prepare_creds();
 	if (!ksu_cred) {

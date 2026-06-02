@@ -1,6 +1,7 @@
 #include "module.hpp"
 #include "../assets.hpp"
 #include "../core/ksucalls.hpp"
+#include "../core/restorecon.hpp"
 #include "../defs.hpp"
 #include "../log.hpp"
 #include "../sepolicy/sepolicy.hpp"
@@ -11,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <climits>
@@ -50,6 +52,7 @@ namespace {
 
 constexpr uint32_t KSU_GET_INFO_FLAG_LATE_LOAD = 1U << 2;
 constexpr const char* INSTALLER_SCRIPT_NAME = "installer.sh";
+constexpr const char* METADATA_FILE_CON = "u:object_r:metadata_file:s0";
 
 // Escape special characters for JSON string
 std::string escape_json(const std::string& s) {
@@ -97,6 +100,68 @@ std::string escape_json(const std::string& s) {
 bool file_exists(const std::string& path) {
     struct stat st{};
     return stat(path.c_str(), &st) == 0;
+}
+
+std::filesystem::path preinit_ksu_dir() {
+    if (std::filesystem::is_directory("/metadata/watchdog")) {
+        return PREINIT_DIR_WATCHDOG;
+    }
+    return PREINIT_DIR_DEFAULT;
+}
+
+bool has_rc_extension(const std::filesystem::path& path) {
+    return path.extension() == ".rc";
+}
+
+void collect_rc_files(const std::filesystem::path& dir, const std::string* module_id,
+                      std::ofstream& out) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec)) {
+        return;
+    }
+
+    std::vector<std::filesystem::directory_entry> entries;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (ec) {
+            return;
+        }
+        entries.push_back(entry);
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.path().filename().string() < rhs.path().filename().string();
+    });
+
+    for (const auto& entry : entries) {
+        const std::filesystem::path path = entry.path();
+        if (!std::filesystem::is_regular_file(path, ec) || !has_rc_extension(path)) {
+            continue;
+        }
+
+        if (module_id == nullptr && access(path.c_str(), X_OK) != 0) {
+            continue;
+        }
+
+        if (module_id != nullptr) {
+            out << "# === from " << *module_id << ":" << path.string() << " ===\n";
+        } else {
+            out << "# === from " << path.string() << " ===\n";
+        }
+
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            LOGW("Failed to read init rc: %s", path.c_str());
+            continue;
+        }
+        out << input.rdbuf();
+        out << "\n";
+    }
+}
+
+void warn_regenerate_preinit_rc_failed(int ret) {
+    if (ret != 0) {
+        LOGW("regenerate preinit rc failed: %d", ret);
+    }
 }
 
 // Resolve module icon path with security checks
@@ -340,7 +405,8 @@ std::string build_install_wrapper_script(bool installing_metamodule) {
     return script.str();
 }
 
-bool exec_install_script(const std::string& zip_path, bool installing_metamodule) {
+bool exec_install_script(const std::string& zip_path, bool installing_metamodule,
+                         const std::string& module_id) {
     std::array<char, PATH_MAX> realpath_buf{};
     if (realpath(zip_path.c_str(), realpath_buf.data()) == nullptr) {
         printf("! Invalid zip path: %s\n", zip_path.c_str());
@@ -390,7 +456,7 @@ bool exec_install_script(const std::string& zip_path, bool installing_metamodule
     }
 
     if (pid == 0) {
-        apply_common_script_env(common_env);
+        apply_common_script_env(common_env, module_id.c_str());
         setenv("OUTFD", "1", 1);
         setenv("ZIPFILE", zipfile.c_str(), 1);
 
@@ -461,6 +527,85 @@ std::string get_metamodule_id() {
 // Forward declaration for run_script (defined below); used by module_run_action,
 // exec_module_scripts, exec_common_scripts
 int run_script(const std::string& script, bool block, const std::string& module_id = "");
+
+int regenerate_preinit_rc() {
+    const std::filesystem::path preinit_dir = preinit_ksu_dir();
+    std::error_code ec;
+    std::filesystem::create_directories(preinit_dir, ec);
+    if (ec) {
+        LOGW("Failed to create %s: %s", preinit_dir.c_str(), ec.message().c_str());
+        return 1;
+    }
+
+    const std::filesystem::path tmp_path = preinit_dir / MODULES_RC_TMP_FILE;
+    const std::filesystem::path out_path = preinit_dir / MODULES_RC_FILE;
+
+    {
+        std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            LOGW("Failed to create %s", tmp_path.c_str());
+            return 1;
+        }
+
+        collect_rc_files(std::filesystem::path(ADB_DIR) / "initrc.d", nullptr, out);
+
+        std::map<std::string, std::filesystem::path> modules;
+        std::map<std::string, bool> skipped_modules;
+
+        for (const char* root : {MODULE_UPDATE_DIR, MODULE_DIR}) {
+            if (!std::filesystem::is_directory(root, ec)) {
+                continue;
+            }
+            for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+                if (ec) {
+                    break;
+                }
+                if (!entry.is_directory(ec)) {
+                    continue;
+                }
+                const std::string id = entry.path().filename().string();
+                if (id.empty()) {
+                    continue;
+                }
+                if (file_exists((entry.path() / DISABLE_FILE_NAME).string()) ||
+                    file_exists((entry.path() / REMOVE_FILE_NAME).string())) {
+                    modules.erase(id);
+                    skipped_modules[id] = true;
+                    continue;
+                }
+                if (skipped_modules.count(id) == 0 && modules.count(id) == 0) {
+                    modules.emplace(id, entry.path());
+                }
+            }
+        }
+
+        for (const auto& [id, path] : modules) {
+            collect_rc_files(path / MODULE_INIT_RC_DIR, &id, out);
+        }
+
+        out.flush();
+        if (!out) {
+            LOGW("Failed to write %s", tmp_path.c_str());
+            return 1;
+        }
+    }
+
+    std::filesystem::rename(tmp_path, out_path, ec);
+    if (ec) {
+        LOGW("Failed to rename %s -> %s: %s", tmp_path.c_str(), out_path.c_str(),
+             ec.message().c_str());
+        std::filesystem::remove(tmp_path, ec);
+        return 1;
+    }
+
+    (void)lsetfilecon(out_path, METADATA_FILE_CON);
+
+    const std::filesystem::path stale_dir =
+        (preinit_dir == PREINIT_DIR_WATCHDOG) ? PREINIT_DIR_DEFAULT : PREINIT_DIR_WATCHDOG;
+    std::filesystem::remove(stale_dir / MODULES_RC_FILE, ec);
+
+    return 0;
+}
 
 int module_install(const std::string& zip_path) {
     // Ensure stdout is unbuffered for real-time output
@@ -564,7 +709,7 @@ int module_install(const std::string& zip_path) {
     }
 
     // Use the embedded installer script (same as the official Rust ksud flow)
-    if (!exec_install_script(zip_path, installing_metamodule)) {
+    if (!exec_install_script(zip_path, installing_metamodule, mod_id)) {
         printf("! Module installation failed\n");
         return 1;
     }
@@ -582,6 +727,7 @@ int module_install(const std::string& zip_path) {
     }
 
     LOGI("Module installed successfully");
+    warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
     return 0;
 }
 
@@ -608,6 +754,7 @@ int module_uninstall(const std::string& id) {
     }
 
     printf("Module %s marked for removal\n", id.c_str());
+    warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
     return 0;
 }
 
@@ -631,6 +778,7 @@ int module_undo_uninstall(const std::string& id) {
     }
 
     printf("Undid uninstall for module %s\n", id.c_str());
+    warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
     return 0;
 }
 
@@ -656,6 +804,7 @@ int module_enable(const std::string& id) {
     }
 
     printf("Module %s enabled\n", id.c_str());
+    warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
     return 0;
 }
 
@@ -681,6 +830,7 @@ int module_disable(const std::string& id) {
     }
 
     printf("Module %s disabled\n", id.c_str());
+    warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
     return 0;
 }
 

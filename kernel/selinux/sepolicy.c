@@ -20,6 +20,9 @@ static struct avtab_node *get_avtab_node(struct policydb *db,
 					 struct avtab_key *key,
 					 struct avtab_extended_perms *xperms);
 
+static bool is_redundant_avtab_node(struct avtab_node *node);
+static bool remove_avtab_node(struct policydb *db, struct avtab_node *node);
+
 static bool add_rule(struct policydb *db, const char *s, const char *t,
 		     const char *c, const char *p, int effect, bool invert);
 
@@ -129,6 +132,8 @@ static struct avtab_node *get_avtab_node(struct policydb *db,
 		/* this is used to get the node - insertion is actually unique
 		 */
 		node = avtab_insert_nonunique(&db->te_avtab, key, &avdatum);
+		if (!node)
+			return NULL;
 
 		int grow_size = sizeof(struct avtab_key);
 		grow_size += sizeof(struct avtab_datum);
@@ -142,6 +147,64 @@ static struct avtab_node *get_avtab_node(struct policydb *db,
 	}
 
 	return node;
+}
+
+static bool is_redundant_avtab_node(struct avtab_node *node)
+{
+	if (node->key.specified & AVTAB_XPERMS)
+		return node->datum.u.xperms == NULL;
+	if (!(node->key.specified & AVTAB_AV))
+		return false;
+	if (node->key.specified & AVTAB_AUDITDENY)
+		return node->datum.u.data == ~0U;
+	return node->datum.u.data == 0U;
+}
+
+static bool remove_avtab_node(struct policydb *db, struct avtab_node *node)
+{
+	struct avtab removed = {};
+	struct avtab_node *n;
+	struct avtab_node *prev;
+	int shrink_size = sizeof(struct avtab_key) + sizeof(struct avtab_datum);
+	int ret;
+	int i;
+
+	ret = avtab_alloc(&removed, 1);
+	if (ret < 0)
+		return false;
+
+	for (i = 0; i < db->te_avtab.nslot; i++) {
+		prev = NULL;
+		for (n = db->te_avtab.htable[i]; n; prev = n, n = n->next) {
+			if (n != node)
+				continue;
+
+			if (prev)
+				prev->next = n->next;
+			else
+				db->te_avtab.htable[i] = n->next;
+
+			if (db->te_avtab.nel > 0)
+				db->te_avtab.nel--;
+
+			if ((n->key.specified & AVTAB_XPERMS) &&
+			    n->datum.u.xperms) {
+				shrink_size +=
+				    sizeof(u8) + sizeof(u8) +
+				    sizeof(u32) *
+					ARRAY_SIZE(n->datum.u.xperms->perms.p);
+			}
+			n->next = NULL;
+			removed.htable[0] = n;
+			removed.nel = 1;
+			avtab_destroy(&removed);
+			db->len -= shrink_size;
+			return true;
+		}
+	}
+
+	avtab_destroy(&removed);
+	return false;
 }
 
 static bool add_rule(struct policydb *db, const char *s, const char *t,
@@ -250,12 +313,23 @@ static void add_rule_raw(struct policydb *db, struct type_datum *src,
 		}
 	} else {
 		struct avtab_key key;
+		struct avtab_node *node;
+
 		key.source_type = src->value;
 		key.target_type = tgt->value;
 		key.target_class = cls->value;
 		key.specified = effect;
 
-		struct avtab_node *node = get_avtab_node(db, &key, NULL);
+		if (invert) {
+			node = avtab_search_node(&db->te_avtab, &key);
+			if (!node)
+				return;
+		} else {
+			node = get_avtab_node(db, &key, NULL);
+			if (!node)
+				return;
+		}
+
 		if (invert) {
 			if (perm)
 				node->datum.u.data &=
@@ -268,6 +342,8 @@ static void add_rule_raw(struct policydb *db, struct type_datum *src,
 			else
 				node->datum.u.data = ~0U;
 		}
+		if (is_redundant_avtab_node(node))
+			remove_avtab_node(db, node);
 	}
 }
 
