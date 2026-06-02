@@ -130,7 +130,7 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
 
     var text by rememberSaveable { mutableStateOf("") }
     var tempText: String
-    val logContent = rememberSaveable { StringBuilder() }
+    val logContent = remember { StringBuilder() }
     var showFloatAction by rememberSaveable { mutableStateOf(false) }
     var shouldWarningUserMetaModule by rememberSaveable { mutableStateOf(false) }
     // ??????????????

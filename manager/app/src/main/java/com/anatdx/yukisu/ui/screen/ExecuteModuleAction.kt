@@ -40,7 +40,7 @@ import java.util.*
 fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String) {
     var text by rememberSaveable { mutableStateOf("") }
     var tempText : String
-    val logContent = rememberSaveable { StringBuilder() }
+    val logContent = remember { StringBuilder() }
     val snackBarHost = LocalSnackbarHost.current
     val activity = LocalActivity.current
     val scope = rememberCoroutineScope()

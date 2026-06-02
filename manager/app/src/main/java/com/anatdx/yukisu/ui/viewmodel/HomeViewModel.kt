@@ -1,6 +1,5 @@
 package com.anatdx.yukisu.ui.viewmodel
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.system.Os
@@ -305,7 +304,7 @@ class HomeViewModel : ViewModel() {
             }
 
             val deviceModel = try {
-                getDeviceModel()
+                resolveDeviceName()
             } catch (_: Exception) {
                 "Unknown"
             }
@@ -359,58 +358,6 @@ class HomeViewModel : ViewModel() {
             }
 
             Tuple4(superuserCount, moduleCount, zygiskImplement, metaModuleImplement)
-        }
-    }
-
-
-    @SuppressLint("PrivateApi")
-    private fun getDeviceModel(): String {
-        return try {
-            val systemProperties = Class.forName("android.os.SystemProperties")
-            val getMethod = systemProperties.getMethod("get", String::class.java, String::class.java)
-            val marketNameKeys = listOf(
-                "ro.product.marketname",
-                "ro.vendor.oplus.market.name",
-                "ro.vivo.market.name",
-                "ro.config.marketing_name"
-            )
-            var result = getDeviceInfo()
-            for (key in marketNameKeys) {
-                try {
-                    val marketName = getMethod.invoke(null, key, "") as String
-                    if (marketName.isNotEmpty()) {
-                        result = marketName
-                        break
-                    }
-                } catch (_: Exception) {
-                }
-            }
-            result
-        } catch (
-
-            _: Exception) {
-            getDeviceInfo()
-        }
-    }
-
-    private fun getDeviceInfo(): String {
-        return try {
-            var manufacturer = Build.MANUFACTURER ?: "Unknown"
-            manufacturer = manufacturer[0].uppercaseChar().toString() + manufacturer.substring(1)
-
-            val brand = Build.BRAND ?: ""
-            if (brand.isNotEmpty() && !brand.equals(Build.MANUFACTURER, ignoreCase = true)) {
-                manufacturer += " " + brand[0].uppercaseChar() + brand.substring(1)
-            }
-
-            val model = Build.MODEL ?: ""
-            if (model.isNotEmpty()) {
-                manufacturer += " $model "
-            }
-
-            manufacturer
-        } catch (_: Exception) {
-            "Unknown Device"
         }
     }
 

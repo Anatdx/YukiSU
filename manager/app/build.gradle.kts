@@ -77,6 +77,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            excludes += "lib/*/libandroidx.graphics.path.so"
         }
         resources {
             // https://stackoverflow.com/a/58956288
