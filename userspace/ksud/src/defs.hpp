@@ -69,10 +69,10 @@ constexpr const char* UMOUNT_CONFIG_PATH = "/data/adb/ksu/.umount";
 enum class FeatureId : uint32_t {
     SuCompat = 0,
     KernelUmount = 1,
-    EnhancedSecurity = 2,
+    SuLog = 2,
     AdbRoot = 3,
     SelinuxHide = 4,
-    SuLog = 100,
+    EnhancedSecurity = 100,
 };
 
 // ioctl constants

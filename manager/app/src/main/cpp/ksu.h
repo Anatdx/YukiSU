@@ -91,10 +91,10 @@ void get_hook_type(char *hook_type);
 enum ksu_feature_id {
   KSU_FEATURE_SU_COMPAT = 0,
   KSU_FEATURE_KERNEL_UMOUNT = 1,
-  KSU_FEATURE_ENHANCED_SECURITY = 2,
+  KSU_FEATURE_SULOG = 2,
   KSU_FEATURE_ADB_ROOT = 3,
   KSU_FEATURE_SELINUX_HIDE = 4,
-  KSU_FEATURE_SULOG = 100,
+  KSU_FEATURE_ENHANCED_SECURITY = 100,
 };
 
 // Generic feature API
