@@ -17,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -31,6 +30,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.ramcosta.composedestinations.annotation.Destination
@@ -67,6 +68,8 @@ fun AppProfileScreen(
     val snackBarHost = LocalSnackbarHost.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val scope = rememberCoroutineScope()
+    val viewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current)
+    val superUserViewModel = viewModel<SuperUserViewModel>(viewModelStoreOwner = viewModelStoreOwner)
     val failToUpdateAppProfile = stringResource(R.string.failed_to_update_app_profile).format(appInfo.label)
     val failToUpdateSepolicy = stringResource(R.string.failed_to_update_sepolicy).format(appInfo.label)
     val suNotAllowed = stringResource(R.string.su_not_allowed).format(appInfo.label)
@@ -95,7 +98,6 @@ fun AppProfileScreen(
         topBar = {
             TopBar(
                 title = appInfo.label,
-                packageName = packageName,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = cardColor.copy(alpha = cardAlpha),
                     scrolledContainerColor = cardColor.copy(alpha = cardAlpha)
@@ -149,6 +151,10 @@ fun AppProfileScreen(
                         snackBarHost.showSnackbar(failToUpdateAppProfile.format(appInfo.uid))
                     } else {
                         profile = it
+                        superUserViewModel.updateAppProfileLocally(packageName, it)
+                        scope.launch {
+                            superUserViewModel.refreshAppConfigurations()
+                        }
                     }
                 }
             },
@@ -360,7 +366,6 @@ private enum class Mode(@param:StringRes private val res: Int) {
 @Composable
 private fun TopBar(
     title: String,
-    packageName: String,
     onBack: () -> Unit,
     colors: TopAppBarColors,
     scrollBehavior: TopAppBarScrollBehavior? = null
@@ -371,11 +376,6 @@ private fun TopBar(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.alpha(0.8f)
                 )
             }
         },
