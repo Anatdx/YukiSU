@@ -216,6 +216,38 @@ class SuperUserViewModel : ViewModel() {
         refreshAppConfigurations()
     }
 
+    suspend fun updateGroupPermission(
+        appGroup: AppGroup,
+        allowSu: Boolean,
+        umountModules: Boolean? = null
+    ): Boolean {
+        var updatedAny = false
+
+        appGroup.apps.forEach { app ->
+            val profile = Natives.getAppProfile(app.packageName, app.uid)
+            val updatedProfile = profile.copy(
+                allowSu = allowSu,
+                umountModules = umountModules ?: profile.umountModules,
+                nonRootUseDefault = if (!allowSu && umountModules != null) {
+                    !umountModules
+                } else {
+                    profile.nonRootUseDefault
+                }
+            )
+            if (Natives.setAppProfile(updatedProfile)) {
+                updateAppProfileLocally(app.packageName, updatedProfile)
+                notifyConfigChange(app.packageName)
+                updatedAny = true
+            }
+        }
+
+        if (updatedAny) {
+            refreshAppConfigurations()
+        }
+
+        return updatedAny
+    }
+
     fun updateAppProfileLocally(packageName: String, updatedProfile: Natives.Profile) {
         appListMutex.tryLock().let { locked ->
             if (locked) {
@@ -225,6 +257,7 @@ class SuperUserViewModel : ViewModel() {
                             app.copy(profile = updatedProfile)
                         } else app
                     }
+                    appGroups = groupAppsByUid(apps)
                 } finally {
                     appListMutex.unlock()
                 }
@@ -265,7 +298,10 @@ class SuperUserViewModel : ViewModel() {
                     }
                 }.awaitAll().flatten()
 
-                appListMutex.withLock { apps = updatedApps }
+                appListMutex.withLock {
+                    apps = updatedApps
+                    appGroups = groupAppsByUid(updatedApps)
+                }
                 loadingProgress = 1f
             }
         }

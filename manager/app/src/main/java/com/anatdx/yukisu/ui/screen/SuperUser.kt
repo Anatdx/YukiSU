@@ -6,8 +6,11 @@ import androidx.compose.animation.core.*
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -32,6 +35,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,15 +43,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -74,6 +84,8 @@ import com.anatdx.yukisu.ui.viewmodel.SortType
 import com.anatdx.yukisu.ui.viewmodel.SuperUserViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 enum class AppPriority(val value: Int) {
     ROOT(1), CUSTOM(2), DEFAULT(3)
@@ -84,6 +96,11 @@ data class BottomSheetMenuItem(
     val titleRes: Int,
     val onClick: () -> Unit
 )
+
+private enum class AppSwipeAction {
+    GrantRoot,
+    UmountModules
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
@@ -812,6 +829,223 @@ private fun EmptyState(
     }
 }
 
+@Composable
+private fun SwipeActionContainer(
+    enabled: Boolean,
+    onSwipeLeft: suspend () -> Boolean,
+    onSwipeRight: suspend () -> Boolean,
+    content: @Composable () -> Unit
+) {
+    val density = LocalDensity.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val actionThresholdPx = remember(density) { with(density) { 132.dp.toPx() } }
+    val maxRevealPx = remember(density) { with(density) { 148.dp.toPx() } }
+    val rootBackgroundColor = Color(0xFFDFF3D8)
+    val rootContentColor = Color(0xFF246B35)
+    val umountBackgroundColor = Color(0xFFFFE1E1)
+    val umountContentColor = Color(0xFF9B1C1C)
+    val scope = rememberCoroutineScope()
+    var targetOffsetX by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    var settleSpec by remember { mutableStateOf<AnimationSpec<Float>>(spring(stiffness = Spring.StiffnessMediumLow)) }
+    val offsetX by animateFloatAsState(
+        targetValue = targetOffsetX,
+        animationSpec = if (isDragging) snap() else settleSpec,
+        label = "appSwipeOffset"
+    )
+    val action = when {
+        offsetX < 0f -> AppSwipeAction.UmountModules
+        offsetX > 0f -> AppSwipeAction.GrantRoot
+        else -> null
+    }
+    val backgroundColor = when (action) {
+        AppSwipeAction.GrantRoot -> rootBackgroundColor
+        AppSwipeAction.UmountModules -> umountBackgroundColor
+        null -> Color.Transparent
+    }
+    val contentColor = when (action) {
+        AppSwipeAction.GrantRoot -> rootContentColor
+        AppSwipeAction.UmountModules -> umountContentColor
+        null -> Color.Transparent
+    }
+    val actionProgress = (abs(offsetX) / actionThresholdPx).coerceIn(0f, 1f)
+
+    fun boundedSwipeOffset(rawOffset: Float): Float {
+        return rawOffset.coerceIn(-maxRevealPx, maxRevealPx)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(0.dp))
+            .background(backgroundColor)
+    ) {
+        if (action != null) {
+            SwipeActionHint(
+                action = action,
+                contentColor = contentColor.copy(alpha = 0.45f + actionProgress * 0.55f),
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(horizontal = 24.dp)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .fillMaxWidth()
+                .pointerInput(enabled, onSwipeLeft, onSwipeRight) {
+                    if (!enabled) return@pointerInput
+
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var pointerId = down.id
+                        var totalX = 0f
+                        var totalY = 0f
+                        var horizontalLocked = false
+                        var thresholdHapticSent = false
+
+                        while (!horizontalLocked) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull { it.id == pointerId }
+                                ?: event.changes.firstOrNull { it.pressed }
+                                ?: return@awaitEachGesture
+
+                            pointerId = change.id
+
+                            if (!change.pressed) {
+                                return@awaitEachGesture
+                            }
+
+                            val delta = change.positionChange()
+                            totalX += delta.x
+                            totalY += delta.y
+
+                            val absX = abs(totalX)
+                            val absY = abs(totalY)
+                            val touchSlop = viewConfiguration.touchSlop
+
+                            if (absY > touchSlop && absY > absX) {
+                                return@awaitEachGesture
+                            }
+
+                            if (absX > touchSlop * 2.4f && absX > absY * 1.8f) {
+                                horizontalLocked = true
+                                change.consume()
+                                isDragging = true
+                                targetOffsetX = boundedSwipeOffset(totalX)
+                            }
+                        }
+
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull { it.id == pointerId }
+                                ?: event.changes.firstOrNull { it.pressed }
+                                ?: break
+
+                            if (!change.pressed) {
+                                break
+                            }
+
+                            val deltaX = change.positionChange().x
+                            if (deltaX != 0f) {
+                                change.consume()
+                                targetOffsetX = boundedSwipeOffset(targetOffsetX + deltaX)
+                                if (!thresholdHapticSent && abs(targetOffsetX) >= actionThresholdPx) {
+                                    thresholdHapticSent = true
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            }
+                        }
+
+                        isDragging = false
+                        val finalOffset = targetOffsetX
+                        when {
+                            finalOffset <= -actionThresholdPx -> {
+                                settleSpec = tween(120)
+                                targetOffsetX = -maxRevealPx
+                                scope.launch {
+                                    kotlinx.coroutines.delay(120)
+                                    onSwipeLeft()
+                                    settleSpec = spring(stiffness = Spring.StiffnessHigh)
+                                    targetOffsetX = 0f
+                                }
+                            }
+                            finalOffset >= actionThresholdPx -> {
+                                settleSpec = tween(120)
+                                targetOffsetX = maxRevealPx
+                                scope.launch {
+                                    kotlinx.coroutines.delay(120)
+                                    onSwipeRight()
+                                    settleSpec = spring(stiffness = Spring.StiffnessHigh)
+                                    targetOffsetX = 0f
+                                }
+                            }
+                            else -> {
+                                settleSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                targetOffsetX = 0f
+                            }
+                        }
+                    }
+                }
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionHint(
+    action: AppSwipeAction,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val isEndAction = action == AppSwipeAction.UmountModules
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (isEndAction) Arrangement.End else Arrangement.Start
+    ) {
+        if (action == AppSwipeAction.UmountModules) {
+            SwipeActionHintContent(
+                icon = Icons.Filled.VisibilityOff,
+                label = stringResource(R.string.profile_umount_modules),
+                contentColor = contentColor
+            )
+        } else {
+            SwipeActionHintContent(
+                icon = Icons.Filled.Security,
+                label = stringResource(R.string.category_root_apps),
+                contentColor = contentColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionHintContent(
+    icon: ImageVector,
+    label: String,
+    contentColor: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = contentColor
+        )
+        Text(
+            text = label,
+            color = contentColor,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun AppGroupItem(
@@ -825,136 +1059,153 @@ private fun AppGroupItem(
 ) {
     val mainApp = appGroup.mainApp
 
-    ListItem(
-        modifier = Modifier.pointerInput(Unit) {
-            detectTapGestures(
-                onLongPress = { onLongClick() },
-                onTap = { onClick() }
+    SwipeActionContainer(
+        enabled = !viewModel.showBatchActions,
+        onSwipeLeft = {
+            viewModel.updateGroupPermission(
+                appGroup = appGroup,
+                allowSu = false,
+                umountModules = !Natives.uidShouldUmount(appGroup.uid)
             )
         },
-        headlineContent = {
-            Text(mainApp.label)
-        },
-        supportingContent = {
-            Column {
-                val summaryText = if (appGroup.apps.size > 1) {
-                    stringResource(R.string.group_contains_apps, appGroup.apps.size)
-                } else {
-                    mainApp.packageName
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(summaryText)
-
-                    if (appGroup.apps.size > 1) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.rotate(
-                                animateFloatAsState(
-                                    targetValue = if (expandedGroups.value.contains(appGroup.uid)) 180f else 0f,
-                                    animationSpec = tween(200, easing = LinearOutSlowInEasing),
-                                    label = ""
-                                ).value
-                            )
-                        )
-                    }
-                }
-
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (appGroup.allowSu) {
-                        LabelItem(text = "ROOT")
-                    } else {
-                        if (Natives.uidShouldUmount(appGroup.uid)) {
-                            LabelItem(
-                                text = "UMOUNT",
-                                style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            )
-                        }
-                    }
-                    if (appGroup.hasCustomProfile) {
-                        LabelItem(
-                            text = "CUSTOM",
-                            style = LabelItemDefaults.style.copy(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            )
-                        )
-                    } else if (!appGroup.allowSu) {
-                        LabelItem(
-                            text = "DEFAULT",
-                            style = LabelItemDefaults.style.copy(
-                                containerColor = Color.Gray
-                            )
-                        )
-                    }
-                    if (appGroup.apps.size > 1) {
-                        appGroup.userName?.let {
-                            LabelItem(
-                                text = it,
-                                style = LabelItemDefaults.style.copy(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        leadingContent = {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(mainApp.packageInfo)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = mainApp.label,
-                modifier = Modifier.padding(4.dp).width(48.dp).height(48.dp)
+        onSwipeRight = {
+            viewModel.updateGroupPermission(
+                appGroup = appGroup,
+                allowSu = !appGroup.allowSu
             )
-        },
-        trailingContent = {
-            AnimatedVisibility(
-                visible = viewModel.showBatchActions,
-                enter = fadeIn(animationSpec = tween(200)) + scaleIn(
-                    animationSpec = tween(200),
-                    initialScale = 0.6f
-                ),
-                exit = fadeOut(animationSpec = tween(200)) + scaleOut(
-                    animationSpec = tween(200),
-                    targetScale = 0.6f
-                )
-            ) {
-                val checkboxInteractionSource = remember { MutableInteractionSource() }
-                val isCheckboxPressed by checkboxInteractionSource.collectIsPressedAsState()
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    AnimatedVisibility(
-                        visible = isCheckboxPressed,
-                        enter = expandHorizontally() + fadeIn(),
-                        exit = shrinkHorizontally() + fadeOut()
-                    ) {
-                        Text(
-                            text = if (isSelected) stringResource(R.string.selected) else stringResource(R.string.select),
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
-                    }
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelection() },
-                        interactionSource = checkboxInteractionSource,
-                    )
-                }
-            }
         }
-    )
+    ) {
+        ListItem(
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { onLongClick() },
+                    onTap = { onClick() }
+                )
+            },
+            headlineContent = {
+                Text(mainApp.label)
+            },
+            supportingContent = {
+                Column {
+                    val summaryText = if (appGroup.apps.size > 1) {
+                        stringResource(R.string.group_contains_apps, appGroup.apps.size)
+                    } else {
+                        mainApp.packageName
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(summaryText)
+
+                        if (appGroup.apps.size > 1) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.rotate(
+                                    animateFloatAsState(
+                                        targetValue = if (expandedGroups.value.contains(appGroup.uid)) 180f else 0f,
+                                        animationSpec = tween(200, easing = LinearOutSlowInEasing),
+                                        label = ""
+                                    ).value
+                                )
+                            )
+                        }
+                    }
+
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (appGroup.allowSu) {
+                            LabelItem(text = "ROOT")
+                        } else {
+                            if (Natives.uidShouldUmount(appGroup.uid)) {
+                                LabelItem(
+                                    text = "UMOUNT",
+                                    style = LabelItemDefaults.style.copy(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                )
+                            }
+                        }
+                        if (appGroup.hasCustomProfile) {
+                            LabelItem(
+                                text = "CUSTOM",
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
+                            )
+                        } else if (!appGroup.allowSu) {
+                            LabelItem(
+                                text = "DEFAULT",
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = Color.Gray
+                                )
+                            )
+                        }
+                        if (appGroup.apps.size > 1) {
+                            appGroup.userName?.let {
+                                LabelItem(
+                                    text = it,
+                                    style = LabelItemDefaults.style.copy(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            leadingContent = {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(mainApp.packageInfo)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = mainApp.label,
+                    modifier = Modifier.padding(4.dp).width(48.dp).height(48.dp)
+                )
+            },
+            trailingContent = {
+                AnimatedVisibility(
+                    visible = viewModel.showBatchActions,
+                    enter = fadeIn(animationSpec = tween(200)) + scaleIn(
+                        animationSpec = tween(200),
+                        initialScale = 0.6f
+                    ),
+                    exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+                        animationSpec = tween(200),
+                        targetScale = 0.6f
+                    )
+                ) {
+                    val checkboxInteractionSource = remember { MutableInteractionSource() }
+                    val isCheckboxPressed by checkboxInteractionSource.collectIsPressedAsState()
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        AnimatedVisibility(
+                            visible = isCheckboxPressed,
+                            enter = expandHorizontally() + fadeIn(),
+                            exit = shrinkHorizontally() + fadeOut()
+                        ) {
+                            Text(
+                                text = if (isSelected) stringResource(R.string.selected) else stringResource(R.string.select),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                        }
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { onToggleSelection() },
+                            interactionSource = checkboxInteractionSource,
+                        )
+                    }
+                }
+            }
+        )
+    }
 }
