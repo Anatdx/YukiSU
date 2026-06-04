@@ -59,6 +59,7 @@ enum class SortType(val displayNameRes: Int, val persistKey: String) {
 class SuperUserViewModel : ViewModel() {
     companion object {
         private const val TAG = "SuperUserViewModel"
+        const val SHELL_UID = 2000
         private val appsLock = Any()
         var apps by mutableStateOf<List<AppInfo>>(emptyList())
         private val _isAppListLoaded = MutableStateFlow(false)
@@ -400,7 +401,7 @@ class SuperUserViewModel : ViewModel() {
                         HanziToPinyin.getInstance().toPinyinString(app.label)?.contains(search, true) == true
             }
         }.filter { group ->
-            group.uid == 2000 || showSystemApps ||
+            group.uid == SHELL_UID || showSystemApps ||
                     group.apps.any { it.packageInfo.applicationInfo!!.flags.and(ApplicationInfo.FLAG_SYSTEM) == 0 }
         }
     }
@@ -415,9 +416,10 @@ class SuperUserViewModel : ViewModel() {
         .sortedWith(
             compareBy<AppGroup> {
                 when {
-                    it.allowSu -> 0
-                    it.hasCustomProfile -> 1
-                    else -> 2
+                    it.uid == SHELL_UID -> 0
+                    it.allowSu -> 1
+                    it.hasCustomProfile -> 2
+                    else -> 3
                 }
             }.thenBy(Collator.getInstance(Locale.getDefault())) {
                 it.userName?.takeIf { name -> name.isNotBlank() } ?: it.uid.toString()

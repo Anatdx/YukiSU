@@ -88,7 +88,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class AppPriority(val value: Int) {
-    ROOT(1), CUSTOM(2), DEFAULT(3)
+    SHELL(0), ROOT(1), CUSTOM(2), DEFAULT(3)
 }
 
 data class BottomSheetMenuItem(
@@ -149,11 +149,13 @@ fun SuperUserScreen(navigator: DestinationsNavigator) {
         // 排序
         groups.sortedWith { group1, group2 ->
             val priority1 = when {
+                group1.uid == SuperUserViewModel.SHELL_UID -> AppPriority.SHELL
                 group1.allowSu -> AppPriority.ROOT
                 group1.hasCustomProfile -> AppPriority.CUSTOM
                 else -> AppPriority.DEFAULT
             }
             val priority2 = when {
+                group2.uid == SuperUserViewModel.SHELL_UID -> AppPriority.SHELL
                 group2.allowSu -> AppPriority.ROOT
                 group2.hasCustomProfile -> AppPriority.CUSTOM
                 else -> AppPriority.DEFAULT

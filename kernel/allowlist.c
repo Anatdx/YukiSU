@@ -1,5 +1,6 @@
 #include <linux/capability.h>
 #include <linux/compiler.h>
+#include <linux/err.h>
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
@@ -27,6 +28,8 @@
 
 #define KSU_APP_PROFILE_PRESERVE_UID 9999 // NOBODY_UID
 #define KSU_DEFAULT_SELINUX_DOMAIN "u:r:" KERNEL_SU_DOMAIN ":s0"
+#define SHELL_UID 2000
+#define KSU_DEFAULT_SHELL_PACKAGE "com.android.shell"
 
 static DEFINE_MUTEX(allowlist_mutex);
 
@@ -104,7 +107,6 @@ retry:
 
 static inline bool forbid_system_uid(uid_t uid)
 {
-#define SHELL_UID 2000
 #define SYSTEM_UID 1000
 	return uid < SHELL_UID && uid != SYSTEM_UID;
 }
@@ -391,6 +393,49 @@ bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
 	return true;
 }
 
+static bool allowlist_file_missing(void)
+{
+	struct file *fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
+
+	if (IS_ERR(fp))
+		return PTR_ERR(fp) == -ENOENT;
+
+	filp_close(fp, 0);
+	return false;
+}
+
+static void ensure_default_shell_profile(void)
+{
+	struct app_profile *existing = ksu_get_app_profile(SHELL_UID);
+	struct app_profile profile = {
+	    .version = KSU_APP_PROFILE_VER,
+	    .allow_su = true,
+	    .curr_uid = SHELL_UID,
+	};
+
+	if (existing) {
+		ksu_put_app_profile(existing);
+		return;
+	}
+
+	strcpy(profile.key, KSU_DEFAULT_SHELL_PACKAGE);
+	profile.rp_config.profile.uid = default_root_profile.uid;
+	profile.rp_config.profile.gid = default_root_profile.gid;
+	profile.rp_config.profile.groups_count =
+	    default_root_profile.groups_count;
+	memcpy(profile.rp_config.profile.groups, default_root_profile.groups,
+	       sizeof(default_root_profile.groups));
+	memcpy(&profile.rp_config.profile.capabilities,
+	       &default_root_profile.capabilities,
+	       sizeof(default_root_profile.capabilities));
+	profile.rp_config.profile.namespaces = default_root_profile.namespaces;
+	strcpy(profile.rp_config.profile.selinux_domain,
+	       default_root_profile.selinux_domain);
+
+	if (!ksu_set_app_profile(&profile, false))
+		pr_warn("Failed to add default shell profile\n");
+}
+
 static void do_persistent_allow_list(struct callback_head *_cb)
 {
 	u32 magic = FILE_MAGIC;
@@ -398,6 +443,9 @@ static void do_persistent_allow_list(struct callback_head *_cb)
 	struct perm_data *p = NULL;
 	loff_t off = 0;
 	int bucket;
+
+	if (allowlist_file_missing())
+		ensure_default_shell_profile();
 
 	mutex_lock(&allowlist_mutex);
 	struct file *fp =
@@ -475,7 +523,18 @@ void ksu_load_allow_list(void)
 	// load allowlist now!
 	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
-		pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
+		long err = PTR_ERR(fp);
+
+		if (err == -ENOENT) {
+			pr_info(
+			    "allowlist file missing, creating default shell "
+			    "profile\n");
+			ensure_default_shell_profile();
+			persistent_allow_list();
+			return;
+		}
+
+		pr_err("load_allow_list open file failed: %ld\n", err);
 		return;
 	}
 
