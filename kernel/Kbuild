@@ -91,7 +91,7 @@ KSU_VERSION_API := $(shell cd $(KSU_SRC) 2>/dev/null && $(GIT_BIN) describe --ta
 LOCAL_GIT_EXISTS := $(shell test -e $(KSU_SRC)/../.git && echo 1 || echo 0)
 
 define get_ksu_version_full
-v$1-$(shell cd $(KSU_SRC); $(GIT_BIN) rev-parse --short=8 HEAD)@$(shell cd $(KSU_SRC); $(GIT_BIN) rev-parse --abbrev-ref HEAD)
+v$1-$(shell cd $(KSU_SRC); $(GIT_BIN) rev-parse --short=8 HEAD)@$(REPO_NAME)
 endef
 
 ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
@@ -117,7 +117,7 @@ ifeq ($(KSU_GITHUB_VERSION),)
     $(info -- $(REPO_NAME) version (local .git): $(KSU_VERSION_FULL))
     $(info -- $(REPO_NAME) Formatted version (local .git): $(KSU_VERSION))
   else
-    KSU_VERSION_FULL := v$(KSU_VERSION_API)-$(REPO_NAME)-unknown@unknown
+    KSU_VERSION_FULL := v$(KSU_VERSION_API)-$(REPO_NAME)-unknown@$(REPO_NAME)
     $(warning -- $(REPO_NAME) version: $(KSU_VERSION_FULL))
   endif
 else
