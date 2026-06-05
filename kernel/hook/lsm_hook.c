@@ -7,8 +7,8 @@
 #include <linux/rcupdate.h>
 #include <linux/string.h>
 
-#include "../infra/symbol_resolver.h"
-#include "../klog.h" // IWYU pragma: keep
+#include "infra/symbol_resolver.h"
+#include "klog.h" // IWYU pragma: keep
 #include "lsm_hook.h"
 #include "patch_memory.h"
 

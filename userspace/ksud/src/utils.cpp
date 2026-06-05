@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -663,15 +665,16 @@ int uninstall(const std::optional<std::string>& magiskboot_path) {
     if (std::filesystem::exists(MODULE_DIR)) {
         printf("- Uninstall modules..\n");
         // Disable all modules
-        try {
-            for (const auto& entry : std::filesystem::directory_iterator(MODULE_DIR)) {
-                if (entry.is_directory()) {
-                    const std::string disable_file = entry.path().string() + "/disable";
-                    std::ofstream(disable_file).close();
-                }
+        std::error_code ec;
+        for (auto it = std::filesystem::directory_iterator(MODULE_DIR, ec);
+             it != std::filesystem::directory_iterator() && !ec; it.increment(ec)) {
+            if (it->is_directory()) {
+                const std::string disable_file = it->path().string() + "/disable";
+                std::ofstream(disable_file).close();
             }
-        } catch (const std::exception& e) {
-            LOGW("Error disabling modules: %s", e.what());
+        }
+        if (ec) {
+            LOGW("Error disabling modules: %s", ec.message().c_str());
         }
     }
 
@@ -734,4 +737,27 @@ uint64_t get_zip_uncompressed_size(const std::string& zip_path) {
 #endif  // #ifdef USE_LIBZIP
 }
 
+bool parse_uint32(const std::string& s, uint32_t* out) {
+    if (s.empty())
+        return false;
+    char* end = nullptr;
+    errno = 0;
+    unsigned long val = std::strtoul(s.c_str(), &end, 10);
+    if (end == s.c_str() || *end != '0' || errno == ERANGE || val > UINT32_MAX)
+        return false;
+    *out = static_cast<uint32_t>(val);
+    return true;
+}
+
+bool parse_uint64(const std::string& s, uint64_t* out) {
+    if (s.empty())
+        return false;
+    char* end = nullptr;
+    errno = 0;
+    unsigned long long val = std::strtoull(s.c_str(), &end, 10);
+    if (end == s.c_str() || *end != '0' || errno == ERANGE)
+        return false;
+    *out = static_cast<uint64_t>(val);
+    return true;
+}
 }  // namespace ksud

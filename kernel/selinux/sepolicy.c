@@ -5,7 +5,7 @@
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 
-#include "../klog.h" // IWYU pragma: keep
+#include "klog.h" // IWYU pragma: keep
 #include "sepolicy.h"
 #include "ss/services.h"
 #include "ss/symtab.h"

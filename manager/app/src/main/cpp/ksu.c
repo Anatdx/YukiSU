@@ -313,7 +313,6 @@ void get_hook_type(char *buff) {
 }
 
 // SuperKey authentication using prctl syscall (SECCOMP-safe)
-// prctl is not blocked by Android's SECCOMP policy, unlike reboot syscall
 bool authenticate_superkey(const char *superkey) {
   if (!superkey) {
     LogDebug("authenticate_superkey: superkey is null");
@@ -474,8 +473,8 @@ bool is_superkey_configured(void) {
   struct ksu_superkey_status_cmd cmd = {};
   if (ksuctl(KSU_IOCTL_SUPERKEY_STATUS, &cmd) == 0) {
     LogDebug("is_superkey_configured: ioctl success, is_configured=%d",
-             cmd.is_configured);
-    return cmd.is_configured != 0;
+             cmd.enabled);
+    return cmd.enabled != 0;
   }
 
   // If ioctl failed, kernel probably doesn't have SuperKey support
@@ -488,8 +487,8 @@ bool is_superkey_authenticated(void) {
   struct ksu_superkey_status_cmd cmd = {};
   if (ksuctl(KSU_IOCTL_SUPERKEY_STATUS, &cmd) == 0) {
     LogDebug("is_superkey_authenticated: ioctl success, is_authenticated=%d",
-             cmd.is_authenticated);
-    return cmd.is_authenticated != 0;
+             cmd.authenticated);
+    return cmd.authenticated != 0;
   }
 
   LogDebug("is_superkey_authenticated: ioctl failed");

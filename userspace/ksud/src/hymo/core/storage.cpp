@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <system_error>
 #include <vector>
 #include "../defs.hpp"
 #include "../utils.hpp"
@@ -42,35 +43,32 @@ static bool try_setup_tmpfs(const fs::path& target) {
 static void repair_storage_root_permissions(const fs::path& target) {
     LOG_DEBUG("Repairing storage root permissions...");
 
-    try {
-        if (chmod(target.c_str(), 0755) != 0) {
-            LOG_WARN("Failed to chmod storage root: " + std::string(strerror(errno)));
-        }
+    if (chmod(target.c_str(), 0755) != 0) {
+        LOG_WARN("Failed to chmod storage root: " + std::string(strerror(errno)));
+    }
 
-        if (chown(target.c_str(), 0, 0) != 0) {
-            LOG_WARN("Failed to chown storage root: " + std::string(strerror(errno)));
-        }
+    if (chown(target.c_str(), 0, 0) != 0) {
+        LOG_WARN("Failed to chown storage root: " + std::string(strerror(errno)));
+    }
 
-        if (!lsetfilecon(target, DEFAULT_SELINUX_CONTEXT)) {
-            LOG_WARN("Failed to set SELinux context on storage root");
-        }
-    } catch (const std::exception& e) {
-        LOG_ERROR("Exception during permission repair: " + std::string(e.what()));
+    if (!lsetfilecon(target, DEFAULT_SELINUX_CONTEXT)) {
+        LOG_WARN("Failed to set SELinux context on storage root");
     }
 }
 
 // Calculate directory size (bytes)
 static uint64_t dir_size(const fs::path& path) {
     uint64_t total = 0;
-    try {
-        if (!fs::exists(path) || !fs::is_directory(path))
-            return 0;
-        for (const auto& e : fs::recursive_directory_iterator(path)) {
-            if (e.is_regular_file())
-                total += e.file_size();
-        }
-    } catch (...) {
-        /* ignore */
+    std::error_code ec;
+    if (!fs::exists(path, ec) || (!ec && !fs::is_directory(path, ec)))
+        return 0;
+    if (ec)
+        return total;
+    auto it = fs::recursive_directory_iterator(path, ec);
+    auto end = fs::recursive_directory_iterator();
+    for (; it != end && !ec; it.increment(ec)) {
+        if (it->is_regular_file())
+            total += it->file_size();
     }
     return total;
 }
@@ -253,21 +251,25 @@ StorageHandle setup_erofs_storage(const fs::path& mnt_dir, const fs::path& sourc
                                   const fs::path& image_path) {
     LOG_DEBUG("Setting up EROFS storage at " + mnt_dir.string() + " from " + source_dir.string());
 
-    if (fs::exists(mnt_dir)) {
+    std::error_code ec;
+    if (fs::exists(mnt_dir, ec)) {
         umount2(mnt_dir.c_str(), MNT_DETACH);
     }
     ensure_dir_exists(mnt_dir);
 
     if (!is_erofs_available()) {
-        throw std::runtime_error("mkfs.erofs not found");
+        LOG_ERROR("mkfs.erofs not found");
+        return {mnt_dir, ""};
     }
 
     if (!create_erofs_image(source_dir, image_path)) {
-        throw std::runtime_error("Failed to create EROFS image");
+        LOG_ERROR("Failed to create EROFS image");
+        return {mnt_dir, ""};
     }
 
     if (!mount_image(image_path, mnt_dir, "erofs", "loop,ro,noatime")) {
-        throw std::runtime_error("Failed to mount EROFS image");
+        LOG_ERROR("Failed to mount EROFS image");
+        return {mnt_dir, ""};
     }
 
     // Register unmountable path for proper cleanup
@@ -280,10 +282,12 @@ StorageHandle setup_erofs_storage(const fs::path& mnt_dir, const fs::path& sourc
 static std::string setup_ext4_image(const fs::path& target, const fs::path& image_path) {
     LOG_DEBUG("Falling back to Ext4...");
 
-    if (!fs::exists(image_path)) {
+    std::error_code ec;
+    if (!fs::exists(image_path, ec) && !ec) {
         LOG_WARN("modules.img missing, recreating...");
         if (!create_image(image_path.parent_path())) {
-            throw std::runtime_error("Failed to create modules.img");
+            LOG_ERROR("Failed to create modules.img");
+            return "";
         }
     }
 
@@ -292,10 +296,12 @@ static std::string setup_ext4_image(const fs::path& target, const fs::path& imag
 
         if (repair_image(image_path)) {
             if (!mount_image(image_path, target, "ext4", "loop,rw,noatime")) {
-                throw std::runtime_error("Failed to mount modules.img after repair");
+                LOG_ERROR("Failed to mount modules.img after repair");
+                return "";
             }
         } else {
-            throw std::runtime_error("Failed to repair modules.img");
+            LOG_ERROR("Failed to repair modules.img");
+            return "";
         }
     }
 
@@ -399,14 +405,12 @@ static std::string format_size(uint64_t bytes) {
 
 static uint64_t calculate_dir_size(const fs::path& path) {
     uint64_t total = 0;
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(path)) {
-            if (entry.is_regular_file()) {
-                total += entry.file_size();
-            }
-        }
-    } catch (...) {
-        // Ignore errors and return best-effort size
+    std::error_code ec;
+    auto it = fs::recursive_directory_iterator(path, ec);
+    auto end = fs::recursive_directory_iterator();
+    for (; it != end && !ec; it.increment(ec)) {
+        if (it->is_regular_file())
+            total += it->file_size();
     }
     return total;
 }
@@ -456,19 +460,16 @@ void print_storage_status() {
 
     // Mirror/tmpfs mode: data may live in moduledir rather than mount_point
     if (used_bytes == 0 && state.storage_mode == "tmpfs") {
-        try {
-            Config cfg = Config::load_default();
-            fs::path module_root =
-                cfg.moduledir.empty() ? fs::path("/data/adb/modules") : fs::path(cfg.moduledir);
-            if (fs::exists(module_root)) {
-                uint64_t logical_used = calculate_dir_size(module_root);
-                if (logical_used > 0) {
-                    used_bytes = logical_used;
-                    percent = total_bytes > 0 ? (used_bytes * 100.0 / total_bytes) : 0.0;
-                }
+        Config cfg = Config::load_default();
+        fs::path module_root =
+            cfg.moduledir.empty() ? fs::path("/data/adb/modules") : fs::path(cfg.moduledir);
+        std::error_code ec;
+        if (fs::exists(module_root, ec) && !ec) {
+            uint64_t logical_used = calculate_dir_size(module_root);
+            if (logical_used > 0) {
+                used_bytes = logical_used;
+                percent = total_bytes > 0 ? (used_bytes * 100.0 / total_bytes) : 0.0;
             }
-        } catch (...) {
-            // Ignore and keep statfs results
         }
     }
 

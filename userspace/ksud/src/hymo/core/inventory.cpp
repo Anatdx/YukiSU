@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 #include "../defs.hpp"
 #include "../utils.hpp"
 
@@ -74,8 +75,12 @@ std::vector<Module> scan_modules(const fs::path& source_dir, const Config& confi
         return modules;
     }
 
-    try {
-        for (const auto& entry : fs::directory_iterator(source_dir)) {
+    {
+        std::error_code ec;
+        auto it = fs::directory_iterator(source_dir, ec);
+        auto end = fs::directory_iterator();
+        for (; it != end && !ec; it.increment(ec)) {
+            const auto& entry = *it;
             if (!entry.is_directory()) {
                 continue;
             }
@@ -86,10 +91,16 @@ std::vector<Module> scan_modules(const fs::path& source_dir, const Config& confi
                 continue;
             }
 
-            if (fs::exists(entry.path() / DISABLE_FILE_NAME) ||
-                fs::exists(entry.path() / REMOVE_FILE_NAME) ||
-                fs::exists(entry.path() / SKIP_MOUNT_FILE_NAME)) {
-                continue;
+            {
+                std::error_code ec2;
+                bool disabled = fs::exists(entry.path() / DISABLE_FILE_NAME, ec2);
+                if (!ec2)
+                    disabled = disabled || fs::exists(entry.path() / REMOVE_FILE_NAME, ec2);
+                if (!ec2)
+                    disabled = disabled || fs::exists(entry.path() / SKIP_MOUNT_FILE_NAME, ec2);
+                if (disabled) {
+                    continue;
+                }
             }
 
             std::string global_mode = "";
@@ -121,12 +132,13 @@ std::vector<Module> scan_modules(const fs::path& source_dir, const Config& confi
             modules.push_back(mod);
         }
 
+        if (ec) {
+            LOG_ERROR("Failed to scan modules: " + ec.message());
+        }
+
         // Sort by ID descending (Z->A) for overlay priority
         std::sort(modules.begin(), modules.end(),
                   [](const Module& a, const Module& b) { return a.id > b.id; });
-
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to scan modules: " + std::string(e.what()));
     }
 
     return modules;
@@ -165,16 +177,22 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
                                          "mnt", "boot", "root", "etc",   "home",
                                          "var", "opt",  "srv",  "media", "usr"};
 
-    try {
-        for (const auto& mod_entry : fs::directory_iterator(source_dir)) {
-            if (!mod_entry.is_directory())
+    {
+        std::error_code ec;
+        auto mod_it = fs::directory_iterator(source_dir, ec);
+        auto mod_end = fs::directory_iterator();
+        for (; mod_it != mod_end && !ec; mod_it.increment(ec)) {
+            if (!mod_it->is_directory())
                 continue;
 
-            for (const auto& entry : fs::directory_iterator(mod_entry.path())) {
-                if (!entry.is_directory())
+            std::error_code ec2;
+            auto entry_it = fs::directory_iterator(mod_it->path(), ec2);
+            auto entry_end = fs::directory_iterator();
+            for (; entry_it != entry_end && !ec2; entry_it.increment(ec2)) {
+                if (!entry_it->is_directory())
                     continue;
 
-                std::string name = entry.path().filename().string();
+                std::string name = entry_it->path().filename().string();
 
                 // Skip module metadata directories
                 if (module_metadata.find(name) != module_metadata.end())
@@ -198,8 +216,6 @@ std::vector<std::string> scan_partition_candidates(const fs::path& source_dir) {
                 }
             }
         }
-    } catch (...) {
-        // Ignore errors
     }
 
     return std::vector<std::string>(candidates.begin(), candidates.end());

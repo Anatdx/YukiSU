@@ -9,10 +9,13 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
+#include <system_error>
 #include <unordered_map>
 #include "../core/state.hpp"
 #include "../defs.hpp"
@@ -102,8 +105,12 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
     int file_count = 0;
     int dir_count = 0;
 
-    try {
-        for (const auto& entry : fs::directory_iterator(module_dir)) {
+    {
+        std::error_code ec;
+        auto it_m = fs::directory_iterator(module_dir, ec);
+        auto end_m = fs::directory_iterator();
+        for (; it_m != end_m && !ec; it_m.increment(ec)) {
+            const auto& entry = *it_m;
             std::string name = entry.path().filename().string();
             NodeFileType ft = get_file_type(entry.path());
 
@@ -111,10 +118,8 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
             Node* child = nullptr;
 
             if (it != node.children.end()) {
-                // Node already exists from another module - merge
                 child = &it->second;
             } else {
-                // Create new node
                 Node new_child;
                 new_child.name = name;
                 new_child.file_type = ft;
@@ -137,14 +142,15 @@ static bool collect_module_files(Node& node, const fs::path& module_dir,
                 has_file = true;
             }
         }
+        if (ec) {
+            LOG_ERROR("Exception scanning " + module_dir.string() + ": " + ec.message());
+            return false;
+        }
 
         if (has_file) {
             LOG_DEBUG("Scanned " + module_dir.string() + ": " + std::to_string(file_count) +
                       " files, " + std::to_string(dir_count) + " dirs");
         }
-    } catch (const std::exception& e) {
-        LOG_ERROR("Exception scanning " + module_dir.string() + ": " + std::string(e.what()));
-        return false;
     }
 
     return has_file;
@@ -189,18 +195,19 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
         }
 
         LOG_INFO("Processing module: " + module_id);
-        try {
+        {
             bool module_has_file = false;
+            bool module_error = false;
             for (const auto& p : partitions_to_check) {
                 fs::path part_path = module_path / p;
-                if (fs::exists(part_path) && fs::is_directory(part_path)) {
+                std::error_code ec_coll;
+                if (fs::exists(part_path, ec_coll) && !ec_coll &&
+                    fs::is_directory(part_path, ec_coll)) {
                     if (p == "system") {
                         if (collect_module_files(system, part_path, module_id)) {
                             module_has_file = true;
                         }
                     } else {
-                        // For top-level partitions like vendor/, product/ (KernelSU style)
-                        // Add them to system's children so they get extracted properly later
                         auto it = system.children.find(p);
                         if (it == system.children.end()) {
                             Node p_node;
@@ -215,17 +222,20 @@ static Node* collect_all_modules(const std::vector<fs::path>& module_paths,
                             module_has_file = true;
                         }
                     }
+                } else if (ec_coll) {
+                    LOG_ERROR("Failed to collect module " + module_id + ": " + ec_coll.message());
+                    failed_modules.push_back(module_id);
+                    module_error = true;
+                    break;
                 }
             }
+            if (module_error)
+                continue;
 
             has_file |= module_has_file;
             if (module_has_file) {
                 LOG_INFO("  Module " + module_id + " has files to mount");
             }
-        } catch (const std::exception& e) {
-            LOG_ERROR("Failed to collect module " + module_id + ": " + std::string(e.what()));
-            failed_modules.push_back(module_id);
-            continue;
         }
     }
 
@@ -308,69 +318,67 @@ static bool mount_mirror(const fs::path& src_path, const fs::path& dst_path,
     fs::path src = src_path / name;
     fs::path dst = dst_path / name;
 
-    try {
-        struct stat st;
-        if (lstat(src.c_str(), &st) != 0) {
-            LOG_WARN("lstat failed for: " + src.string());
+    struct stat st;
+    if (lstat(src.c_str(), &st) != 0) {
+        LOG_WARN("lstat failed for: " + src.string());
+        return false;
+    }
+
+    if (S_ISREG(st.st_mode)) {
+        // Regular file: create empty file then bind mount
+        int fd = open(dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, st.st_mode & 07777);
+        if (fd < 0) {
+            LOG_ERROR("Failed to create mirror file: " + dst.string());
+            return false;
+        }
+        close(fd);
+
+        if (!mount_bind_modern(src, dst, true)) {
+            LOG_WARN("Failed to bind mirror file: " + src.string());
+            return false;
+        }
+        LOG_VERBOSE("Mirror file: " + src.string() + " -> " + dst.string());
+    } else if (S_ISDIR(st.st_mode)) {
+        // Directory: create dir, copy attributes, recursively mirror children
+        if (mkdir(dst.c_str(), st.st_mode & 07777) != 0 && errno != EEXIST) {
+            LOG_ERROR("Failed to create mirror directory: " + dst.string());
             return false;
         }
 
-        if (S_ISREG(st.st_mode)) {
-            // Regular file: create empty file then bind mount
-            int fd = open(dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, st.st_mode & 07777);
-            if (fd < 0) {
-                LOG_ERROR("Failed to create mirror file: " + dst.string());
-                return false;
-            }
-            close(fd);
+        chmod(dst.c_str(), st.st_mode & 07777);
+        chown(dst.c_str(), st.st_uid, st.st_gid);
+        clone_attr(src, dst);
 
-            if (!mount_bind_modern(src, dst, true)) {
-                LOG_WARN("Failed to bind mirror file: " + src.string());
-                return false;
+        // Recursively mirror all children
+        bool ok = true;
+        std::error_code ec_mm;
+        auto it_mm = fs::directory_iterator(src, ec_mm);
+        auto end_mm = fs::directory_iterator();
+        for (; it_mm != end_mm && !ec_mm; it_mm.increment(ec_mm)) {
+            std::string child_name = it_mm->path().filename().string();
+            if (!mount_mirror(src, dst, child_name)) {
+                ok = false;
             }
-            LOG_VERBOSE("Mirror file: " + src.string() + " -> " + dst.string());
-        } else if (S_ISDIR(st.st_mode)) {
-            // Directory: create dir, copy attributes, recursively mirror children
-            if (mkdir(dst.c_str(), st.st_mode & 07777) != 0 && errno != EEXIST) {
-                LOG_ERROR("Failed to create mirror directory: " + dst.string());
-                return false;
-            }
-
-            chmod(dst.c_str(), st.st_mode & 07777);
-            chown(dst.c_str(), st.st_uid, st.st_gid);
-            clone_attr(src, dst);
-
-            // Recursively mirror all children
-            bool ok = true;
-            for (const auto& entry : fs::directory_iterator(src)) {
-                std::string child_name = entry.path().filename().string();
-                if (!mount_mirror(src, dst, child_name)) {
-                    ok = false;
-                }
-            }
-            if (!ok) {
-                return false;
-            }
-        } else if (S_ISLNK(st.st_mode)) {
-            // Symlink: read target and create symlink
-            char target[PATH_MAX];
-            ssize_t len = readlink(src.c_str(), target, sizeof(target) - 1);
-            if (len < 0) {
-                LOG_ERROR("Failed to read symlink: " + src.string());
-                return false;
-            }
-            target[len] = '\0';
-
-            if (symlink(target, dst.c_str()) != 0) {
-                LOG_ERROR("Failed to create symlink: " + dst.string());
-                return false;
-            }
-            clone_attr(src, dst);
-            LOG_VERBOSE("Mirror symlink: " + src.string() + " -> " + std::string(target));
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to mirror " + src.string() + ": " + std::string(e.what()));
-        return false;
+        if (!ok) {
+            return false;
+        }
+    } else if (S_ISLNK(st.st_mode)) {
+        // Symlink: read target and create symlink
+        char target[PATH_MAX];
+        ssize_t len = readlink(src.c_str(), target, sizeof(target) - 1);
+        if (len < 0) {
+            LOG_ERROR("Failed to read symlink: " + src.string());
+            return false;
+        }
+        target[len] = '\0';
+
+        if (symlink(target, dst.c_str()) != 0) {
+            LOG_ERROR("Failed to create symlink: " + dst.string());
+            return false;
+        }
+        clone_attr(src, dst);
+        LOG_VERBOSE("Mirror symlink: " + src.string() + " -> " + std::string(target));
     }
 
     return true;
@@ -413,53 +421,55 @@ static bool mount_symlink(const fs::path& work_dir_path, const Node& node) {
     g_mount_stats.symlinks_created++;
 
     if (!node.module_path.empty()) {
-        try {
-            auto link_target = fs::read_symlink(node.module_path);
-
-            // Validate symlink safety
-            if (!is_safe_symlink(node.module_path, fs::path("/"))) {
-                LOG_ERROR("Unsafe symlink detected: " + node.module_path.string());
-                g_mount_stats.failed_mounts++;
-                return false;
-            }
-
-            fs::create_symlink(link_target, work_dir_path);
-            clone_attr(node.module_path, work_dir_path);
-            g_mount_stats.successful_mounts++;
-        } catch (...) {
+        std::error_code ec_sl;
+        auto link_target = fs::read_symlink(node.module_path, ec_sl);
+        if (ec_sl) {
             g_mount_stats.failed_mounts++;
             return false;
         }
+
+        // Validate symlink safety
+        if (!is_safe_symlink(node.module_path, fs::path("/"))) {
+            LOG_ERROR("Unsafe symlink detected: " + node.module_path.string());
+            g_mount_stats.failed_mounts++;
+            return false;
+        }
+
+        fs::create_symlink(link_target, work_dir_path, ec_sl);
+        if (ec_sl) {
+            g_mount_stats.failed_mounts++;
+            return false;
+        }
+        clone_attr(node.module_path, work_dir_path);
+        g_mount_stats.successful_mounts++;
     }
     return true;
 }
 
 static bool create_whiteout(const fs::path& target_path, const fs::path& work_dir_path) {
-    try {
-        fs::create_directories(work_dir_path.parent_path());
-
-        if (fs::exists(work_dir_path)) {
-            fs::remove(work_dir_path);
-        }
-
-        if (mknod(work_dir_path.c_str(), S_IFCHR | 0000, makedev(0, 0)) != 0) {
-            LOG_ERROR("Failed to create whiteout: " + work_dir_path.string() + ": " +
-                      strerror(errno));
-            return false;
-        }
-
-        if (fs::exists(target_path)) {
-            clone_attr(target_path, work_dir_path);
-        } else {
-            copy_path_context(work_dir_path.parent_path(), work_dir_path);
-        }
-
-        return true;
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to create whiteout: " + work_dir_path.string() + ": " +
-                  std::string(e.what()));
+    std::error_code ec_wh;
+    fs::create_directories(work_dir_path.parent_path(), ec_wh);
+    if (ec_wh) {
+        LOG_ERROR("Failed to create whiteout: " + work_dir_path.string() + ": " + ec_wh.message());
         return false;
     }
+
+    if (fs::exists(work_dir_path, ec_wh)) {
+        fs::remove(work_dir_path, ec_wh);
+    }
+
+    if (mknod(work_dir_path.c_str(), S_IFCHR | 0000, makedev(0, 0)) != 0) {
+        LOG_ERROR("Failed to create whiteout: " + work_dir_path.string() + ": " + strerror(errno));
+        return false;
+    }
+
+    if (fs::exists(target_path, ec_wh)) {
+        clone_attr(target_path, work_dir_path);
+    } else {
+        copy_path_context(work_dir_path.parent_path(), work_dir_path);
+    }
+
+    return true;
 }
 
 static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, const Node& current,
@@ -468,25 +478,27 @@ static bool do_magic_mount(const fs::path& path, const fs::path& work_dir_path, 
 static bool mount_directory_children(const fs::path& path, const fs::path& work_dir_path,
                                      const Node& node, bool has_tmpfs, bool disable_umount) {
     bool ok = true;
-    if (fs::exists(path) && !node.replace) {
-        try {
-            for (const auto& entry : fs::directory_iterator(path)) {
-                std::string name = entry.path().filename().string();
-                auto it = node.children.find(name);
-                if (it != node.children.end()) {
-                    if (!it->second.skip) {
-                        if (!do_magic_mount(path, work_dir_path, it->second, has_tmpfs,
-                                            disable_umount)) {
-                            ok = false;
-                        }
-                    }
-                } else if (has_tmpfs) {
-                    if (!mount_mirror(path, work_dir_path, name)) {
+    std::error_code ec_mdc;
+    if (fs::exists(path, ec_mdc) && !node.replace) {
+        auto it_mdc = fs::directory_iterator(path, ec_mdc);
+        auto end_mdc = fs::directory_iterator();
+        for (; it_mdc != end_mdc && !ec_mdc; it_mdc.increment(ec_mdc)) {
+            std::string name = it_mdc->path().filename().string();
+            auto it = node.children.find(name);
+            if (it != node.children.end()) {
+                if (!it->second.skip) {
+                    if (!do_magic_mount(path, work_dir_path, it->second, has_tmpfs,
+                                        disable_umount)) {
                         ok = false;
                     }
                 }
+            } else if (has_tmpfs) {
+                if (!mount_mirror(path, work_dir_path, name)) {
+                    ok = false;
+                }
             }
-        } catch (...) {
+        }
+        if (ec_mdc) {
             LOG_WARN("Failed to iterate directory: " + path.string());
             ok = false;
         }
@@ -528,14 +540,11 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
         } else if (child.file_type == NodeFileType::Whiteout) {
             need = fs::exists(real_path);
         } else {
-            try {
-                if (fs::exists(real_path)) {
-                    NodeFileType real_ft = get_file_type(real_path);
-                    need = (real_ft != child.file_type || real_ft == NodeFileType::Symlink);
-                } else {
-                    need = true;
-                }
-            } catch (...) {
+            std::error_code ec_sct;
+            if (fs::exists(real_path, ec_sct) && !ec_sct) {
+                NodeFileType real_ft = get_file_type(real_path);
+                need = (real_ft != child.file_type || real_ft == NodeFileType::Symlink);
+            } else {
                 need = true;
             }
         }
@@ -554,21 +563,23 @@ static bool should_create_tmpfs(const Node& node, const fs::path& path, bool has
 
 static bool prepare_tmpfs_dir(const fs::path& path, const fs::path& work_dir_path,
                               const Node& node) {
-    try {
-        fs::create_directories(work_dir_path);
-
-        if (!fs::exists(path) && node.module_path.empty()) {
-            LOG_ERROR("No source for tmpfs skeleton: " + path.string());
-            return false;
-        }
-
-        fs::path src_path = fs::exists(path) ? path : node.module_path;
-        clone_attr(src_path, work_dir_path);
-
-        mount(work_dir_path.c_str(), work_dir_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
-    } catch (...) {
+    std::error_code ec_ptd;
+    fs::create_directories(work_dir_path, ec_ptd);
+    if (ec_ptd) {
         return false;
     }
+
+    std::error_code ec2;
+    bool path_exists = fs::exists(path, ec2);
+    if (!path_exists && node.module_path.empty()) {
+        LOG_ERROR("No source for tmpfs skeleton: " + path.string());
+        return false;
+    }
+
+    fs::path src_path = path_exists ? path : node.module_path;
+    clone_attr(src_path, work_dir_path);
+
+    mount(work_dir_path.c_str(), work_dir_path.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
 
     return true;
 }
@@ -677,27 +688,20 @@ bool mount_partitions(const fs::path& tmp_path, const std::vector<fs::path>& mod
     // "none" for propagation-only.
     mount("none", work_dir.c_str(), nullptr, MS_SLAVE, nullptr);
 
-    bool result = false;
-    try {
-        result = do_magic_mount("/", work_dir, *root, false, disable_umount);
-    } catch (const std::exception& e) {
-        LOG_ERROR("Magic mount failed with exception: " + std::string(e.what()));
-        result = false;
-    } catch (...) {
-        LOG_ERROR("Magic mount failed with unknown exception");
-        result = false;
-    }
+    bool result = do_magic_mount("/", work_dir, *root, false, disable_umount);
 
     g_mount_stats.tmpfs_created++;
     if (umount2(work_dir.c_str(), MNT_DETACH) != 0) {
         LOG_WARN("Failed to umount workdir: " + work_dir.string() + ": " + strerror(errno));
     }
-    try {
-        if (fs::exists(work_dir)) {
-            fs::remove(work_dir);
+    {
+        std::error_code ec_rmw;
+        if (fs::exists(work_dir, ec_rmw)) {
+            fs::remove(work_dir, ec_rmw);
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to remove workdir: " + work_dir.string() + ": " + e.what());
+        if (ec_rmw) {
+            LOG_WARN("Failed to remove workdir: " + work_dir.string() + ": " + ec_rmw.message());
+        }
     }
 
     delete root;
@@ -725,32 +729,34 @@ MountStatistics get_mount_statistics() {
     MountStatistics stats;
     std::ifstream file(MOUNT_STATS_FILE);
     if (file.is_open()) {
-        try {
-            std::string content((std::istreambuf_iterator<char>(file)),
-                                std::istreambuf_iterator<char>());
-            file.close();
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        file.close();
 
-            // Simple JSON parsing
-            auto get_int = [&content](const std::string& key) -> int {
-                auto pos = content.find("\"" + key + "\":");
-                if (pos == std::string::npos)
-                    return 0;
-                pos = content.find(":", pos) + 1;
-                auto end = content.find_first_of(",}", pos);
-                return std::stoi(content.substr(pos, end - pos));
-            };
+        // Simple JSON parsing
+        auto get_int = [&content](const std::string& key) -> int {
+            auto pos = content.find("\"" + key + "\":");
+            if (pos == std::string::npos)
+                return 0;
+            pos = content.find(":", pos) + 1;
+            auto end = content.find_first_of(",}", pos);
+            char* endp = nullptr;
+            errno = 0;
+            long val = std::strtol(content.c_str() + pos, &endp, 10);
+            if (endp == content.c_str() + pos || errno == ERANGE) {
+                return 0;
+            }
+            return static_cast<int>(val);
+        };
 
-            stats.total_mounts = get_int("total_mounts");
-            stats.successful_mounts = get_int("successful_mounts");
-            stats.failed_mounts = get_int("failed_mounts");
-            stats.tmpfs_created = get_int("tmpfs_created");
-            stats.files_mounted = get_int("files_mounted");
-            stats.dirs_mounted = get_int("dirs_mounted");
-            stats.symlinks_created = get_int("symlinks_created");
-            stats.overlayfs_mounts = get_int("overlayfs_mounts");
-        } catch (...) {
-            // Return zeros on parse error
-        }
+        stats.total_mounts = get_int("total_mounts");
+        stats.successful_mounts = get_int("successful_mounts");
+        stats.failed_mounts = get_int("failed_mounts");
+        stats.tmpfs_created = get_int("tmpfs_created");
+        stats.files_mounted = get_int("files_mounted");
+        stats.dirs_mounted = get_int("dirs_mounted");
+        stats.symlinks_created = get_int("symlinks_created");
+        stats.overlayfs_mounts = get_int("overlayfs_mounts");
     }
 
     return stats;

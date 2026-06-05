@@ -35,37 +35,33 @@ namespace {
 void try_kasumi_metamount_mount() {
     using hymo::Config;
 
-    try {
-        if (access("/data/adb/ksu/.disable_builtin_mount", F_OK) == 0) {
-            LOGI("Kasumi metamount: built-in mount disabled by .disable_builtin_mount, skip");
-            return;
-        }
-        if (ksud::get_metamodule_id() == "hymo") {
-            LOGI("Kasumi metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
-            return;
-        }
+    // Config::load_default() and hymo::run_hymo_main() both catch their own
+    // exceptions internally, so no outer try-catch is needed.
+    if (access("/data/adb/ksu/.disable_builtin_mount", F_OK) == 0) {
+        LOGI("Kasumi metamount: built-in mount disabled by .disable_builtin_mount, skip");
+        return;
+    }
+    if (ksud::get_metamodule_id() == "hymo") {
+        LOGI("Kasumi metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
+        return;
+    }
 
-        const Config config = Config::load_default();
+    const Config config = Config::load_default();
 
-        if (!config.kasumi_enabled) {
-            LOGI("Kasumi metamount: kasumi_enabled=false, skip");
-            return;
-        }
+    if (!config.kasumi_enabled) {
+        LOGI("Kasumi metamount: kasumi_enabled=false, skip");
+        return;
+    }
 
-        // Built-in hymo uses ksud log, no separate daemon.log
-        std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
+    // Built-in hymo uses ksud log, no separate daemon.log
+    std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
 
-        LOGI("Kasumi metamount: invoking hymod mount");
-        const int ret = hymo::run_hymo_main(2, argv.data());
-        if (ret != 0) {
-            LOGW("Kasumi metamount mount failed, ret=%d", ret);
-        } else {
-            LOGI("Kasumi metamount mount succeeded");
-        }
-    } catch (const std::exception& e) {
-        LOGW("Kasumi metamount mount threw exception: %s", e.what());
-    } catch (...) {
-        LOGW("Kasumi metamount mount threw unknown exception");
+    LOGI("Kasumi metamount: invoking hymod mount");
+    const int ret = hymo::run_hymo_main(2, argv.data());
+    if (ret != 0) {
+        LOGW("Kasumi metamount mount failed, ret=%d", ret);
+    } else {
+        LOGI("Kasumi metamount mount succeeded");
     }
 }
 
@@ -151,6 +147,10 @@ void run_stage(const std::string& stage, bool block) {
 
 int on_post_data_fs() {
     LOGI("post-fs-data triggered");
+
+    if (set_init_pgrp() != 0) {
+        LOGW("set init pgrp failed");
+    }
 
     // Report to kernel first
     report_post_fs_data();

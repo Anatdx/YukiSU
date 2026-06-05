@@ -19,7 +19,6 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -347,17 +346,12 @@ bool parse_positive_u64(const std::string& raw, uint64_t* out_value) {
         return false;
     }
 
-    size_t consumed = 0;
-    try {
-        const auto parsed = std::stoull(value, &consumed, 10);
-        if (consumed != value.size() || parsed == 0) {
-            return false;
-        }
-        *out_value = static_cast<uint64_t>(parsed);
-        return true;
-    } catch (const std::exception&) {
+    uint64_t parsed = 0;
+    if (!parse_uint64(value, &parsed) || parsed == 0) {
         return false;
     }
+    *out_value = parsed;
+    return true;
 }
 
 auto ensure_sulog_config_value(const char* key, uint64_t default_value) -> std::string {
@@ -1225,7 +1219,7 @@ int ensure_sulogd_running() {
 }
 
 void ensure_sulogd_running_if_enabled() {
-    const auto [value, supported] = get_feature(static_cast<uint32_t>(FeatureId::SuLog));
+    const auto [value, supported] = get_feature(KSU_FEATURE_SULOG);
     if (!supported || value == 0) {
         return;
     }

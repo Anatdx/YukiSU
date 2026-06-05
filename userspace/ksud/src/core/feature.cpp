@@ -28,30 +28,30 @@ constexpr uint32_t FEATURE_VERSION = 1;
 
 const std::map<std::string, uint32_t>& get_feature_map() {
     static const std::map<std::string, uint32_t> map = {
-        {"su_compat", static_cast<uint32_t>(FeatureId::SuCompat)},
-        {"kernel_umount", static_cast<uint32_t>(FeatureId::KernelUmount)},
-        {"enhanced_security", static_cast<uint32_t>(FeatureId::EnhancedSecurity)},
-        {"adb_root", static_cast<uint32_t>(FeatureId::AdbRoot)},
-        {"selinux_hide", static_cast<uint32_t>(FeatureId::SelinuxHide)},
-        {"sulog", static_cast<uint32_t>(FeatureId::SuLog)},
+        {"su_compat", KSU_FEATURE_SU_COMPAT},
+        {"kernel_umount", KSU_FEATURE_KERNEL_UMOUNT},
+        {"enhanced_security", KSU_FEATURE_ENHANCED_SECURITY},
+        {"adb_root", KSU_FEATURE_ADB_ROOT},
+        {"selinux_hide", KSU_FEATURE_SELINUX_HIDE},
+        {"sulog", KSU_FEATURE_SULOG},
     };
     return map;
 }
 
 const std::map<uint32_t, const char*>& get_feature_descriptions() {
     static const std::map<uint32_t, const char*> desc = {
-        {static_cast<uint32_t>(FeatureId::SuCompat),
+        {KSU_FEATURE_SU_COMPAT,
          "SU Compatibility Mode - allows authorized apps to gain root via traditional 'su' "
          "command"},
-        {static_cast<uint32_t>(FeatureId::KernelUmount),
+        {KSU_FEATURE_KERNEL_UMOUNT,
          "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"},
-        {static_cast<uint32_t>(FeatureId::EnhancedSecurity),
+        {KSU_FEATURE_ENHANCED_SECURITY,
          "Enhanced Security - disable non-KSU root elevation and unauthorized UID downgrades"},
-        {static_cast<uint32_t>(FeatureId::AdbRoot),
+        {KSU_FEATURE_ADB_ROOT,
          "ADB Root - run adbd with root privileges via kernel feature injection"},
-        {static_cast<uint32_t>(FeatureId::SelinuxHide),
+        {KSU_FEATURE_SELINUX_HIDE,
          "SELinux Hide - hides KernelSU sepolicy changes from app-facing SELinux probes"},
-        {static_cast<uint32_t>(FeatureId::SuLog),
+        {KSU_FEATURE_SULOG,
          "SU Log - streams kernel sulog events to userspace and persists them to disk"},
     };
     return desc;
@@ -59,15 +59,13 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
 
 std::pair<uint32_t, bool> parse_feature_id(const std::string& id) {
     // Try numeric first
-    try {
-        const uint32_t num = std::stoul(id);
-        // Check if it's a known feature ID
+    uint32_t num = 0;
+    if (parse_uint32(id, &num)) {
         for (const auto& [name, fid] : get_feature_map()) {
             if (fid == num)
                 return {num, true};
         }
         return {0, false};
-    } catch (...) {  // NOLINT(bugprone-empty-catch) not a number, fall through to name lookup
     }
 
     // Try name lookup
@@ -144,8 +142,7 @@ int feature_set(const std::string& id, uint64_t value) {
         return 1;
     }
 
-    if (feature_id == static_cast<uint32_t>(FeatureId::SuLog) && value != 0 &&
-        ensure_sulogd_running() != 0) {
+    if (feature_id == KSU_FEATURE_SULOG && value != 0 && ensure_sulogd_running() != 0) {
         LOGW("Failed to ensure sulogd is running after enabling sulog");
     }
 
@@ -221,12 +218,12 @@ int feature_load_config() {
 
         auto [feature_id, valid] = parse_feature_id(key);
         if (valid) {
-            try {
-                const uint64_t value = std::stoull(val);
+            uint64_t value = 0;
+            if (parse_uint64(val, &value)) {
                 set_feature(feature_id, value);
                 loaded_features[feature_id] = value;
                 LOGI("Loaded feature %s = %" PRIu64, key.c_str(), value);
-            } catch (...) {
+            } else {
                 LOGW("Invalid value for feature %s: %s", key.c_str(), val.c_str());
             }
         }
@@ -348,8 +345,7 @@ void apply_config(const std::map<uint32_t, uint64_t>& features) {
     for (const auto& [id, value] : features) {
         const int ret = set_feature(id, value);
         if (ret >= 0) {
-            if (id == static_cast<uint32_t>(FeatureId::SuLog) && value != 0 &&
-                ensure_sulogd_running() != 0) {
+            if (id == KSU_FEATURE_SULOG && value != 0 && ensure_sulogd_running() != 0) {
                 LOGW("Failed to ensure sulogd is running while applying config");
             }
             LOGI("Set feature %s to %" PRIu64, feature_id_to_name(id), value);

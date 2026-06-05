@@ -24,6 +24,7 @@
 
 #include <unistd.h>
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -355,9 +356,7 @@ int cmd_umount(const std::vector<std::string>& args) {
         for (size_t i = 1; i < args.size(); ++i) {
             const std::string& a = args[i];
             if ((a == "-f" || a == "--flags") && i + 1 < args.size()) {
-                try {
-                    flags = static_cast<uint32_t>(std::stoul(args[++i]));
-                } catch (const std::exception& e) {
+                if (!parse_uint32(args[++i], &flags)) {
                     printf("Invalid flags value: %s\n", args[i].c_str());
                     return 1;
                 }
@@ -415,9 +414,7 @@ int cmd_kernel(const std::vector<std::string>& args) {
             for (size_t i = 2; i < args.size(); ++i) {
                 const std::string& a = args[i];
                 if ((a == "-f" || a == "--flags") && i + 1 < args.size()) {
-                    try {
-                        flags = static_cast<uint32_t>(std::stoul(args[++i]));
-                    } catch (const std::exception& e) {
+                    if (!parse_uint32(args[++i], &flags)) {
                         printf("Invalid flags value: %s\n", args[i].c_str());
                         return 1;
                     }
@@ -774,17 +771,15 @@ int cmd_late_load(const std::vector<std::string>& args) {
         if (args[i] == "--magica") {
             uint16_t port = 5555;
             if (i + 1 < args.size() && !args[i + 1].empty() && args[i + 1].rfind("--", 0) != 0) {
-                try {
-                    const int parsed = std::stoi(args[++i]);
-                    if (parsed <= 0 || parsed > 65535) {
-                        printf("Invalid magica port: %s\n", args[i].c_str());
-                        return 1;
-                    }
-                    port = static_cast<uint16_t>(parsed);
-                } catch (const std::exception&) {
+                char* end = nullptr;
+                errno = 0;
+                long parsed_long = std::strtol(args[++i].c_str(), &end, 10);
+                if (end == args[i].c_str() || *end != '\0' || errno == ERANGE || parsed_long <= 0 ||
+                    parsed_long > 65535) {
                     printf("Invalid magica port: %s\n", args[i].c_str());
                     return 1;
                 }
+                port = static_cast<uint16_t>(parsed_long);
             }
             magica_port = port;
             continue;

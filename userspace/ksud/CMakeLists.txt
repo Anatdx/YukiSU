@@ -308,6 +308,8 @@ if(RESETPROP_ALONE_AVAILABLE)
     list(APPEND KSUD_THIRDPARTY_SOURCES ${RESETPROP_ALONE_SOURCES})
 endif()
 
+get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+
 # Include directories (for both object libs and ksud)
 set(KSUD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src
@@ -317,6 +319,7 @@ set(KSUD_INCLUDE_DIRS
     ${miniz_BINARY_DIR}
     ${LZ4_LIB_DIR}
     ${GENERATED_DIR}
+    ${REPO_ROOT}  # uapi/ kernel headers for userspace
 )
 include_directories(${KSUD_INCLUDE_DIRS})
 

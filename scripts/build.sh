@@ -120,7 +120,8 @@ if [[ "$SKIP_LKM" != "true" ]]; then
 	mkdir -p "$OUT_DIR"
 	docker run --rm -v "$REPO_ROOT:/src" -w /src \
 		"ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}" \
-		bash -c "cd kernel && CONFIG_KSU=m CONFIG_KSU_MANUAL_SU=y CONFIG_KSU_SUPERKEY=y CC=clang make -j${MAKE_JOBS} && \
+		bash -c "cd kernel && test -f include/uapi/supercall.h && \
+	             CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y CC=clang make -j${MAKE_JOBS} && \
 	             mkdir -p /src/out && cp kernelsu.ko /src/out/${KMI}_kernelsu.ko && \
 	             (llvm-strip -d /src/out/${KMI}_kernelsu.ko 2>/dev/null || true)"
 	echo "    LKM 已输出: $OUT_DIR/${KMI}_kernelsu.ko"

@@ -5,96 +5,34 @@
 #include <string>
 #include <utility>
 
+// Kernel uapi headers — single source of truth for ioctl numbers,
+// struct layouts, and feature IDs.  Guarded for userspace by
+// #ifndef __KERNEL__ blocks in each uapi header.
+extern "C" {
+#include "uapi/supercall.h"
+}
+
 namespace ksud {
 
-// ioctl macros - cast to unsigned to avoid overflow warnings
-// Note: size field is 0 to match kernel _IOC(..., 0) definitions
-#define _IOC(dir, type, nr, size) \
-    (static_cast<uint32_t>(((dir) << 30) | ((type) << 8) | (nr) | ((size) << 16)))
-#define _IO(type, nr) _IOC(0, type, nr, 0)
-#define _IOR(type, nr, sz) _IOC(2, type, nr, 0)
-#define _IOW(type, nr, sz) _IOC(1, type, nr, 0)
-#define _IOWR(type, nr, sz) _IOC(3, type, nr, 0)
+// C++ convenience aliases (keep callers unchanged)
+using GetInfoCmd = ksu_get_info_cmd;
+using ReportEventCmd = ksu_report_event_cmd;
+using SetSepolicyCmd = ksu_set_sepolicy_cmd;
+using CheckSafemodeCmd = ksu_check_safemode_cmd;
+using GetFeatureCmd = ksu_get_feature_cmd;
+using SetFeatureCmd = ksu_set_feature_cmd;
+using GetWrapperFdCmd = ksu_get_wrapper_fd_cmd;
+using GetSulogFdCmd = ksu_get_sulog_fd_cmd;
+using ManageMarkCmd = ksu_manage_mark_cmd;
+using NukeExt4SysfsCmd = ksu_nuke_ext4_sysfs_cmd;
+using AddTryUmountCmd = ksu_add_try_umount_cmd;
 
-constexpr uint32_t K = 'K';
-
-// ioctl commands
-constexpr uint32_t KSU_IOCTL_GRANT_ROOT = _IO(K, 1);
-constexpr uint32_t KSU_IOCTL_GET_INFO = _IOR(K, 2, uint64_t);
-constexpr uint32_t KSU_IOCTL_REPORT_EVENT = _IOW(K, 3, uint64_t);
-constexpr uint32_t KSU_IOCTL_SET_SEPOLICY = _IOWR(K, 4, uint64_t);
-constexpr uint32_t KSU_IOCTL_CHECK_SAFEMODE = _IOR(K, 5, uint64_t);
-constexpr uint32_t KSU_IOCTL_GET_FEATURE = _IOWR(K, 13, uint64_t);
-constexpr uint32_t KSU_IOCTL_SET_FEATURE = _IOW(K, 14, uint64_t);
-constexpr uint32_t KSU_IOCTL_GET_WRAPPER_FD = _IOW(K, 15, uint64_t);
-constexpr uint32_t KSU_IOCTL_MANAGE_MARK = _IOWR(K, 16, uint64_t);
-constexpr uint32_t KSU_IOCTL_NUKE_EXT4_SYSFS = _IOW(K, 17, uint64_t);
-constexpr uint32_t KSU_IOCTL_ADD_TRY_UMOUNT = _IOW(K, 18, uint64_t);
-constexpr uint32_t KSU_IOCTL_GET_SULOG_FD = _IOW(K, 20, uint64_t);
-constexpr uint32_t KSU_IOCTL_LIST_TRY_UMOUNT = _IOWR(K, 200, uint64_t);
-
-// Structures for ioctl - use natural C alignment (matching kernel and Rust repr(C))
-// Do NOT use #pragma pack(1) as it would misalign structures with the kernel!
-
-struct GetInfoCmd {
-    uint32_t version;
-    uint32_t flags;
-    uint32_t features;  // max feature ID supported
-};
-
-struct ReportEventCmd {
-    uint32_t event;
-};
-
-struct SetSepolicyCmd {
-    uint64_t cmd;
-    uint64_t arg;
-};
-
-struct CheckSafemodeCmd {
-    uint8_t in_safe_mode;
-};
-
-struct GetFeatureCmd {
-    uint32_t feature_id;
-    uint64_t value;
-    uint8_t supported;
-};
-
-struct SetFeatureCmd {
-    uint32_t feature_id;
-    uint64_t value;
-};
-
-struct GetWrapperFdCmd {
-    int32_t fd;
-    uint32_t flags;
-};
-
-struct GetSulogFdCmd {
-    uint32_t flags;
-};
-
-struct ManageMarkCmd {
-    uint32_t operation;
-    int32_t pid;
-    uint32_t result;
-};
-
-struct NukeExt4SysfsCmd {
-    uint64_t arg;
-};
-
-struct AddTryUmountCmd {
-    uint64_t arg;
-    uint32_t flags;
-    uint8_t mode;
-};
-
+// YukiSU-only: list umount ioctl (not in upstream uapi)
 struct ListTryUmountCmd {
     uint64_t arg;
     uint32_t buf_size;
 };
+#define KSU_IOCTL_LIST_TRY_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0)
 
 // API functions
 int ksuctl(int request, void* arg);
@@ -108,7 +46,7 @@ void report_boot_complete();
 void report_module_mounted();
 bool check_kernel_safemode();
 
-int set_sepolicy(const SetSepolicyCmd& cmd);
+int set_sepolicy(const void* payload, uint64_t payload_len);
 
 // Feature management
 // Returns: pair<value, supported>
@@ -125,6 +63,7 @@ int mark_unset(int32_t pid);
 int mark_refresh();
 
 int nuke_ext4_sysfs(const std::string& mnt);
+int set_init_pgrp();
 
 // Umount list management
 int umount_list_wipe();

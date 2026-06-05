@@ -47,19 +47,6 @@ static constexpr uint32_t SUBCMD_ENFORCING = 2;
 static constexpr uint32_t SUBCMD_TYPE_CHANGE = 1;
 static constexpr uint32_t SUBCMD_TYPE_MEMBER = 2;
 
-// FfiPolicy structure - must match kernel expectations
-struct FfiPolicy {
-    uint32_t cmd;
-    uint32_t subcmd;
-    const char* sepol1;
-    const char* sepol2;
-    const char* sepol3;
-    const char* sepol4;
-    const char* sepol5;
-    const char* sepol6;
-    const char* sepol7;
-};
-
 // PolicyObject - holds a sepolicy string or represents "all" (*)
 class PolicyObject {
 public:
@@ -115,16 +102,8 @@ struct AtomicStatement {
     PolicyObject sepol7;
     // NOLINTEND(misc-non-private-member-variables-in-classes)
 
-    [[nodiscard]] FfiPolicy to_ffi() const {
-        return FfiPolicy{cmd,
-                         subcmd,
-                         sepol1.c_ptr(),
-                         sepol2.c_ptr(),
-                         sepol3.c_ptr(),
-                         sepol4.c_ptr(),
-                         sepol5.c_ptr(),
-                         sepol6.c_ptr(),
-                         sepol7.c_ptr()};
+    [[nodiscard]] std::array<const PolicyObject*, 7> args() const {
+        return {&sepol1, &sepol2, &sepol3, &sepol4, &sepol5, &sepol6, &sepol7};
     }
 };
 
@@ -554,25 +533,82 @@ bool parse_rule(const std::string& rule, std::vector<AtomicStatement>& statement
     return false;
 }
 
-// Apply a single atomic statement to kernel
-int apply_statement(const AtomicStatement& stmt) {
-    const FfiPolicy ffi = stmt.to_ffi();
-
-    SetSepolicyCmd cmd{};
-    cmd.cmd = 0;
-    cmd.arg = reinterpret_cast<uint64_t>(&ffi);
-
-    const int ret = set_sepolicy(cmd);
-    if (ret < 0) {
-        LOGW("Failed to apply sepolicy: cmd=%u subcmd=%u", ffi.cmd, ffi.subcmd);
+int expected_argc(uint32_t cmd) {
+    switch (cmd) {
+    case CMD_NORMAL_PERM:
+        return 4;
+    case CMD_XPERM:
+        return 5;
+    case CMD_TYPE_STATE:
+        return 1;
+    case CMD_TYPE:
+    case CMD_TYPE_ATTR:
+        return 2;
+    case CMD_ATTR:
+        return 1;
+    case CMD_TYPE_TRANSITION:
+        return 5;
+    case CMD_TYPE_CHANGE:
+        return 4;
+    case CMD_GENFSCON:
+        return 3;
+    default:
+        return -1;
     }
-    return ret;
+}
+
+void append_u32(std::vector<uint8_t>& payload, uint32_t value) {
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+    payload.insert(payload.end(), bytes, bytes + sizeof(value));
+}
+
+bool append_policy_object(std::vector<uint8_t>& payload, const PolicyObject& object) {
+    const char* value = object.c_ptr();
+    const uint32_t len = value ? static_cast<uint32_t>(strlen(value)) : 0;
+
+    append_u32(payload, len);
+    if (len > 0) {
+        payload.insert(payload.end(), value, value + len);
+    }
+    payload.push_back('\0');
+    return true;
+}
+
+bool serialize_statement(std::vector<uint8_t>& payload, const AtomicStatement& stmt) {
+    const int argc = expected_argc(stmt.cmd);
+    if (argc < 0) {
+        LOGW("Unknown sepolicy cmd: %u", stmt.cmd);
+        return false;
+    }
+
+    append_u32(payload, stmt.cmd);
+    append_u32(payload, stmt.subcmd);
+
+    auto args = stmt.args();
+    for (int i = 0; i < argc; i++) {
+        if (!append_policy_object(payload, *args[static_cast<size_t>(i)])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool serialize_statements(const std::vector<AtomicStatement>& statements,
+                          std::vector<uint8_t>& payload) {
+    payload.clear();
+    for (const auto& stmt : statements) {
+        if (!serialize_statement(payload, stmt)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace
 
 int sepolicy_live_patch(const std::string& policy) {
     int errors = 0;
+    std::vector<AtomicStatement> statements;
 
     // Split by newline and semicolon
     std::istringstream iss(policy);
@@ -595,15 +631,34 @@ int sepolicy_live_patch(const std::string& policy) {
                 continue;
             }
 
-            for (const auto& stmt : rule_stmts) {
-                if (apply_statement(stmt) < 0) {
-                    errors++;
-                }
-            }
+            statements.insert(statements.end(), rule_stmts.begin(), rule_stmts.end());
         }
     }
 
-    return errors > 0 ? 1 : 0;
+    if (errors > 0) {
+        return 1;
+    }
+
+    if (statements.empty()) {
+        return 0;
+    }
+
+    std::vector<uint8_t> payload;
+    if (!serialize_statements(statements, payload)) {
+        return 1;
+    }
+
+    const int applied = set_sepolicy(payload.data(), payload.size());
+    if (applied < 0) {
+        LOGW("Failed to apply sepolicy batch");
+        return 1;
+    }
+    if (static_cast<size_t>(applied) < statements.size()) {
+        LOGW("sepolicy batch partially applied: %d/%zu", applied, statements.size());
+        return 1;
+    }
+
+    return 0;
 }
 
 int sepolicy_apply_file(const std::string& file) {

@@ -1,5 +1,5 @@
-#include "../klog.h" // IWYU pragma: keep
-#include "../ksu.h"
+#include "klog.h" // IWYU pragma: keep
+#include "ksu.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
 #include "linux/version.h"

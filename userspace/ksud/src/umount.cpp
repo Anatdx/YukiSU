@@ -19,6 +19,8 @@ struct UmountEntry {
 
 namespace {
 
+// Parse a decimal uint32_t without exceptions.  Returns true on success.
+
 std::vector<UmountEntry> load_umount_config() {
     std::vector<UmountEntry> entries;
     auto content = read_file(UMOUNT_CONFIG_PATH);
@@ -36,7 +38,11 @@ std::vector<UmountEntry> load_umount_config() {
         const size_t space = line.find(' ');
         if (space != std::string::npos) {
             entry.path = line.substr(0, space);
-            entry.flags = std::stoul(line.substr(space + 1));
+            const std::string flags_str = line.substr(space + 1);
+            if (!parse_uint32(flags_str, &entry.flags)) {
+                LOGW("umount: bad flags in config line: %s", line.c_str());
+                continue;
+            }
         } else {
             entry.path = line;
             entry.flags = 0;
@@ -108,7 +114,11 @@ int umount_save_config() {
         const size_t space = line.find(' ');
         if (space != std::string::npos) {
             entry.path = line.substr(0, space);
-            entry.flags = std::stoul(line.substr(space + 1));
+            const std::string flags_str = line.substr(space + 1);
+            if (!parse_uint32(flags_str, &entry.flags)) {
+                LOGW("umount: bad flags in kernel list: %s", line.c_str());
+                continue;
+            }
         } else {
             entry.path = line;
             entry.flags = 0;

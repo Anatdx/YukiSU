@@ -50,7 +50,6 @@ struct ModuleInfo {
 
 namespace {
 
-constexpr uint32_t KSU_GET_INFO_FLAG_LATE_LOAD = 1U << 2;
 constexpr const char* INSTALLER_SCRIPT_NAME = "installer.sh";
 constexpr const char* METADATA_FILE_CON = "u:object_r:metadata_file:s0";
 

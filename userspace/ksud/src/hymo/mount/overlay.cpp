@@ -11,6 +11,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <system_error>
 #include "../defs.hpp"
 #include "../utils.hpp"
 #include "kasumi.hpp"
@@ -382,25 +383,32 @@ bool mount_overlay(const std::string& target_root_raw, const std::vector<std::st
 
     // Skip overlay when partition is a symlink (e.g. /product -> /system/product); same as
     // meta-overlayfs to avoid double overlay or wrong base.
-    try {
-        if (fs::exists(target_root_raw) && fs::is_symlink(target_root_raw)) {
+    {
+        std::error_code ec;
+        if (fs::exists(target_root_raw, ec) && !ec && fs::is_symlink(target_root_raw, ec)) {
             LOG_INFO("Partition is symlink, skip overlay: " + target_root_raw);
             return true;
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to check symlink " + target_root_raw + ": " + e.what());
+        if (ec) {
+            LOG_WARN("Failed to check symlink " + target_root_raw + ": " + ec.message());
+        }
     }
 
     std::string target_root = target_root_raw;
-    try {
-        if (fs::exists(target_root_raw)) {
-            target_root = fs::canonical(target_root_raw).string();
-            if (target_root != target_root_raw) {
-                LOG_DEBUG("Resolved symlink: " + target_root_raw + " -> " + target_root);
+    {
+        std::error_code ec;
+        if (fs::exists(target_root_raw, ec)) {
+            fs::path resolved = fs::canonical(target_root_raw, ec);
+            if (!ec) {
+                target_root = resolved.string();
+                if (target_root != target_root_raw) {
+                    LOG_DEBUG("Resolved symlink: " + target_root_raw + " -> " + target_root);
+                }
             }
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to resolve path " + target_root_raw + ": " + e.what());
+        if (ec) {
+            LOG_WARN("Failed to resolve path " + target_root_raw + ": " + ec.message());
+        }
     }
 
     LOG_INFO("Starting robust overlay mount for " + target_root);

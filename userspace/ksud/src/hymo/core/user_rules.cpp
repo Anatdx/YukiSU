@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <system_error>
 #include "../defs.hpp"
 #include "../mount/kasumi.hpp"
 #include "../utils.hpp"
@@ -22,17 +23,13 @@ std::vector<UserHideRule> load_user_hide_rules() {
     buffer << file.rdbuf();
     file.close();
 
-    try {
-        auto root = json::parse(buffer.str());
-        if (root.type == json::Type::Array) {
-            for (const auto& val : root.as_array()) {
-                if (val.type == json::Type::String) {
-                    rules.push_back({val.as_string()});
-                }
+    auto root = json::parse(buffer.str());
+    if (root.type == json::Type::Array) {
+        for (const auto& val : root.as_array()) {
+            if (val.type == json::Type::String) {
+                rules.push_back({val.as_string()});
             }
         }
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to parse user rules JSON: " + std::string(e.what()));
     }
 
     LOG_VERBOSE("Loaded " + std::to_string(rules.size()) + " user hide rules");
@@ -44,12 +41,12 @@ bool save_user_hide_rules(const std::vector<UserHideRule>& rules) {
     fs::path file_path(USER_HIDE_RULES_FILE);
     fs::path dir = file_path.parent_path();
 
-    try {
-        if (!fs::exists(dir)) {
-            fs::create_directories(dir);
-        }
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to create directory: " + std::string(e.what()));
+    std::error_code ec;
+    if (!fs::exists(dir, ec) && !ec) {
+        fs::create_directories(dir, ec);
+    }
+    if (ec) {
+        LOG_ERROR("Failed to create directory: " + ec.message());
         return false;
     }
 

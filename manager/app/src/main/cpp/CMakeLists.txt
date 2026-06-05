@@ -4,6 +4,12 @@
 # Sets the minimum version of CMake required to build the native library.
 cmake_minimum_required(VERSION 3.18.1)
 
+# uapi headers: resolve repo root relative to this CMakeLists.txt
+# CMAKE_CURRENT_SOURCE_DIR = manager/app/src/main/cpp/
+# Going up 5 levels reaches the repo root
+get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
+include_directories(${REPO_ROOT})
+
 project("kernelsu")
 
 find_package(cxx REQUIRED CONFIG)
@@ -21,7 +27,7 @@ target_link_libraries(kernelsu ${log-lib})
 
 add_library(adbroot
         SHARED
-        adbroot.cc
+        adbroot.cpp
 )
 
 target_link_libraries(adbroot ${log-lib})

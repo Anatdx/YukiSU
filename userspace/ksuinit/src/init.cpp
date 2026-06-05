@@ -13,6 +13,10 @@
 #include "loader.hpp"
 #include "log.hpp"
 
+extern "C" {
+#include "uapi/supercall.h"
+}
+
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -122,23 +126,14 @@ void unlimit_kmsg() {
  * Check if KernelSU is present using the new v2 method (ioctl)
  */
 bool has_kernelsu_v2() {
-    constexpr uint32_t KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
-    constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
-    constexpr uint32_t KSU_IOCTL_GET_INFO = 0x80004b02;  // _IOC(_IOC_READ, 'K', 2, 0)
-
-    struct GetInfoCmd {
-        uint32_t version;
-        uint32_t flags;
-    };
-
     // Try to get driver fd using reboot syscall with magic numbers
+    // (KSU_INSTALL_MAGIC1/MAGIC2 and KSU_IOCTL_GET_INFO are from uapi/supercall.h)
     int fd = -1;
     syscall(__NR_reboot, KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, &fd);
 
     uint32_t version = 0;
     if (fd >= 0) {
-        // Try to get version info via ioctl
-        GetInfoCmd cmd = {0, 0};
+        ksu_get_info_cmd cmd = {0, 0};
         if (ioctl(fd, KSU_IOCTL_GET_INFO, &cmd) == 0) {
             version = cmd.version;
         }

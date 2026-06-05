@@ -41,17 +41,18 @@ bool restore_syscon(const fs::path& dir) {
         return true;
     }
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(dir)) {
-            if (!setsyscon(entry.path())) {
-                LOGW("Failed to restore context for %s", entry.path().c_str());
-            }
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec);
+         it != fs::recursive_directory_iterator() && !ec; it.increment(ec)) {
+        if (!setsyscon(it->path())) {
+            LOGW("Failed to restore context for %s", it->path().c_str());
         }
-        return true;
-    } catch (const fs::filesystem_error& e) {
-        LOGE("Error walking directory %s: %s", dir.c_str(), e.what());
+    }
+    if (ec) {
+        LOGE("Error walking directory %s: %s", dir.c_str(), ec.message().c_str());
         return false;
     }
+    return true;
 }
 
 bool restore_syscon_if_unlabeled(const fs::path& dir) {
@@ -59,20 +60,21 @@ bool restore_syscon_if_unlabeled(const fs::path& dir) {
         return true;
     }
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(dir)) {
-            const std::string con = lgetfilecon(entry.path());
-            if (con.empty() || con == UNLABEL_CON) {
-                if (!lsetfilecon(entry.path(), SYSTEM_CON)) {
-                    LOGW("Failed to restore context for %s", entry.path().c_str());
-                }
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec);
+         it != fs::recursive_directory_iterator() && !ec; it.increment(ec)) {
+        const std::string con = lgetfilecon(it->path());
+        if (con.empty() || con == UNLABEL_CON) {
+            if (!lsetfilecon(it->path(), SYSTEM_CON)) {
+                LOGW("Failed to restore context for %s", it->path().c_str());
             }
         }
-        return true;
-    } catch (const fs::filesystem_error& e) {
-        LOGE("Error walking directory %s: %s", dir.c_str(), e.what());
+    }
+    if (ec) {
+        LOGE("Error walking directory %s: %s", dir.c_str(), ec.message().c_str());
         return false;
     }
+    return true;
 }
 
 bool restorecon() {

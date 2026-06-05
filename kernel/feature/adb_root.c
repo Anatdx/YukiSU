@@ -10,10 +10,10 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#include "../arch.h"
-#include "../feature.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "../selinux/selinux.h"
+#include "arch.h"
+#include "policy/feature.h"
+#include "klog.h" // IWYU pragma: keep
+#include "selinux/selinux.h"
 #include "adb_root.h"
 
 DEFINE_STATIC_KEY_FALSE(ksu_adb_root);

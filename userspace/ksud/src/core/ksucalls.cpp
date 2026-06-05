@@ -19,9 +19,6 @@ namespace ksud {
 
 // Magic constants
 // NOTE: Avoid 0xDEAD/0xBEEF patterns - easily detected by root checkers
-constexpr uint32_t KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
-constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
-constexpr int KSU_PRCTL_GET_FD = static_cast<int>(0x59554B4AU);  // "YUKJ" in hex
 
 namespace {
 
@@ -183,8 +180,8 @@ bool check_kernel_safemode() {
     return cmd.in_safe_mode != 0;
 }
 
-int set_sepolicy(const SetSepolicyCmd& cmd) {
-    SetSepolicyCmd ioctl_cmd = cmd;
+int set_sepolicy(const void* payload, uint64_t payload_len) {
+    SetSepolicyCmd ioctl_cmd = {payload_len, reinterpret_cast<uint64_t>(payload)};
     return ksuctl(KSU_IOCTL_SET_SEPOLICY, &ioctl_cmd);
 }
 
@@ -204,7 +201,7 @@ int set_feature(uint32_t feature_id, uint64_t value) {
 }
 
 int get_wrapped_fd(int fd) {
-    GetWrapperFdCmd cmd = {fd, 0};
+    GetWrapperFdCmd cmd = {static_cast<__u32>(fd), 0};
     return ksuctl(KSU_IOCTL_GET_WRAPPER_FD, &cmd);
 }
 
@@ -239,19 +236,23 @@ int nuke_ext4_sysfs(const std::string& mnt) {
     return ksuctl(KSU_IOCTL_NUKE_EXT4_SYSFS, &cmd);
 }
 
+int set_init_pgrp() {
+    return ksuctl(KSU_IOCTL_SET_INIT_PGRP, nullptr);
+}
+
 int umount_list_wipe() {
-    AddTryUmountCmd cmd = {0, 0, UMOUNT_WIPE};
+    AddTryUmountCmd cmd = {0, 0, KSU_UMOUNT_WIPE};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 int umount_list_add(const std::string& path, uint32_t flags) {
-    AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), flags, UMOUNT_ADD};
+    AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), flags, KSU_UMOUNT_ADD};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
 
 int umount_list_del(const std::string& path) {
-    AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), 0, UMOUNT_DEL};
+    AddTryUmountCmd cmd = {reinterpret_cast<uint64_t>(path.c_str()), 0, KSU_UMOUNT_DEL};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);
 }
 

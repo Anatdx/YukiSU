@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+extern "C" {
+#include "uapi/supercall.h"
+}
+
 namespace hymo {
 
 // Directories
@@ -33,12 +37,6 @@ constexpr const char* DEFAULT_SELINUX_CONTEXT = "u:object_r:system_file:s0";
 // Standard Android partitions
 const std::vector<std::string> BUILTIN_PARTITIONS = {"system",     "vendor", "product",
                                                      "system_ext", "odm",    "oem"};
-
-// KSU IOCTLs
-constexpr uint32_t KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
-constexpr uint32_t KSU_INSTALL_MAGIC2 = 0xCAFEBABE;
-constexpr uint32_t KSU_IOCTL_NUKE_EXT4_SYSFS = 0x40004b11;
-constexpr uint32_t KSU_IOCTL_ADD_TRY_UMOUNT = 0x40004b12;
 
 // Kasumi devices
 constexpr const char* KASUMI_MIRROR_DEV = "/dev/kasumi_mirror";

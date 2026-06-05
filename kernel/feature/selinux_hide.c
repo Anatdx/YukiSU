@@ -1,11 +1,11 @@
 #include "selinux_hide.h"
-#include "../feature.h"
-#include "../hook/lsm_hook.h"
-#include "../hook/patch_memory.h"
-#include "../infra/symbol_resolver.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "../ksu.h"
-#include "../selinux/sepolicy.h"
+#include "policy/feature.h"
+#include "hook/lsm_hook.h"
+#include "hook/patch_memory.h"
+#include "infra/symbol_resolver.h"
+#include "klog.h" // IWYU pragma: keep
+#include "ksu.h"
+#include "selinux/sepolicy.h"
 #include <linux/cred.h>
 #include <linux/cpu.h>
 #include <linux/fs.h>

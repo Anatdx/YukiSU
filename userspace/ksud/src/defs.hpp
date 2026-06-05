@@ -3,6 +3,13 @@
 #include <cstdint>
 #include <string>
 
+// Kernel uapi headers provide feature IDs, event constants,
+// mark/umount operation constants, and ioctl numbers.
+extern "C" {
+#include "uapi/feature.h"
+}
+#include "uapi/supercall.h"  // EVENT_*, KSU_MARK_*, KSU_UMOUNT_* are macros
+
 namespace ksud {
 
 // Version info
@@ -65,33 +72,9 @@ constexpr const char* KSU_BACKUP_FILE_PREFIX = "ksu_backup_";
 constexpr const char* BACKUP_FILENAME = "stock_image.sha1";
 constexpr const char* UMOUNT_CONFIG_PATH = "/data/adb/ksu/.umount";
 
-// Feature IDs - must match kernel definitions
-enum class FeatureId : uint32_t {
-    SuCompat = 0,
-    KernelUmount = 1,
-    SuLog = 2,
-    AdbRoot = 3,
-    SelinuxHide = 4,
-    EnhancedSecurity = 100,
-};
-
-// ioctl constants
-constexpr uint32_t KSUD_MAGIC = 'K';
-
-// Event constants
-constexpr uint32_t EVENT_POST_FS_DATA = 1;
-constexpr uint32_t EVENT_BOOT_COMPLETED = 2;
-constexpr uint32_t EVENT_MODULE_MOUNTED = 3;
-
-// Mark operation constants
-constexpr uint32_t KSU_MARK_GET = 1;
-constexpr uint32_t KSU_MARK_MARK = 2;
-constexpr uint32_t KSU_MARK_UNMARK = 3;
-constexpr uint32_t KSU_MARK_REFRESH = 4;
-
-// Umount operation constants
-constexpr uint8_t UMOUNT_WIPE = 0;
-constexpr uint8_t UMOUNT_ADD = 1;
-constexpr uint8_t UMOUNT_DEL = 2;
+// No need to redefine FeatureId, EVENT_*, KSU_MARK_*, UMOUNT_* —
+// they are all provided by uapi/feature.h and uapi/supercall.h.
+// C++ callers can use the C enum ksu_feature_id values directly or
+// via the convenience wrappers in core/ksucalls.hpp.
 
 }  // namespace ksud

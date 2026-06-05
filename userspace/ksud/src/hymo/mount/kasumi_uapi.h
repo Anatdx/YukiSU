@@ -41,8 +41,8 @@
 
 /*
  * Kasumi inode marking bits (stored in inode->i_mapping->flags)
- * Using high bits to avoid conflict with kernel AS_* flags and SUSFS bits
- * SUSFS uses bits 33-39, we use 40+
+ * Use high bits to avoid conflict with kernel AS_* flags and older private
+ * downstream inode flags.
  */
 #ifdef __KERNEL__
 #define AS_FLAGS_KASUMI_HIDE 40
@@ -90,10 +90,7 @@ struct kasumi_uid_list_arg {
     __aligned_u64 uids;
 };
 
-/*
- * kstat spoofing structure - allows full control over stat() results
- * Similar to susfs sus_kstat but with Kasumi conventions
- */
+/* kstat spoofing structure - allows full control over stat() results. */
 struct kasumi_spoof_kstat {
     unsigned long target_ino;                   /* Target inode number (after mount/overlay) */
     char target_pathname[KSM_MAX_LEN_PATHNAME]; /* Path to spoof */

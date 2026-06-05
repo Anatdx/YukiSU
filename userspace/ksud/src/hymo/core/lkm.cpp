@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 #include <thread>
 #include <vector>
 #include "../../assets.hpp"
@@ -170,12 +171,9 @@ static bool write_file(const std::string& path, const std::string& content) {
 }
 
 static bool ensure_base_dir() {
-    try {
-        fs::create_directories(BASE_DIR);
-        return true;
-    } catch (...) {
-        return false;
-    }
+    std::error_code ec;
+    fs::create_directories(BASE_DIR, ec);
+    return !ec;
 }
 
 #include <sys/utsname.h>

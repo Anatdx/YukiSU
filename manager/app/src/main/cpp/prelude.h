@@ -86,6 +86,6 @@
 #else
 #define LogDebug(...)                                                          \
   __android_log_print(ANDROID_LOG_DEBUG, "KernelSU", __VA_ARGS__)
-#endif
+#endif // #ifdef NDEBUG
 
-#endif
+#endif // #ifndef KERNELSU_PRELUDE_H

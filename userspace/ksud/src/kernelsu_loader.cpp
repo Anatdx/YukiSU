@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -157,10 +158,10 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer) {
             break;
         }
 
-        uint64_t addr = 0;
-        try {
-            addr = std::stoull(addr_str, nullptr, 16);
-        } catch (...) {
+        char* end = nullptr;
+        errno = 0;
+        uint64_t addr = std::strtoull(addr_str.c_str(), &end, 16);
+        if (end == addr_str.c_str() || *end != '\0' || errno == ERANGE) {
             continue;
         }
 

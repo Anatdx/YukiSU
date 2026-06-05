@@ -5,7 +5,8 @@
 #include "linux/types.h"
 #include "linux/version.h"
 
-// TODO: rename to "ksu"
+/* YukiSU defaults to the su domain; keep ksu as a future feature-controlled
+ * option. */
 #define KERNEL_SU_DOMAIN "su"
 #define KERNEL_SU_FILE "ksu_file"
 
@@ -33,7 +34,7 @@ void cache_sid(void);
 
 u32 ksu_get_ksu_file_sid(void);
 
-int handle_sepolicy(unsigned long arg3, void __user *arg4);
+int handle_sepolicy(void __user *user_data, u64 data_len);
 
 void setup_ksu_cred(void);
 void escape_to_root_for_adb_root(void);

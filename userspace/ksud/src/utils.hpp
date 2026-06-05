@@ -59,4 +59,8 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
                                    const std::string& workdir = "");
 int exec_command_async(const std::vector<std::string>& args);
 
+// Exception-free number parsers. Return true on success.
+bool parse_uint32(const std::string& s, uint32_t* out);
+bool parse_uint64(const std::string& s, uint64_t* out);
+
 }  // namespace ksud

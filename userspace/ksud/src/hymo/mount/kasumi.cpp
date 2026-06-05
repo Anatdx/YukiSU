@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <system_error>
 #include <thread>
 #include "../utils.hpp"
 #include "kasumi_uapi.h"
@@ -219,44 +220,53 @@ bool Kasumi::hide_path(const std::string& path) {
 }
 
 bool Kasumi::add_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
-    if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
+    std::error_code ec;
+    if (!fs::exists(module_dir, ec) || (!ec && !fs::is_directory(module_dir, ec))) {
         return false;
+    }
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(module_dir)) {
-            const fs::path& current_path = entry.path();
+    {
+        auto it = fs::recursive_directory_iterator(module_dir, ec);
+        auto end = fs::recursive_directory_iterator();
+        for (; it != end && !ec; it.increment(ec)) {
+            const auto& entry = *it;
 
             // Calculate relative path from module root
-            fs::path rel_path = fs::relative(current_path, module_dir);
+            fs::path rel_path = fs::relative(entry.path(), module_dir);
             fs::path target_path = target_base / rel_path;
 
             if (entry.is_regular_file() || entry.is_symlink()) {
-                add_rule(target_path.string(), current_path.string());
+                add_rule(target_path.string(), entry.path().string());
             } else if (entry.is_character_file()) {
                 // Redirection for whiteout (0:0)
                 struct stat st;
-                if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
+                if (stat(entry.path().c_str(), &st) == 0 && st.st_rdev == 0) {
                     hide_path(target_path.string());
                 }
             }
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Kasumi rule generation error for " + module_dir.string() + ": " + e.what());
+    }
+    if (ec) {
+        LOG_WARN("Kasumi rule generation error for " + module_dir.string() + ": " + ec.message());
         return false;
     }
     return true;
 }
 
 bool Kasumi::remove_rules_from_directory(const fs::path& target_base, const fs::path& module_dir) {
-    if (!fs::exists(module_dir) || !fs::is_directory(module_dir))
+    std::error_code ec;
+    if (!fs::exists(module_dir, ec) || (!ec && !fs::is_directory(module_dir, ec))) {
         return false;
+    }
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(module_dir)) {
-            const fs::path& current_path = entry.path();
+    {
+        auto it = fs::recursive_directory_iterator(module_dir, ec);
+        auto end = fs::recursive_directory_iterator();
+        for (; it != end && !ec; it.increment(ec)) {
+            const auto& entry = *it;
 
             // Calculate relative path from module root
-            fs::path rel_path = fs::relative(current_path, module_dir);
+            fs::path rel_path = fs::relative(entry.path(), module_dir);
             fs::path target_path = target_base / rel_path;
 
             if (entry.is_regular_file() || entry.is_symlink()) {
@@ -265,13 +275,14 @@ bool Kasumi::remove_rules_from_directory(const fs::path& target_base, const fs::
             } else if (entry.is_character_file()) {
                 // Check for whiteout (0:0)
                 struct stat st;
-                if (stat(current_path.c_str(), &st) == 0 && st.st_rdev == 0) {
+                if (stat(entry.path().c_str(), &st) == 0 && st.st_rdev == 0) {
                     delete_rule(target_path.string());
                 }
             }
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Kasumi rule removal error for " + module_dir.string() + ": " + e.what());
+    }
+    if (ec) {
+        LOG_WARN("Kasumi rule removal error for " + module_dir.string() + ": " + ec.message());
         return false;
     }
     return true;

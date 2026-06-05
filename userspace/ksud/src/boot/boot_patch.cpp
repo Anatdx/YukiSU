@@ -379,20 +379,22 @@ void clean_backup(const std::string& current_sha1) {
     printf("- Clean up backup\n");
     const std::string backup_name = std::string(KSU_BACKUP_FILE_PREFIX) + current_sha1;
 
-    try {
-        for (const auto& entry : fs::directory_iterator(KSU_BACKUP_DIR)) {
-            if (!entry.is_regular_file())
-                continue;
+    std::error_code ec;
+    for (auto it = fs::directory_iterator(KSU_BACKUP_DIR, ec);
+         it != fs::directory_iterator() && !ec; it.increment(ec)) {
+        std::error_code rf_ec;
+        if (!it->is_regular_file(rf_ec))
+            continue;
 
-            const std::string name = entry.path().filename().string();
-            if (name != backup_name && starts_with(name, KSU_BACKUP_FILE_PREFIX)) {
-                if (fs::remove(entry.path())) {
-                    printf("- removed %s\n", name.c_str());
-                }
+        const std::string name = it->path().filename().string();
+        if (name != backup_name && starts_with(name, KSU_BACKUP_FILE_PREFIX)) {
+            if (fs::remove(it->path())) {
+                printf("- removed %s\n", name.c_str());
             }
         }
-    } catch (const std::exception& e) {
-        LOGW("Clean backup error: %s", e.what());
+    }
+    if (ec) {
+        LOGW("Clean backup error: %s", ec.message().c_str());
     }
 }
 
@@ -957,13 +959,14 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         const std::string kasumi_file = workdir + "/kasumi.ko";
         bool have_kasumi = false;
         if (!parsed.kasumi_module.empty() && fs::exists(parsed.kasumi_module)) {
-            try {
-                fs::copy_file(parsed.kasumi_module, kasumi_file,
-                              fs::copy_options::overwrite_existing);
+            std::error_code cp_ec;
+            fs::copy_file(parsed.kasumi_module, kasumi_file, fs::copy_options::overwrite_existing,
+                          cp_ec);
+            if (!cp_ec) {
                 have_kasumi = true;
                 printf("- Adding Kasumi LKM (custom)\n");
-            } catch (const std::exception& e) {
-                LOGW("Failed to copy custom Kasumi LKM: %s", e.what());
+            } else {
+                LOGW("Failed to copy custom Kasumi LKM: %s", cp_ec.message().c_str());
             }
         }
         if (!have_kasumi) {

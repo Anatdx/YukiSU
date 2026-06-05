@@ -25,7 +25,8 @@ add_executable(ksuinit
     src/log.cpp
 )
 
-target_include_directories(ksuinit PRIVATE src)
+get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+target_include_directories(ksuinit PRIVATE src ${REPO_ROOT})
 
 # Optional: UPX binary compression
 option(KSUINIT_UPX "Use UPX to compress ksuinit binary" OFF)

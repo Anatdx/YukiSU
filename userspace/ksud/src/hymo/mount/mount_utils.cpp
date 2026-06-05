@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstring>
 #include <ctime>
+#include <system_error>
 #include <thread>
 #include "../defs.hpp"
 #include "../utils.hpp"
@@ -175,90 +176,110 @@ bool mount_with_retry(const char* source, const char* target, const char* filesy
 }
 
 bool is_safe_path(const fs::path& base, const fs::path& target) {
-    try {
-        auto canonical_base = fs::canonical(base);
-        auto canonical_target = fs::canonical(target);
-
-        // Check if target is within base directory
-        auto target_str = canonical_target.string();
-        auto base_str = canonical_base.string();
-
-        // C++17 compatible starts_with
-        return target_str.compare(0, base_str.length(), base_str) == 0;
-    } catch (const fs::filesystem_error& e) {
-        LOG_WARN("Path validation failed: " + std::string(e.what()));
+    std::error_code ec;
+    auto canonical_base = fs::canonical(base, ec);
+    if (ec) {
+        LOG_WARN("Path validation failed: " + ec.message());
         return false;
     }
+    auto canonical_target = fs::canonical(target, ec);
+    if (ec) {
+        LOG_WARN("Path validation failed: " + ec.message());
+        return false;
+    }
+
+    // Check if target is within base directory
+    auto target_str = canonical_target.string();
+    auto base_str = canonical_base.string();
+
+    // C++17 compatible starts_with
+    return target_str.compare(0, base_str.length(), base_str) == 0;
 }
 
 bool is_safe_symlink(const fs::path& link_path, const fs::path& base) {
-    try {
-        if (!fs::is_symlink(link_path)) {
-            return true;
-        }
-
-        auto target = fs::read_symlink(link_path);
-
-        // Check for absolute paths pointing to sensitive directories
-        if (target.is_absolute()) {
-            std::string target_str = target.string();
-            const std::vector<std::string> forbidden_prefixes = {"/data/", "/dev/", "/proc/",
-                                                                 "/sys/"};
-
-            for (const auto& prefix : forbidden_prefixes) {
-                // C++17 compatible starts_with
-                if (target_str.compare(0, prefix.length(), prefix) == 0) {
-                    LOG_WARN("Suspicious symlink target: " + target_str);
-                    return false;
-                }
-            }
-        }
-
-        // Check symlink depth to prevent cycles
-        int depth = 0;
-        fs::path current = link_path;
-        while (fs::is_symlink(current) && depth < 20) {
-            current = fs::read_symlink(current);
-            if (!current.is_absolute()) {
-                current = link_path.parent_path() / current;
-            }
-            depth++;
-        }
-
-        if (depth >= 20) {
-            LOG_WARN("Symlink depth exceeded: " + link_path.string());
-            return false;
-        }
-
-        return true;
-    } catch (const fs::filesystem_error& e) {
-        LOG_WARN("Symlink validation failed: " + std::string(e.what()));
+    std::error_code ec;
+    if (!fs::is_symlink(link_path, ec)) {
+        return !ec;
+    }
+    if (ec) {
+        LOG_WARN("Symlink validation failed: " + ec.message());
         return false;
     }
+
+    auto target = fs::read_symlink(link_path, ec);
+    if (ec) {
+        LOG_WARN("Symlink validation failed: " + ec.message());
+        return false;
+    }
+
+    // Check for absolute paths pointing to sensitive directories
+    if (target.is_absolute()) {
+        std::string target_str = target.string();
+        const std::vector<std::string> forbidden_prefixes = {"/data/", "/dev/", "/proc/", "/sys/"};
+
+        for (const auto& prefix : forbidden_prefixes) {
+            // C++17 compatible starts_with
+            if (target_str.compare(0, prefix.length(), prefix) == 0) {
+                LOG_WARN("Suspicious symlink target: " + target_str);
+                return false;
+            }
+        }
+    }
+
+    // Check symlink depth to prevent cycles
+    int depth = 0;
+    fs::path current = link_path;
+    while (depth < 20) {
+        std::error_code ec2;
+        if (!fs::is_symlink(current, ec2)) {
+            break;
+        }
+        if (ec2) {
+            LOG_WARN("Symlink validation failed: " + ec2.message());
+            return false;
+        }
+        current = fs::read_symlink(current, ec2);
+        if (ec2) {
+            LOG_WARN("Symlink validation failed: " + ec2.message());
+            return false;
+        }
+        if (!current.is_absolute()) {
+            current = link_path.parent_path() / current;
+        }
+        depth++;
+    }
+
+    if (depth >= 20) {
+        LOG_WARN("Symlink depth exceeded: " + link_path.string());
+        return false;
+    }
+
+    return true;
 }
 
 FastFileType get_file_type_fast(const fs::directory_entry& entry) {
     // Try to use cached file type from readdir first
-    try {
-        auto status = entry.symlink_status();
-        auto type = status.type();
+    std::error_code ec;
+    auto status = entry.symlink_status(ec);
+    if (ec) {
+        return FastFileType::Unknown;
+    }
+    auto type = status.type();
 
-        if (type == fs::file_type::directory) {
-            return FastFileType::Directory;
-        } else if (type == fs::file_type::symlink) {
-            return FastFileType::Symlink;
-        } else if (type == fs::file_type::regular) {
-            return FastFileType::RegularFile;
-        } else if (type == fs::file_type::character) {
-            return FastFileType::CharDevice;
-        } else if (type == fs::file_type::block) {
-            return FastFileType::BlockDevice;
-        } else if (type == fs::file_type::fifo) {
-            return FastFileType::Fifo;
-        } else if (type == fs::file_type::socket) {
-            return FastFileType::Socket;
-        }
-    } catch (...) {
+    if (type == fs::file_type::directory) {
+        return FastFileType::Directory;
+    } else if (type == fs::file_type::symlink) {
+        return FastFileType::Symlink;
+    } else if (type == fs::file_type::regular) {
+        return FastFileType::RegularFile;
+    } else if (type == fs::file_type::character) {
+        return FastFileType::CharDevice;
+    } else if (type == fs::file_type::block) {
+        return FastFileType::BlockDevice;
+    } else if (type == fs::file_type::fifo) {
+        return FastFileType::Fifo;
+    } else if (type == fs::file_type::socket) {
+        return FastFileType::Socket;
     }
 
     return FastFileType::Unknown;

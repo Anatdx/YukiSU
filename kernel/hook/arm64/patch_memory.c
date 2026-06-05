@@ -5,8 +5,8 @@
 
 #ifdef __aarch64__
 
-#include "../patch_memory.h"
-#include "../../klog.h" // IWYU pragma: keep
+#include "hook/patch_memory.h"
+#include "klog.h" // IWYU pragma: keep
 #include <linux/cpumask.h>
 #include <linux/gfp.h> // IWYU pragma: keep
 #include <linux/stop_machine.h>

@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <system_error>
 #include "hymo_defs.hpp"
 
 namespace hymo {
@@ -56,15 +57,15 @@ void Logger::log(const std::string& level, const std::string& message) {
 
 // File system utilities
 bool ensure_dir_exists(const fs::path& path) {
-    try {
-        if (!fs::exists(path)) {
-            fs::create_directories(path);
-        }
-        return true;
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to create directory " + path.string() + ": " + e.what());
+    std::error_code ec;
+    if (!fs::exists(path, ec) && !ec) {
+        fs::create_directories(path, ec);
+    }
+    if (ec) {
+        LOG_ERROR("Failed to create directory " + path.string() + ": " + ec.message());
         return false;
     }
+    return true;
 }
 
 bool lsetfilecon(const fs::path& path, const std::string& context) {
@@ -100,17 +101,17 @@ bool copy_path_context(const fs::path& src, const fs::path& dst) {
 
 bool is_xattr_supported(const fs::path& path) {
     auto test_file = path / ".xattr_test";
-    try {
-        std::ofstream f(test_file);
-        f << "test";
-        f.close();
-
-        bool supported = lsetfilecon(test_file, DEFAULT_SELINUX_CONTEXT);
-        fs::remove(test_file);
-        return supported;
-    } catch (...) {
+    std::ofstream f(test_file);
+    if (!f) {
         return false;
     }
+    f << "test";
+    f.close();
+
+    bool supported = lsetfilecon(test_file, DEFAULT_SELINUX_CONTEXT);
+    std::error_code ec;
+    fs::remove(test_file, ec);
+    return supported;
 }
 
 bool mount_tmpfs(const fs::path& target) {
@@ -127,18 +128,20 @@ bool mount_tmpfs(const fs::path& target) {
 }
 
 bool has_files_recursive(const fs::path& path) {
-    if (!fs::exists(path) || !fs::is_directory(path)) {
+    std::error_code ec;
+    if (!fs::exists(path, ec) || (!ec && !fs::is_directory(path, ec))) {
+        return false;
+    }
+    if (ec) {
         return false;
     }
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(path)) {
-            if (fs::is_regular_file(entry) || fs::is_symlink(entry)) {
-                return true;
-            }
+    auto it = fs::recursive_directory_iterator(path, ec);
+    auto end = fs::recursive_directory_iterator();
+    for (; it != end && !ec; it.increment(ec)) {
+        if (it->is_regular_file() || it->is_symlink()) {
+            return true;
         }
-    } catch (...) {
-        return true;
     }
 
     return false;
@@ -208,36 +211,56 @@ bool repair_image(const fs::path& image_path) {
 }
 
 static bool native_cp_r(const fs::path& src, const fs::path& dst) {
-    try {
-        if (!fs::exists(dst)) {
-            fs::create_directories(dst);
-            fs::permissions(dst, fs::status(src).permissions());
-            lsetfilecon(dst, DEFAULT_SELINUX_CONTEXT);
+    std::error_code ec;
+    if (!fs::exists(dst, ec) && !ec) {
+        fs::create_directories(dst, ec);
+        if (ec) {
+            LOG_ERROR("native_cp_r failed: " + ec.message());
+            return false;
         }
+        fs::permissions(dst, fs::status(src, ec).permissions(), ec);
+        lsetfilecon(dst, DEFAULT_SELINUX_CONTEXT);
+    }
 
-        for (const auto& entry : fs::directory_iterator(src)) {
-            auto dst_path = dst / entry.path().filename();
-
-            if (fs::is_directory(entry)) {
-                native_cp_r(entry.path(), dst_path);
-            } else if (fs::is_symlink(entry)) {
-                auto link_target = fs::read_symlink(entry.path());
-                if (fs::exists(dst_path)) {
-                    fs::remove(dst_path);
-                }
-                fs::create_symlink(link_target, dst_path);
-                lsetfilecon(dst_path, DEFAULT_SELINUX_CONTEXT);
-            } else {
-                fs::copy_file(entry.path(), dst_path, fs::copy_options::overwrite_existing);
-                fs::permissions(dst_path, fs::status(entry.path()).permissions());
-                lsetfilecon(dst_path, DEFAULT_SELINUX_CONTEXT);
-            }
-        }
-        return true;
-    } catch (const std::exception& e) {
-        LOG_ERROR("native_cp_r failed: " + std::string(e.what()));
+    auto it = fs::directory_iterator(src, ec);
+    auto end = fs::directory_iterator();
+    if (ec) {
+        LOG_ERROR("native_cp_r failed: " + ec.message());
         return false;
     }
+    for (; it != end && !ec; it.increment(ec)) {
+        const auto& entry = *it;
+        auto dst_path = dst / entry.path().filename();
+
+        if (entry.is_directory()) {
+            if (!native_cp_r(entry.path(), dst_path)) {
+                return false;
+            }
+        } else if (entry.is_symlink()) {
+            auto link_target = fs::read_symlink(entry.path(), ec);
+            if (ec)
+                continue;
+            std::error_code ec2;
+            if (fs::exists(dst_path, ec2)) {
+                fs::remove(dst_path, ec2);
+            }
+            fs::create_symlink(link_target, dst_path, ec2);
+            if (ec2)
+                continue;
+            lsetfilecon(dst_path, DEFAULT_SELINUX_CONTEXT);
+        } else {
+            fs::copy_file(entry.path(), dst_path, fs::copy_options::overwrite_existing, ec);
+            if (ec)
+                continue;
+            fs::permissions(dst_path, fs::status(entry.path(), ec).permissions(), ec);
+            lsetfilecon(dst_path, DEFAULT_SELINUX_CONTEXT);
+        }
+    }
+    if (ec) {
+        LOG_ERROR("native_cp_r failed: " + ec.message());
+        return false;
+    }
+    return true;
 }
 
 bool sync_dir(const fs::path& src, const fs::path& dst) {
@@ -267,24 +290,23 @@ fs::path select_temp_dir() {
 }
 
 bool ensure_temp_dir(const fs::path& temp_dir) {
-    try {
-        if (fs::exists(temp_dir)) {
-            fs::remove_all(temp_dir);
-        }
-        fs::create_directories(temp_dir);
-        return true;
-    } catch (...) {
-        return false;
+    std::error_code ec;
+    if (fs::exists(temp_dir, ec) && !ec) {
+        fs::remove_all(temp_dir, ec);
     }
+    if (!ec) {
+        fs::create_directories(temp_dir, ec);
+    }
+    return !ec;
 }
 
 void cleanup_temp_dir(const fs::path& temp_dir) {
-    try {
-        if (fs::exists(temp_dir)) {
-            fs::remove_all(temp_dir);
-        }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to clean up temp dir " + temp_dir.string() + ": " + e.what());
+    std::error_code ec;
+    if (fs::exists(temp_dir, ec)) {
+        fs::remove_all(temp_dir, ec);
+    }
+    if (ec) {
+        LOG_WARN("Failed to clean up temp dir " + temp_dir.string() + ": " + ec.message());
     }
 }
 

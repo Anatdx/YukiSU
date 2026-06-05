@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <system_error>
 #include "../core/json.hpp"
 #include "../defs.hpp"
 #include "../utils.hpp"
@@ -12,12 +13,9 @@ namespace hymo {
 Config Config::load_default() {
     Config config;
     fs::path default_path = fs::path(BASE_DIR) / "config.json";
-    if (fs::exists(default_path)) {
-        try {
-            return from_file(default_path);
-        } catch (...) {
-            LOG_WARN("Failed to load default config, using defaults");
-        }
+    std::error_code ec;
+    if (fs::exists(default_path, ec) && !ec) {
+        config = from_file(default_path);
     }
     return config;
 }
@@ -27,72 +25,68 @@ Config Config::from_file(const fs::path& path) {
 
     std::ifstream file(path);
     if (!file.is_open()) {
-        throw std::runtime_error("Cannot open config file");
+        return config;
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string json_str = buffer.str();
 
-    try {
-        json::Value root = json::parse(json_str);
-        if (root.type == json::Type::Object) {
-            const auto& o = root.as_object();
+    json::Value root = json::parse(json_str);
+    if (root.type == json::Type::Object) {
+        const auto& o = root.as_object();
 
-            if (o.count("moduledir"))
-                config.moduledir = o.at("moduledir").as_string();
-            if (o.count("tempdir"))
-                config.tempdir = o.at("tempdir").as_string();
-            if (o.count("mountsource"))
-                config.mountsource = o.at("mountsource").as_string();
-            if (o.count("debug"))
-                config.debug = o.at("debug").as_bool();
-            if (o.count("verbose"))
-                config.verbose = o.at("verbose").as_bool();
-            if (o.count("fs_type"))
-                config.fs_type = filesystem_type_from_string(o.at("fs_type").as_string());
-            if (o.count("disable_umount"))
-                config.disable_umount = o.at("disable_umount").as_bool();
-            if (o.count("enable_nuke"))
-                config.enable_nuke = o.at("enable_nuke").as_bool();
-            if (o.count("ignore_protocol_mismatch"))
-                config.ignore_protocol_mismatch = o.at("ignore_protocol_mismatch").as_bool();
-            if (o.count("enable_kernel_debug"))
-                config.enable_kernel_debug = o.at("enable_kernel_debug").as_bool();
-            if (o.count("enable_stealth"))
-                config.enable_stealth = o.at("enable_stealth").as_bool();
-            if (o.count("enable_hidexattr"))
-                config.enable_hidexattr = o.at("enable_hidexattr").as_bool();
-            if (o.count("enable_selinux_fix"))
-                config.enable_selinux_fix = o.at("enable_selinux_fix").as_bool();
-            if (o.count("kasumi_enabled"))
-                config.kasumi_enabled = o.at("kasumi_enabled").as_bool();
-            if (o.count("mirror_path")) {
-                config.mirror_path = o.at("mirror_path").as_string();
-                // Treat legacy default as "auto" so Kasumi-on uses /dev/kasumi_mirror
-                if (config.mirror_path == (std::string(HYMO_DATA_DIR) + "/img_mnt"))
-                    config.mirror_path.clear();
-            }
-            if (o.count("uname_release"))
-                config.uname_release = o.at("uname_release").as_string();
-            if (o.count("uname_version"))
-                config.uname_version = o.at("uname_version").as_string();
-            if (o.count("uname_mode")) {
-                std::string mode = o.at("uname_mode").as_string();
-                if (mode == "scoped" || mode == "global")
-                    config.uname_mode = mode;
-            }
+        if (o.count("moduledir"))
+            config.moduledir = o.at("moduledir").as_string();
+        if (o.count("tempdir"))
+            config.tempdir = o.at("tempdir").as_string();
+        if (o.count("mountsource"))
+            config.mountsource = o.at("mountsource").as_string();
+        if (o.count("debug"))
+            config.debug = o.at("debug").as_bool();
+        if (o.count("verbose"))
+            config.verbose = o.at("verbose").as_bool();
+        if (o.count("fs_type"))
+            config.fs_type = filesystem_type_from_string(o.at("fs_type").as_string());
+        if (o.count("disable_umount"))
+            config.disable_umount = o.at("disable_umount").as_bool();
+        if (o.count("enable_nuke"))
+            config.enable_nuke = o.at("enable_nuke").as_bool();
+        if (o.count("ignore_protocol_mismatch"))
+            config.ignore_protocol_mismatch = o.at("ignore_protocol_mismatch").as_bool();
+        if (o.count("enable_kernel_debug"))
+            config.enable_kernel_debug = o.at("enable_kernel_debug").as_bool();
+        if (o.count("enable_stealth"))
+            config.enable_stealth = o.at("enable_stealth").as_bool();
+        if (o.count("enable_hidexattr"))
+            config.enable_hidexattr = o.at("enable_hidexattr").as_bool();
+        if (o.count("enable_selinux_fix"))
+            config.enable_selinux_fix = o.at("enable_selinux_fix").as_bool();
+        if (o.count("kasumi_enabled"))
+            config.kasumi_enabled = o.at("kasumi_enabled").as_bool();
+        if (o.count("mirror_path")) {
+            config.mirror_path = o.at("mirror_path").as_string();
+            // Treat legacy default as "auto" so Kasumi-on uses /dev/kasumi_mirror
+            if (config.mirror_path == (std::string(HYMO_DATA_DIR) + "/img_mnt"))
+                config.mirror_path.clear();
+        }
+        if (o.count("uname_release"))
+            config.uname_release = o.at("uname_release").as_string();
+        if (o.count("uname_version"))
+            config.uname_version = o.at("uname_version").as_string();
+        if (o.count("uname_mode")) {
+            std::string mode = o.at("uname_mode").as_string();
+            if (mode == "scoped" || mode == "global")
+                config.uname_mode = mode;
+        }
 
-            if (o.count("partitions") && o.at("partitions").type == json::Type::Array) {
-                for (const auto& p : o.at("partitions").as_array()) {
-                    if (p.type == json::Type::String) {
-                        config.partitions.push_back(p.as_string());
-                    }
+        if (o.count("partitions") && o.at("partitions").type == json::Type::Array) {
+            for (const auto& p : o.at("partitions").as_array()) {
+                if (p.type == json::Type::String) {
+                    config.partitions.push_back(p.as_string());
                 }
             }
         }
-    } catch (const std::exception& e) {
-        LOG_WARN("Failed to parse config JSON: " + std::string(e.what()));
     }
 
     config.module_modes = load_module_modes();
@@ -180,16 +174,13 @@ std::map<std::string, std::string> load_module_modes() {
     std::stringstream buffer;
     buffer << file.rdbuf();
 
-    try {
-        auto root = json::parse(buffer.str());
-        if (root.type == json::Type::Object) {
-            for (const auto& [key, val] : root.as_object()) {
-                if (val.type == json::Type::String) {
-                    modes[key] = val.as_string();
-                }
+    auto root = json::parse(buffer.str());
+    if (root.type == json::Type::Object) {
+        for (const auto& [key, val] : root.as_object()) {
+            if (val.type == json::Type::String) {
+                modes[key] = val.as_string();
             }
         }
-    } catch (...) {
     }
 
     return modes;
@@ -206,24 +197,21 @@ std::map<std::string, std::vector<ModuleRuleConfig>> load_module_rules() {
     std::stringstream buffer;
     buffer << file.rdbuf();
 
-    try {
-        auto root = json::parse(buffer.str());
-        if (root.type == json::Type::Object) {
-            for (const auto& [mod_id, list] : root.as_object()) {
-                if (list.type == json::Type::Array) {
-                    for (const auto& rule : list.as_array()) {
-                        if (rule.type == json::Type::Object) {
-                            const auto& ro = rule.as_object();
-                            if (ro.count("path") && ro.count("mode")) {
-                                rules[mod_id].push_back(
-                                    {ro.at("path").as_string(), ro.at("mode").as_string()});
-                            }
+    auto root = json::parse(buffer.str());
+    if (root.type == json::Type::Object) {
+        for (const auto& [mod_id, list] : root.as_object()) {
+            if (list.type == json::Type::Array) {
+                for (const auto& rule : list.as_array()) {
+                    if (rule.type == json::Type::Object) {
+                        const auto& ro = rule.as_object();
+                        if (ro.count("path") && ro.count("mode")) {
+                            rules[mod_id].push_back(
+                                {ro.at("path").as_string(), ro.at("mode").as_string()});
                         }
                     }
                 }
             }
         }
-    } catch (...) {
     }
 
     return rules;

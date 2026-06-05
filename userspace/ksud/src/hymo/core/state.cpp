@@ -1,5 +1,8 @@
 // core/state.cpp - Runtime state implementation
 #include "state.hpp"
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include "../defs.hpp"
@@ -125,14 +128,17 @@ RuntimeState load_runtime_state() {
             state.active_mounts = parse_json_array(line);
         } else if (line.find("\"pid\"") != std::string::npos) {
             if (line.find(":") != std::string::npos) {
-                try {
-                    std::string val = line.substr(line.find(":") + 1);
-                    // Remove trailing comma if any
-                    if (val.find(",") != std::string::npos)
-                        val = val.substr(0, val.find(","));
-                    state.pid = std::stoi(val);
-                } catch (...) {
+                std::string val = line.substr(line.find(":") + 1);
+                // Remove trailing comma if any
+                if (val.find(",") != std::string::npos)
+                    val = val.substr(0, val.find(","));
+                char* end = nullptr;
+                errno = 0;
+                long parsed = std::strtol(val.c_str(), &end, 10);
+                if (end == val.c_str() || errno == ERANGE || parsed < INT_MIN || parsed > INT_MAX) {
                     state.pid = 0;
+                } else {
+                    state.pid = static_cast<int>(parsed);
                 }
             }
         }

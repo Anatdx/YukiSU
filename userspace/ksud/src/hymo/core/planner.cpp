@@ -8,6 +8,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <system_error>
 #include "../defs.hpp"
 #include "../mount/kasumi.hpp"
 #include "../utils.hpp"
@@ -68,18 +69,19 @@ bool MountPlan::is_covered_by_overlay(const std::string& path) const {
 }
 
 static bool has_files(const fs::path& path) {
-    if (!fs::exists(path) || !fs::is_directory(path)) {
+    std::error_code ec;
+    if (!fs::exists(path, ec) || (!ec && !fs::is_directory(path, ec))) {
         return false;
     }
-    try {
-        for (const auto& entry : fs::directory_iterator(path)) {
-            (void)entry;
-            return true;
-        }
-    } catch (...) {
+    if (ec) {
         return false;
     }
-    return false;
+    auto it = fs::directory_iterator(path, ec);
+    auto end = fs::directory_iterator();
+    if (ec) {
+        return false;
+    }
+    return it != end;
 }
 
 static bool has_meaningful_content(const fs::path& base,
@@ -95,38 +97,44 @@ static bool has_meaningful_content(const fs::path& base,
 
 // Helper: Resolve symlinks in directory symlinks but preserve filename logic
 static std::string resolve_path_for_kasumi(const std::string& path_str) {
-    try {
-        fs::path p(path_str);
-        if (!p.has_parent_path())
-            return path_str;
-
-        fs::path parent = p.parent_path();
-        fs::path filename = p.filename();
-
-        fs::path curr = parent;
-        std::vector<fs::path> suffix;
-
-        // Walk up until we find an existing path
-        while (!curr.empty() && curr != "/" && !fs::exists(curr)) {
-            suffix.push_back(curr.filename());
-            curr = curr.parent_path();
-        }
-
-        // Resolve the existing base
-        if (fs::exists(curr)) {
-            curr = fs::canonical(curr);
-        }
-
-        // Re-append the non-existing suffix
-        for (auto it = suffix.rbegin(); it != suffix.rend(); ++it) {
-            curr /= *it;
-        }
-
-        curr /= filename;
-        return curr.string();
-    } catch (...) {
+    std::error_code ec;
+    fs::path p(path_str);
+    if (!p.has_parent_path())
         return path_str;
+
+    fs::path parent = p.parent_path();
+    fs::path filename = p.filename();
+
+    fs::path curr = parent;
+    std::vector<fs::path> suffix;
+
+    // Walk up until we find an existing path
+    while (!curr.empty() && curr != "/") {
+        if (fs::exists(curr, ec)) {
+            break;
+        }
+        if (ec) {
+            return path_str;
+        }
+        suffix.push_back(curr.filename());
+        curr = curr.parent_path();
     }
+
+    // Resolve the existing base
+    if (fs::exists(curr, ec)) {
+        curr = fs::canonical(curr, ec);
+        if (ec) {
+            return path_str;
+        }
+    }
+
+    // Re-append the non-existing suffix
+    for (auto it = suffix.rbegin(); it != suffix.rend(); ++it) {
+        curr /= *it;
+    }
+
+    curr /= filename;
+    return curr.string();
 }
 
 MountPlan generate_plan(const Config& config, const std::vector<Module>& modules,
@@ -293,14 +301,14 @@ MountPlan generate_plan(const Config& config, const std::vector<Module>& modules
 
         // Resolve symlinks for target
         fs::path target_path(target);
-        if (fs::is_symlink(target_path)) {
-            try {
-                target_path = fs::read_symlink(target_path);
+        std::error_code ec;
+        if (fs::is_symlink(target_path, ec)) {
+            target_path = fs::read_symlink(target_path, ec);
+            if (!ec) {
                 if (target_path.is_relative()) {
                     target_path = fs::path(target).parent_path() / target_path;
                 }
-                target_path = fs::canonical(target_path);
-            } catch (...) {
+                target_path = fs::canonical(target_path, ec);
             }
         }
 
@@ -388,9 +396,11 @@ void update_kasumi_mappings(const Config& config, const std::vector<Module>& mod
             if (!fs::exists(part_root))
                 continue;
 
-            try {
-                for (auto dir_it = fs::recursive_directory_iterator(part_root);
-                     dir_it != fs::recursive_directory_iterator(); ++dir_it) {
+            {
+                std::error_code ec_dir;
+                auto dir_it = fs::recursive_directory_iterator(part_root, ec_dir);
+                auto dir_end = fs::recursive_directory_iterator();
+                for (; dir_it != dir_end && !ec_dir; dir_it.increment(ec_dir)) {
                     const auto& entry = *dir_it;
                     fs::path rel = fs::relative(entry.path(), mod_path);
                     fs::path virtual_path = fs::path("/") / rel;
@@ -440,8 +450,11 @@ void update_kasumi_mappings(const Config& config, const std::vector<Module>& mod
                                         break;
                                     }
                                 }
-                                if (!exists && fs::exists(layer_path)) {
-                                    op.lowerdirs.push_back(layer_path);
+                                if (!exists) {
+                                    std::error_code ec_ex;
+                                    if (fs::exists(layer_path, ec_ex) && !ec_ex) {
+                                        op.lowerdirs.push_back(layer_path);
+                                    }
                                 }
                             }
                             break;
@@ -455,8 +468,9 @@ void update_kasumi_mappings(const Config& config, const std::vector<Module>& mod
                     if (entry.is_directory()) {
                         std::string final_virtual_path =
                             resolve_path_for_kasumi(virtual_path.string());
-                        if (fs::exists(final_virtual_path) &&
-                            fs::is_directory(final_virtual_path)) {
+                        std::error_code ec_fs;
+                        if (fs::exists(final_virtual_path, ec_fs) && !ec_fs &&
+                            fs::is_directory(final_virtual_path, ec_fs)) {
                             merge_rules.push_back(
                                 {final_virtual_path, entry.path().string(), DT_DIR});
                             dir_it.disable_recursion_pending();  // Kernel handles children via
@@ -468,7 +482,9 @@ void update_kasumi_mappings(const Config& config, const std::vector<Module>& mod
                     if (entry.is_regular_file() || entry.is_symlink()) {
                         // Safety Check: Do not replace existing directories with symlinks
                         if (entry.is_symlink()) {
-                            if (fs::exists(virtual_path) && fs::is_directory(virtual_path)) {
+                            std::error_code ec_fs;
+                            if (fs::exists(virtual_path, ec_fs) && !ec_fs &&
+                                fs::is_directory(virtual_path, ec_fs)) {
                                 LOG_WARN("Safety: Skipping symlink replacement for directory: " +
                                          virtual_path.string());
                                 continue;
@@ -504,8 +520,9 @@ void update_kasumi_mappings(const Config& config, const std::vector<Module>& mod
                         }
                     }
                 }
-            } catch (const std::exception& e) {
-                LOG_WARN("Error scanning module " + module.id + ": " + std::string(e.what()));
+                if (ec_dir) {
+                    LOG_WARN("Error scanning module " + module.id + ": " + ec_dir.message());
+                }
             }
         }
     }

@@ -2,14 +2,14 @@
 
 #ifdef __x86_64__
 
-#include "../syscall_hook.h"
+#include "hook/syscall_hook.h"
 
 #include <linux/mutex.h>
 #include <linux/string.h>
-#include "../../arch.h"
-#include "../../infra/symbol_resolver.h"
-#include "../../klog.h" // IWYU pragma: keep
-#include "../patch_memory.h"
+#include "arch.h"
+#include "infra/symbol_resolver.h"
+#include "klog.h" // IWYU pragma: keep
+#include "hook/patch_memory.h"
 
 syscall_fn_t *ksu_syscall_table = NULL;
 int ksu_dispatcher_nr = -1;
