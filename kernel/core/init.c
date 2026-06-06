@@ -64,7 +64,9 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #include "manager/manager_observer.h"
 #include "selinux/selinux.h"
 #include "supercall/supercall.h"
+#ifdef CONFIG_KSU_SUPERKEY
 #include "manager/superkey.h"
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 #include "manager/throne_tracker.h"
 #include "feature/sulog.h"
 
@@ -180,8 +182,9 @@ int __init kernelsu_init(void)
 
 	ksu_supercalls_init();
 
-	// Initialize SuperKey authentication (APatch-style)
+#ifdef CONFIG_KSU_SUPERKEY
 	superkey_init();
+#endif // #ifdef CONFIG_KSU_SUPERKEY
 
 	yukisu_custom_config_init();
 
