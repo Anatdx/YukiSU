@@ -67,6 +67,9 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #ifdef CONFIG_KSU_SUPERKEY
 #include "manager/superkey.h"
 #endif // #ifdef CONFIG_KSU_SUPERKEY
+#ifndef CONFIG_KSU_DISABLE_MANAGER
+#include "manager/dynamic_manager.h"
+#endif // #ifndef CONFIG_KSU_DISABLE_MANAGER
 #include "manager/throne_tracker.h"
 #include "feature/sulog.h"
 
@@ -181,6 +184,9 @@ int __init kernelsu_init(void)
 	ksu_selinux_hide_init();
 
 	ksu_supercalls_init();
+#ifndef CONFIG_KSU_DISABLE_MANAGER
+	ksu_dynamic_manager_init();
+#endif // #ifndef CONFIG_KSU_DISABLE_MANAGER
 
 #ifdef CONFIG_KSU_SUPERKEY
 	superkey_init();
@@ -254,6 +260,9 @@ void kernelsu_exit(void)
 	// Phase 2: Now safe to release data structures
 	ksu_observer_exit();
 	ksu_throne_tracker_exit();
+#ifndef CONFIG_KSU_DISABLE_MANAGER
+	ksu_dynamic_manager_exit();
+#endif // #ifndef CONFIG_KSU_DISABLE_MANAGER
 	ksu_allowlist_exit();
 
 	yukisu_custom_config_exit();

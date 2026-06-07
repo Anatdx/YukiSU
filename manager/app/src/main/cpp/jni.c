@@ -349,6 +349,26 @@ NativeBridge(uidShouldUmount, jboolean, jint uid) {
   return uid_should_umount(uid);
 }
 
+NativeBridgeNP(getDynamicManagers, jintArray) {
+  struct ksu_dynamic_manager_app apps[KSU_DYNAMIC_MANAGER_MAX_APPS] = {};
+  uint32_t count = get_dynamic_managers(apps, KSU_DYNAMIC_MANAGER_MAX_APPS);
+  jsize array_size = (jsize)(count * 2);
+  jintArray array = GetEnvironment()->NewIntArray(env, array_size);
+
+  if (!array || !count) {
+    return array;
+  }
+
+  jint flattened[KSU_DYNAMIC_MANAGER_MAX_APPS * 2] = {};
+  for (uint32_t i = 0; i < count; i++) {
+    flattened[i * 2] = (jint)apps[i].appid;
+    flattened[i * 2 + 1] = (jint)apps[i].flags;
+  }
+
+  GetEnvironment()->SetIntArrayRegion(env, array, 0, array_size, flattened);
+  return array;
+}
+
 NativeBridgeNP(isSuEnabled, jboolean) { return is_su_enabled(); }
 
 NativeBridge(setSuEnabled, jboolean, jboolean enabled) {

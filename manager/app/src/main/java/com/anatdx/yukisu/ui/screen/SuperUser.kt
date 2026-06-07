@@ -88,7 +88,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class AppPriority(val value: Int) {
-    SHELL(0), ROOT(1), CUSTOM(2), DEFAULT(3)
+    DYNAMIC_MANAGER(0), SHELL(1), ROOT(2), CUSTOM(3), DEFAULT(4)
 }
 
 data class BottomSheetMenuItem(
@@ -141,20 +141,22 @@ fun SuperUserScreen(navigator: DestinationsNavigator) {
         // 按分类筛选
         groups = when (viewModel.selectedCategory) {
             AppCategory.ALL -> groups
-            AppCategory.ROOT -> groups.filter { it.allowSu }
-            AppCategory.CUSTOM -> groups.filter { !it.allowSu && it.hasCustomProfile }
-            AppCategory.DEFAULT -> groups.filter { !it.allowSu && !it.hasCustomProfile }
+            AppCategory.ROOT -> groups.filter { it.allowSu || it.isDynamicManager }
+            AppCategory.CUSTOM -> groups.filter { !it.allowSu && !it.isDynamicManager && it.hasCustomProfile }
+            AppCategory.DEFAULT -> groups.filter { !it.allowSu && !it.isDynamicManager && !it.hasCustomProfile }
         }
 
         // 排序
         groups.sortedWith { group1, group2 ->
             val priority1 = when {
+                group1.isDynamicManager -> AppPriority.DYNAMIC_MANAGER
                 group1.uid == SuperUserViewModel.SHELL_UID -> AppPriority.SHELL
                 group1.allowSu -> AppPriority.ROOT
                 group1.hasCustomProfile -> AppPriority.CUSTOM
                 else -> AppPriority.DEFAULT
             }
             val priority2 = when {
+                group2.isDynamicManager -> AppPriority.DYNAMIC_MANAGER
                 group2.uid == SuperUserViewModel.SHELL_UID -> AppPriority.SHELL
                 group2.allowSu -> AppPriority.ROOT
                 group2.hasCustomProfile -> AppPriority.CUSTOM
@@ -184,9 +186,9 @@ fun SuperUserScreen(navigator: DestinationsNavigator) {
     val appCounts = remember(viewModel.appGroupList, viewModel.showSystemApps) {
         mapOf(
             AppCategory.ALL to viewModel.appGroupList.size,
-            AppCategory.ROOT to viewModel.appGroupList.count { it.allowSu },
-            AppCategory.CUSTOM to viewModel.appGroupList.count { !it.allowSu && it.hasCustomProfile },
-            AppCategory.DEFAULT to viewModel.appGroupList.count { !it.allowSu && !it.hasCustomProfile }
+            AppCategory.ROOT to viewModel.appGroupList.count { it.allowSu || it.isDynamicManager },
+            AppCategory.CUSTOM to viewModel.appGroupList.count { !it.allowSu && !it.isDynamicManager && it.hasCustomProfile },
+            AppCategory.DEFAULT to viewModel.appGroupList.count { !it.allowSu && !it.isDynamicManager && !it.hasCustomProfile }
         )
     }
 
@@ -1060,6 +1062,11 @@ private fun AppGroupItem(
     expandedGroups: MutableState<Set<Int>>
 ) {
     val mainApp = appGroup.mainApp
+    val managerContainerColor = when {
+        appGroup.isDynamicManager -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
+        appGroup.isPresetManager -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.32f)
+        else -> Color.Transparent
+    }
 
     SwipeActionContainer(
         enabled = !viewModel.showBatchActions,
@@ -1084,8 +1091,36 @@ private fun AppGroupItem(
                     onTap = { onClick() }
                 )
             },
+            colors = ListItemDefaults.colors(containerColor = managerContainerColor),
             headlineContent = {
-                Text(mainApp.label)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = mainApp.label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (appGroup.isDynamicManager || appGroup.isPresetManager) {
+                        LabelItem(
+                            text = if (appGroup.isDynamicManager) "DYNAMIC KSU" else "KSU",
+                            style = LabelItemDefaults.style.copy(
+                                containerColor = if (appGroup.isDynamicManager) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                },
+                                contentColor = if (appGroup.isDynamicManager) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onTertiary
+                                },
+                            )
+                        )
+                    }
+                }
             },
             supportingContent = {
                 Column {
@@ -1117,6 +1152,15 @@ private fun AppGroupItem(
                     }
 
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (appGroup.isDynamicManager) {
+                            LabelItem(
+                                text = "ACTIVE",
+                                style = LabelItemDefaults.style.copy(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            )
+                        }
                         if (appGroup.allowSu) {
                             LabelItem(text = "ROOT")
                         } else {

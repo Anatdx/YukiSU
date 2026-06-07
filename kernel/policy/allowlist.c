@@ -138,18 +138,20 @@ static bool profile_valid(struct app_profile *profile)
 
 	if (profile->allow_su) {
 #ifndef CONFIG_KSU_DISABLE_POLICY
-		if (profile->rp_config.profile.groups_count > KSU_MAX_GROUPS) {
-			pr_err("invalid groups_count in app_profile: %s\n",
-			       profile->key);
-			return false;
-		}
-
-		{
+		if (!profile->rp_config.use_default) {
 			char *domain =
 			    profile->rp_config.profile.selinux_domain;
 			static const size_t domain_len =
 			    sizeof(profile->rp_config.profile.selinux_domain);
 			size_t len;
+
+			if (profile->rp_config.profile.groups_count >
+			    KSU_MAX_GROUPS) {
+				pr_err("invalid groups_count in app_profile: "
+				       "%s\n",
+				       profile->key);
+				return false;
+			}
 
 			if (unlikely(need_migrate_domain) &&
 			    strncmp(domain, "u:r:ksu:s0", domain_len) == 0) {
@@ -203,7 +205,7 @@ static bool profile_valid(struct app_profile *profile)
 		    0) {
 			return false;
 		}
-#endif
+#endif // #ifdef CONFIG_KSU_DISABLE_POLICY
 	}
 
 	return true;

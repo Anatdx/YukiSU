@@ -160,6 +160,17 @@ bool uid_should_umount(int uid) {
   return false;
 }
 
+uint32_t get_dynamic_managers(struct ksu_dynamic_manager_app *apps,
+                              uint32_t max_count) {
+  struct ksu_get_dynamic_managers_cmd cmd = {};
+  cmd.count = max_count;
+  cmd.apps = (uint64_t)(uintptr_t)apps;
+  if (ksuctl(KSU_IOCTL_GET_DYNAMIC_MANAGERS, &cmd) == 0) {
+    return cmd.count;
+  }
+  return 0;
+}
+
 bool set_app_profile(const struct app_profile *profile) {
   struct ksu_set_app_profile_cmd cmd = {};
   cmd.profile = *profile;

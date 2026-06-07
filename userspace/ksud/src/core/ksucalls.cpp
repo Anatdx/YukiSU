@@ -240,6 +240,12 @@ int set_init_pgrp() {
     return ksuctl(KSU_IOCTL_SET_INIT_PGRP, nullptr);
 }
 
+int set_dynamic_managers(const std::vector<DynamicManagerSign>& signs) {
+    DynamicManagerCmd cmd = {static_cast<uint32_t>(signs.size()),
+                             reinterpret_cast<uint64_t>(signs.empty() ? nullptr : signs.data())};
+    return ksuctl(KSU_IOCTL_SET_DYNAMIC_MANAGERS, &cmd);
+}
+
 int umount_list_wipe() {
     AddTryUmountCmd cmd = {0, 0, KSU_UMOUNT_WIPE};
     return ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &cmd);

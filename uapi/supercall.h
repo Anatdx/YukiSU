@@ -3,7 +3,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif // #ifdef __cplusplus
 
 #ifdef __KERNEL__
 #include <linux/ioctl.h>
@@ -15,8 +15,8 @@ extern "C" {
 // (-> linux/ioctl.h -> asm/types.h) on Linux/Android.
 #ifndef __aligned_u64
 #define __aligned_u64 __u64 __attribute__((aligned(8)))
-#endif
-#endif
+#endif // #ifndef __aligned_u64
+#endif // #ifdef __KERNEL__
 
 #include "uapi/app_profile.h"
 #include "uapi/selinux.h"
@@ -28,31 +28,31 @@ extern "C" {
 
 // Magic numbers for prctl hook (SECCOMP-safe)
 #define KSU_PRCTL_SUPERKEY_AUTH 0x59554B49 // "YUKI"
-#define KSU_PRCTL_GET_FD 0x59554B4A // "YUKJ"
+#define KSU_PRCTL_GET_FD 0x59554B4A        // "YUKJ"
 
 // prctl command structures
 struct ksu_prctl_get_fd_cmd {
-	int result;
-	int fd;
+  int result;
+  int fd;
 };
 
 struct ksu_superkey_prctl_cmd {
-	char superkey[65];
-	__u64 timestamp; // user-supplied Unix epoch seconds; kernel rejects
-			 // |now - timestamp| > 30
-	int result;
-	int fd;
+  char superkey[65];
+  __u64 timestamp; // user-supplied Unix epoch seconds; kernel rejects
+                   // |now - timestamp| > 30
+  int result;
+  int fd;
 };
 
 struct ksu_superkey_reboot_cmd {
-	char superkey[65];
-	int result;
-	int fd;
+  char superkey[65];
+  int result;
+  int fd;
 };
 
 // IOCTL command structures
 struct ksu_become_daemon_cmd {
-	__u8 token[65];
+  __u8 token[65];
 };
 
 #define EVENT_POST_FS_DATA 1
@@ -64,94 +64,94 @@ struct ksu_become_daemon_cmd {
 #define KSU_GET_INFO_FLAG_LATE_LOAD (1U << 2)
 
 struct ksu_get_info_cmd {
-	__u32 version;
-	__u32 flags; // Output: KSU_GET_INFO_FLAG_* bits
-	__u32 features;
+  __u32 version;
+  __u32 flags; // Output: KSU_GET_INFO_FLAG_* bits
+  __u32 features;
 };
 
 struct ksu_report_event_cmd {
-	__u32 event;
+  __u32 event;
 };
 
 struct ksu_set_sepolicy_cmd {
-	__u64 data_len; /* Input: bytes of serialized command payload */
-	__aligned_u64 data; /* Input: pointer to serialized payload */
+  __u64 data_len;     /* Input: bytes of serialized command payload */
+  __aligned_u64 data; /* Input: pointer to serialized payload */
 };
 
 struct ksu_sepolicy_cmd_hdr {
-	__u32 cmd; /* Input: command type, KSU_SEPOLICY_CMD_* */
-	__u32 subcmd; /* Input: command subtype */
+  __u32 cmd;    /* Input: command type, KSU_SEPOLICY_CMD_* */
+  __u32 subcmd; /* Input: command subtype */
 };
 
 struct ksu_check_safemode_cmd {
-	__u8 in_safe_mode;
+  __u8 in_safe_mode;
 };
 
 struct ksu_get_allow_list_cmd {
-	__u32 uids[128];
-	__u32 count;
-	__u8 allow;
+  __u32 uids[128];
+  __u32 count;
+  __u8 allow;
 };
 
 /* New allowlist API: flexible array, separate count/total (for count-only or
  * pagination) */
 struct ksu_new_get_allow_list_cmd {
-	__u16 count; /* Input: buffer size in uids; Output: number of uids
-			returned */
-	__u16 total_count; /* Output: total number of uids in list */
-	__u32 uids[]; /* Output: array of UIDs (flexible array member) */
+  __u16 count;       /* Input: buffer size in uids; Output: number of uids
+                        returned */
+  __u16 total_count; /* Output: total number of uids in list */
+  __u32 uids[];      /* Output: array of UIDs (flexible array member) */
 };
 
 struct ksu_uid_granted_root_cmd {
-	__u32 uid;
-	__u8 granted;
+  __u32 uid;
+  __u8 granted;
 };
 
 struct ksu_uid_should_umount_cmd {
-	__u32 uid;
-	__u8 should_umount;
+  __u32 uid;
+  __u8 should_umount;
 };
 
 struct ksu_get_manager_appid_cmd {
-	__u32 appid;
+  __u32 appid;
 };
 
 struct ksu_get_manager_uid_cmd {
-	__u32 uid;
+  __u32 uid;
 };
 
 struct ksu_get_app_profile_cmd {
-	struct app_profile profile;
+  struct app_profile profile;
 };
 
 struct ksu_set_app_profile_cmd {
-	struct app_profile profile;
+  struct app_profile profile;
 };
 
 struct ksu_get_feature_cmd {
-	__u32 feature_id;
-	__u64 value;
-	__u8 supported;
+  __u32 feature_id;
+  __u64 value;
+  __u8 supported;
 };
 
 struct ksu_set_feature_cmd {
-	__u32 feature_id;
-	__u64 value;
+  __u32 feature_id;
+  __u64 value;
 };
 
 struct ksu_get_wrapper_fd_cmd {
-	__u32 fd;
-	__u32 flags;
+  __u32 fd;
+  __u32 flags;
 };
 
 struct ksu_get_sulog_fd_cmd {
-	__u32 flags;
+  __u32 flags;
 };
 
 struct ksu_manage_mark_cmd {
-	__u32 operation;
-	__s32 pid;
-	__u32 result;
+  __u32 operation;
+  __s32 pid;
+  __u32 result;
 };
 
 #define KSU_MARK_GET 1
@@ -160,18 +160,18 @@ struct ksu_manage_mark_cmd {
 #define KSU_MARK_REFRESH 4
 
 struct ksu_nuke_ext4_sysfs_cmd {
-	__aligned_u64 arg;
+  __aligned_u64 arg;
 };
 
 struct ksu_add_try_umount_cmd {
-	__aligned_u64 arg;
-	__u32 flags;
-	__u8 mode;
+  __aligned_u64 arg;
+  __u32 flags;
+  __u8 mode;
 };
 
 struct ksu_list_try_umount_cmd {
-	__aligned_u64 arg;
-	__u32 buf_size;
+  __aligned_u64 arg;
+  __u32 buf_size;
 };
 
 #define KSU_UMOUNT_WIPE 0
@@ -180,26 +180,53 @@ struct ksu_list_try_umount_cmd {
 
 #ifndef KSU_FULL_VERSION_STRING
 #define KSU_FULL_VERSION_STRING 255
-#endif
+#endif // #ifndef KSU_FULL_VERSION_STRING
 
 struct ksu_get_full_version_cmd {
-	char version_full[KSU_FULL_VERSION_STRING];
+  char version_full[KSU_FULL_VERSION_STRING];
 };
 
 struct ksu_hook_type_cmd {
-	char hook_type[32];
+  char hook_type[32];
 };
 
 struct ksu_superkey_auth_cmd {
-	char superkey[65];
-	__s32 result;
+  char superkey[65];
+  __s32 result;
 };
 
 struct ksu_superkey_status_cmd {
-	__u8 enabled;
-	__u8 authenticated;
-	__u8 signature_ok;
-	__u32 manager_uid;
+  __u8 enabled;
+  __u8 authenticated;
+  __u8 signature_ok;
+  __u32 manager_uid;
+};
+
+#define KSU_DYNAMIC_MANAGER_MAX_SIGNS 64
+#define KSU_DYNAMIC_MANAGER_MAX_APPS 64
+
+struct ksu_dynamic_manager_sign {
+  __u32 size;
+  char hash[65];
+};
+
+struct ksu_dynamic_manager_cmd {
+  __u32 count;
+  __aligned_u64 signs;
+};
+
+#define KSU_DYNAMIC_MANAGER_FLAG_PRESET (1U << 0)
+#define KSU_DYNAMIC_MANAGER_FLAG_TRUSTED (1U << 1)
+
+struct ksu_dynamic_manager_app {
+  __u32 appid;
+  __u32 flags;
+};
+
+struct ksu_get_dynamic_managers_cmd {
+  __u32 count;
+  __u32 total_count;
+  __aligned_u64 apps;
 };
 
 // IOCTL definitions
@@ -211,9 +238,9 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_GET_ALLOW_LIST _IOC(_IOC_READ | _IOC_WRITE, 'K', 6, 0)
 #define KSU_IOCTL_GET_DENY_LIST _IOC(_IOC_READ | _IOC_WRITE, 'K', 7, 0)
 #define KSU_IOCTL_NEW_GET_ALLOW_LIST                                           \
-	_IOWR('K', 6, struct ksu_new_get_allow_list_cmd)
+  _IOWR('K', 6, struct ksu_new_get_allow_list_cmd)
 #define KSU_IOCTL_NEW_GET_DENY_LIST                                            \
-	_IOWR('K', 7, struct ksu_new_get_allow_list_cmd)
+  _IOWR('K', 7, struct ksu_new_get_allow_list_cmd)
 #define KSU_IOCTL_UID_GRANTED_ROOT _IOC(_IOC_READ | _IOC_WRITE, 'K', 8, 0)
 #define KSU_IOCTL_UID_SHOULD_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 9, 0)
 #define KSU_IOCTL_GET_MANAGER_APPID _IOC(_IOC_READ, 'K', 10, 0)
@@ -232,11 +259,16 @@ struct ksu_superkey_status_cmd {
 #define KSU_IOCTL_LIST_TRY_UMOUNT _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0)
 #define KSU_IOCTL_GET_MANAGER_UID _IOC(_IOC_READ, 'K', 201, 0)
 
+/* YukiSU private range: keep away from low upstream KernelSU ioctl numbers. */
+#define KSU_IOCTL_SET_DYNAMIC_MANAGERS _IOC(_IOC_WRITE, 'K', 240, 0)
+#define KSU_IOCTL_GET_DYNAMIC_MANAGERS                                         \
+  _IOWR('K', 241, struct ksu_get_dynamic_managers_cmd)
+
 #define KSU_IOCTL_SUPERKEY_AUTH _IOC(_IOC_READ | _IOC_WRITE, 'K', 107, 0)
 #define KSU_IOCTL_SUPERKEY_STATUS _IOC(_IOC_READ, 'K', 108, 0)
 
 #ifdef __cplusplus
 }
-#endif
+#endif // #ifdef __cplusplus
 
 #endif // #ifndef __KSU_UAPI_SUPERCALL_H

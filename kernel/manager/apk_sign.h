@@ -4,6 +4,15 @@
 #include "ksu.h"
 #include <linux/types.h>
 
+struct apk_sign_match {
+	int index;
+	bool trusted;
+	const char *name;
+	u32 size;
+	char hash[65];
+};
+
+bool match_apk_signature(char *path, struct apk_sign_match *match);
 bool is_manager_apk(char *path);
 
 /** Same as is_manager_apk; when signature_index is non-NULL, set it to the

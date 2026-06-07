@@ -16,6 +16,7 @@
 
 #include "manager/apk_sign.h"
 #include "klog.h" // IWYU pragma: keep
+#include "manager/dynamic_manager.h"
 #include "manager/manager_sign.h"
 
 #ifdef CONFIG_KSU_SUPERKEY
@@ -29,7 +30,15 @@ struct sdesc {
 };
 
 static apk_sign_key_t apk_sign_keys[] = {
-    {EXPECTED_SIZE, EXPECTED_HASH},
+    {EXPECTED_SIZE, EXPECTED_HASH, APK_SIGN_FLAG_TRUSTED, "YukiSU"},
+    {PRESET_SIZE_OFFICIAL, PRESET_HASH_OFFICIAL, 0, "KernelSU"},
+    {PRESET_SIZE_MKSU, PRESET_HASH_MKSU, 0, "MKSU"},
+    {PRESET_SIZE_RKSU, PRESET_HASH_RKSU, 0, "RKSU"},
+    {PRESET_SIZE_SUKISU, PRESET_HASH_SUKISU, 0, "SukiSU"},
+    {PRESET_SIZE_RESUKISU, PRESET_HASH_RESUKISU, 0, "ReSukiSU"},
+    {PRESET_SIZE_KOWSU, PRESET_HASH_KOWSU, 0, "KowSU"},
+    {PRESET_SIZE_KSUN, PRESET_HASH_KSUN, 0, "KernelSU-Next"},
+    {PRESET_SIZE_XXKSU, PRESET_HASH_XXKSU, 0, "xxKSU"},
 };
 
 static struct sdesc *init_sdesc(struct crypto_shash *alg)
@@ -80,7 +89,7 @@ static int ksu_sha256(const unsigned char *data, unsigned int datalen,
 }
 
 static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
-			int *matched_index)
+			struct apk_sign_match *match)
 {
 	int i;
 	apk_sign_key_t sign_key;
@@ -130,9 +139,30 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 				hash_str, sign_key.sha256, i);
 			if (strcmp(sign_key.sha256, hash_str) == 0) {
 				signature_valid = true;
-				if (matched_index)
-					*matched_index = i;
+				if (match) {
+					match->index = i;
+					match->trusted =
+					    (sign_key.flags &
+					     APK_SIGN_FLAG_TRUSTED) != 0;
+					match->name = sign_key.name;
+					match->size = *size4;
+					strscpy(match->hash, hash_str,
+						sizeof(match->hash));
+				}
 				break;
+			}
+		}
+
+		if (!signature_valid &&
+		    ksu_dynamic_manager_is_trusted_sign(*size4, hash_str)) {
+			signature_valid = true;
+			if (match) {
+				match->index = -1;
+				match->trusted = true;
+				match->name = "dynamic";
+				match->size = *size4;
+				strscpy(match->hash, hash_str,
+					sizeof(match->hash));
 			}
 		}
 	}
@@ -191,7 +221,8 @@ static bool has_v1_signature_file(struct file *fp)
 	return false;
 }
 
-static __always_inline bool check_v2_signature(char *path, int *signature_index)
+static __always_inline bool check_v2_signature(char *path,
+					       struct apk_sign_match *match)
 {
 	unsigned char buffer[0x11] = {0};
 	u32 size4;
@@ -265,8 +296,8 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 			/* One v2 block can contain multiple signers; accept if
 			 * any signer matches any key */
 			while (offset < size8) {
-				bool result = check_block(
-				    fp, &size4, &pos, &offset, signature_index);
+				bool result = check_block(fp, &size4, &pos,
+							  &offset, match);
 				if (result) {
 					v2_signing_valid = true;
 					break;
@@ -306,7 +337,7 @@ static __always_inline bool check_v2_signature(char *path, int *signature_index)
 	if (v3_signing_exist || v3_1_signing_exist) {
 #ifdef CONFIG_KSU_DEBUG
 		pr_err("Unexpected v3 signature scheme found!\n");
-#endif
+#endif // #ifdef CONFIG_KSU_DEBUG
 		v2_signing_valid = false;
 	}
 clean:
@@ -341,6 +372,10 @@ module_param_cb(ksu_debug_manager_uid, &expected_size_ops,
 
 bool is_manager_apk_ex(char *path, int *signature_index)
 {
+	struct apk_sign_match match = {
+	    .index = -1,
+	};
+
 #ifdef CONFIG_KSU_SUPERKEY
 	// SuperKey mode: signature verification is bypassed entirely.
 	// The manager is identified by password (via prctl), not by APK
@@ -350,7 +385,11 @@ bool is_manager_apk_ex(char *path, int *signature_index)
 		return false;
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
-	return check_v2_signature(path, signature_index);
+	if (!check_v2_signature(path, &match) || !match.trusted)
+		return false;
+	if (signature_index)
+		*signature_index = match.index;
+	return true;
 }
 
 bool is_manager_apk(char *path)
@@ -373,4 +412,16 @@ bool is_manager_apk(char *path)
 	}
 
 	return is_manager_apk_ex(path, NULL);
+}
+
+bool match_apk_signature(char *path, struct apk_sign_match *match)
+{
+	if (match) {
+		match->index = -1;
+		match->trusted = false;
+		match->name = NULL;
+		match->size = 0;
+		match->hash[0] = '\0';
+	}
+	return check_v2_signature(path, match);
 }

@@ -347,6 +347,16 @@ private fun AdvancedSettings(
         SettingsDivider()
 
         SwitchSettingItem(
+            icon = Icons.Filled.AdminPanelSettings,
+            title = stringResource(R.string.allow_any_dynamic_manager),
+            summary = stringResource(R.string.allow_any_dynamic_manager_summary),
+            checked = state.allowAnyDynamicManager,
+            onChange = handlers::handleAllowAnyDynamicManagerChange
+        )
+
+        SettingsDivider()
+
+        SwitchSettingItem(
             icon = Icons.Filled.DeveloperMode,
             title = stringResource(R.string.enable_web_debugging),
             summary = stringResource(R.string.enable_web_debugging_summary),

@@ -7,6 +7,7 @@
 #include "core/restorecon.hpp"
 #include "debug.hpp"
 #include "defs.hpp"
+#include "dynamic_manager.hpp"
 #include "flash/flash_partition.hpp"
 #include "hymo/hymo_cli.hpp"
 #include "init_event.hpp"
@@ -43,6 +44,11 @@ bool CliParser::parse(int argc, char** argv) {
 
         if (arg.empty())
             continue;
+
+        if (!subcommand_.empty()) {
+            positional_args_.push_back(arg);
+            continue;
+        }
 
         // Check if it's an option
         if (arg[0] == '-') {
@@ -143,6 +149,7 @@ void print_usage() {
     printf("  sepolicy       SELinux policy patch tool\n");
     printf("  profile        Manage app profiles\n");
     printf("  feature        Manage kernel features\n");
+    printf("  dynamic        Manage dynamic manager signatures\n");
     printf("  initrc         Manage init.rc injection\n");
     printf("  sulogd         Run sulog reader daemon\n");
     printf("  boot-patch     Patch boot image\n");
@@ -292,7 +299,6 @@ int cmd_debug(const std::vector<std::string>& args) {
         printf("USAGE: ksud debug <SUBCOMMAND>\n\n");
         printf("SUBCOMMANDS:\n");
         printf("  set-manager [PKG]  Set manager app\n");
-        printf("  get-sign <APK>     Get APK signature\n");
         printf("  insmod <KO> [PARAMS...]  Load a kernel module (legacy alias)\n");
         printf("  su [-g]            Root shell\n");
         printf("  version            Get kernel version\n");
@@ -306,8 +312,6 @@ int cmd_debug(const std::vector<std::string>& args) {
     if (subcmd == "set-manager") {
         const std::string pkg = args.size() > 1 ? args[1] : "com.anatdx.yukisu";
         return debug_set_manager(pkg);
-    } else if (subcmd == "get-sign" && args.size() > 1) {
-        return debug_get_sign(args[1]);
     } else if (subcmd == "insmod" && args.size() > 1) {
         return debug_insmod(args[1], std::vector<std::string>(args.begin() + 2, args.end()));
     } else if (subcmd == "version") {
@@ -895,6 +899,8 @@ int cli_run(int argc, char** argv) {
         return cmd_profile(args);
     } else if (cmd == "feature") {
         return cmd_feature(args);
+    } else if (cmd == "dynamic") {
+        return cmd_dynamic_manager(args);
     } else if (cmd == "initrc") {
         return cmd_initrc(args);
     } else if (cmd == "sulogd") {

@@ -70,6 +70,13 @@
     <string name="profile_selinux_context">SELinux context</string>
     <string name="profile_umount_modules">Umount modules</string>
     <string name="failed_to_update_app_profile">Failed to update App Profile for %s</string>
+    <string name="set_as_dynamic_manager">Set as dynamic manager</string>
+    <string name="set_as_dynamic_manager_summary">Persist this app signature and trust it as a dynamic manager</string>
+    <string name="dynamic_manager_set_failed">Failed to set %s as dynamic manager</string>
+    <string name="dynamic_manager_del_failed">Failed to remove %s from dynamic managers</string>
+    <string name="dynamic_manager_signature_unavailable">Unable to extract dynamic manager signature for %s</string>
+    <string name="allow_any_dynamic_manager">Allow any app as dynamic manager</string>
+    <string name="allow_any_dynamic_manager_summary">Experimental. Show the dynamic manager switch for every app instead of only preset manager signatures.</string>
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
     <string name="settings_umount_modules_default_summary">Global default for "Umount modules" in App Profile. If enabled, it will remove all module modifications for apps without a profile. By default this is OFF, so new/unknown apps keep module changes.</string>

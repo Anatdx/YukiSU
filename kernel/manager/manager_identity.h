@@ -41,6 +41,17 @@ static inline bool ksu_is_uid_manager(uid_t uid)
 	return uid == 0;
 }
 
+static inline bool ksu_is_uid_preset_manager(uid_t uid)
+{
+	(void)uid;
+	return false;
+}
+
+static inline bool ksu_is_current_dynamic_manager(void)
+{
+	return false;
+}
+
 static inline void ksu_set_manager_uid(uid_t uid)
 {
 	(void)uid;
@@ -75,6 +86,10 @@ extern uid_t
 extern uid_t ksu_manager_appid; // primary appid (first valid)
 extern uid_t ksu_manager_appids[KSU_MAX_MANAGER_KEYS]; // per signature_index
 
+bool ksu_is_dynamic_manager_uid(uid_t uid);
+bool ksu_is_preset_manager_uid(uid_t uid);
+bool ksu_has_dynamic_manager(void);
+
 #ifdef CONFIG_KSU_SUPERKEY
 #include "manager/superkey.h"
 #endif // #ifdef CONFIG_KSU_SUPERKEY
@@ -83,9 +98,9 @@ static inline bool ksu_is_manager_uid_valid(void)
 {
 #ifdef CONFIG_KSU_SUPERKEY
 	return superkey_get_manager_uid() != (uid_t)-1 ||
-	       ksu_manager_uid != KSU_INVALID_UID;
+	       ksu_manager_uid != KSU_INVALID_UID || ksu_has_dynamic_manager();
 #else
-	return ksu_manager_uid != KSU_INVALID_UID;
+	return ksu_manager_uid != KSU_INVALID_UID || ksu_has_dynamic_manager();
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }
 
@@ -114,6 +129,8 @@ static inline bool is_manager(void)
 				return true;
 		}
 	}
+	if (ksu_is_dynamic_manager_uid(current_uid().val))
+		return true;
 	return false;
 }
 
@@ -156,7 +173,19 @@ static inline bool ksu_is_uid_manager(uid_t uid)
 		    ksu_manager_appids[i] == appid)
 			return true;
 	}
+	if (ksu_is_dynamic_manager_uid(uid))
+		return true;
 	return false;
+}
+
+static inline bool ksu_is_uid_preset_manager(uid_t uid)
+{
+	return ksu_is_preset_manager_uid(uid);
+}
+
+static inline bool ksu_is_current_dynamic_manager(void)
+{
+	return ksu_is_dynamic_manager_uid(current_uid().val);
 }
 
 static inline void ksu_set_manager_uid(uid_t uid)

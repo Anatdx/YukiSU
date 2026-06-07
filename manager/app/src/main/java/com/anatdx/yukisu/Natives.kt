@@ -76,6 +76,10 @@ object Natives {
         external get
 
     external fun uidShouldUmount(uid: Int): Boolean
+    external fun getDynamicManagers(): IntArray
+
+    const val DYNAMIC_MANAGER_FLAG_PRESET = 1 shl 0
+    const val DYNAMIC_MANAGER_FLAG_TRUSTED = 1 shl 1
 
     /**
      * Get the profile of the given package.

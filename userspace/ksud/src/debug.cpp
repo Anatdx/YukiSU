@@ -1,5 +1,4 @@
 #include "debug.hpp"
-#include "boot/apk_sign.hpp"
 #include "core/ksucalls.hpp"
 #include "kernelsu_loader.hpp"
 #include "log.hpp"
@@ -87,17 +86,6 @@ int debug_set_manager(const std::string& pkg) {
     system(cmd.c_str());
 
     printf("Manager set successfully!\n");
-    return 0;
-}
-
-int debug_get_sign(const std::string& apk) {
-    auto [size, hash] = get_apk_signature(apk);
-    if (hash.empty()) {
-        printf("Failed to get APK signature\n");
-        return 1;
-    }
-
-    printf("size: 0x%x, hash: %s\n", size, hash.c_str());
     return 0;
 }
 

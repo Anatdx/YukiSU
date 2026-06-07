@@ -5,6 +5,7 @@
 #include "core/ksucalls.hpp"
 #include "core/restorecon.hpp"
 #include "defs.hpp"
+#include "dynamic_manager.hpp"
 #include "log.hpp"
 #include "module/metamodule.hpp"
 #include "module/module.hpp"
@@ -25,6 +26,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <array>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 
 namespace ksud {
@@ -154,6 +157,7 @@ int on_post_data_fs() {
 
     // Report to kernel first
     report_post_fs_data();
+    load_and_apply_dynamic_managers();
 
     umask(0);
 

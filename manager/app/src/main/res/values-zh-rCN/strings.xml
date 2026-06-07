@@ -68,6 +68,13 @@
     <string name="profile_selinux_context">SELinux</string>
     <string name="profile_umount_modules">卸载模块</string>
     <string name="failed_to_update_app_profile">为 %s 更新 App Profile 失败</string>
+    <string name="set_as_dynamic_manager">设为动态管理器</string>
+    <string name="set_as_dynamic_manager_summary">持久化此应用签名并信任为动态管理器</string>
+    <string name="dynamic_manager_set_failed">将 %s 设为动态管理器失败</string>
+    <string name="dynamic_manager_del_failed">从动态管理器中移除 %s 失败</string>
+    <string name="dynamic_manager_signature_unavailable">无法提取 %s 的动态管理器签名</string>
+    <string name="allow_any_dynamic_manager">允许授权任何应用为动态管理器</string>
+    <string name="allow_any_dynamic_manager_summary">实验性功能。开启后在所有应用的 App Profile 中显示动态管理器开关，而不是仅显示预置签名管理器。</string>
     <string name="require_kernel_version" formatted="false">当前 KernelSU 版本 %s 过低，管理器无法正常工作，请将内核 KernelSU 版本升级至 %s 或以上！</string>
     <string name="settings_umount_modules_default">默认卸载模块</string>
     <string name="settings_umount_modules_default_summary">App Profile 中"卸载模块"的全局默认值，如果启用，将会为没有设置 Profile 的应用移除所有模块针对系统的修改。</string>

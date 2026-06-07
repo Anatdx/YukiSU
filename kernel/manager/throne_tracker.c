@@ -8,6 +8,8 @@
 
 #include "policy/allowlist.h"
 #include "klog.h" // IWYU pragma: keep
+#include "manager/apk_sign.h"
+#include "manager/dynamic_manager.h"
 #include "manager/manager_identity.h"
 #include "manager/throne_tracker.h"
 
@@ -253,6 +255,31 @@ static void crown_manager(const char *apk, struct list_head *uid_data,
 	}
 }
 
+static void note_scanned_manager(const char *apk, struct list_head *uid_data,
+				 const struct apk_sign_match *match)
+{
+	char pkg[KSU_MAX_PACKAGE_NAME];
+	struct list_head *list = (struct list_head *)uid_data;
+	struct uid_data *np;
+
+	if (get_pkg_from_apk_path(pkg, apk) < 0) {
+		pr_err("Failed to get package name from apk path: %s\n", apk);
+		return;
+	}
+
+	list_for_each_entry (np, list, list) {
+		if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
+			pr_info("Noting dynamic manager candidate: %s "
+				"(appid=%d) "
+				"signature=%s\n",
+				pkg, np->appid,
+				match && match->name ? match->name : "unknown");
+			ksu_dynamic_manager_note_scanned(np->appid, match);
+			break;
+		}
+	}
+}
+
 #define DATA_PATH_LEN 384 // 384 is enough for /data/app/<package>/base.apk
 
 struct data_path {
@@ -268,6 +295,7 @@ struct apk_path_hash {
 };
 
 static struct list_head apk_path_hash_list = LIST_HEAD_INIT(apk_path_hash_list);
+static bool manager_scan_forced;
 
 struct my_dir_context {
 	struct dir_context ctx;
@@ -293,7 +321,6 @@ struct my_dir_context {
 #define FILLDIR_ACTOR_CONTINUE 0
 #define FILLDIR_ACTOR_STOP -EINVAL
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-extern bool is_manager_apk(char *path);
 FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 			     int namelen, loff_t off, u64 ino,
 			     unsigned int d_type)
@@ -345,6 +372,9 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 		    (strncmp(name, "base.apk", namelen) == 0)) {
 			struct apk_path_hash *pos, *n;
 			struct apk_path_hash *apk_data;
+			struct apk_sign_match sign_match = {
+			    .index = -1,
+			};
 			int signature_index = -1;
 			unsigned int hash =
 			    full_name_hash(NULL, dirpath, strlen(dirpath));
@@ -355,13 +385,24 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 				}
 			}
 
-			if (is_manager_apk_ex(dirpath, &signature_index)) {
-				pr_info("Found manager base.apk at path: %s\n",
-					dirpath);
-				crown_manager(dirpath, my_ctx->private_data,
-					      signature_index);
-				/* Do not stop: continue scanning so all manager
-				 * APKs (e.g. Rei + YukiSU) get crowned */
+			if (match_apk_signature(dirpath, &sign_match)) {
+				if (sign_match.trusted &&
+				    sign_match.index >= 0) {
+					signature_index = sign_match.index;
+					pr_info("Found manager base.apk at "
+						"path: %s\n",
+						dirpath);
+					crown_manager(dirpath,
+						      my_ctx->private_data,
+						      signature_index);
+					/* Do not stop: continue scanning so
+					 * preset branch managers can be marked
+					 * even after YukiSU is found. */
+				} else {
+					note_scanned_manager(
+					    dirpath, my_ctx->private_data,
+					    &sign_match);
+				}
 			}
 
 			apk_data = kzalloc(sizeof(*apk_data), GFP_ATOMIC);
@@ -372,7 +413,7 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 					      &apk_path_hash_list);
 			}
 
-			if (is_manager_apk(dirpath)) {
+			if (sign_match.trusted) {
 				// Manager found, clear APK cache list
 				list_for_each_entry_safe (
 				    pos, n, &apk_path_hash_list, list) {
@@ -498,10 +539,12 @@ void track_throne(bool prune_only)
 	struct list_head uid_list;
 	struct uid_data *np, *n;
 	struct file *fp;
-	char chr = 0;
 	loff_t pos = 0;
-	loff_t line_start = 0;
-	char buf[KSU_MAX_PACKAGE_NAME];
+	loff_t size;
+	ssize_t nr;
+	char *buf = NULL;
+	char *line = NULL;
+	char *next = NULL;
 	static bool manager_exist = false;
 	bool need_search = false;
 
@@ -515,49 +558,66 @@ void track_throne(bool prune_only)
 		return;
 	}
 
-	for (;;) {
+	size = i_size_read(file_inode(fp));
+	if (size <= 0) {
+		filp_close(fp, 0);
+		goto out;
+	}
+
+	buf = kzalloc(size + 1, GFP_KERNEL);
+	if (!buf) {
+		filp_close(fp, 0);
+		goto out;
+	}
+
+	nr = kernel_read(fp, buf, size, &pos);
+	filp_close(fp, 0);
+	if (nr <= 0) {
+		pr_err("track_throne: read packages.list failed: %zd\n", nr);
+		goto out;
+	}
+	buf[nr] = '\0';
+
+	for (line = buf; line && *line; line = next) {
 		struct uid_data *data = NULL;
-		ssize_t count = kernel_read(fp, &chr, sizeof(chr), &pos);
-		const char *delim = " ";
+		const char *delim = " \t";
 		char *package = NULL;
 		char *tmp = NULL;
 		char *uid = NULL;
 		u32 res;
 
-		if (count != sizeof(chr))
-			break;
-		if (chr != '\n')
+		next = strchr(line, '\n');
+		if (next)
+			*next++ = '\0';
+		while (*line == ' ' || *line == '\t' || *line == '\r')
+			line++;
+		if (!*line)
 			continue;
 
-		count = kernel_read(fp, buf, sizeof(buf), &line_start);
-		data = kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
-		if (!data) {
-			filp_close(fp, 0);
-			goto out;
-		}
-
-		tmp = buf;
+		tmp = line;
 		package = strsep(&tmp, delim);
 		uid = strsep(&tmp, delim);
 		if (!uid || !package) {
-			kfree(data);
 			pr_err("update_uid: package or uid is NULL!\n");
-			break;
+			continue;
 		}
 
 		if (kstrtou32(uid, 10, &res)) {
-			kfree(data);
 			pr_err("track_throne: appid parse err\n");
-			break;
+			continue;
+		}
+
+		data = kzalloc(sizeof(*data), GFP_KERNEL);
+		if (!data) {
+			pr_err("track_throne: OOM appid=%u\n", res);
+			continue;
 		}
 		data->appid = res;
-		strncpy(data->package, package, KSU_MAX_PACKAGE_NAME);
+		strscpy(data->package, package, KSU_MAX_PACKAGE_NAME);
 		list_add_tail(&data->list, &uid_list);
-		// reset line start
-		line_start = pos;
 	}
-
-	filp_close(fp, 0);
+	kfree(buf);
+	buf = NULL;
 
 	if (prune_only)
 		goto prune;
@@ -596,7 +656,8 @@ void track_throne(bool prune_only)
 		}
 	}
 
-	need_search = !manager_exist;
+	need_search = !manager_exist || manager_scan_forced;
+	manager_scan_forced = false;
 
 	if (need_search) {
 		pr_info("Searching for manager(s)...\n");
@@ -608,6 +669,7 @@ prune:
 	// then prune the allowlist
 	ksu_prune_allowlist(is_uid_exist, &uid_list);
 out:
+	kfree(buf);
 	// free uid_list
 	list_for_each_entry_safe (np, n, &uid_list, list) {
 		list_del(&np->list);
@@ -624,6 +686,12 @@ static struct delayed_work throne_search_work;
 static void do_throne_search(struct work_struct *work)
 {
 	pr_info("throne_tracker: delayed search for manager...\n");
+	track_throne(false);
+}
+
+void ksu_request_manager_rescan(void)
+{
+	manager_scan_forced = true;
 	track_throne(false);
 }
 
