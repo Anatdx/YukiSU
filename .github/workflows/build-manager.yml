@@ -11,6 +11,7 @@ on:
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
+      - 'repack_apk.py'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
@@ -23,6 +24,7 @@ on:
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
+      - 'repack_apk.py'
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
@@ -35,6 +37,33 @@ on:
         type: boolean
 
 jobs:
+  generate-key:
+    runs-on: ubuntu-latest
+    outputs:
+      keystore: ${{ steps.gen.outputs.keystore }}
+      keystore_password: ${{ steps.gen.outputs.keystore_password }}
+      key_password: ${{ steps.gen.outputs.key_password }}
+    steps:
+      - name: Generate temporary keystore
+        id: gen
+        run: |
+          KEYSTORE_PASSWORD=$(openssl rand -hex 32)
+          KEY_PASSWORD=$(openssl rand -hex 32)
+          echo "keystore_password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "key_password=$KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+
+          keytool -genkeypair \
+            -alias ci-key \
+            -keyalg RSA -keysize 2048 \
+            -validity 1 \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -dname "CN=YukiSU CI Build" \
+            -storetype JKS \
+            -keystore ci-key.jks
+
+          echo "keystore=$(base64 -w 0 ci-key.jks)" >> "$GITHUB_OUTPUT"
+
   build-lkm:
     uses: ./.github/workflows/build-lkm.yml
     secrets: inherit
@@ -65,10 +94,10 @@ jobs:
       os: ${{ matrix.os }}
 
   build-manager:
-    needs: [build-ksud]
+    needs: [generate-key]
     strategy:
       matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"abi":"arm64-v8a","ksud_artifact":"ksud-aarch64-linux-android"},{"abi":"x86_64","ksud_artifact":"ksud-x86_64-linux-android"},{"abi":"armeabi-v7a","ksud_artifact":"ksud-armv7-linux-androideabi"}]') || fromJSON('[{"abi":"arm64-v8a","ksud_artifact":"ksud-aarch64-linux-android"}]') }}
+        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"abi":"arm64-v8a"},{"abi":"x86_64"},{"abi":"armeabi-v7a"}]') || fromJSON('[{"abi":"arm64-v8a"}]') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,40 +110,38 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup need_upload
-        id: need_upload
-        run: |
-          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
-            echo "UPLOAD=true" >> $GITHUB_OUTPUT
-          else
-            echo "UPLOAD=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Determine manager variant for telegram bot
         id: determine
         run: |
-          echo "title=Manager" >> $GITHUB_OUTPUT
-          echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> $GITHUB_OUTPUT
-
-      - name: Check GPG available
-        id: gpg_check
-        run: |
-          if [ -n "${{ secrets.GPG_PRIVATE_KEY }}" ]; then
-            echo "available=true" >> $GITHUB_OUTPUT
-          else
-            echo "available=false" >> $GITHUB_OUTPUT
-          fi
+          echo "title=Manager" >> "$GITHUB_OUTPUT"
+          echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> "$GITHUB_OUTPUT"
 
       - name: Write key
+        env:
+          TEMP_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
+          TEMP_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
+          TEMP_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
+          PROD_KEYSTORE: ${{ secrets.KEYSTORE }}
+          PROD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          PROD_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          PROD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
+          if [ -n "$PROD_KEYSTORE" ]; then
             {
-              echo KEYSTORE_PASSWORD='${{ secrets.KEYSTORE_PASSWORD }}'
-              echo KEY_ALIAS='${{ secrets.KEY_ALIAS }}'
-              echo KEY_PASSWORD='${{ secrets.KEY_PASSWORD }}'
+              echo KEYSTORE_PASSWORD="$PROD_KEYSTORE_PASSWORD"
+              echo KEY_ALIAS="$PROD_KEY_ALIAS"
+              echo KEY_PASSWORD="$PROD_KEY_PASSWORD"
               echo KEYSTORE_FILE='key.jks'
             } >> gradle.properties
-            echo "${{ secrets.KEYSTORE }}" | base64 -d > key.jks
+            echo "$PROD_KEYSTORE" | base64 -d > key.jks
+          else
+            {
+              echo KEYSTORE_PASSWORD="$TEMP_KEYSTORE_PASSWORD"
+              echo KEY_ALIAS='ci-key'
+              echo KEY_PASSWORD="$TEMP_KEY_PASSWORD"
+              echo KEYSTORE_FILE='ci-key.jks'
+            } >> gradle.properties
+            echo "$TEMP_KEYSTORE" | base64 -d > ci-key.jks
           fi
 
       - name: Setup Java
@@ -129,20 +156,131 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Build with Gradle
+        if: ${{ steps.determine.outputs.SKIP != 'true' }}
+        run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=${{ matrix.abi }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Manager-gradle-${{ matrix.abi }}
+          path: manager/app/build/outputs/apk/release/
+
+      - name: Upload mappings
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ steps.determine.outputs.title }}-mappings-${{ matrix.abi }}"
+          path: "manager/app/build/outputs/mapping/release/"
+
+  repack-manager:
+    needs: [build-manager, build-ksud, generate-key]
+    if: always() && needs.build-manager.result == 'success' && needs.build-ksud.result == 'success' && needs.generate-key.result == 'success'
+    strategy:
+      matrix:
+        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"abi":"arm64-v8a","target":"aarch64-linux-android","ksud_artifact":"ksud-aarch64-linux-android"},{"abi":"x86_64","target":"x86_64-linux-android","ksud_artifact":"ksud-x86_64-linux-android"},{"abi":"armeabi-v7a","target":"armv7-linux-androideabi","ksud_artifact":"ksud-armv7-linux-androideabi"}]') || fromJSON('[{"abi":"arm64-v8a","target":"aarch64-linux-android","ksud_artifact":"ksud-aarch64-linux-android"}]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup need_upload
+        id: need_upload
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          if [ -n "$BOT_TOKEN" ]; then
+            echo "UPLOAD=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "UPLOAD=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine manager variant for telegram bot
+        id: determine
+        run: |
+          echo "title=Manager" >> "$GITHUB_OUTPUT"
+          echo "topicid=${{ vars.MESSAGE_THREAD_ID }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check GPG available
+        id: gpg_check
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Download manager APK
+        uses: actions/download-artifact@v4
+        with:
+          name: Manager-gradle-${{ matrix.abi }}
+          path: artifacts/manager-gradle
+
       - name: Download ksud
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.ksud_artifact }}
-          path: ksud
+          path: artifacts/${{ matrix.ksud_artifact }}
 
-      - name: Copy ksud to app jniLibs
+      - name: Place manager APK and ksud
         run: |
-          mkdir -p app/src/main/jniLibs/${{ matrix.abi }}
-          cp -f ../ksud/ksud app/src/main/jniLibs/${{ matrix.abi }}/libksud.so
+          set -euo pipefail
+          mkdir -p manager/app/build/outputs/apk/release
+          APK=$(find artifacts/manager-gradle -type f -name "*.apk" | head -n 1)
+          test -n "$APK"
+          cp -f "$APK" manager/app/build/outputs/apk/release/
 
-      - name: Build with Gradle
-        if: ${{ steps.determine.outputs.SKIP != 'true' }}
-        run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=${{ matrix.abi }}
+          mkdir -p target/${{ matrix.target }}/release
+          KSUD=$(find artifacts/${{ matrix.ksud_artifact }} -type f -name "ksud" | head -n 1)
+          test -n "$KSUD"
+          cp -f "$KSUD" target/${{ matrix.target }}/release/ksud
+
+      - name: Prepare signing inputs
+        env:
+          TEMP_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
+          TEMP_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
+          TEMP_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
+          PROD_KEYSTORE: ${{ secrets.KEYSTORE }}
+          PROD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          PROD_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          PROD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$PROD_KEYSTORE" ]; then
+            echo "$PROD_KEYSTORE" | base64 -d > key.jks
+            {
+              echo "SIGN_KEYSTORE_FILE=key.jks"
+              echo "SIGN_KEY_ALIAS=$PROD_KEY_ALIAS"
+              echo "SIGN_KEYSTORE_PASSWORD=$PROD_KEYSTORE_PASSWORD"
+              echo "SIGN_KEY_PASSWORD=$PROD_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "$TEMP_KEYSTORE" | base64 -d > ci-key.jks
+            {
+              echo "SIGN_KEYSTORE_FILE=ci-key.jks"
+              echo "SIGN_KEY_ALIAS=ci-key"
+              echo "SIGN_KEYSTORE_PASSWORD=$TEMP_KEYSTORE_PASSWORD"
+              echo "SIGN_KEY_PASSWORD=$TEMP_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Repack and resign
+        run: |
+          python3 repack_apk.py repack \
+            -b release \
+            -t release \
+            -a ${{ matrix.abi }} \
+            -K "$SIGN_KEYSTORE_FILE" \
+            -A "$SIGN_KEY_ALIAS" \
+            -P "$SIGN_KEYSTORE_PASSWORD" \
+            -S "$SIGN_KEY_PASSWORD" \
+            --strip
 
       - name: Import GPG key
         if: steps.gpg_check.outputs.available == 'true'
@@ -158,8 +296,8 @@ jobs:
       - name: Sign APK with GPG
         if: steps.gpg_check.outputs.available == 'true'
         run: |
-          cd app/build/outputs/apk/release
-          for apk in *.apk; do
+          cd dist
+          for apk in ./*.apk; do
             if [ -f "$apk" ]; then
               echo "Signing $apk..."
               gpg --detach-sign --local-user an@anatdx.com --batch --yes --pinentry-mode loopback \
@@ -168,19 +306,13 @@ jobs:
             fi
           done
           echo "Signatures created:"
-          ls -lh *.sig || true
+          ls -lh ./*.sig || true
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: Manager-${{ matrix.abi }}
-          path: manager/app/build/outputs/apk/release/
-
-      - name: Upload mappings
-        uses: actions/upload-artifact@v4
-        with:
-          name: "${{ steps.determine.outputs.title }}-mappings-${{ matrix.abi }}"
-          path: "manager/app/build/outputs/mapping/release/"
+          path: dist/
 
       - name: Upload to telegram
         if: matrix.abi == 'arm64-v8a' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
@@ -194,9 +326,10 @@ jobs:
           TITLE: ${{ steps.determine.outputs.title }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
-            export VERSION=$(git rev-list --count HEAD)
-            APKS=$(find ./app/build/outputs/apk/release -name "*.apk")
+          if [ -n "$BOT_TOKEN" ]; then
+            export VERSION
+            VERSION=$(git rev-list --count HEAD)
+            mapfile -t APKS < <(find ./dist -name "*.apk")
             pip3 install telethon
-            python3 $GITHUB_WORKSPACE/scripts/ksubot.py $APKS
+            python3 "$GITHUB_WORKSPACE/scripts/ksubot.py" "${APKS[@]}"
           fi
