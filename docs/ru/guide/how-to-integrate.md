@@ -1,6 +1,6 @@
 # Руководство по интеграции
 
-YukiSU может быть интегрирован как в ядра GKI, так и в ядра, не относящиеся к GKI, и был обратно портирован на версию 4.14.
+YukiSU может быть интегрирован в исходные деревья ядер GKI и non-GKI, но текущий драйвер поддерживает только путь загружаемого модуля ядра (`CONFIG_KSU=m`). Встроенный `CONFIG_KSU=y` больше не поддерживается.
 
 Некоторые настройки OEM могут привести к тому, что до 50 % кода ядра будет происходить извне дерева ядра, а не из исходного Linux или ACK. Следовательно, индивидуальные функции ядер, не относящихся к GKI, приводят к значительной фрагментации ядра, и у нас нет универсального метода для их сборки. Поэтому мы не можем предоставить загрузочные образы для ядер, не относящихся к GKI.
 
@@ -8,23 +8,22 @@ YukiSU может быть интегрирован как в ядра GKI, та
 
 ## Методы подключения
 
-1. **Подключение системного вызова:**
+1. **TSR syscall hook:**
 
-   - Применимо к загружаемым модулям ядра (LKM) или GKI с этим подключением. (Поддерживается в `5.10+`)
-   - Требует `CONFIG_KSU_SYSCALL_HOOK=y` & `CONFIG_KPROBES=y`, `CONFIG_KRETPROBES=y`, `CONFIG_HAVE_SYSCALL_TRACEPOINTS=y`
+   - Основной путь для загружаемых модулей ядра (LKM). Поддерживается на ядрах GKI 2.0 (`5.10+`) и совместимых интеграциях из исходников.
+   - Требует `CONFIG_KPROBES=y`, `CONFIG_KRETPROBES=y` и `CONFIG_HAVE_SYSCALL_TRACEPOINTS=y`.
 
-2. **Ручной хук:**
+2. **Портирование hook под конкретное устройство:**
 
    - [Дополнительные сведения см. в этом репозитории](https://github.com/rksuorg/kernel_patches)
-   - Метод хука по умолчанию для ядер, отличных от GKI; `CONFIG_KPROBES` по умолчанию отключен.
-   - Требуется `CONFIG_KSU_MANUAL_HOOK=y`
+   - Некоторые non-GKI ядра отключают необходимую hook-инфраструктуру или содержат значительные OEM-изменения.
    - См. [руководство по kernelsu](https://github.com/tiann/KernelSU/blob/main/website/docs/guide/how-to-integrate-for-non-gki.md#manually-modify-the-kernel-source)
    - См. [`guide/how-to-integrate.md`](how-to-integrate.md)
    - Дополнительная ссылка: [backslashxx hooks](https://github.com/backslashxx/KernelSU/issues/5)
 
 ### Как добавить драйвер ядра YukiSU в исходный код ядра
 
-YukiSU теперь использует **единую кодовую базу** для сборок LKM и GKI/non-GKI. Отдельные ветки не нужны.
+YukiSU теперь использует **единую кодовую базу** для LKM-сборок на GKI и device-specific исходных деревьях. Отдельные ветки не нужны.
 
 ```sh
 curl -LSs "https://raw.githubusercontent.com/Anatdx/YukiSU/main/kernel/setup.sh" | bash -s main
@@ -51,14 +50,8 @@ CONFIG_KSU=m
 CONFIG_KPROBES=y
 CONFIG_HAVE_KPROBES=y
 CONFIG_KPROBE_EVENTS=y
+CONFIG_KRETPROBES=y
+CONFIG_HAVE_SYSCALL_TRACEPOINTS=y
 ```
 
-#### Для режима GKI (встроенный):
-
-```
-CONFIG_KSU=y
-CONFIG_KPROBES=y
-CONFIG_HAVE_KPROBES=y
-CONFIG_KPROBE_EVENTS=y
-```
-
+YukiSU не поддерживает встроенный `CONFIG_KSU=y`; выберите `m`.

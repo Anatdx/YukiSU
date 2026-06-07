@@ -14,22 +14,28 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 > Eski Rust sürümü [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) dalında durmaktadır.
 >
 
-[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
-[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/Anatdx/YukiSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/manosaba)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/Anatdx/YukiSU?logo=gnu)](/LICENSE)
 
 ## Özellikler
 
 1. Çekirdek tabanlı `su` ve root erişim yönetimi
-2. [hymo](https://github.com/Anatdx/hymo) tabanlı Hibrit Bağlama Modülü sistemi
-   > **Not:** Yerleşik hymo yerine başka metamodule'ler de kullanabilirsiniz.
-3. [App Profile](https://kernelsu.org/guide/app-profile.html): Root yetkisini kafese alın
-4. Yönetici teması ayarları
+2. Eski HymoFS yolunun yerine geçen yerleşik Kasumi hibrit bağlama modülü arka ucu
+   > **Not:** YukiSU artık SUSFS desteklemez. Harici çekirdek paketlerinde SUSFS adı geçebilir, ancak YukiSU Kasumi kullanır.
+3. [App Profile](https://kernelsu.org/guide/app-profile.html) ve uygulama başına non-root profil denetimleri
+4. Yerleşik paket imzası yolunun dışındaki güvenilir yönetici uygulamaları için Dynamic Manager desteği
+5. APatch tarzı SuperKey kimlik doğrulaması; derleme zamanı anahtarı veya `ksud` tarafından LKM içine yazılan anahtar desteklenir
+6. ADB root, sulog, SELinux hide, modül `init.rc` ekleme ve güncel KernelSU userspace davranışları C++ `ksud` yığınına eşitlendi
+7. arm64 ve x86_64 LKM desteği olan TSR tabanlı sucompat/syscall hook altyapısı
+8. Kasumi yapılandırması, SuperUser kaydırma eylemleri, günlük görüntüleme, soft reboot ve WebUI düzeltmeleri içeren yönetici güncellemeleri
 
 ## Uyumluluk
 
-- YukiSU, Android GKI 2.0 cihazlarını (çekirdek 5.10+) resmen destekler.
+- YukiSU şu anda yalnızca yüklenebilir çekirdek modülü yolunu (`CONFIG_KSU=m`) destekler. Yerleşik `CONFIG_KSU=y` artık desteklenmez.
+
+- YukiSU, Android GKI 2.0 cihazlarında (çekirdek 5.10+) LKM modunu resmen destekler. Eski ve non-GKI çekirdeklerde cihaza özel kaynak entegrasyonu gerekebilir.
 
 - Şu an yalnızca `arm64-v8a`, `armeabi-v7a (bare)` ve `X86_64` (bazıları) desteklenmektedir.
 
@@ -64,6 +70,7 @@ Yönetici için çeviri göndermek istiyorsanız [Crowdin](https://crowdin.com/p
 ## Katkıda Bulunanlar
 
 - [KernelSU](https://github.com/tiann/KernelSU): Üst akış
+- Kasumi: Yerleşik hibrit bağlama arka ucu
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): non-GKI desteği
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch, APatch çekirdek modülü uygulamasının önemli bir parçasıdır

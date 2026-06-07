@@ -14,22 +14,28 @@ Android デバイス向けのカーネルベース root ソリューション。
 > 従来の Rust 版は [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) ブランチに残しています。
 >
 
-[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
-[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/Anatdx/YukiSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/manosaba)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/Anatdx/YukiSU?logo=gnu)](/LICENSE)
 
 ## 特徴
 
 1. カーネルベースの `su` と root アクセス管理
-2. [hymo](https://github.com/Anatdx/hymo) ベースのハイブリッドマウントモジュールシステム
-   > **Note:** 組み込み hymo の代わりに他の metamodule も使用できます。
-3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html): root 権限をケージで管理
-4. マネージャーのテーマ調整
+2. 旧 HymoFS パスを置き換える、組み込み Kasumi ハイブリッドマウントモジュールバックエンド
+   > **Note:** YukiSU は SUSFS をサポートしなくなりました。外部カーネルパッケージ名に SUSFS が残る場合でも、YukiSU 本体は Kasumi を使用します。
+3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html) とアプリごとの non-root プロファイル制御
+4. 組み込みパッケージ署名以外の信頼済みマネージャーに対応する Dynamic Manager
+5. APatch 風の SuperKey 認証。コンパイル時キー、または `ksud` による LKM へのキー注入に対応
+6. ADB root、sulog、SELinux hide、モジュール `init.rc` 注入、現在の KernelSU userspace 挙動を C++ `ksud` スタックへ同期
+7. arm64 と x86_64 LKM をサポートする TSR ベースの sucompat/syscall hook 基盤
+8. Kasumi 設定、SuperUser スワイプ操作、ログビューア、ソフト再起動、WebUI 修正を含むマネージャー更新
 
 ## 互換性
 
-- YukiSU は Android GKI 2.0 デバイス（カーネル 5.10+）を公式にサポートしています。
+- YukiSU は現在、ロード可能カーネルモジュールパス（`CONFIG_KSU=m`）のみをサポートします。組み込みの `CONFIG_KSU=y` はサポートされません。
+
+- YukiSU は Android GKI 2.0 デバイス（カーネル 5.10+）の LKM モードを公式にサポートしています。古いカーネルや non-GKI カーネルでは、デバイス固有のソース統合が必要になる場合があります。
 
 - 現在サポートしているのは `arm64-v8a`、`armeabi-v7a (bare)`、`X86_64`（一部）のみです。
 
@@ -64,6 +70,7 @@ Android デバイス向けのカーネルベース root ソリューション。
 ## クレジット
 
 - [KernelSU](https://github.com/tiann/KernelSU): 上流
+- Kasumi: 組み込みハイブリッドマウントバックエンド
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): non-GKI サポート
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch は APatch カーネルモジュール実装の重要な一部です

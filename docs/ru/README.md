@@ -14,22 +14,28 @@
 > Классическая версия на Rust сохранена в ветке [`classic`](https://github.com/Anatdx/YukiSU/tree/classic).
 >
 
-[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
-[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/Anatdx/YukiSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/manosaba)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/Anatdx/YukiSU?logo=gnu)](/LICENSE)
 
 ## Возможности
 
 1. Управление `su` и root-доступом на основе ядра
-2. Система гибридных модулей монтирования на базе [hymo](https://github.com/Anatdx/hymo)
-   > **Примечание:** Можно также использовать другие metamodule вместо встроенного hymo.
-3. [App Profile](https://kernelsu.org/guide/app-profile.html): ограничение root-доступа
-4. Настройка темы менеджера
+2. Встроенный гибридный модульный бэкенд монтирования Kasumi, заменяющий старый путь HymoFS
+   > **Примечание:** YukiSU больше не поддерживает SUSFS. В названиях внешних пакетов ядра SUSFS может оставаться, но сам YukiSU использует Kasumi.
+3. [App Profile](https://kernelsu.org/guide/app-profile.html) и по-приложенческие профили non-root
+4. Dynamic Manager для доверенных приложений менеджера за пределами встроенного пути подписи пакета
+5. Аутентификация SuperKey в стиле APatch: ключ может задаваться при сборке или записываться в LKM через `ksud`
+6. ADB root, sulog, SELinux hide, внедрение модульного `init.rc` и актуальное поведение KernelSU userspace синхронизированы со стеком C++ `ksud`
+7. Инфраструктура sucompat/syscall hook на базе TSR с поддержкой arm64 и x86_64 LKM
+8. Обновления менеджера: настройка Kasumi, свайпы SuperUser, просмотр логов, soft reboot и исправления WebUI
 
 ## Совместимость
 
-- YukiSU официально поддерживает устройства с Android GKI 2.0 (ядро 5.10+).
+- YukiSU сейчас поддерживает только путь загружаемого модуля ядра (`CONFIG_KSU=m`). Встроенный `CONFIG_KSU=y` больше не поддерживается.
+
+- YukiSU официально поддерживает режим LKM на устройствах Android GKI 2.0 (ядро 5.10+). Для старых и non-GKI ядер может потребоваться интеграция исходников под конкретное устройство.
 
 - Сейчас поддерживаются только `arm64-v8a`, `armeabi-v7a (bare)` и `X86_64` (частично).
 
@@ -64,6 +70,7 @@
 ## Благодарности
 
 - [KernelSU](https://github.com/tiann/KernelSU): исходный проект
+- Kasumi: встроенный гибридный бэкенд монтирования
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): поддержка non-GKI
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch — ключевая часть реализации модуля ядра APatch

@@ -14,22 +14,28 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 > The classic Rust version is preserved in the [`classic`](https://github.com/Anatdx/YukiSU/tree/classic) branch.
 >
 
-[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
-[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/hymo_chat)
+[![Latest release](https://img.shields.io/github/v/release/Anatdx/YukiSU?label=Release&logo=github)](https://github.com/Anatdx/YukiSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/manosaba)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/Anatdx/YukiSU?logo=gnu)](/LICENSE)
 
 ## Features
 
 1. Kernel-based `su` and root access management
-2. A Hybrid Mounting Module system based on [hymo](https://github.com/Anatdx/hymo)
-   > **Note:** You can also use other metamodules instead of built-in hymo.
-3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
-4. Tweaks to the manager theme
+2. Built-in Kasumi hybrid mounting module backend, replacing the old HymoFS path
+   > **Note:** YukiSU no longer supports SUSFS. External kernel packages may still mention SUSFS, but YukiSU uses Kasumi.
+3. [App Profile](https://kernelsu.org/guide/app-profile.html) and per-app non-root profile controls
+4. Dynamic manager support for trusted manager apps beyond the built-in package signature path
+5. APatch-style SuperKey authentication, with compile-time keys or keys patched into the LKM by `ksud`
+6. ADB root, sulog, SELinux hide, module `init.rc` injection, and current KernelSU userspace behavior synced into the C++ `ksud` stack
+7. TSR-based sucompat/syscall hook infrastructure with arm64 and x86_64 LKM support
+8. Manager updates including Kasumi configuration, SuperUser swipe actions, log viewing, soft reboot, and WebUI fixes
 
 ## Compatibility Status
 
-- YukiSU officially supports Android GKI 2.0 devices (kernel 5.10+).
+- YukiSU currently supports only the loadable kernel module path (`CONFIG_KSU=m`). Built-in `CONFIG_KSU=y` is no longer supported.
+
+- YukiSU officially supports Android GKI 2.0 devices (kernel 5.10+) in LKM mode. Legacy and non-GKI kernels may require device-specific source integration.
 
 - Currently, only `arm64-v8a`, `armeabi-v7a (bare)` and `X86_64`(some) are supported.
 
@@ -64,6 +70,7 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 ## Credit
 
 - [KernelSU](https://github.com/tiann/KernelSU): upstream
+- Kasumi: built-in hybrid mounting backend
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): support non-GKI
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch is a key part of the APatch implementation of the kernel module
