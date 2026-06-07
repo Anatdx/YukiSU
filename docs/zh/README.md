@@ -57,7 +57,7 @@
 
 ## 赞助
 
-- [Anatdx](https://afd.anatdx.com)（YukiSU 维护者）
+- [Anatdx](https://afd.anatdx.moe)（YukiSU 维护者）
 - [ShirkNeko](https://afdian.com/a/shirkneko)（SukiSU 维护者）
 - [weishu](https://github.com/sponsors/tiann)（KernelSU 作者）
 

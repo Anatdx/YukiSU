@@ -58,7 +58,7 @@ Yönetici için çeviri göndermek istiyorsanız [Crowdin](https://crowdin.com/p
 
 ## Sponsorlar
 
-- [Anatdx](https://afd.anatdx.com) (YukiSU bakımcısı)
+- [Anatdx](https://afd.anatdx.moe) (YukiSU bakımcısı)
 - [ShirkNeko](https://afdian.com/a/shirkneko) (SukiSU bakımcısı)
 - [weishu](https://github.com/sponsors/tiann) (KernelSU yazarı)
 

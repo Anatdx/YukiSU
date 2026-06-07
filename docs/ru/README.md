@@ -58,7 +58,7 @@
 
 ## Спонсоры
 
-- [Anatdx](https://afd.anatdx.com) (мейнтейнер YukiSU)
+- [Anatdx](https://afd.anatdx.moe) (мейнтейнер YukiSU)
 - [ShirkNeko](https://afdian.com/a/shirkneko) (мейнтейнер SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (автор KernelSU)
 

@@ -58,7 +58,7 @@ If you need to submit a translation for the manager, please go to [Crowdin](http
 
 ## Sponsor
 
-- [Anatdx](https://afd.anatdx.com) (maintainer of YukiSU)
+- [Anatdx](https://afd.anatdx.moe) (maintainer of YukiSU)
 - [ShirkNeko](https://afdian.com/a/shirkneko) (maintainer of SukiSU)
 - [weishu](https://github.com/sponsors/tiann) (author of KernelSU)
 

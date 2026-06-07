@@ -58,7 +58,7 @@ Android デバイス向けのカーネルベース root ソリューション。
 
 ## スポンサー
 
-- [Anatdx](https://afd.anatdx.com)（YukiSU メンテナー）
+- [Anatdx](https://afd.anatdx.moe)（YukiSU メンテナー）
 - [ShirkNeko](https://afdian.com/a/shirkneko)（SukiSU メンテナー）
 - [weishu](https://github.com/sponsors/tiann)（KernelSU 作者）
 
