@@ -45,4 +45,4 @@ jobs:
       kmi: ${{ matrix.kmi }}
       arch: ${{ matrix.arch }}
       kasumi_ref: ${{ inputs.kasumi_ref || (startsWith(github.head_ref || github.ref_name, 'feat/hymofs') && 'dev' || 'main') }}
-      ddk_release: '20251104'
+      ddk_release: '20260313'

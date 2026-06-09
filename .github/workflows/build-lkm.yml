@@ -19,4 +19,4 @@ jobs:
     secrets: inherit
     with:
       kmi: ${{ matrix.kmi }}
-      ddk_release: '20251104'
+      ddk_release: '20260313'

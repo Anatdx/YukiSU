@@ -12,7 +12,7 @@ KMI="android16-6.12"
 ABI="arm64-v8a"
 SKIP_LKM=false
 SKIP_KASUMI=false
-DDK_RELEASE="20251104"
+DDK_RELEASE="20260313"
 DO_INSTALL=false
 # 默认从当前 Kasumi 主仓库编译 ko；可用 --kasumi-dir 覆盖
 KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
@@ -119,7 +119,7 @@ if [[ "$SKIP_LKM" != "true" ]]; then
 	echo ">>> [1/5] 构建 KernelSU LKM (DDK) ..."
 	mkdir -p "$OUT_DIR"
 	docker run --rm -v "$REPO_ROOT:/src" -w /src \
-		"ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}" \
+		"ghcr.io/ylarod/ddk-min:${KMI}-${DDK_RELEASE}" \
 		bash -c "cd kernel && test -f include/uapi/supercall.h && \
 	             CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y CC=clang make -j${MAKE_JOBS} && \
 	             mkdir -p /src/out && cp kernelsu.ko /src/out/${KMI}_kernelsu.ko && \
