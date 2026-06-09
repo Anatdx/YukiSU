@@ -17,6 +17,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "policy/app_profile.h"
 #include "runtime/ksud.h"
+#include "selinux/selinux.h"
 #include "sulog/event.h"
 
 /*

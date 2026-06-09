@@ -3,6 +3,7 @@
 #include "klog.h"
 #include "manager/manager_identity.h"
 #include <crypto/hash.h>
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/sched/signal.h>

@@ -25,6 +25,7 @@
 #include "feature/kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
+#include "manager/apk_sign.h"
 #include "runtime/ksud_boot.h"
 #include "runtime/ksud.h"
 #include "manager/manager_identity.h"
