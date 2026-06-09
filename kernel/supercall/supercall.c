@@ -17,6 +17,7 @@
 
 #include "policy/allowlist.h"
 #include "arch.h"
+#include "hook/syscall_hook.h"
 #include "policy/feature.h"
 #include "feature/selinux_hide.h"
 #include "infra/file_wrapper.h"
@@ -249,8 +250,8 @@ static void ksu_superkey_prctl_tw_func(struct callback_head *cb)
 		superkey_on_auth_success(uid);
 		ksu_set_manager_uid(uid);
 
-		// Unregister prctl kprobe after successful authentication
-		ksu_superkey_unregister_prctl_kprobe();
+		// Unregister the prctl TSR hook after successful authentication
+		ksu_superkey_unregister_prctl_hook();
 
 		// Allow reboot syscall for this process
 		if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
@@ -371,43 +372,47 @@ static int ksu_handle_prctl_superkey(int option, unsigned long arg2)
 	return 0;
 }
 
-static int prctl_handler_pre(struct kprobe *p, struct pt_regs *regs)
+/*
+ * SuperKey prctl interception via TSR (Tracepoint Syscall Redirect) instead of
+ * a kprobe. It runs in the sleepable dispatcher context (not the atomic kprobe
+ * breakpoint handler) and avoids planting a breakpoint on the hot __NR_prctl
+ * path. Must be __nocfi: it tail-calls the original syscall through
+ * ksu_syscall_table[orig_nr], a kallsyms-resolved pointer with no .cfi_jt on
+ * some kernels.
+ */
+static long __nocfi ksu_hook_prctl(int orig_nr, const struct pt_regs *regs)
 {
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	int option = (int)PT_REGS_PARM1(real_regs);
-	unsigned long arg2 = PT_REGS_PARM2(real_regs);
-	return ksu_handle_prctl_superkey(option, arg2);
+	int option = (int)PT_REGS_PARM1(regs);
+	unsigned long arg2 = PT_REGS_PARM2(regs);
+
+	ksu_handle_prctl_superkey(option, arg2);
+	return ksu_syscall_table[orig_nr](regs);
 }
 
-static struct kprobe prctl_kp = {
-    .symbol_name = SYS_PRCTL_SYMBOL,
-    .pre_handler = prctl_handler_pre,
-};
+static bool prctl_hook_registered = false;
 
-static bool prctl_kprobe_registered = false;
-
-void ksu_superkey_unregister_prctl_kprobe(void)
+void ksu_superkey_unregister_prctl_hook(void)
 {
-	if (prctl_kprobe_registered) {
-		unregister_kprobe(&prctl_kp);
-		prctl_kprobe_registered = false;
-		pr_info("SuperKey: prctl kprobe unregistered after "
+	if (prctl_hook_registered) {
+		ksu_unregister_syscall_hook(__NR_prctl);
+		prctl_hook_registered = false;
+		pr_info("SuperKey: prctl TSR hook unregistered after "
 			"authentication\n");
 	}
 }
 
-void ksu_superkey_register_prctl_kprobe(void)
+void ksu_superkey_register_prctl_hook(void)
 {
 	int rc;
-	if (!prctl_kprobe_registered) {
-		rc = register_kprobe(&prctl_kp);
+	if (!prctl_hook_registered) {
+		rc = ksu_register_syscall_hook(__NR_prctl, ksu_hook_prctl);
 		if (rc) {
 			pr_err(
-			    "SuperKey: prctl kprobe re-register failed: %d\n",
+			    "SuperKey: prctl TSR hook re-register failed: %d\n",
 			    rc);
 		} else {
-			prctl_kprobe_registered = true;
-			pr_info("SuperKey: prctl kprobe re-registered\n");
+			prctl_hook_registered = true;
+			pr_info("SuperKey: prctl TSR hook re-registered\n");
 		}
 	}
 }
@@ -425,19 +430,20 @@ void ksu_supercalls_init(void)
 		pr_info("reboot kprobe registered successfully\n");
 	}
 
-	// SuperKey prctl kprobe - only register when SuperKey is configured.
+	// SuperKey prctl TSR hook - only register when SuperKey is configured.
 #ifdef CONFIG_KSU_SUPERKEY
 	if (superkey_is_set()) {
-		rc = register_kprobe(&prctl_kp);
+		rc = ksu_register_syscall_hook(__NR_prctl, ksu_hook_prctl);
 		if (rc) {
-			pr_err("prctl kprobe failed: %d\n", rc);
-			prctl_kprobe_registered = false;
+			pr_err("prctl TSR hook failed: %d\n", rc);
+			prctl_hook_registered = false;
 		} else {
-			pr_info("prctl kprobe registered for SuperKey auth\n");
-			prctl_kprobe_registered = true;
+			pr_info(
+			    "prctl TSR hook registered for SuperKey auth\n");
+			prctl_hook_registered = true;
 		}
 	} else {
-		pr_info("SuperKey: no SuperKey configured, prctl kprobe not "
+		pr_info("SuperKey: no SuperKey configured, prctl TSR hook not "
 			"registered (signature-only mode)\n");
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
@@ -447,9 +453,9 @@ void ksu_supercalls_exit(void)
 {
 	unregister_kprobe(&reboot_kp);
 #ifdef CONFIG_KSU_SUPERKEY
-	if (prctl_kprobe_registered) {
-		unregister_kprobe(&prctl_kp);
-		prctl_kprobe_registered = false;
+	if (prctl_hook_registered) {
+		ksu_unregister_syscall_hook(__NR_prctl);
+		prctl_hook_registered = false;
 	}
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 }

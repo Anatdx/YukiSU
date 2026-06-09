@@ -650,8 +650,8 @@ void track_throne(bool prune_only)
 		manager_exist = (ksu_manager_appid != KSU_INVALID_UID);
 		if (!manager_exist) {
 #ifdef CONFIG_KSU_SUPERKEY
-			extern void ksu_superkey_register_prctl_kprobe(void);
-			ksu_superkey_register_prctl_kprobe();
+			extern void ksu_superkey_register_prctl_hook(void);
+			ksu_superkey_register_prctl_hook();
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 		}
 	}
