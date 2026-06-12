@@ -34,7 +34,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,7 +52,6 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -65,7 +62,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.dergoogler.mmrl.ui.component.LabelItem
 import com.dergoogler.mmrl.ui.component.LabelItemDefaults
@@ -339,11 +335,6 @@ private fun SuperUserContent(
     navigator: DestinationsNavigator,
     scope: CoroutineScope
 ) {
-    val expandedGroups = remember { mutableStateOf(setOf<Int>()) }
-    val density = LocalDensity.current
-    val targetSizePx = remember(density) { with(density) { 36.dp.roundToPx() } }
-    val context = LocalContext.current
-
     PullToRefreshBox(
         modifier = Modifier.padding(innerPadding),
         onRefresh = { scope.launch { viewModel.fetchAppList() } },
@@ -358,7 +349,6 @@ private fun SuperUserContent(
             filteredAndSortedAppGroups.forEachIndexed { _, appGroup ->
                 item(key = "${appGroup.uid}-${appGroup.mainApp.packageName}") {
                     AppGroupItem(
-                        expandedGroups = expandedGroups,
                         appGroup = appGroup,
                         isSelected = appGroup.packageNames.any { viewModel.selectedApps.contains(it) },
                         onToggleSelection = {
@@ -367,12 +357,6 @@ private fun SuperUserContent(
                         onClick = {
                             if (viewModel.showBatchActions) {
                                 appGroup.packageNames.forEach { viewModel.toggleAppSelection(it) }
-                            } else if (appGroup.apps.size > 1) {
-                                expandedGroups.value = if (expandedGroups.value.contains(appGroup.uid)) {
-                                    expandedGroups.value - appGroup.uid
-                                } else {
-                                    expandedGroups.value + appGroup.uid
-                                }
                             } else {
                                 navigator.navigate(AppProfileScreenDestination(appGroup.mainApp))
                             }
@@ -385,49 +369,6 @@ private fun SuperUserContent(
                         },
                         viewModel = viewModel
                     )
-                }
-
-                if (appGroup.apps.size <= 1) return@forEachIndexed
-
-                items(appGroup.apps, key = { "${it.packageName}-${it.uid}" }) { app ->
-                    val painter = rememberAsyncImagePainter(
-                        model = ImageRequest.Builder(context)
-                            .data(app.packageInfo)
-                            .size(targetSizePx)
-                            .crossfade(true)
-                            .build()
-                    )
-
-                    val listItemContent = remember(app.packageName, appGroup.uid) {
-                        @Composable {
-                            ListItem(
-                                modifier = Modifier
-                                    .clickable { navigator.navigate(AppProfileScreenDestination(app)) }
-                                    .fillMaxWidth()
-                                    .padding(start = 10.dp),
-                                headlineContent = { Text(app.label, style = MaterialTheme.typography.bodyMedium) },
-                                supportingContent = { Text(app.packageName, style = MaterialTheme.typography.bodySmall) },
-                                leadingContent = {
-                                    Image(
-                                        painter = painter,
-                                        contentDescription = app.label,
-                                        modifier = Modifier
-                                            .padding(4.dp)
-                                            .size(36.dp),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-                            )
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = expandedGroups.value.contains(appGroup.uid),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        listItemContent()
-                    }
                 }
             }
 
@@ -1059,7 +1000,6 @@ private fun AppGroupItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     viewModel: SuperUserViewModel,
-    expandedGroups: MutableState<Set<Int>>
 ) {
     val mainApp = appGroup.mainApp
     val managerContainerColor = when {
@@ -1130,26 +1070,7 @@ private fun AppGroupItem(
                         mainApp.packageName
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(summaryText)
-
-                        if (appGroup.apps.size > 1) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                modifier = Modifier.rotate(
-                                    animateFloatAsState(
-                                        targetValue = if (expandedGroups.value.contains(appGroup.uid)) 180f else 0f,
-                                        animationSpec = tween(200, easing = LinearOutSlowInEasing),
-                                        label = ""
-                                    ).value
-                                )
-                            )
-                        }
-                    }
+                    Text(summaryText)
 
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (appGroup.isDynamicManager) {

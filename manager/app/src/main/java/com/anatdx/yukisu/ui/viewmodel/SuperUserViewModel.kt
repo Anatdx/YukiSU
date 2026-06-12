@@ -96,6 +96,8 @@ class SuperUserViewModel : ViewModel() {
         val packageName: String = packageInfo.packageName
         @IgnoredOnParcel
         val uid: Int = packageInfo.applicationInfo!!.uid
+        @IgnoredOnParcel
+        val profileKey: String = profile?.name?.takeIf { it.isNotBlank() } ?: packageName
     }
 
     @Immutable
@@ -110,6 +112,8 @@ class SuperUserViewModel : ViewModel() {
         val mainApp: AppInfo = apps.first()
         @IgnoredOnParcel
         val packageNames: List<String> = apps.map { it.packageName }
+        @IgnoredOnParcel
+        val profileKey: String = mainApp.profileKey
         @IgnoredOnParcel
         val allowSu: Boolean = profile?.allowSu == true
         @IgnoredOnParcel
@@ -206,17 +210,22 @@ class SuperUserViewModel : ViewModel() {
     }
 
     suspend fun updateBatchPermissions(allowSu: Boolean, umountModules: Boolean? = null) {
-        selectedApps.forEach { packageName ->
-            apps.find { it.packageName == packageName }?.let { app ->
-                val profile = Natives.getAppProfile(packageName, app.uid)
+        val selectedUids = apps.asSequence()
+            .filter { it.packageName in selectedApps }
+            .map { it.uid }
+            .toSet()
+
+        selectedUids.forEach { uid ->
+            appGroups.find { it.uid == uid }?.let { group ->
+                val profile = Natives.getAppProfile(group.profileKey, uid)
                 val updatedProfile = profile.copy(
                     allowSu = allowSu,
                     umountModules = umountModules ?: profile.umountModules,
                     nonRootUseDefault = false
                 )
                 if (Natives.setAppProfile(updatedProfile)) {
-                    updateAppProfileLocally(packageName, updatedProfile)
-                    notifyConfigChange(packageName)
+                    updateUidProfileLocally(uid, updatedProfile)
+                    notifyConfigChange(group.profileKey)
                 }
             }
         }
@@ -230,39 +239,33 @@ class SuperUserViewModel : ViewModel() {
         allowSu: Boolean,
         umountModules: Boolean? = null
     ): Boolean {
-        var updatedAny = false
-
-        appGroup.apps.forEach { app ->
-            val profile = Natives.getAppProfile(app.packageName, app.uid)
-            val updatedProfile = profile.copy(
-                allowSu = allowSu,
-                umountModules = umountModules ?: profile.umountModules,
-                nonRootUseDefault = if (!allowSu && umountModules != null) {
-                    !umountModules
-                } else {
-                    profile.nonRootUseDefault
-                }
-            )
-            if (Natives.setAppProfile(updatedProfile)) {
-                updateAppProfileLocally(app.packageName, updatedProfile)
-                notifyConfigChange(app.packageName)
-                updatedAny = true
+        val profile = Natives.getAppProfile(appGroup.profileKey, appGroup.uid)
+        val updatedProfile = profile.copy(
+            allowSu = allowSu,
+            umountModules = umountModules ?: profile.umountModules,
+            nonRootUseDefault = if (!allowSu && umountModules != null) {
+                !umountModules
+            } else {
+                profile.nonRootUseDefault
             }
-        }
+        )
+        val updated = Natives.setAppProfile(updatedProfile)
 
-        if (updatedAny) {
+        if (updated) {
+            updateUidProfileLocally(appGroup.uid, updatedProfile)
+            notifyConfigChange(appGroup.profileKey)
             refreshAppConfigurations()
         }
 
-        return updatedAny
+        return updated
     }
 
-    fun updateAppProfileLocally(packageName: String, updatedProfile: Natives.Profile) {
+    fun updateUidProfileLocally(uid: Int, updatedProfile: Natives.Profile) {
         appListMutex.tryLock().let { locked ->
             if (locked) {
                 try {
                     apps = apps.map { app ->
-                        if (app.packageName == packageName) {
+                        if (app.uid == uid) {
                             app.copy(profile = updatedProfile)
                         } else app
                     }
@@ -288,21 +291,22 @@ class SuperUserViewModel : ViewModel() {
         withContext(appProcessingThreadPool) {
             supervisorScope {
                 val currentApps = apps.toList()
-                val batches = currentApps.chunked(BATCH_SIZE)
+                val uidGroups = currentApps.groupBy { it.uid }.values.toList()
+                val batches = uidGroups.chunked(BATCH_SIZE)
                 loadingProgress = 0f
 
                 val updatedApps = batches.mapIndexed { batchIndex, batch ->
                     async {
-                        val batchResult = batch.map { app ->
+                        val batchResult = batch.flatMap { uidApps ->
                             try {
-                                val updatedProfile = Natives.getAppProfile(app.packageName, app.uid)
-                                app.copy(profile = updatedProfile)
+                                val profile = loadUidProfile(uidApps)
+                                uidApps.map { it.copy(profile = profile) }
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error refreshing profile for ${app.packageName}", e)
-                                app
+                                Log.e(TAG, "Error refreshing profile for uid ${uidApps.first().uid}", e)
+                                uidApps
                             }
                         }
-                        loadingProgress = (batchIndex + 1).toFloat() / batches.size
+                        loadingProgress = (batchIndex + 1).toFloat() / batches.size.coerceAtLeast(1)
                         batchResult
                     }
                 }.awaitAll().flatten()
@@ -377,7 +381,7 @@ class SuperUserViewModel : ViewModel() {
                         AppInfo(
                             label = appInfo.loadLabel(pm).toString(),
                             packageInfo = packageInfo,
-                            profile = Natives.getAppProfile(packageInfo.packageName, appInfo.uid)
+                            profile = null
                         )
                     }
                 }
@@ -393,8 +397,12 @@ class SuperUserViewModel : ViewModel() {
 
             appListMutex.withLock {
                 val filteredApps = result.filter { it.packageName != ksuApp.packageName }
-                apps = filteredApps
-                appGroups = groupAppsByUid(filteredApps)
+                val profiledApps = filteredApps.groupBy { it.uid }.values.flatMap { uidApps ->
+                    val profile = loadUidProfile(uidApps)
+                    uidApps.map { it.copy(profile = profile) }
+                }
+                apps = profiledApps
+                appGroups = groupAppsByUid(profiledApps)
             }
             loadingProgress = 1f
         }
@@ -435,7 +443,7 @@ class SuperUserViewModel : ViewModel() {
         return appList.groupBy { it.uid }
             .map { (uid, apps) ->
                 val sortedApps = apps.sortedBy { it.label }
-                val profile = apps.firstOrNull()?.let { Natives.getAppProfile(it.packageName, uid) }
+                val profile = apps.firstOrNull()?.profile
                 val dynamicManagerFlags = dynamicManagers[uid % PER_USER_RANGE] ?: 0
                 AppGroup(
                     uid = uid,
@@ -457,6 +465,14 @@ class SuperUserViewModel : ViewModel() {
                     it.userName?.takeIf { name -> name.isNotBlank() } ?: it.uid.toString()
                 }.thenBy(Collator.getInstance(Locale.getDefault())) { it.mainApp.label }
             )
+    }
+
+    private fun loadUidProfile(uidApps: Collection<AppInfo>): Natives.Profile {
+        val first = uidApps.first()
+        val packageNames = uidApps.mapTo(mutableSetOf()) { it.packageName }
+        val fallbackKey = packageNames.min()
+        val profile = Natives.getAppProfile(fallbackKey, first.uid)
+        return if (profile.name in packageNames) profile else profile.copy(name = fallbackKey)
     }
     override fun onCleared() {
         super.onCleared()

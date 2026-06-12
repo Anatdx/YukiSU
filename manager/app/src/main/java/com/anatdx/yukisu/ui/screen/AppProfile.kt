@@ -79,11 +79,16 @@ fun AppProfileScreen(
     val dynamicManagerSignatureUnavailable = stringResource(R.string.dynamic_manager_signature_unavailable).format(appInfo.label)
 
     val packageName = appInfo.packageName
-    // Fetch the profile (and sepolicy rules, if applicable) once per package
-    // instead of on every recomposition; both calls cross JNI/shell.
-    val initialProfile = remember(packageName, appInfo.uid) {
-        Natives.getAppProfile(packageName, appInfo.uid).also { p ->
-            if (p.allowSu) p.rules = getSepolicy(packageName)
+    val profileKey = appInfo.profileKey
+    val uidApps = SuperUserViewModel.appGroups
+        .firstOrNull { it.uid == appInfo.uid }
+        ?.apps
+        ?: listOf(appInfo)
+    val isSharedUid = uidApps.size > 1
+    // Both calls cross JNI/shell, so keep them out of recomposition.
+    val initialProfile = remember(profileKey, appInfo.uid) {
+        Natives.getAppProfile(profileKey, appInfo.uid).also { p ->
+            if (p.allowSu) p.rules = getSepolicy(profileKey)
         }
     }
     var profile by rememberSaveable {
@@ -131,7 +136,7 @@ fun AppProfileScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = appInfo.label,
+                title = if (isSharedUid) "UID ${appInfo.uid}" else appInfo.label,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = cardColor.copy(alpha = cardAlpha),
                     scrolledContainerColor = cardColor.copy(alpha = cardAlpha)
@@ -149,6 +154,8 @@ fun AppProfileScreen(
                 .verticalScroll(rememberScrollState()),
             packageName = appInfo.packageName,
             appLabel = appInfo.label,
+            uid = appInfo.uid,
+            uidApps = uidApps,
             appIcon = {
                 AsyncImage(
                     model = ImageRequest.Builder(context).data(appInfo.packageInfo).crossfade(true).build(),
@@ -179,7 +186,7 @@ fun AppProfileScreen(
                             snackBarHost.showSnackbar(suNotAllowed)
                             return@launch
                         }
-                        if (!it.rootUseDefault && it.rules.isNotEmpty() && !setSepolicy(profile.name, it.rules)) {
+                        if (!it.rootUseDefault && it.rules.isNotEmpty() && !setSepolicy(profileKey, it.rules)) {
                             snackBarHost.showSnackbar(failToUpdateSepolicy)
                             return@launch
                         }
@@ -188,7 +195,7 @@ fun AppProfileScreen(
                         snackBarHost.showSnackbar(failToUpdateAppProfile.format(appInfo.uid))
                     } else {
                         profile = it
-                        superUserViewModel.updateAppProfileLocally(packageName, it)
+                        superUserViewModel.updateUidProfileLocally(appInfo.uid, it)
                         scope.launch {
                             superUserViewModel.refreshAppConfigurations()
                         }
@@ -236,6 +243,8 @@ private fun AppProfileInner(
     modifier: Modifier = Modifier,
     packageName: String,
     appLabel: String,
+    uid: Int,
+    uidApps: List<SuperUserViewModel.AppInfo>,
     appIcon: @Composable () -> Unit,
     profile: Natives.Profile,
     showDynamicManagerSwitch: Boolean = false,
@@ -263,23 +272,48 @@ private fun AppProfileInner(
                 colors = cardColors,
                 elevation = getCardElevation(),
             ) {
-                AppMenuBox(packageName) {
+                if (uidApps.size > 1) {
                     ListItem(
                         headlineContent = {
                             Text(
-                                text = appLabel,
+                                text = "UID $uid",
                                 style = MaterialTheme.typography.titleMedium
                             )
                         },
                         supportingContent = {
                             Text(
-                                text = packageName,
+                                text = stringResource(R.string.group_contains_apps, uidApps.size),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        leadingContent = appIcon,
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Filled.AccountCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                            )
+                        },
                     )
+                } else {
+                    AppMenuBox(packageName) {
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    text = appLabel,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = packageName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = appIcon,
+                        )
+                    }
                 }
             }
 
@@ -442,8 +476,67 @@ private fun AppProfileInner(
                             }
                         }
                     }
+
+                    if (uidApps.size > 1) {
+                        SharedUidAppsCard(
+                            apps = uidApps,
+                            cardColors = cardColors,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SharedUidAppsCard(
+    apps: List<SuperUserViewModel.AppInfo>,
+    cardColors: CardColors,
+) {
+    val context = LocalContext.current
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = cardColors,
+        elevation = getCardElevation(),
+    ) {
+        Text(
+            text = stringResource(R.string.group_contains_apps, apps.size),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+        apps.forEachIndexed { index, app ->
+            if (index > 0) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            }
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = app.label,
+                        maxLines = 1,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = app.packageName,
+                        maxLines = 1,
+                    )
+                },
+                leadingContent = {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(app.packageInfo)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = app.label,
+                        modifier = Modifier.size(40.dp),
+                    )
+                },
+            )
         }
     }
 }
@@ -665,6 +758,8 @@ private fun AppProfilePreview() {
             AppProfileInner(
                 packageName = "icu.nullptr.test",
                 appLabel = "Test",
+                uid = 10000,
+                uidApps = emptyList(),
                 appIcon = {
                     Icon(
                         imageVector = Icons.Filled.Android,
