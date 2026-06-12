@@ -3,7 +3,6 @@ package com.anatdx.yukisu.ui.screen
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -205,17 +204,19 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             checked = selinuxHideEnabled,
                             enabled = selinuxHideStatus == "supported",
                             onCheckedChange = { enabled ->
-                                selinuxHideEnabled = enabled
                                 val ok = Natives.setSelinuxHideEnabled(enabled)
                                 if (ok) {
                                     execKsud("feature save", true)
+                                    selinuxHideEnabled = enabled
                                 }
-                                Toast.makeText(
-                                    context,
-                                    if (ok) R.string.setting_change_saved_reboot
-                                    else R.string.setting_change_failed,
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                scope.launch {
+                                    snackBarHost.showSnackbar(
+                                        context.getString(
+                                            if (ok) R.string.setting_change_saved_reboot
+                                            else R.string.setting_change_failed
+                                        )
+                                    )
+                                }
                             }
                         )
 
