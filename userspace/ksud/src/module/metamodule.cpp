@@ -87,6 +87,7 @@ int run_script(const std::string& script, bool block, const std::string& module_
     const pid_t pid = fork();
     if (pid == 0) {
         setsid();
+        switch_cgroups();
         chdir(script_dir_path);
 
         apply_common_script_env(common_env, module_id_cstr, true);
