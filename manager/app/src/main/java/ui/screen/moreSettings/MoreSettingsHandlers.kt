@@ -262,6 +262,11 @@ class MoreSettingsHandlers(
         state.isHideZygiskImplement = newValue
     }
 
+    fun handleHideSeccompStatusChange(newValue: Boolean) {
+        prefs.edit { putBoolean("is_hide_seccomp_status", newValue) }
+        state.isHideSeccompStatus = newValue
+    }
+
     fun handleHideMetaModuleImplementChange(newValue: Boolean) {
         prefs.edit { putBoolean("is_hide_meta_module_Implement", newValue) }
         state.isHideMetaModuleImplement = newValue

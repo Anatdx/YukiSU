@@ -44,7 +44,10 @@ class HomeViewModel : ViewModel() {
         val superuserCount: Int = 0,
         val moduleCount: Int = 0,
         val zygiskImplement: String = "",
-        val metaModuleImplement: String = ""
+        val metaModuleImplement: String = "",
+        // Manager process seccomp mode: -1 unsupported, 0 disabled, 1 strict,
+        // 2 filter (mirrors upstream's prctl(PR_GET_SECCOMP)).
+        val seccompStatus: Int = 2
     )
 
     var systemStatus by mutableStateOf(SystemStatus())
@@ -65,6 +68,8 @@ class HomeViewModel : ViewModel() {
     var isHideOtherInfo by mutableStateOf(false)
         private set
     var isHideZygiskImplement by mutableStateOf(false)
+        private set
+    var isHideSeccompStatus by mutableStateOf(false)
         private set
     var isHideMetaModuleImplement by mutableStateOf(false)
         private set
@@ -95,6 +100,7 @@ class HomeViewModel : ViewModel() {
             isHideOtherInfo = settingsPrefs.getBoolean("is_hide_other_info", false)
             isHideLinkCard = settingsPrefs.getBoolean("is_hide_link_card", false)
             isHideZygiskImplement = settingsPrefs.getBoolean("is_hide_zygisk_Implement", false)
+            isHideSeccompStatus = settingsPrefs.getBoolean("is_hide_seccomp_status", false)
             isHideMetaModuleImplement = settingsPrefs.getBoolean("is_hide_meta_module_Implement", false)
         }
     }
@@ -192,7 +198,8 @@ class HomeViewModel : ViewModel() {
                     androidVersion = basicInfo.second,
                     deviceModel = basicInfo.third,
                     managerVersion = basicInfo.fourth,
-                    seLinuxStatus = basicInfo.fifth
+                    seLinuxStatus = basicInfo.fifth,
+                    seccompStatus = readSeccompStatus()
                 )
 
                 delay(100)
@@ -306,6 +313,15 @@ class HomeViewModel : ViewModel() {
             }
         }
     }
+
+    // Reads the manager process seccomp mode from /proc/self/status.
+    // -1 = unsupported (no Seccomp line), 0 = disabled, 1 = strict, 2 = filter.
+    private fun readSeccompStatus(): Int = runCatching {
+        java.io.File("/proc/self/status").useLines { lines ->
+            lines.firstOrNull { it.startsWith("Seccomp:") }
+                ?.substringAfter(':')?.trim()?.toIntOrNull() ?: -1
+        }
+    }.getOrDefault(-1)
 
     private suspend fun loadBasicSystemInfo(context: Context): Tuple5<String, String, String, Pair<String, Long>, String> {
         return withContext(Dispatchers.IO) {

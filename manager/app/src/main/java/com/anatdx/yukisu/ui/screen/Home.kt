@@ -328,6 +328,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isSimpleMode = viewModel.isSimpleMode,
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
+                        isHideSeccompStatus = viewModel.isHideSeccompStatus,
                         kasumiAvailable = kasumiStatus == KasumiStatus.AVAILABLE,
                         onKernelClick = { showKernelSpoofDialog = true },
                     )
@@ -877,6 +878,7 @@ private fun InfoCard(
     isSimpleMode: Boolean,
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
+    isHideSeccompStatus: Boolean = false,
     kasumiAvailable: Boolean = false,
     onKernelClick: () -> Unit = {},
 ) {
@@ -1016,6 +1018,21 @@ private fun InfoCard(
                 systemInfo.seLinuxStatus,
                 icon = Icons.Default.Security,
             )
+
+            if (!isHideSeccompStatus) {
+                val seccompText = when (systemInfo.seccompStatus) {
+                    -1 -> stringResource(R.string.seccomp_status_not_supported)
+                    0 -> stringResource(R.string.seccomp_status_disabled)
+                    1 -> stringResource(R.string.seccomp_status_strict)
+                    2 -> stringResource(R.string.seccomp_status_filter)
+                    else -> stringResource(R.string.seccomp_status_unknown)
+                }
+                InfoCardItem(
+                    stringResource(R.string.home_seccomp_status),
+                    seccompText,
+                    icon = Icons.Default.LocalPolice,
+                )
+            }
 
             if (!isHideZygiskImplement && !isSimpleMode && systemInfo.zygiskImplement != "None") {
                 InfoCardItem(

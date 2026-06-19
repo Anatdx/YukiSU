@@ -289,6 +289,15 @@ private fun HideOptionsSettings(
 
     SwitchSettingItem(
         icon = Icons.Filled.VisibilityOff,
+        title = stringResource(R.string.hide_seccomp_status),
+        summary = stringResource(R.string.hide_seccomp_status_summary),
+        checked = state.isHideSeccompStatus,
+        onChange = handlers::handleHideSeccompStatusChange
+    )
+
+
+    SwitchSettingItem(
+        icon = Icons.Filled.VisibilityOff,
         title = stringResource(R.string.hide_zygisk_implement),
         summary = stringResource(R.string.hide_zygisk_implement_summary),
         checked = state.isHideZygiskImplement,
