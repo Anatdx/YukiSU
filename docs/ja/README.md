@@ -47,10 +47,6 @@ Android デバイス向けのカーネルベース root ソリューション。
 
 [`guide/how-to-integrate.md`](guide/how-to-integrate.md) を参照してください。
 
-## 翻訳
-
-マネージャーの翻訳を投稿する場合は [Crowdin](https://crowdin.com/project/YukiSU) をご利用ください。
-
 ## トラブルシューティング
 
 1. マネージャーアプリをアンインストールしたらデバイスが固まる？

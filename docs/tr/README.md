@@ -47,10 +47,6 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 
 [`guide/how-to-integrate.md`](guide/how-to-integrate.md) konusuna bakın.
 
-## Çeviri
-
-Yönetici için çeviri göndermek istiyorsanız [Crowdin](https://crowdin.com/project/YukiSU) adresine gidin.
-
 ## Sorun Giderme
 
 1. Yönetici uygulaması kaldırılınca cihaz takılıyor mu?

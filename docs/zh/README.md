@@ -46,10 +46,6 @@
 
 参见 [`guide/how-to-integrate.md`](guide/how-to-integrate.md)
 
-## 翻译
-
-如需提交管理器翻译，请前往 [Crowdin](https://crowdin.com/project/YukiSU)。
-
 ## 故障排除
 
 1. 卸载管理器后设备卡住？

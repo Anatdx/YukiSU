@@ -47,10 +47,6 @@
 
 См. [`guide/how-to-integrate.md`](guide/how-to-integrate.md)
 
-## Перевод
-
-Чтобы предложить перевод менеджера, перейдите на [Crowdin](https://crowdin.com/project/YukiSU).
-
 ## Устранение неполадок
 
 1. Устройство зависает после удаления приложения менеджера?

@@ -47,10 +47,6 @@ See [`guide/installation.md`](guide/installation.md)
 
 See [`guide/how-to-integrate.md`](guide/how-to-integrate.md)
 
-## Translation
-
-If you need to submit a translation for the manager, please go to [Crowdin](https://crowdin.com/project/YukiSU).
-
 ## Troubleshooting
 
 1. Device stuck upon manager app uninstallation?
