@@ -336,6 +336,23 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
+                        // app profile 防逃逸：全局默认 NO_NEW_PRIVS（含默认档/manager/shell）
+                        var defaultNnpChecked by rememberSaveable {
+                            mutableStateOf(Natives.isDefaultNoNewPrivsEnabled())
+                        }
+                        SwitchItem(
+                            icon = Icons.Filled.FrontHand,
+                            title = stringResource(id = R.string.settings_default_no_new_privs),
+                            summary = stringResource(id = R.string.settings_default_no_new_privs_summary),
+                            checked = defaultNnpChecked,
+                            onCheckedChange = {
+                                if (Natives.setDefaultNoNewPrivsEnabled(it)) {
+                                    execKsud("feature save", true)
+                                    defaultNnpChecked = it
+                                }
+                            }
+                        )
+
                         // 内置 hymo 挂载开关
                         var builtinMountEnabled by remember { mutableStateOf(true) }
                         LaunchedEffect(Unit) {

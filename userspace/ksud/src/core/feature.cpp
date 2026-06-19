@@ -34,6 +34,7 @@ const std::map<std::string, uint32_t>& get_feature_map() {
         {"enhanced_security", KSU_FEATURE_ENHANCED_SECURITY},
         {"adb_root", KSU_FEATURE_ADB_ROOT},
         {"selinux_hide", KSU_FEATURE_SELINUX_HIDE},
+        {"default_no_new_privs", KSU_FEATURE_DEFAULT_NO_NEW_PRIVS},
         {"sulog", KSU_FEATURE_SULOG},
         {"magisk_compat", KSU_FEATURE_MAGISK_COMPAT},
     };
@@ -53,6 +54,9 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
          "ADB Root - run adbd with root privileges via kernel feature injection"},
         {KSU_FEATURE_SELINUX_HIDE,
          "SELinux Hide - hides KernelSU sepolicy changes from app-facing SELinux probes"},
+        {KSU_FEATURE_DEFAULT_NO_NEW_PRIVS,
+         "Default No-New-Privs - profiles using the default root profile block re-escalation "
+         "(anti-escape) by default"},
         {KSU_FEATURE_SULOG,
          "SU Log - streams kernel sulog events to userspace and persists them to disk"},
         {KSU_FEATURE_MAGISK_COMPAT,

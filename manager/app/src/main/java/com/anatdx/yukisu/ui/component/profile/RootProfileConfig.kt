@@ -156,7 +156,13 @@ fun RootProfileConfig(
             )
         })
 
-        val noNewPrivs = profile.flags and Natives.FLAG_KSU_NO_NEW_PRIVS != 0L
+        // When the profile still uses the default, seed the toggle from the
+        // global "防逃逸" default; once customized, reflect the profile's flag.
+        val noNewPrivs = if (profile.rootUseDefault) {
+            Natives.isDefaultNoNewPrivsEnabled()
+        } else {
+            profile.flags and Natives.FLAG_KSU_NO_NEW_PRIVS != 0L
+        }
         ListItem(
             headlineContent = { Text(stringResource(R.string.profile_no_new_privs)) },
             supportingContent = {

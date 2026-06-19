@@ -79,6 +79,9 @@ bool is_adb_root_enabled();
 bool set_selinux_hide_enabled(bool enabled);
 bool is_selinux_hide_enabled();
 
+bool set_default_no_new_privs_enabled(bool enabled);
+bool is_default_no_new_privs_enabled();
+
 // ksu_get_full_version_cmd, ksu_hook_type_cmd, ksu_superkey_auth_cmd,
 // ksu_superkey_status_cmd, KSU_IOCTL_GET_FULL_VERSION, KSU_IOCTL_HOOK_TYPE,
 // KSU_IOCTL_SUPERKEY_AUTH, KSU_IOCTL_SUPERKEY_STATUS are all provided by

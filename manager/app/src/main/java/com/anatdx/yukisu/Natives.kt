@@ -158,6 +158,14 @@ object Natives {
     external fun isSelinuxHideEnabled(): Boolean
     external fun setSelinuxHideEnabled(enabled: Boolean): Boolean
 
+    /**
+     * Global "app profile 防逃逸" default. When on, the default root profile
+     * (used by every profile that resolves to default, incl. the manager and
+     * shell) carries NO_NEW_PRIVS. Persisted via ksud's feature config.
+     */
+    external fun isDefaultNoNewPrivsEnabled(): Boolean
+    external fun setDefaultNoNewPrivsEnabled(enabled: Boolean): Boolean
+
     external fun getHookType(): String
 
     external fun getUserName(uid: Int): String?

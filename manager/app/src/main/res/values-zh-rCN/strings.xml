@@ -75,7 +75,9 @@
     <string name="require_kernel_version" formatted="false">当前 KernelSU 版本 %s 过低，管理器无法正常工作，请将内核 KernelSU 版本升级至 %s 或以上！</string>
     <string name="uapi_mismatch">管理器 (UAPI %1$d) 与内核 (UAPI %2$d) 版本不匹配，请将内核与管理器同步更新到匹配的版本。</string>
     <string name="settings_umount_modules_default">默认卸载模块</string>
-    <string name="settings_umount_modules_default_summary">App Profile 中“卸载模块”的全局默认值。启用后，没有单独 Profile 的应用将移除所有模块对系统的修改。该选项默认关闭，因此新应用或未知应用仍会保留模块修改。</string>
+    <string name="settings_umount_modules_default_summary">对没有单独 Profile 的应用默认卸载模块。默认关闭。</string>
+    <string name="settings_default_no_new_privs">默认防逃逸 (no-new-privs)</string>
+    <string name="settings_default_no_new_privs_summary">默认 root 档（含管理器、shell）禁止二次提权。默认关闭。</string>
     <string name="profile_umount_modules_summary">启用该选项后将允许 KernelSU 为本应用还原被模块修改过的文件。</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">规则</string>

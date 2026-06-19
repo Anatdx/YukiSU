@@ -77,7 +77,9 @@
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
     <string name="uapi_mismatch">The manager (UAPI %1$d) and kernel (UAPI %2$d) are out of sync. Please update both the kernel and the manager to matching versions.</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
-    <string name="settings_umount_modules_default_summary">Global default for "Umount modules" in App Profile. If enabled, it will remove all module modifications for apps without a profile. By default this is OFF, so new/unknown apps keep module changes.</string>
+    <string name="settings_umount_modules_default_summary">Umount modules for apps without their own profile. Off by default.</string>
+    <string name="settings_default_no_new_privs">Default anti-escape (no-new-privs)</string>
+    <string name="settings_default_no_new_privs_summary">Default root profile (manager and shell included) blocks re-escalation. Off by default.</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>
     <string name="profile_selinux_domain">Domain</string>
     <string name="profile_selinux_rules">Rules</string>

@@ -17,6 +17,7 @@
 #include <linux/rcupdate.h>
 
 #include "policy/allowlist.h"
+#include "policy/feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "runtime/ksud_boot.h"
 #include "runtime/ksud.h"
@@ -755,12 +756,45 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *),
 	}
 }
 
+// Global "app profile 防逃逸" default: when on, default_root_profile carries
+// NO_NEW_PRIVS, so every profile that resolves to the default (incl. the
+// manager and shell, per ksu_get_root_profile) defaults to anti-escape.
+// Persisted by ksud's .feature_config (feature save/load).
+static int default_no_new_privs_feature_get(u64 *value)
+{
+	*value = (default_root_profile.flags & FLAG_KSU_NO_NEW_PRIVS) ? 1 : 0;
+	return 0;
+}
+
+static int default_no_new_privs_feature_set(u64 value)
+{
+	// Single aligned u64 store; the lockless reader in
+	// escape_with_root_profile() sees either the old or new value, never
+	// torn.
+	if (value)
+		default_root_profile.flags |= FLAG_KSU_NO_NEW_PRIVS;
+	else
+		default_root_profile.flags &= ~FLAG_KSU_NO_NEW_PRIVS;
+	pr_info("default_no_new_privs: set to %d\n", value != 0);
+	return 0;
+}
+
+static const struct ksu_feature_handler default_no_new_privs_handler = {
+    .feature_id = KSU_FEATURE_DEFAULT_NO_NEW_PRIVS,
+    .name = "default_no_new_privs",
+    .get_handler = default_no_new_privs_feature_get,
+    .set_handler = default_no_new_privs_feature_set,
+};
+
 void ksu_allowlist_init(void)
 {
 	hash_init(allow_list);
 	allow_list_count = 0;
 
 	init_default_profiles();
+
+	if (ksu_register_feature_handler(&default_no_new_privs_handler))
+		pr_err("failed to register default_no_new_privs feature\n");
 }
 
 void ksu_allowlist_exit(void)

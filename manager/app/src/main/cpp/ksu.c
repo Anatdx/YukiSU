@@ -329,6 +329,22 @@ bool is_selinux_hide_enabled() {
   return value != 0;
 }
 
+bool set_default_no_new_privs_enabled(bool enabled) {
+  return set_feature(KSU_FEATURE_DEFAULT_NO_NEW_PRIVS, enabled ? 1 : 0);
+}
+
+bool is_default_no_new_privs_enabled() {
+  uint64_t value = 0;
+  bool supported = false;
+  if (!get_feature(KSU_FEATURE_DEFAULT_NO_NEW_PRIVS, &value, &supported)) {
+    return false;
+  }
+  if (!supported) {
+    return false;
+  }
+  return value != 0;
+}
+
 void get_full_version(char *buff) {
   struct ksu_get_full_version_cmd cmd = {0};
   if (ksuctl(KSU_IOCTL_GET_FULL_VERSION, &cmd) == 0) {
