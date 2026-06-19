@@ -290,6 +290,20 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         )
                     }
 
+                    // UAPI 版本不匹配（管理器与内核 ABI 不同步）
+                    if (viewModel.systemStatus.isManager &&
+                        viewModel.systemStatus.ksuVersion != null &&
+                        viewModel.systemStatus.kernelUapiVersion != viewModel.systemStatus.managerUapiVersion
+                    ) {
+                        WarningCard(
+                            stringResource(
+                                id = R.string.uapi_mismatch,
+                                viewModel.systemStatus.managerUapiVersion,
+                                viewModel.systemStatus.kernelUapiVersion
+                            )
+                        )
+                    }
+
                     if (viewModel.systemStatus.ksuVersion != null && !viewModel.systemStatus.isRootAvailable) {
                         WarningCard(
                             stringResource(id = R.string.grant_root_failed)
@@ -657,8 +671,17 @@ private fun StatusCard(
                         if (!isHideVersion) {
                             Spacer(Modifier.height(4.dp))
                             systemStatus.ksuFullVersion?.let {
+                                // version_full (…@YukiSU) + (内核ksuver[/uapi]) in parens,
+                                // matching the manager version's "(code/uapi)" style.
+                                val ksuver = systemStatus.ksuVersion
+                                val versionText = when {
+                                    ksuver == null -> it
+                                    systemStatus.kernelUapiVersion > 0 ->
+                                        "$it ($ksuver/${systemStatus.kernelUapiVersion})"
+                                    else -> "$it ($ksuver)"
+                                }
                                 Text(
-                                    text = stringResource(R.string.home_working_version, it),
+                                    text = stringResource(R.string.home_working_version, versionText),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.secondary,
                                 )
@@ -955,7 +978,7 @@ private fun InfoCard(
 
             InfoCardItem(
                 stringResource(R.string.home_manager_version),
-                "${systemInfo.managerVersion.first} (${systemInfo.managerVersion.second.toInt()})",
+                "${systemInfo.managerVersion.first} (${systemInfo.managerVersion.second.toInt()}/${Natives.getManagerUapiVersion()})",
                 icon = Icons.Default.SettingsSuggest,
             )
             // ksud daemon info row: same style as other InfoCard items, clickable, highlight on mismatch

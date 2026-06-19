@@ -29,7 +29,19 @@ object Natives {
     const val ROOT_UID = 0
     const val ROOT_GID = 0
 
+    /** root_profile.flags: block re-escalation for this profile and its children. */
+    const val FLAG_KSU_NO_NEW_PRIVS = 1L
+
     external fun getFullVersion(): String
+
+    /** Kernel UAPI contract version (KERNEL_SU_UAPI_VERSION); 0 if unsupported. */
+    external fun getUapiVersion(): Int
+
+    /** UAPI contract version this manager binary was built against. */
+    external fun getManagerUapiVersion(): Int
+
+    /** True when the kernel's UAPI version differs from the manager's (skew). */
+    fun checkUapiMismatch(): Boolean = getUapiVersion() != getManagerUapiVersion()
 
     fun isVersionLessThan(v1Full: String, v2Full: String): Boolean {
         fun extractVersionParts(version: String): List<Int> {
@@ -229,6 +241,10 @@ object Natives {
         val capabilities: List<Int> = mutableListOf(),
         val context: String = KERNEL_SU_DOMAIN,
         val namespace: Int = Namespace.INHERITED.ordinal,
+        // root_profile.flags bitmask. Neutral by default; the per-profile UI
+        // seeds the anti-escape toggle from the global default
+        // (isDefaultNoNewPrivsEnabled) when the profile still uses default.
+        val flags: Long = 0L,
 
         val nonRootUseDefault: Boolean = true,
         // Default to NOT unmounting modules for non-root apps.

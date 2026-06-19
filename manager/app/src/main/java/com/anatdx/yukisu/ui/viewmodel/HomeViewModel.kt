@@ -30,7 +30,9 @@ class HomeViewModel : ViewModel() {
         val ksuFullVersion : String? = null,
         val kernelVersion: KernelVersion = getKernelVersion(),
         val isRootAvailable: Boolean = false,
-        val requireNewKernel: Boolean = false
+        val requireNewKernel: Boolean = false,
+        val kernelUapiVersion: Int = 0,
+        val managerUapiVersion: Int = 0
     )
 
     data class SystemInfo(
@@ -151,13 +153,23 @@ class HomeViewModel : ViewModel() {
                     false
                 }
 
+                val kernelUapiVersion = if (isManager) {
+                    try { Natives.getUapiVersion() } catch (_: Exception) { 0 }
+                } else 0
+
+                val managerUapiVersion = try {
+                    Natives.getManagerUapiVersion()
+                } catch (_: Exception) { 0 }
+
                 systemStatus = SystemStatus(
                     isManager = isManager,
                     ksuVersion = ksuVersion,
                     ksuFullVersion = ksuFullVersion,
                     kernelVersion = kernelVersion,
                     isRootAvailable = isRootAvailable,
-                    requireNewKernel = requireNewKernel
+                    requireNewKernel = requireNewKernel,
+                    kernelUapiVersion = kernelUapiVersion,
+                    managerUapiVersion = managerUapiVersion
                 )
 
                 isCoreDataLoaded = true

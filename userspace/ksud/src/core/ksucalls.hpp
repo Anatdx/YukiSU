@@ -42,8 +42,10 @@ int ksuctl(int request, void* arg);
 
 int32_t get_version();
 uint32_t get_flags();
+uint32_t get_uapi_version();
 
 int grant_root();
+int set_ksu_no_new_privs();
 void report_post_fs_data();
 void report_boot_complete();
 void report_module_mounted();

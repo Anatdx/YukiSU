@@ -64,6 +64,8 @@
     <string name="profile_capabilities">Capabilities</string>
     <string name="profile_selinux_context">SELinux context</string>
     <string name="profile_umount_modules">Umount modules</string>
+    <string name="profile_no_new_privs">No new privileges</string>
+    <string name="profile_no_new_privs_summary">Prevent processes escalated with this profile (and their children) from re-escalating via KernelSU, e.g. running su again or calling GRANT_ROOT. Recommended.</string>
     <string name="failed_to_update_app_profile">Failed to update App Profile for %s</string>
     <string name="set_as_dynamic_manager">Set as dynamic manager</string>
     <string name="set_as_dynamic_manager_summary">Persist this app signature and trust it as a dynamic manager</string>
@@ -73,6 +75,7 @@
     <string name="allow_any_dynamic_manager">Allow any app as dynamic manager</string>
     <string name="allow_any_dynamic_manager_summary">Experimental. Show the dynamic manager switch for every app instead of only preset manager signatures.</string>
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
+    <string name="uapi_mismatch">The manager (UAPI %1$d) and kernel (UAPI %2$d) are out of sync. Please update both the kernel and the manager to matching versions.</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
     <string name="settings_umount_modules_default_summary">Global default for "Umount modules" in App Profile. If enabled, it will remove all module modifications for apps without a profile. By default this is OFF, so new/unknown apps keep module changes.</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>

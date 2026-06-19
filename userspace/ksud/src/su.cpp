@@ -37,6 +37,7 @@ void print_su_usage() {
     printf("  -g, --group GROUP        specify the primary group\n");
     printf("  -G, --supp-group GROUP   specify a supplementary group\n");
     printf("  -W, --no-wrapper         don't use ksu fd wrapper\n");
+    printf("      --ksu-no-new-privs   block this process and its children from re-escalating\n");
 }
 
 void set_identity(uid_t uid, gid_t gid, const std::vector<gid_t>& groups) {
@@ -94,6 +95,7 @@ int run_su_shell(int argc, char** argv) {
     bool preserve_env = false;
     bool mount_master = false;
     bool use_fd_wrapper = true;
+    bool ksu_no_new_privs = false;
     uid_t target_uid = 0;
     gid_t target_gid = 0;
     bool gid_specified = false;
@@ -136,7 +138,8 @@ int run_su_shell(int argc, char** argv) {
     argc = static_cast<int>(new_argv.size() - 1);
     argv = new_argv.data();
 
-    static const std::array<struct option, 11> long_options = {{
+    enum { OPT_KSU_NO_NEW_PRIVS = 0x100 };  // long-only option id (> any short opt)
+    static const std::array<struct option, 12> long_options = {{
         {"command", required_argument, nullptr, 'c'},
         {"help", no_argument, nullptr, 'h'},
         {"login", no_argument, nullptr, 'l'},
@@ -147,6 +150,7 @@ int run_su_shell(int argc, char** argv) {
         {"group", required_argument, nullptr, 'g'},
         {"supp-group", required_argument, nullptr, 'G'},
         {"no-wrapper", no_argument, nullptr, 'W'},
+        {"ksu-no-new-privs", no_argument, nullptr, OPT_KSU_NO_NEW_PRIVS},
         {nullptr, 0, nullptr, 0},
     }};
 
@@ -188,6 +192,9 @@ int run_su_shell(int argc, char** argv) {
             break;
         case 'W':
             use_fd_wrapper = false;
+            break;
+        case OPT_KSU_NO_NEW_PRIVS:
+            ksu_no_new_privs = true;
             break;
         default:
             break;
@@ -249,6 +256,12 @@ int run_su_shell(int argc, char** argv) {
         wrap_tty(0);
         wrap_tty(1);
         wrap_tty(2);
+    }
+
+    // Lock this process and its children out of any further escalation.
+    if (ksu_no_new_privs && set_ksu_no_new_privs() != 0) {
+        LOGE("Failed to set KSU_NO_NEW_PRIVS");
+        return 1;
     }
 
     // Switch cgroups

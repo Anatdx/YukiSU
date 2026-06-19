@@ -109,7 +109,7 @@ static void disable_seccomp_for_task(struct task_struct *tsk)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 	// https://github.com/torvalds/linux/commit/0d8315dddd2899f519fe1ca3d4d5cdaf44ea421e#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R556-R558
 	fake->sighand = NULL;
-#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
 	seccomp_filter_release(fake);
 	kfree(fake);
@@ -134,6 +134,13 @@ int escape_with_root_profile(void)
 		pr_warn("Already root, don't escape!\n");
 		abort_creds(cred);
 		return 0;
+	}
+
+	if (test_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT)) {
+		pr_warn(
+		    "TIF_KSU_DISABLE_ESCAPE_WITH_ROOT set, don't escape!\n");
+		abort_creds(cred);
+		return -EPERM;
 	}
 
 	profile = ksu_get_root_profile(cred->uid.val);
@@ -176,7 +183,7 @@ int escape_with_root_profile(void)
 		ret = -EAGAIN;
 		goto out_abort_creds;
 	}
-#endif
+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
 
 	BUILD_BUG_ON(sizeof(profile->capabilities.effective) !=
 		     sizeof(kernel_cap_t));
@@ -199,6 +206,9 @@ int escape_with_root_profile(void)
 	commit_creds(cred);
 
 	disable_seccomp(current);
+
+	if (profile->flags & FLAG_KSU_NO_NEW_PRIVS)
+		set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
 
 	setup_selinux(profile->selinux_domain);
 

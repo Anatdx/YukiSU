@@ -156,6 +156,29 @@ fun RootProfileConfig(
             )
         })
 
+        val noNewPrivs = profile.flags and Natives.FLAG_KSU_NO_NEW_PRIVS != 0L
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.profile_no_new_privs)) },
+            supportingContent = {
+                Text(stringResource(R.string.profile_no_new_privs_summary))
+            },
+            trailingContent = {
+                Switch(
+                    checked = noNewPrivs,
+                    onCheckedChange = { checked ->
+                        val newFlags = if (checked) {
+                            profile.flags or Natives.FLAG_KSU_NO_NEW_PRIVS
+                        } else {
+                            profile.flags and Natives.FLAG_KSU_NO_NEW_PRIVS.inv()
+                        }
+                        onProfileChange(
+                            profile.copy(flags = newFlags, rootUseDefault = false)
+                        )
+                    }
+                )
+            }
+        )
+
     }
 }
 

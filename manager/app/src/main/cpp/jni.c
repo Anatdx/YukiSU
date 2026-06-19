@@ -13,6 +13,12 @@
 
 NativeBridgeNP(getVersion, jint) { return (jint)get_version(); }
 
+NativeBridgeNP(getUapiVersion, jint) { return (jint)get_uapi_version(); }
+
+NativeBridgeNP(getManagerUapiVersion, jint) {
+  return (jint)get_manager_uapi_version();
+}
+
 // get VERSION FULL
 NativeBridgeNP(getFullVersion, jstring) {
   char buff[255] = {0};

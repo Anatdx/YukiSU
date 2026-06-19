@@ -984,6 +984,28 @@ static int do_superkey_status(void __user *arg)
 }
 #endif // #ifdef CONFIG_KSU_SUPERKEY
 
+// Lock the calling (already-root) thread and its children out of any further
+// KernelSU escalation. Backs `su --ksu-no-new-privs`.
+static int do_disable_escape_to_root(void __user *arg)
+{
+	set_thread_flag(TIF_KSU_DISABLE_ESCAPE_WITH_ROOT);
+	return 0;
+}
+
+// Report the UAPI contract version via its own ioctl, keeping GET_INFO's number
+// and struct stable across kernel/userspace version skew.
+static int do_get_uapi_version(void __user *arg)
+{
+	__u32 v = KERNEL_SU_UAPI_VERSION;
+
+	if (copy_to_user(arg, &v, sizeof(v))) {
+		pr_err("get_uapi_version: copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1078,6 +1100,14 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "GET_SULOG_FD",
      .handler = do_get_sulog_fd,
      .perm_check = only_root},
+    {.cmd = KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT,
+     .name = "DISABLE_ESCAPE_TO_ROOT",
+     .handler = do_disable_escape_to_root,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_GET_UAPI_VERSION,
+     .name = "GET_UAPI_VERSION",
+     .handler = do_get_uapi_version,
+     .perm_check = always_allow},
     {.cmd = KSU_IOCTL_SET_DYNAMIC_MANAGERS,
      .name = "SET_DYNAMIC_MANAGERS",
      .handler = do_set_dynamic_managers,

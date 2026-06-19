@@ -32,6 +32,8 @@
 // --- Manager JNI helper declarations ---
 
 uint32_t get_version();
+uint32_t get_uapi_version();
+uint32_t get_manager_uapi_version();
 
 bool uid_should_umount(int uid);
 uint32_t get_dynamic_managers(struct ksu_dynamic_manager_app *apps,

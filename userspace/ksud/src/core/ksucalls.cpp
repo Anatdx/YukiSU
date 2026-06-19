@@ -158,8 +158,18 @@ uint32_t get_flags() {
     return get_info().flags;
 }
 
+uint32_t get_uapi_version() {
+    uint32_t v = 0;
+    ksuctl(KSU_IOCTL_GET_UAPI_VERSION, &v);
+    return v;
+}
+
 int grant_root() {
     return ksuctl(KSU_IOCTL_GRANT_ROOT, nullptr);
+}
+
+int set_ksu_no_new_privs() {
+    return ksuctl(KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT, nullptr);
 }
 
 void report_post_fs_data() {

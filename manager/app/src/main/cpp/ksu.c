@@ -106,6 +106,16 @@ uint32_t get_version() {
   return info.version;
 }
 
+uint32_t get_uapi_version() {
+  uint32_t v = 0;
+  ksuctl(KSU_IOCTL_GET_UAPI_VERSION, &v);
+  return v;
+}
+
+// UAPI contract version this manager was built against. Compared against the
+// kernel's get_uapi_version() to detect manager/kernel skew.
+uint32_t get_manager_uapi_version() { return (uint32_t)KERNEL_SU_UAPI_VERSION; }
+
 bool get_allow_list(struct ksu_get_allow_list_cmd *cmd) {
   return ksuctl(KSU_IOCTL_GET_ALLOW_LIST, cmd) == 0;
 }

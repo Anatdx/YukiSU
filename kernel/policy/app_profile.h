@@ -4,6 +4,13 @@
 #include "infra/su_mount_ns.h"
 #include "uapi/app_profile.h"
 
+/*
+ * Thread flag set after escalating with a NO_NEW_PRIVS root profile; blocks any
+ * further KernelSU escalation for this thread and its children. Bit 63 is
+ * unused by arch TIF flags (valid on 64-bit thread_info.flags).
+ */
+#define TIF_KSU_DISABLE_ESCAPE_WITH_ROOT 63
+
 // Forward declarations
 struct cred;
 struct task_struct;
