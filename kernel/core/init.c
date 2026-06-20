@@ -54,6 +54,9 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 #include "policy/feature.h"
 #include "feature/adb_root.h"
 #include "feature/selinux_hide.h"
+#include "feature/zygote_probe.h"
+#include "feature/zygote_orch.h"
+#include "feature/zygote_nl.h"
 #include "infra/file_wrapper.h"
 #include "hook/lsm_hook.h"
 #include "infra/symbol_resolver.h"
@@ -182,6 +185,9 @@ int __init kernelsu_init(void)
 	ksu_lsm_hook_init();
 	ksu_adb_root_init();
 	ksu_selinux_hide_init();
+	ksu_zygote_probe_init();
+	ksu_zygote_nl_init();
+	ksu_zygote_orch_init();
 
 	ksu_supercalls_init();
 #ifndef CONFIG_KSU_DISABLE_MANAGER
@@ -267,6 +273,9 @@ void kernelsu_exit(void)
 
 	yukisu_custom_config_exit();
 	ksu_selinux_hide_exit();
+	ksu_zygote_probe_exit();
+	ksu_zygote_orch_exit();
+	ksu_zygote_nl_exit();
 	ksu_adb_root_exit();
 	ksu_lsm_hook_exit();
 	ksu_feature_exit();

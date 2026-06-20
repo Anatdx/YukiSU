@@ -101,6 +101,10 @@ long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
 	if (static_branch_unlikely(&ksud_execve_key))
 		ksu_execve_hook_ksud(regs);
 
+	/* kernel-zygisk experiment: persistent zygote detection (every
+	 * (re)start, not one-shot) -- read-only Phase 0.5 */
+	ksu_zygote_probe_execve(regs);
+
 	if (current_euid().val == 0) {
 		const char __user *const __user *argv_user =
 		    (const char __user *const __user *)PT_REGS_PARM2(regs);
