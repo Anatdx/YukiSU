@@ -1,0 +1,5 @@
+# lsplt -- external dependency (LSPosed/LSPlt, LGPL-3.0), kept as a local clone
+# for now and NOT tracked here. TODO: convert to a proper submodule (fork to
+# Anatdx/LSPlt carrying the cmake_minimum_required bump) to match the other
+# userspace/ksud/third_party/* submodules.
+/lsplt/
