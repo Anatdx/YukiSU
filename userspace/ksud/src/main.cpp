@@ -13,6 +13,9 @@ extern "C" int resetprop_main(int argc, char** argv);
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
 extern "C" int busybox_main(int argc, char** argv);
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...
+#if defined(ZYGISKD_AVAILABLE) && ZYGISKD_AVAILABLE
+extern "C" int zygiskd_main(int argc, char** argv);
+#endif  // #if defined(ZYGISKD_AVAILABLE) && ZYGIS...
 
 namespace {
 const char* path_basename(const char* path) {
@@ -63,6 +66,13 @@ int main(int argc, char** argv) {
             return r;
     }
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+#if defined(ZYGISKD_AVAILABLE) && ZYGISKD_AVAILABLE
+    {
+        const int r = dispatch("zygiskd", zygiskd_main);
+        if (r >= 0)
+            return r;
+    }
+#endif  // #if defined(ZYGISKD_AVAILABLE) && ZYGIS...
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
     {
         const int r = dispatch("busybox", busybox_main);
@@ -74,7 +84,8 @@ int main(int argc, char** argv) {
     // Exclude "su": sucompat hijacks root shell to ksud; must not be delegated to busybox.
     if (base && base[0] && std::strcmp(base, "ksud") != 0 && std::strcmp(base, "magiskboot") != 0 &&
         std::strcmp(base, "bootctl") != 0 && std::strcmp(base, "resetprop") != 0 &&
-        std::strcmp(base, "su") != 0 && std::strstr(base, ".so") == nullptr) {
+        std::strcmp(base, "su") != 0 && std::strcmp(base, "zygiskd") != 0 &&
+        std::strstr(base, ".so") == nullptr) {
         return busybox_main(argc, argv);
     }
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...
