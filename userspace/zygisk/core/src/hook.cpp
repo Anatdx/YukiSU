@@ -207,8 +207,9 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.env = env;
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
-           ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           if (ctx.pid == 0) { // child: module pre + fd sanitize
+           ctx_fork_pre(&ctx);         // real fork; child snapshots fds
+           if (ctx.pid == 0) {         // child: module pre + fd sanitize
+             zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
            }
@@ -258,8 +259,9 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.env = env;
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
-           ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           if (ctx.pid == 0) { // child: module pre + fd sanitize
+           ctx_fork_pre(&ctx);         // real fork; child snapshots fds
+           if (ctx.pid == 0) {         // child: module pre + fd sanitize
+             zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
            }
@@ -301,6 +303,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.whitelisted_data_info_list = &allowlisted_data_info;
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
+           zygisk_load_modules(env); // USAP: load + onLoad in this process
            zygisk_run_app_pre(&args);
            reinterpret_cast<void (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
@@ -335,6 +338,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
            args.mount_sysprop_overrides = &mount_sysprop_overrides;
+           zygisk_load_modules(env); // USAP: load + onLoad in this process
            zygisk_run_app_pre(&args);
            reinterpret_cast<void (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
@@ -364,7 +368,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
        ctx.fds_to_ignore = nullptr; // server fork has no exempt channel
        g_ctx = &ctx;
        ctx_fork_pre(&ctx);
-       if (ctx.pid == 0) { // child (system_server)
+       if (ctx.pid == 0) {         // child (system_server)
+         zygisk_load_modules(env); // dlopen + onLoad here, in the child
          zygisk_run_server_pre(&args);
          ctx_sanitize_fds(&ctx);
        }
@@ -472,7 +477,10 @@ void hook_zygote_jni() {
   }
   hook_jni_methods(env, kZygote, g_zygote_methods.data(),
                    static_cast<int>(g_zygote_methods.size()));
-  zygisk_load_modules(env);
+  // Modules are loaded per-specialize in the CHILD (see the fork wrappers),
+  // NOT here in the zygote body: a module's onLoad may call getModuleDir,
+  // whose DIR fd would linger in the zygote and abort the next fork
+  // ("Unsupported st_mode for FD: DIR"), and its hooks would pollute every app.
   ZLOGI("zygote JNI takeover done");
 }
 
