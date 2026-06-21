@@ -6,6 +6,7 @@
  */
 
 #include "hook.hpp"
+#include "solist.hpp"
 #include "zygisk.hpp"
 
 #include <android/dlext.h>
@@ -396,6 +397,15 @@ void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
   g_cur = nullptr;
 }
 
+/* Anti-detection: unlink our injected libs from the linker solist so
+ * dl_iterate_phdr / solist walks can't see them. The mappings survive (we only
+ * re-link pointers), so our code keeps running. Run after specialize, in the
+ * child -- "libzygisk" also covers the module soname libzygiskmodule.so. */
+void hide_injection() {
+  zloader::hide_from_solist("libzygisk");
+  zloader::hide_from_solist("libzloader");
+}
+
 void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   auto *mut = const_cast<zygisk::AppSpecializeArgs *>(args);
   AppSpecializeArgs_v1 v1args(mut);
@@ -407,6 +417,7 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
                            app_args_for(m, mut, &v1args)));
     }
   g_cur = nullptr;
+  hide_injection();
 }
 
 void run_server_pre_impl(zygisk::ServerSpecializeArgs *args) {
@@ -426,6 +437,7 @@ void run_server_post_impl(const zygisk::ServerSpecializeArgs *args) {
       m.abi->postServerSpecialize(m.abi->impl, args);
     }
   g_cur = nullptr;
+  hide_injection();
 }
 
 } // namespace

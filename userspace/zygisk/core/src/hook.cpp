@@ -87,6 +87,15 @@ struct ZygiskContext {
 ZygiskContext *g_ctx = nullptr;
 int (*g_orig_fork)() = nullptr;
 
+/* Isolated processes (appId 99000-99999, e.g. webview/chrome sandboxes) run
+ * under a very tight SELinux domain -- they can't reach zygiskd and module
+ * onLoad code tends to crash there. Like NeoZygisk, we skip loading modules in
+ * them (they still fork+specialize normally). */
+bool is_isolated(int uid) {
+  int app_id = uid % 100000;
+  return app_id >= 99000 && app_id <= 99999;
+}
+
 /* the fork() the native specialize code calls: once we've forked in
  * ctx_fork_pre, it's a no-op returning the already-forked pid. */
 int new_fork() {
@@ -207,8 +216,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.env = env;
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
-           ctx_fork_pre(&ctx);         // real fork; child snapshots fds
-           if (ctx.pid == 0) {         // child: module pre + fd sanitize
+           ctx_fork_pre(&ctx); // real fork; child snapshots fds
+           if (ctx.pid == 0 && !is_isolated(uid)) { // non-isolated child
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
@@ -226,7 +235,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                     fds_to_ignore, is_child_zygote, instruction_set,
                     app_data_dir, is_top_app, pkg_data_info_list,
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
-           if (ctx.pid == 0)
+           if (ctx.pid == 0 && !is_isolated(uid))
              zygisk_run_app_post(&args);
            g_ctx = nullptr;
            return pid;
@@ -259,8 +268,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.env = env;
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
-           ctx_fork_pre(&ctx);         // real fork; child snapshots fds
-           if (ctx.pid == 0) {         // child: module pre + fd sanitize
+           ctx_fork_pre(&ctx); // real fork; child snapshots fds
+           if (ctx.pid == 0 && !is_isolated(uid)) { // non-isolated child
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
@@ -276,7 +285,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            app_data_dir, is_top_app, pkg_data_info_list,
                            allowlisted_data_info, mount_data_dirs,
                            mount_storage_dirs, mount_sysprop_overrides);
-           if (ctx.pid == 0)
+           if (ctx.pid == 0 && !is_isolated(uid))
              zygisk_run_app_post(&args);
            g_ctx = nullptr;
            return pid;
@@ -303,8 +312,10 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.whitelisted_data_info_list = &allowlisted_data_info;
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
-           zygisk_load_modules(env); // USAP: load + onLoad in this process
-           zygisk_run_app_pre(&args);
+           if (!is_isolated(uid)) { // USAP: skip isolated processes
+             zygisk_load_modules(env);
+             zygisk_run_app_pre(&args);
+           }
            reinterpret_cast<void (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jboolean, jstring, jstring, jboolean,
@@ -314,7 +325,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                mount_external, se_info, nice_name, is_child_zygote,
                instruction_set, app_data_dir, is_top_app, pkg_data_info_list,
                allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
-           zygisk_run_app_post(&args);
+           if (!is_isolated(uid))
+             zygisk_run_app_post(&args);
          })},
     {"nativeSpecializeAppProcess",
      "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;"
@@ -338,8 +350,10 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
            args.mount_sysprop_overrides = &mount_sysprop_overrides;
-           zygisk_load_modules(env); // USAP: load + onLoad in this process
-           zygisk_run_app_pre(&args);
+           if (!is_isolated(uid)) { // USAP: skip isolated processes
+             zygisk_load_modules(env);
+             zygisk_run_app_pre(&args);
+           }
            reinterpret_cast<void (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jboolean, jstring, jstring, jboolean,
@@ -350,7 +364,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                instruction_set, app_data_dir, is_top_app, pkg_data_info_list,
                allowlisted_data_info, mount_data_dirs, mount_storage_dirs,
                mount_sysprop_overrides);
-           zygisk_run_app_post(&args);
+           if (!is_isolated(uid))
+             zygisk_run_app_post(&args);
          })},
     /* system_server fork: ServerSpecializeArgs; like fork-app, post runs in
      * the forked child (pid==0). */

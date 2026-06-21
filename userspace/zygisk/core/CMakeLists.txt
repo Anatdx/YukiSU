@@ -21,12 +21,16 @@ add_subdirectory(
 add_library(zygisk SHARED
     src/core.cpp
     src/hook.cpp
+    # solist unlink (anti-detection) -- the same source the loader uses.
+    ../loader/src/solist.cpp
 )
 # -> libzygisk.so
 set_target_properties(zygisk PROPERTIES PREFIX "lib" OUTPUT_NAME zygisk)
 
 # The public ABI contract (zygisk.hpp) lives in ../include.
-target_include_directories(zygisk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_include_directories(zygisk PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../loader/src)
 
 target_compile_options(zygisk PRIVATE
     -Os -fno-exceptions -fno-rtti
