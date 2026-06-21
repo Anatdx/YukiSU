@@ -37,6 +37,7 @@ const std::map<std::string, uint32_t>& get_feature_map() {
         {"default_no_new_privs", KSU_FEATURE_DEFAULT_NO_NEW_PRIVS},
         {"sulog", KSU_FEATURE_SULOG},
         {"magisk_compat", KSU_FEATURE_MAGISK_COMPAT},
+        {"yukizygisk", KSU_FEATURE_YUKIZYGISK},
     };
     return map;
 }

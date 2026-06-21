@@ -148,6 +148,71 @@ void run_stage(const std::string& stage, bool block) {
     exec_stage_script(stage, block);
 }
 
+// Launch the zygisk daemon (ksud's zygiskd multi-call applet) detached.
+// Mirrors spawn_sulogd: own pgrp, stdio to /dev/null, double-fork, exec.
+int spawn_zygiskd() {
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOGE("Failed to fork zygiskd launcher: %s", strerror(errno));
+        return -1;
+    }
+    if (pid == 0) {
+        if (setpgid(0, 0) != 0) {
+            LOGW("Failed to detach zygiskd process group: %s", strerror(errno));
+        }
+        switch_cgroups();
+
+        const int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > STDERR_FILENO) {
+                close(devnull);
+            }
+        }
+
+        const pid_t grandchild = fork();
+        if (grandchild < 0) {
+            _exit(127);
+        }
+        if (grandchild > 0) {
+            _exit(0);
+        }
+
+        char* const argv[] = {const_cast<char*>(DAEMON_PATH), const_cast<char*>("zygiskd"),
+                              nullptr};
+        execv(DAEMON_PATH, argv);
+
+        char* const fallback_argv[] = {const_cast<char*>("ksud"), const_cast<char*>("zygiskd"),
+                                       nullptr};
+        execv("/proc/self/exe", fallback_argv);
+        _exit(127);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        LOGW("waitpid for zygiskd launcher failed: %s", strerror(errno));
+    }
+    return 0;
+}
+
+// YukiZygisk gate: only when the feature is on and we're NOT in safe mode.
+// Bring zygiskd up at post-fs-data so it has resolved the linker dlopen
+// offsets and is listening before zygote starts; the kernel then injects
+// zygote on the KSU_FEATURE_YUKIZYGISK gate. Feature off / safe mode: no-op.
+void ensure_zygiskd_running_if_enabled() {
+    if (is_safe_mode()) {
+        return;
+    }
+    const auto [value, supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
+    if (!supported || value == 0) {
+        return;
+    }
+    LOGI("YukiZygisk feature on -- launching zygiskd");
+    spawn_zygiskd();
+}
+
 }  // namespace
 
 int on_post_data_fs() {
@@ -232,6 +297,7 @@ int on_post_data_fs() {
     // Load feature config (with init_features handling managed features)
     init_features();
     ensure_sulogd_running_if_enabled();
+    ensure_zygiskd_running_if_enabled();
 
     // Kasumi LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
     hymo::lkm_autoload_post_fs_data();

@@ -32,6 +32,7 @@
 #include <linux/version.h>
 #include <asm/cacheflush.h>
 
+#include "policy/feature.h"
 #include "zygote_probe.h"
 #include "hook/lsm_hook.h"
 #include "selinux/selinux.h"
@@ -40,22 +41,15 @@
 
 static const char app_process[] = "/system/bin/app_process";
 
-/* Off by default, reset on reload. Exposed via /proc, not module_param,
- * because KSU hides its own /sys/module entry. */
-static bool zp_redirect_enabled;
+/* Gated by KSU_FEATURE_YUKIZYGISK (ksud's manager toggles it via set_feature).
+ * Off by default; the AT_ENTRY redirect below only fires when this is on. */
+static bool yukizygisk_enabled;
 
-/* Proof-of-execution marker the [2c-1] stub writes into its own page; read back
- * cross-process via `cat /proc/zp_redirect`. */
-#define ZP_STUB_MARKER_OFF 0x800
-#define ZP_STUB_HANDLE_OFF 0x808
 #define ZP_STUB_EXTINFO_OFF 0xa00
 #define ZP_STUB_STR_OFF 0xc00
 #define ZP_STUB_ENTRY_STR_OFF                                                  \
 	0xd00 /* "zygisk_loader_main" string for dlsym                         \
 	       */
-#define ZP_STUB_MARKER 0x52414E21u /* "RAN!" */
-static pid_t zp_stub_pid;
-static unsigned long zp_stub_uaddr;
 
 /* offsets of the linker's dlopen/dlsym within linker64, handed in by zygiskd.
  * The injected stub dlopens the loader, then dlsym+calls its entry (bionic
@@ -83,59 +77,25 @@ static void __maybe_unused zp_patch_imm64(u32 *insn, u64 val)
 	}
 }
 
-static ssize_t zp_redirect_proc_write(struct file *file,
-				      const char __user *ubuf, size_t len,
-				      loff_t *off)
+static int yukizygisk_feature_get(u64 *value)
 {
-	char c = 0;
-
-	if (len == 0)
-		return 0;
-	if (get_user(c, ubuf))
-		return -EFAULT;
-	zp_redirect_enabled = (c == '1');
-	pr_info("zygote_probe: redirect %s\n",
-		zp_redirect_enabled ? "ARMED" : "disarmed");
-	return len;
+	*value = yukizygisk_enabled ? 1 : 0;
+	return 0;
 }
 
-static ssize_t zp_redirect_proc_read(struct file *file, char __user *ubuf,
-				     size_t len, loff_t *off)
+static int yukizygisk_feature_set(u64 value)
 {
-	struct task_struct *task = NULL;
-	const char *status = "not-yet";
-	u32 marker = 0;
-	u64 handle = 0;
-	char out[160];
-	int n;
-
-	if (zp_stub_pid) {
-		rcu_read_lock();
-		task = find_task_by_vpid(zp_stub_pid);
-		if (task)
-			get_task_struct(task);
-		rcu_read_unlock();
-	}
-	if (task) {
-		access_process_vm(task, zp_stub_uaddr + ZP_STUB_MARKER_OFF,
-				  &marker, sizeof(marker), 0);
-		access_process_vm(task, zp_stub_uaddr + ZP_STUB_HANDLE_OFF,
-				  &handle, sizeof(handle), 0);
-		put_task_struct(task);
-	}
-
-	if (marker == ZP_STUB_MARKER)
-		status = handle ? "RAN dlopen-OK" : "RAN dlopen-NULL";
-
-	n = scnprintf(out, sizeof(out),
-		      "stub pid=%d addr=0x%lx marker=0x%08x handle=0x%llx %s\n",
-		      zp_stub_pid, zp_stub_uaddr, marker, handle, status);
-	return simple_read_from_buffer(ubuf, len, off, out, n);
+	yukizygisk_enabled = value != 0;
+	pr_info("zygote_probe: YukiZygisk %s\n",
+		yukizygisk_enabled ? "ENABLED" : "disabled");
+	return 0;
 }
 
-static const struct proc_ops zp_redirect_proc_ops = {
-    .proc_read = zp_redirect_proc_read,
-    .proc_write = zp_redirect_proc_write,
+static const struct ksu_feature_handler yukizygisk_feature_handler = {
+    .feature_id = KSU_FEATURE_YUKIZYGISK,
+    .name = "yukizygisk",
+    .get_handler = yukizygisk_feature_get,
+    .set_handler = yukizygisk_feature_set,
 };
 
 static void my_bprm_committed_creds(const struct linux_binprm *bprm);
@@ -416,7 +376,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	/* [1c] real redirect, gated. Fail-safe: rewrite AT_ENTRY only once the
 	 * stub is fully staged. The stub (below) dlopens libzloader.so from a
 	 * kernel-provided fd, then chains to the saved entry. */
-	if (zp_redirect_enabled && at_entry_uaddr && at_entry_uval == saved &&
+	if (yukizygisk_enabled && at_entry_uaddr && at_entry_uval == saved &&
 	    saved) {
 #ifdef CONFIG_ARM64
 		/*
@@ -566,9 +526,6 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
 			zp_close_current_fd(core_fd);
-		} else {
-			zp_stub_pid = current->pid;
-			zp_stub_uaddr = stub;
 		}
 #else
 		pr_info("zygote_probe: [1c] pid=%d redirect: arm64 only\n",
@@ -623,11 +580,12 @@ void ksu_zygote_probe_init(void)
 	else
 		pr_info("zygote_probe: armed (bprm_committed_creds)\n");
 
-	proc_create("zp_redirect", 0644, NULL, &zp_redirect_proc_ops);
+	if (ksu_register_feature_handler(&yukizygisk_feature_handler))
+		pr_err("zygote_probe: failed to register YukiZygisk feature\n");
 }
 
 void ksu_zygote_probe_exit(void)
 {
-	remove_proc_entry("zp_redirect", NULL);
+	ksu_unregister_feature_handler(KSU_FEATURE_YUKIZYGISK);
 	ksu_unregister_lsm_hook(&zygote_probe_hook);
 }
