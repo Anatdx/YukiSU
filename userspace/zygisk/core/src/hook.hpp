@@ -22,3 +22,11 @@ void zygisk_run_app_pre(zygisk::AppSpecializeArgs *args);
 void zygisk_run_app_post(const zygisk::AppSpecializeArgs *args);
 void zygisk_run_server_pre(zygisk::ServerSpecializeArgs *args);
 void zygisk_run_server_post(const zygisk::ServerSpecializeArgs *args);
+
+/* Exposed for the module api_table -- generic JNI/PLT hooking (lsplt-backed),
+ * reused by Api::hookJniNativeMethods / pltHookRegister / pltHookCommit. */
+void zygisk_hook_jni_methods(JNIEnv *env, const char *cls,
+                             JNINativeMethod *methods, int n);
+bool zygisk_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
+                              void *new_func, void **old_func);
+bool zygisk_plt_hook_commit();

@@ -352,3 +352,17 @@ void zygisk_hook_bootstrap(const char *self_path) {
   ZLOGI("lifecycle bootstrap armed on libandroid_runtime (dev=%u,%u inode=%lu)",
         major(dev), minor(dev), static_cast<unsigned long>(inode));
 }
+
+/* ---- module-facing hook helpers (Api glue) ------------------------------ */
+
+void zygisk_hook_jni_methods(JNIEnv *env, const char *cls,
+                             JNINativeMethod *methods, int n) {
+  hook_jni_methods(env, cls, methods, n);
+}
+
+bool zygisk_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
+                              void *new_func, void **old_func) {
+  return lsplt::RegisterHook(dev, inode, symbol, new_func, old_func);
+}
+
+bool zygisk_plt_hook_commit() { return lsplt::CommitHook(); }

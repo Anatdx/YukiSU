@@ -18,7 +18,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <dlfcn.h>
 #include <elf.h>
+#include <pthread.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -152,6 +154,123 @@ bool send_fd(int sock, int fd) {
   return sendmsg(sock, &msg, 0) > 0;
 }
 
+/* receive one fd via SCM_RIGHTS */
+int recv_fd(int sock) {
+  char data = 0;
+  char cbuf[CMSG_SPACE(sizeof(int))] = {};
+  iovec io{&data, 1};
+  msghdr msg{};
+  msg.msg_iov = &io;
+  msg.msg_iovlen = 1;
+  msg.msg_control = cbuf;
+  msg.msg_controllen = sizeof(cbuf);
+  if (recvmsg(sock, &msg, 0) <= 0)
+    return -1;
+  for (cmsghdr *c = CMSG_FIRSTHDR(&msg); c != nullptr; c = CMSG_NXTHDR(&msg, c))
+    if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
+      int fd = -1;
+      memcpy(&fd, CMSG_DATA(c), sizeof(fd));
+      return fd;
+    }
+  return -1;
+}
+
+/* ---- module companions -------------------------------------------------- */
+/* A companion is a long-lived root process forked from the daemon, one per
+ * module that defines zygisk_companion_entry. The daemon keeps a control
+ * socket to it; for every Api::connectCompanion() we socketpair() and hand one
+ * end to the companion (which services it on a fresh thread) and the other back
+ * to the calling app process. */
+
+using companion_entry_fn = void (*)(int);
+
+struct CompanionJob {
+  companion_entry_fn fn;
+  int client;
+};
+
+void *companion_thread(void *p) {
+  auto *job = static_cast<CompanionJob *>(p);
+  job->fn(job->client);
+  close(job->client);
+  delete job;
+  return nullptr;
+}
+
+/* Runs in the forked companion process; never returns. Writes a readiness byte
+ * (1 = module has a companion entry) then serves client fds off ctrl. */
+[[noreturn]] void companion_main(const std::string &lib_path, int ctrl) {
+  void *h = dlopen(lib_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+  auto fn = h ? reinterpret_cast<companion_entry_fn>(
+                    dlsym(h, "zygisk_companion_entry"))
+              : nullptr;
+  uint8_t ready = fn != nullptr ? 1 : 0;
+  if (write(ctrl, &ready, 1) != 1)
+    _exit(0);
+  for (;;) {
+    int client = recv_fd(ctrl);
+    if (client < 0)
+      _exit(0); // daemon gone
+    if (fn == nullptr) {
+      close(client);
+      continue;
+    }
+    auto *job = new CompanionJob{fn, client};
+    pthread_t t;
+    if (pthread_create(&t, nullptr, companion_thread, job) == 0)
+      pthread_detach(t);
+    else {
+      close(client);
+      delete job;
+    }
+  }
+}
+
+struct Companion {
+  pid_t pid = -1;
+  int ctrl = -1;
+  bool has_entry = false;
+};
+std::vector<Companion> g_companions; // indexed like g_modules, spawned lazily
+
+/* Ensure module idx has a live companion; return whether it exposes an entry.
+ */
+bool ensure_companion(uint32_t idx) {
+  if (idx >= g_modules.size())
+    return false;
+  if (g_companions.size() != g_modules.size())
+    g_companions.resize(g_modules.size());
+  Companion &c = g_companions[idx];
+  if (c.pid > 0)
+    return c.has_entry;
+
+  int sv[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) != 0)
+    return false;
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(sv[0]);
+    close(sv[1]);
+    return false;
+  }
+  if (pid == 0) {
+    close(sv[0]);
+    companion_main(g_modules[idx].lib_path, sv[1]); // never returns
+  }
+  close(sv[1]);
+  c.pid = pid;
+  c.ctrl = sv[0];
+  uint8_t ready = 0;
+  c.has_entry = read_exact(c.ctrl, &ready, 1) && ready == 1;
+  DLOGI("companion for '%s' pid=%d entry=%d", g_modules[idx].name.c_str(), pid,
+        c.has_entry);
+  return c.has_entry;
+}
+
+/* Root-grant + denylist StateFlag bits for a uid. TODO: wire to the KSU
+ * allowlist / denylist; report a defined zero state until then. */
+uint32_t query_flags(uint32_t /*uid*/) { return 0; }
+
 void handle_client(int client) {
   uint8_t op = 0;
   if (!read_exact(client, &op, sizeof(op)))
@@ -175,11 +294,47 @@ void handle_client(int client) {
       close(fd);
     break;
   }
-  case zygiskd::Request::ConnectCompanion:
-    send_fd(client, -1); // TODO: spawn + connect the module companion.
+  case zygiskd::Request::ConnectCompanion: {
+    uint32_t idx = 0;
+    if (!read_exact(client, &idx, sizeof(idx)) || !ensure_companion(idx)) {
+      send_fd(client, -1);
+      break;
+    }
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) != 0) {
+      send_fd(client, -1);
+      break;
+    }
+    // companion services sv[1] on a thread; caller talks over sv[0]
+    if (!send_fd(g_companions[idx].ctrl, sv[1])) {
+      close(sv[0]);
+      close(sv[1]);
+      send_fd(client, -1);
+      break;
+    }
+    close(sv[1]);
+    send_fd(client, sv[0]);
+    close(sv[0]);
     break;
+  }
+  case zygiskd::Request::GetModuleDir: {
+    uint32_t idx = 0;
+    if (!read_exact(client, &idx, sizeof(idx)) || idx >= g_modules.size()) {
+      send_fd(client, -1);
+      break;
+    }
+    std::string dir = std::string(kModulesDir) + "/" + g_modules[idx].name;
+    int fd = open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    send_fd(client, fd);
+    if (fd >= 0)
+      close(fd);
+    break;
+  }
   case zygiskd::Request::GetProcessFlags: {
-    uint32_t flags = 0; // TODO: root-grant / denylist for the caller.
+    uint32_t uid = 0;
+    if (!read_exact(client, &uid, sizeof(uid)))
+      break;
+    uint32_t flags = query_flags(uid);
     write_exact(client, &flags, sizeof(flags));
     break;
   }

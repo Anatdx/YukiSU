@@ -13,10 +13,11 @@ namespace zygiskd {
 /* core sends a one-byte Request (+ args); daemon replies with data and/or
  * passes fds via SCM_RIGHTS. */
 enum class Request : uint8_t {
-  GetProcessFlags = 1,  // -> u32 StateFlag bits
+  GetProcessFlags = 1,  // arg u32 uid -> u32 StateFlag bits
   GetModuleCount = 2,   // -> u32 count
   GetModuleFd = 3,      // arg u32 index -> module lib fd
   ConnectCompanion = 4, // arg u32 index -> companion socket fd
+  GetModuleDir = 5,     // arg u32 index -> module root dir fd
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */
