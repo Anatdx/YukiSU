@@ -25,7 +25,8 @@ template <class F> struct Hook {
 Hook<char *(const char *)> g_strdup;
 
 /* strdup("...ZygoteInit") is AndroidRuntime::start's signal that the VM is up
- * and JNI is safe -- where we take over the Zygote specialize natives. */
+ * and JNI is safe -- where we take over the Zygote specialize natives. Verified
+ * on-device: this fires in the real zygote right before ZygoteInit#main. */
 char *new_strdup(const char *str) {
   if (str != nullptr && std::strcmp(str, kZygoteInit) == 0) {
     ZLOGI("reached ZygoteInit -- VM is up, JNI is now safe");

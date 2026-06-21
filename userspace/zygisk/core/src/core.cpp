@@ -93,10 +93,28 @@ api_table g_api{
     api_get_flags,
 };
 
+/* bionic does NOT run a dlopen'd lib's .init_array at the AT_ENTRY injection
+ * point (pre-__libc_init), so our C++ globals -- crucially lsplt's
+ * std::mutex/std::list -- stay unconstructed, and RegisterHook then walks a
+ * bogus list. A constructor would have set g_ctors_done; if it's still 0 we run
+ * the init_array ourselves, exactly once. */
+volatile int g_ctors_done = 0;
+__attribute__((constructor)) void mark_ctors_done() { g_ctors_done = 1; }
+
 } // namespace
+
+extern "C" {
+extern void (*__init_array_start[])(void) __attribute__((visibility("hidden")));
+extern void (*__init_array_end[])(void) __attribute__((visibility("hidden")));
+}
 
 extern "C" [[gnu::visibility("default")]] void
 zygisk_core_entry(const char *self_path) {
+  if (!g_ctors_done) {
+    for (void (**p)(void) = __init_array_start; p < __init_array_end; ++p)
+      if (*p)
+        (*p)();
+  }
   LOGI("core entry, self=%s", self_path ? self_path : "(null)");
   zygisk_hook_bootstrap(self_path);
   // TODO: connect to zygiskd for the module list/fds; run the per-fork
