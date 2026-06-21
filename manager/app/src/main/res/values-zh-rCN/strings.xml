@@ -84,6 +84,11 @@
     <string name="settings_umount_modules_default_summary">对没有单独 Profile 的应用默认卸载模块。默认关闭。</string>
     <string name="settings_default_no_new_privs">默认防逃逸 (no-new-privs)</string>
     <string name="settings_default_no_new_privs_summary">默认 root 档（含管理器、shell）禁止二次提权。默认关闭。</string>
+    <string name="settings_yukizygisk">YukiZygisk</string>
+    <string name="settings_yukizygisk_summary">捕获 zygote 并注入 Zygisk 模块，重启后生效。默认关闭。</string>
+    <string name="settings_yukizygisk_toast_on">YukiZygisk 已开启 — 重启后生效</string>
+    <string name="settings_yukizygisk_toast_off">YukiZygisk 已关闭 — 重启后生效</string>
+    <string name="settings_yukizygisk_toast_failed">YukiZygisk 切换失败</string>
     <string name="profile_umount_modules_summary">启用该选项后将允许 KernelSU 为本应用还原被模块修改过的文件。</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">规则</string>

@@ -376,6 +376,19 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
         .orEmpty()
 }
 
+/** Read a feature's current on/off value via `ksud feature get` (parses the
+ *  "Status: enabled/disabled" line). Returns false when unsupported. */
+suspend fun getFeatureValue(feature: String): Boolean = withContext(Dispatchers.IO) {
+    ksudReadLines("feature get $feature").any { it.equals("Status: enabled", ignoreCase = true) }
+}
+
+/** Set a feature value and persist it; returns whether ksud reported success. */
+suspend fun setFeatureValue(feature: String, enabled: Boolean): Boolean =
+    withContext(Dispatchers.IO) {
+        execKsud("feature set $feature ${if (enabled) 1 else 0}", true) &&
+            execKsud("feature save", true)
+    }
+
 fun install() {
     val start = SystemClock.elapsedRealtime()
     val ksudPath = getKsuDaemonPath()

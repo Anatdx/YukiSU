@@ -63,6 +63,9 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
         {KSU_FEATURE_MAGISK_COMPAT,
          "Magisk-compat su prompt - shows a visible su and asks for authorization on first use "
          "for apps that are not in the allowlist"},
+        {KSU_FEATURE_YUKIZYGISK,
+         "YukiZygisk - kernel captures zygote and injects Zygisk modules; the daemon is brought "
+         "up at post-fs-data when enabled (off by default)"},
     };
     return desc;
 }

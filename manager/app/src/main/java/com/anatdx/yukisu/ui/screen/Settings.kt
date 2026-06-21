@@ -353,6 +353,46 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             }
                         )
 
+                        // YukiZygisk：内核捕获 zygote、注入 zygisk 模块（接全局防逃逸之后）
+                        var yukiZygiskEnabled by remember { mutableStateOf(false) }
+                        val yukiZygiskStatus by produceState(initialValue = "") {
+                            value = getFeatureStatus("yukizygisk")
+                        }
+                        LaunchedEffect(Unit) {
+                            yukiZygiskEnabled = getFeatureValue("yukizygisk")
+                        }
+                        val yukiZygiskSummary = when (yukiZygiskStatus) {
+                            "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
+                            "managed" -> stringResource(id = R.string.feature_status_managed_summary)
+                            else -> stringResource(id = R.string.settings_yukizygisk_summary)
+                        }
+                        SwitchItem(
+                            icon = Icons.Filled.Extension,
+                            title = stringResource(id = R.string.settings_yukizygisk),
+                            summary = yukiZygiskSummary,
+                            checked = yukiZygiskEnabled,
+                            enabled = yukiZygiskStatus == "supported",
+                            onCheckedChange = { enable ->
+                                // toggle UX：先翻到用户意图，再异步落地 + toast，失败回滚
+                                yukiZygiskEnabled = enable
+                                scope.launch {
+                                    if (setFeatureValue("yukizygisk", enable)) {
+                                        snackBarHost.showSnackbar(
+                                            context.getString(
+                                                if (enable) R.string.settings_yukizygisk_toast_on
+                                                else R.string.settings_yukizygisk_toast_off
+                                            )
+                                        )
+                                    } else {
+                                        yukiZygiskEnabled = getFeatureValue("yukizygisk")
+                                        snackBarHost.showSnackbar(
+                                            context.getString(R.string.settings_yukizygisk_toast_failed)
+                                        )
+                                    }
+                                }
+                            }
+                        )
+
                         // 内置 hymo 挂载开关
                         var builtinMountEnabled by remember { mutableStateOf(true) }
                         LaunchedEffect(Unit) {

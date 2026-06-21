@@ -86,6 +86,11 @@
     <string name="settings_umount_modules_default_summary">Umount modules for apps without their own profile. Off by default.</string>
     <string name="settings_default_no_new_privs">Default anti-escape (no-new-privs)</string>
     <string name="settings_default_no_new_privs_summary">Default root profile (manager and shell included) blocks re-escalation. Off by default.</string>
+    <string name="settings_yukizygisk">YukiZygisk</string>
+    <string name="settings_yukizygisk_summary">Capture zygote and inject Zygisk modules. Takes effect after a reboot. Off by default.</string>
+    <string name="settings_yukizygisk_toast_on">YukiZygisk enabled — reboot to apply</string>
+    <string name="settings_yukizygisk_toast_off">YukiZygisk disabled — reboot to apply</string>
+    <string name="settings_yukizygisk_toast_failed">Failed to toggle YukiZygisk</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>
     <string name="profile_selinux_domain">Domain</string>
     <string name="profile_selinux_rules">Rules</string>
