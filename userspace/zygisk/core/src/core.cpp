@@ -233,6 +233,18 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
       m.abi->postAppSpecialize(m.abi->impl, args);
 }
 
+void run_server_pre_impl(zygisk::ServerSpecializeArgs *args) {
+  for (auto &m : g_modules)
+    if (m.abi != nullptr && m.abi->preServerSpecialize != nullptr)
+      m.abi->preServerSpecialize(m.abi->impl, args);
+}
+
+void run_server_post_impl(const zygisk::ServerSpecializeArgs *args) {
+  for (auto &m : g_modules)
+    if (m.abi != nullptr && m.abi->postServerSpecialize != nullptr)
+      m.abi->postServerSpecialize(m.abi->impl, args);
+}
+
 } // namespace
 
 extern "C" {
@@ -259,4 +271,10 @@ void zygisk_run_app_pre(zygisk::AppSpecializeArgs *args) {
 }
 void zygisk_run_app_post(const zygisk::AppSpecializeArgs *args) {
   run_app_post_impl(args);
+}
+void zygisk_run_server_pre(zygisk::ServerSpecializeArgs *args) {
+  run_server_pre_impl(args);
+}
+void zygisk_run_server_post(const zygisk::ServerSpecializeArgs *args) {
+  run_server_post_impl(args);
 }

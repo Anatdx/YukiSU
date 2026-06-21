@@ -20,3 +20,5 @@ void zygisk_hook_bootstrap(const char *self_path);
 void zygisk_load_modules(JNIEnv *env);
 void zygisk_run_app_pre(zygisk::AppSpecializeArgs *args);
 void zygisk_run_app_post(const zygisk::AppSpecializeArgs *args);
+void zygisk_run_server_pre(zygisk::ServerSpecializeArgs *args);
+void zygisk_run_server_post(const zygisk::ServerSpecializeArgs *args);

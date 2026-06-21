@@ -71,7 +71,7 @@ bool find_libandroid_runtime(dev_t &dev, ino_t &inode) {
  * g_zygote_methods[i].fnPtr. fork returns 0 in the child (the new app/server)
  * and the child pid in the zygote -- we log from the child where liblog is
  * reliable. Two signatures cover Android 14 (...ZZ) and 15/16 (...ZZZ). */
-std::array<JNINativeMethod, 2> g_zygote_methods = {{
+std::array<JNINativeMethod, 5> g_zygote_methods = {{
     {"nativeForkAndSpecialize",
      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;"
      "Ljava/lang/String;Z[Ljava/lang/String;[Ljava/lang/String;ZZ)I",
@@ -150,6 +150,97 @@ std::array<JNINativeMethod, 2> g_zygote_methods = {{
              zygisk_run_app_post(&args);
            return pid;
          })},
+    /* USAP path: process is already forked; specialize happens in-place, so
+     * pre and post both run in this (the target app) process. No fds args. */
+    {"nativeSpecializeAppProcess",
+     "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;"
+     "Ljava/lang/String;Z[Ljava/lang/String;[Ljava/lang/String;ZZ)V",
+     reinterpret_cast<void *>(
+         +[](JNIEnv *env, jclass clazz, jint uid, jint gid, jintArray gids,
+             jint runtime_flags, jobjectArray rlimits, jint mount_external,
+             jstring se_info, jstring nice_name, jboolean is_child_zygote,
+             jstring instruction_set, jstring app_data_dir, jboolean is_top_app,
+             jobjectArray pkg_data_info_list,
+             jobjectArray allowlisted_data_info, jboolean mount_data_dirs,
+             jboolean mount_storage_dirs) -> void {
+           zygisk::AppSpecializeArgs args(
+               uid, gid, gids, runtime_flags, rlimits, mount_external, se_info,
+               nice_name, instruction_set, app_data_dir);
+           args.is_child_zygote = &is_child_zygote;
+           args.is_top_app = &is_top_app;
+           args.pkg_data_info_list = &pkg_data_info_list;
+           args.whitelisted_data_info_list = &allowlisted_data_info;
+           args.mount_data_dirs = &mount_data_dirs;
+           args.mount_storage_dirs = &mount_storage_dirs;
+           zygisk_run_app_pre(&args);
+           reinterpret_cast<void (*)(
+               JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
+               jint, jstring, jstring, jboolean, jstring, jstring, jboolean,
+               jobjectArray, jobjectArray, jboolean, jboolean)>(
+               g_zygote_methods[2].fnPtr)(
+               env, clazz, uid, gid, gids, runtime_flags, rlimits,
+               mount_external, se_info, nice_name, is_child_zygote,
+               instruction_set, app_data_dir, is_top_app, pkg_data_info_list,
+               allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
+           zygisk_run_app_post(&args);
+         })},
+    {"nativeSpecializeAppProcess",
+     "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;"
+     "Ljava/lang/String;Z[Ljava/lang/String;[Ljava/lang/String;ZZZ)V",
+     reinterpret_cast<void *>(
+         +[](JNIEnv *env, jclass clazz, jint uid, jint gid, jintArray gids,
+             jint runtime_flags, jobjectArray rlimits, jint mount_external,
+             jstring se_info, jstring nice_name, jboolean is_child_zygote,
+             jstring instruction_set, jstring app_data_dir, jboolean is_top_app,
+             jobjectArray pkg_data_info_list,
+             jobjectArray allowlisted_data_info, jboolean mount_data_dirs,
+             jboolean mount_storage_dirs,
+             jboolean mount_sysprop_overrides) -> void {
+           zygisk::AppSpecializeArgs args(
+               uid, gid, gids, runtime_flags, rlimits, mount_external, se_info,
+               nice_name, instruction_set, app_data_dir);
+           args.is_child_zygote = &is_child_zygote;
+           args.is_top_app = &is_top_app;
+           args.pkg_data_info_list = &pkg_data_info_list;
+           args.whitelisted_data_info_list = &allowlisted_data_info;
+           args.mount_data_dirs = &mount_data_dirs;
+           args.mount_storage_dirs = &mount_storage_dirs;
+           args.mount_sysprop_overrides = &mount_sysprop_overrides;
+           zygisk_run_app_pre(&args);
+           reinterpret_cast<void (*)(
+               JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
+               jint, jstring, jstring, jboolean, jstring, jstring, jboolean,
+               jobjectArray, jobjectArray, jboolean, jboolean, jboolean)>(
+               g_zygote_methods[3].fnPtr)(
+               env, clazz, uid, gid, gids, runtime_flags, rlimits,
+               mount_external, se_info, nice_name, is_child_zygote,
+               instruction_set, app_data_dir, is_top_app, pkg_data_info_list,
+               allowlisted_data_info, mount_data_dirs, mount_storage_dirs,
+               mount_sysprop_overrides);
+           zygisk_run_app_post(&args);
+         })},
+    /* system_server fork: ServerSpecializeArgs; like fork-app, post runs in
+     * the forked child (pid==0). */
+    {"nativeForkSystemServer", "(II[II[[IJJ)I",
+     reinterpret_cast<void *>(+[](JNIEnv *env, jclass clazz, jint uid, jint gid,
+                                  jintArray gids, jint runtime_flags,
+                                  jobjectArray rlimits,
+                                  jlong permitted_capabilities,
+                                  jlong effective_capabilities) -> jint {
+       zygisk::ServerSpecializeArgs args(uid, gid, gids, runtime_flags,
+                                         permitted_capabilities,
+                                         effective_capabilities);
+       zygisk_run_server_pre(&args);
+       auto orig =
+           reinterpret_cast<jint (*)(JNIEnv *, jclass, jint, jint, jintArray,
+                                     jint, jobjectArray, jlong, jlong)>(
+               g_zygote_methods[4].fnPtr);
+       jint pid = orig(env, clazz, uid, gid, gids, runtime_flags, rlimits,
+                       permitted_capabilities, effective_capabilities);
+       if (pid == 0)
+         zygisk_run_server_post(&args);
+       return pid;
+     })},
 }};
 
 /* Recover each method's original JNI entry via its ArtMethod, then swap in our

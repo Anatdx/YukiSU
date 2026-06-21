@@ -105,6 +105,11 @@ struct ServerSpecializeArgs {
   jlong &effective_capabilities;
 
   ServerSpecializeArgs() = delete;
+  // Core-internal: bind to the live JNI arguments. Modules only read it.
+  ServerSpecializeArgs(jint &uid_, jint &gid_, jintArray &gids_, jint &rf_,
+                       jlong &pc_, jlong &ec_)
+      : uid(uid_), gid(gid_), gids(gids_), runtime_flags(rf_),
+        permitted_capabilities(pc_), effective_capabilities(ec_) {}
 };
 
 namespace internal {

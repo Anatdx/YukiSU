@@ -30,7 +30,11 @@ target_include_directories(zygisk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include
 
 target_compile_options(zygisk PRIVATE
     -Os -fno-exceptions -fno-rtti
-    -ffunction-sections -fdata-sections -fvisibility=hidden)
+    -ffunction-sections -fdata-sections -fvisibility=hidden
+    # zygisk core is injected and runs across fork()+specialize, where the
+    # stack canary in TLS shifts -- disable the stack protector to avoid
+    # spurious __stack_chk_fail aborts in the specialize wrappers/dispatch.
+    -fno-stack-protector)
 target_link_libraries(zygisk PRIVATE log dl lsplt_static)
 target_link_options(zygisk PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 
