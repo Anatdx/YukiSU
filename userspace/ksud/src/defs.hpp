@@ -38,6 +38,14 @@ constexpr const char* KSURC_PATH = "/data/adb/ksu/.ksurc";
 constexpr const char* DAEMON_PATH = "/data/adb/ksud";
 constexpr const char* MAGISKBOOT_PATH = "/data/adb/ksu/bin/magiskboot";
 constexpr const char* LIBADBROOT_PATH = "/data/adb/ksu/lib/libadbroot.so";
+
+// YukiZygisk runtime payload: ksud stages these at post-fs-data; the kernel
+// reads libzloader.so (as ksu_cred) and hands it to the zygote via a memfd, so
+// the zygote never opens these paths directly. Private to ksu's lib dir to
+// avoid colliding with Magisk/ZygiskNext's /data/adb/zygisk.
+constexpr const char* YUKIZYGISK_DIR = "/data/adb/ksu/lib/yukizygisk/";
+constexpr const char* ZLOADER_PATH = "/data/adb/ksu/lib/yukizygisk/libzloader.so";
+constexpr const char* ZCORE_PATH = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
 constexpr const char* DAEMON_LINK_PATH = "/data/adb/ksu/bin/ksud";
 constexpr const char* SULOGD_LOCK_PATH = "/data/adb/ksu/sulogd.lock";
 

@@ -22,4 +22,8 @@ std::vector<std::string> list_supported_kmi();
 // Ensure binary assets are extracted
 int ensure_binaries(bool ignore_if_exist);
 
+// Stage the YukiZygisk payload (libzloader.so + libzygisk.so) into
+// /data/adb/ksu/lib/yukizygisk/. No-op when the payload isn't embedded.
+int ensure_yukizygisk(bool ignore_if_exist);
+
 }  // namespace ksud

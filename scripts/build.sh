@@ -219,6 +219,42 @@ ninja
 cp "$SU_DIR/build/su" "$KSUD_ASSETS/su"
 echo "    su 已构建并嵌入 assets"
 
+# YukiZygisk payload (libzloader + libzygisk): standalone NDK libs like su,
+# staged into ksud assets so embed_assets embeds them; ksud then安放到
+# /data/adb/ksu/lib/yukizygisk/ at post-fs-data. Experimental -- a build failure
+# (e.g. missing lsplt submodule) only warns, and ensure_yukizygisk() degrades
+# gracefully when a lib isn't embedded.
+echo ">>> 构建 YukiZygisk payload (libzloader + libzygisk) ..."
+ZLOADER_DIR="$REPO_ROOT/userspace/zygisk/loader"
+rm -rf "$ZLOADER_DIR/build"; mkdir -p "$ZLOADER_DIR/build"; cd "$ZLOADER_DIR/build"
+if cmake .. -G Ninja \
+	-DCMAKE_SYSTEM_NAME=Android \
+	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
+	-DCMAKE_C_COMPILER="$CC" \
+	-DCMAKE_CXX_COMPILER="$CXX" \
+	-DCMAKE_BUILD_TYPE=Release && ninja; then
+	cp "$ZLOADER_DIR/build/libzloader.so" "$KSUD_ASSETS/"
+	echo "    libzloader.so 已构建并嵌入 assets"
+else
+	echo "    ⚠️  libzloader.so 构建失败，跳过（不影响主流程）"
+fi
+
+ZCORE_DIR="$REPO_ROOT/userspace/zygisk/core"
+rm -rf "$ZCORE_DIR/build"; mkdir -p "$ZCORE_DIR/build"; cd "$ZCORE_DIR/build"
+if cmake .. -G Ninja \
+	-DCMAKE_SYSTEM_NAME=Android \
+	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
+	-DCMAKE_C_COMPILER="$CC" \
+	-DCMAKE_CXX_COMPILER="$CXX" \
+	-DCMAKE_BUILD_TYPE=Release && ninja; then
+	cp "$ZCORE_DIR/build/libzygisk.so" "$KSUD_ASSETS/"
+	echo "    libzygisk.so 已构建并嵌入 assets"
+else
+	echo "    ⚠️  libzygisk.so 构建失败，跳过（需 lsplt 子模块；不影响主流程）"
+fi
+
 KSUD_DIR="$REPO_ROOT/userspace/ksud"
 rm -rf "$KSUD_DIR/build"
 mkdir -p "$KSUD_DIR/build"

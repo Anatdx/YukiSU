@@ -197,6 +197,10 @@ int on_post_data_fs() {
         LOGW("Failed to ensure binaries");
     }
 
+    // Stage the YukiZygisk payload into /data/adb/ksu/lib/yukizygisk/ (no-op if
+    // this ksud wasn't built with the payload embedded).
+    ensure_yukizygisk(true);
+
     // if we are in safe mode, we should disable all modules
     if (safe_mode) {
         LOGW("safe mode, skip post-fs-data scripts and disable all modules!");
