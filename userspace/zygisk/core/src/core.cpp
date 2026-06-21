@@ -422,17 +422,25 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
 
 void run_server_pre_impl(zygisk::ServerSpecializeArgs *args) {
   g_app_uid = args->uid;
-  for (auto &m : g_modules)
+  LOGI("run_server_pre: uid=%d, %zu module(s)", args->uid, g_modules.size());
+  for (auto &m : g_modules) {
+    LOGI("  module %d: preServer=%p postServer=%p", m.id,
+         m.abi ? reinterpret_cast<void *>(m.abi->preServerSpecialize) : nullptr,
+         m.abi ? reinterpret_cast<void *>(m.abi->postServerSpecialize)
+               : nullptr);
     if (m.abi != nullptr && m.abi->preServerSpecialize != nullptr) {
       g_cur = &m;
       m.abi->preServerSpecialize(m.abi->impl, args);
     }
+  }
   g_cur = nullptr;
 }
 
 void run_server_post_impl(const zygisk::ServerSpecializeArgs *args) {
+  LOGI("run_server_post: %zu module(s)", g_modules.size());
   for (auto &m : g_modules)
     if (m.abi != nullptr && m.abi->postServerSpecialize != nullptr) {
+      LOGI("  module %d postServerSpecialize", m.id);
       g_cur = &m;
       m.abi->postServerSpecialize(m.abi->impl, args);
     }

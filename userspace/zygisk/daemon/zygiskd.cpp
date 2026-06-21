@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include <csignal>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -154,7 +155,8 @@ bool send_fd(int sock, int fd) {
     cmsg->cmsg_len = CMSG_LEN(sizeof(int));
     memcpy(CMSG_DATA(cmsg), &fd, sizeof(int));
   }
-  return sendmsg(sock, &msg, 0) > 0;
+  return sendmsg(sock, &msg, MSG_NOSIGNAL) >
+         0; // EPIPE not SIGPIPE on dead client
 }
 
 /* receive one fd via SCM_RIGHTS */
@@ -550,13 +552,28 @@ void send_dlopen_offset() {
 }
 
 int run_daemon() {
+  // A client (zygote/app) can disconnect mid-reply; without this a write to
+  // the dead socket raises SIGPIPE and kills the daemon (it then lingers as a
+  // zombie holding @zygiskd64, so new processes connect but are never served).
+  signal(SIGPIPE, SIG_IGN);
+
+  // Bind FIRST so exactly one daemon owns @zygiskd64. post-fs-data can fire
+  // more than once (the kernel injects the exec at multiple init triggers), so
+  // ksud may launch us again while a live daemon already holds the socket. If
+  // the abstract name is taken, bail cleanly here -- before scanning modules or
+  // re-pushing the dlopen offset to the kernel -- instead of racing and then
+  // lingering as an idle process that never serves anyone.
+  int srv = bind_listen();
+  if (srv < 0) {
+    DLOGI("@%s already owned by another zygiskd; exiting",
+          zygiskd::kSocketName);
+    return 0;
+  }
+
   g_modules = scan_modules();
   DLOGI("found %zu zygisk module(s) for %s", g_modules.size(), kAbi);
   send_dlopen_offset();
 
-  int srv = bind_listen();
-  if (srv < 0)
-    return 1;
   int nlfd = nl_listen();
   DLOGI("zygiskd up: unix @%s, netlink proto=%d", zygiskd::kSocketName,
         YZ_NETLINK_PROTO);
