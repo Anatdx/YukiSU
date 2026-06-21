@@ -11,6 +11,9 @@
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
+#include <linux/sched/task.h>
+#include <linux/rcupdate.h>
+#include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
@@ -35,6 +38,36 @@ static const char app_process[] = "/system/bin/app_process";
  * because KSU hides its own /sys/module entry. */
 static bool zp_redirect_enabled;
 
+/* Proof-of-execution marker the [2c-1] stub writes into its own page; read back
+ * cross-process via `cat /proc/zp_redirect`. */
+#define ZP_STUB_MARKER_OFF 0x800
+#define ZP_STUB_HANDLE_OFF 0x808
+#define ZP_STUB_STR_OFF 0xc00
+#define ZP_STUB_MARKER 0x52414E21u /* "RAN!" */
+static pid_t zp_stub_pid;
+static unsigned long zp_stub_uaddr;
+
+/* offset of the linker's dlopen within linker64, handed in by zygiskd (2c-2) */
+static u64 zp_dlopen_off;
+
+void ksu_zygote_probe_set_dlopen_off(u64 off)
+{
+	zp_dlopen_off = off;
+	pr_info("zygote_probe: dlopen offset set to 0x%llx\n", off);
+}
+
+/* patch a movz/movk x<d> sequence (4 insns, hw 0..3) with a 64-bit immediate */
+static void __maybe_unused zp_patch_imm64(u32 *insn, u64 val)
+{
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		u16 imm = (val >> (16 * i)) & 0xffff;
+
+		insn[i] = (insn[i] & ~(0xffffu << 5)) | ((u32)imm << 5);
+	}
+}
+
 static ssize_t zp_redirect_proc_write(struct file *file,
 				      const char __user *ubuf, size_t len,
 				      loff_t *off)
@@ -51,7 +84,42 @@ static ssize_t zp_redirect_proc_write(struct file *file,
 	return len;
 }
 
+static ssize_t zp_redirect_proc_read(struct file *file, char __user *ubuf,
+				     size_t len, loff_t *off)
+{
+	struct task_struct *task = NULL;
+	const char *status = "not-yet";
+	u32 marker = 0;
+	u64 handle = 0;
+	char out[160];
+	int n;
+
+	if (zp_stub_pid) {
+		rcu_read_lock();
+		task = find_task_by_vpid(zp_stub_pid);
+		if (task)
+			get_task_struct(task);
+		rcu_read_unlock();
+	}
+	if (task) {
+		access_process_vm(task, zp_stub_uaddr + ZP_STUB_MARKER_OFF,
+				  &marker, sizeof(marker), 0);
+		access_process_vm(task, zp_stub_uaddr + ZP_STUB_HANDLE_OFF,
+				  &handle, sizeof(handle), 0);
+		put_task_struct(task);
+	}
+
+	if (marker == ZP_STUB_MARKER)
+		status = handle ? "RAN dlopen-OK" : "RAN dlopen-NULL";
+
+	n = scnprintf(out, sizeof(out),
+		      "stub pid=%d addr=0x%lx marker=0x%08x handle=0x%llx %s\n",
+		      zp_stub_pid, zp_stub_uaddr, marker, handle, status);
+	return simple_read_from_buffer(ubuf, len, off, out, n);
+}
+
 static const struct proc_ops zp_redirect_proc_ops = {
+    .proc_read = zp_redirect_proc_read,
     .proc_write = zp_redirect_proc_write,
 };
 
@@ -110,6 +178,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	struct pt_regs *uregs;
 	unsigned long sp, p, word, val;
 	unsigned long saved = 0, at_entry_uaddr = 0, at_entry_uval = 0;
+	unsigned long at_base = 0;
 	int argc, k;
 
 	if (!mm)
@@ -117,14 +186,16 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	if (!zp_argv1_is_xzygote(mm))
 		goto out;
 
-	for (k = 0; k < AT_VECTOR_SIZE - 1;
-	     k += 2) { /* AT_ENTRY from saved copy */
-		if (mm->saved_auxv[k] == AT_NULL)
+	for (k = 0; k < AT_VECTOR_SIZE - 1; k += 2) {
+		/* AT_ENTRY + AT_BASE (linker load base) from the saved copy */
+		unsigned long t = mm->saved_auxv[k];
+
+		if (t == AT_NULL)
 			break;
-		if (mm->saved_auxv[k] == AT_ENTRY) {
+		if (t == AT_ENTRY)
 			saved = mm->saved_auxv[k + 1];
-			break;
-		}
+		else if (t == AT_BASE)
+			at_base = mm->saved_auxv[k + 1];
 	}
 
 	/* stack: [argc][argv..][NULL][envp..][NULL][auxv (type,val)..] */
@@ -166,6 +237,13 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		(at_entry_uaddr && at_entry_uval == saved) ? "MATCH"
 							   : "MISMATCH");
 
+	if (at_base && zp_dlopen_off)
+		pr_info(
+		    "zygote_probe: [2c-2] pid=%d AT_BASE=0x%lx off=0x%llx -> "
+		    "dlopen=0x%llx\n",
+		    current->pid, at_base, zp_dlopen_off,
+		    (u64)at_base + zp_dlopen_off);
+
 	/* [1b] inert same-value write -- proves the store path is safe. */
 	if (at_entry_uaddr && at_entry_uval == saved) {
 		unsigned long check = ~saved;
@@ -186,9 +264,28 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	if (zp_redirect_enabled && at_entry_uaddr && at_entry_uval == saved &&
 	    saved) {
 #ifdef CONFIG_ARM64
-		unsigned long stub;
-		u32 code[5];
+		/* [2c-3a] offline-assembled stub: dlopen("liblog.so") to prove
+		 * the call, stash the handle, then continue to the real entry.
+		 * movz/movk imm16 for x20(entry) @idx2 and x21(dlopen) @idx6
+		 * are patched in below. */
+		static const u32 tmpl[] = {
+		    0x10000013, 0xaa0003f6, 0xd2800014, 0xf2a00014, 0xf2c00014,
+		    0xf2e00014, 0xd2800015, 0xf2a00015, 0xf2c00015, 0xf2e00015,
+		    0x5289c430, 0x72aa4830, 0xb9080270, 0x91300260, 0xd2800041,
+		    0xd2800002, 0xaa1403e3, 0xd63f02a0, 0xf9040660, 0xaa1603e0,
+		    0xaa1403f0, 0xd61f0200,
+		};
+		u32 code[ARRAY_SIZE(tmpl)];
+		unsigned long stub, dlopen_addr;
 		int werr;
+
+		if (!at_base || !zp_dlopen_off) {
+			pr_info("zygote_probe: [1c] pid=%d no dlopen addr yet, "
+				"skipping\n",
+				current->pid);
+			goto out;
+		}
+		dlopen_addr = at_base + zp_dlopen_off;
 
 		stub = vm_mmap(NULL, 0, PAGE_SIZE,
 			       PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -200,13 +297,13 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			goto out;
 		}
 
-		code[0] = 0xd2800010u | ((u32)((saved >> 0) & 0xffff) << 5);
-		code[1] = 0xf2a00010u | ((u32)((saved >> 16) & 0xffff) << 5);
-		code[2] = 0xf2c00010u | ((u32)((saved >> 32) & 0xffff) << 5);
-		code[3] = 0xf2e00010u | ((u32)((saved >> 48) & 0xffff) << 5);
-		code[4] = 0xd61f0200u; /* br x16 */
+		memcpy(code, tmpl, sizeof(code));
+		zp_patch_imm64(&code[2], saved); /* x20 = real entry */
+		zp_patch_imm64(&code[6], dlopen_addr); /* x21 = dlopen */
 
-		if (copy_to_user((void __user *)stub, code, sizeof(code))) {
+		if (copy_to_user((void __user *)stub, code, sizeof(code)) ||
+		    copy_to_user((void __user *)(stub + ZP_STUB_STR_OFF),
+				 "liblog.so", 10)) {
 			pr_info(
 			    "zygote_probe: [1c] pid=%d copy_to_user failed\n",
 			    current->pid);
@@ -217,12 +314,16 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		flush_icache_range(stub, stub + sizeof(code));
 
 		werr = put_user(stub, (unsigned long __user *)at_entry_uaddr);
-		pr_info("zygote_probe: [1c] pid=%d stub@0x%lx -> entry 0x%lx "
-			"rewrite=%d %s\n",
-			current->pid, stub, saved, werr,
+		pr_info("zygote_probe: [1c] pid=%d stub@0x%lx dlopen@0x%lx -> "
+			"entry 0x%lx rewrite=%d %s\n",
+			current->pid, stub, dlopen_addr, saved, werr,
 			werr ? "FAIL" : "REDIRECTED");
 		if (werr)
 			vm_munmap(stub, PAGE_SIZE);
+		else {
+			zp_stub_pid = current->pid;
+			zp_stub_uaddr = stub;
+		}
 #else
 		pr_info("zygote_probe: [1c] pid=%d redirect: arm64 only\n",
 			current->pid);

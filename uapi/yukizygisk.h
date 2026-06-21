@@ -7,6 +7,7 @@
 #ifndef _UAPI_YUKIZYGISK_H
 #define _UAPI_YUKIZYGISK_H
 
+#include <linux/ioctl.h>
 #include <linux/types.h>
 
 #define YZ_NETLINK_PROTO 27  /* custom netlink protocol number */
@@ -21,6 +22,29 @@ struct yz_event {
   __u32 type; /* enum yz_event_type */
   __u32 pid;
   __u32 appid;
+};
+
+/* ---- zygiskd -> kernel control plane (ioctl on the ksu driver) ---- */
+
+#define YZ_MAX_MODULE_FDS 8
+
+/* hand the kernel the module fds it should broker for a just-specialized app */
+#define KSU_IOCTL_YZ_HANDOFF _IOC(_IOC_WRITE, 'K', 50, 0)
+
+struct yz_handoff_cmd {
+  __u32 pid; /* target app process (tgid) */
+  __u32 appid;
+  __u32 n_fds; /* valid entries in fds[] */
+  __u32 flags; /* injection flags, reserved */
+  __s32 fds[YZ_MAX_MODULE_FDS];
+};
+
+/* zygiskd -> kernel: offset of the linker's dlopen within linker64, so the
+ * kernel resolves it per-zygote as AT_BASE + offset. */
+#define KSU_IOCTL_YZ_SET_DLOPEN _IOC(_IOC_WRITE, 'K', 51, 0)
+
+struct yz_dlopen_cmd {
+  __u64 dlopen_offset;
 };
 
 #endif /* _UAPI_YUKIZYGISK_H */

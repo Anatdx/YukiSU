@@ -17,6 +17,7 @@
 
 #include "feature/zygote_orch.h"
 #include "feature/zygote_nl.h"
+#include "feature/zygote_ctl.h"
 #include "selinux/selinux.h"
 #include "klog.h" // IWYU pragma: keep
 
@@ -109,8 +110,10 @@ static void zo_on_free(void *data, struct task_struct *p)
 	}
 	spin_unlock_irqrestore(&zo_lock, flags);
 
-	if (tracked)
+	if (tracked) {
 		pr_info("zygote_orch: [gone] app pid=%d uid=%u\n", p->pid, uid);
+		ksu_zygote_ctl_release(p->pid);
+	}
 }
 
 void ksu_zygote_orch_init(void)

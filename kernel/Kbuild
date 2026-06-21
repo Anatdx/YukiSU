@@ -32,6 +32,7 @@ kernelsu-objs += feature/selinux_hide.o
 kernelsu-objs += feature/zygote_probe.o
 kernelsu-objs += feature/zygote_orch.o
 kernelsu-objs += feature/zygote_nl.o
+kernelsu-objs += feature/zygote_ctl.o
 kernelsu-objs += infra/symbol_resolver.o
 kernelsu-objs += runtime/boot_event.o
 kernelsu-objs += runtime/ksud_integration.o
