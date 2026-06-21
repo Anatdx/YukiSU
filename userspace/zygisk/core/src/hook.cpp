@@ -17,9 +17,12 @@
 #include <jni.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
+#include <dirent.h>
 #include <dlfcn.h>
 #include <sys/sysmacros.h>
+#include <unistd.h>
 #include <vector>
 
 #include "art_method.hpp"
@@ -64,6 +67,112 @@ bool find_libandroid_runtime(dev_t &dev, ino_t &inode) {
   return false;
 }
 
+/* ---- fork-time context -------------------------------------------------- *
+ * Module pre/post and fd sanitization MUST run in the forked child, not in the
+ * zygote body: otherwise module-opened fds (dir/companion) leak into every
+ * fork and Android's FileDescriptorTable aborts the child, and module PLT/JNI
+ * hooks pollute every app. We hook libc fork(): the wrapper forks itself first
+ * (ctx_fork_pre), runs pre+sanitize in the child, then calls the original
+ * native whose own fork() we turn into a no-op returning the already-forked
+ * pid -- so the native specializes inside our child. */
+
+struct ZygiskContext {
+  JNIEnv *env = nullptr;
+  pid_t pid = -1; // <0 not forked; ==0 child; >0 zygote (parent)
+  jintArray *fds_to_ignore = nullptr; // app fork only -- the exempt channel
+  std::vector<bool> allowed_fds;
+  std::vector<int> exempted_fds;
+};
+
+ZygiskContext *g_ctx = nullptr;
+int (*g_orig_fork)() = nullptr;
+
+/* the fork() the native specialize code calls: once we've forked in
+ * ctx_fork_pre, it's a no-op returning the already-forked pid. */
+int new_fork() {
+  return (g_ctx != nullptr && g_ctx->pid >= 0)
+             ? g_ctx->pid
+             : (g_orig_fork != nullptr ? g_orig_fork() : fork());
+}
+
+size_t fd_table_size() {
+  long n = sysconf(_SC_OPEN_MAX);
+  return n > 0 ? static_cast<size_t>(n) : 1024;
+}
+
+void mark_allowed(ZygiskContext *ctx, int fd) {
+  if (fd >= 0 && static_cast<size_t>(fd) < ctx->allowed_fds.size())
+    ctx->allowed_fds[fd] = true;
+}
+
+/* Real fork now; in the child snapshot the open fds as the zygote-native
+ * allow-list. */
+void ctx_fork_pre(ZygiskContext *ctx) {
+  ctx->pid = g_orig_fork != nullptr ? g_orig_fork() : fork();
+  if (ctx->pid != 0)
+    return; // zygote
+  ctx->allowed_fds.assign(fd_table_size(), false);
+  if (DIR *d = opendir("/proc/self/fd")) {
+    int dfd = dirfd(d);
+    while (dirent *e = readdir(d))
+      mark_allowed(ctx, atoi(e->d_name));
+    if (dfd >= 0 && static_cast<size_t>(dfd) < ctx->allowed_fds.size())
+      ctx->allowed_fds[dfd] = false;
+    closedir(d);
+  }
+}
+
+/* In the child, before the native fd check: push exempted fds into the
+ * fds_to_ignore arg (the native skips those), then close every fd that is not
+ * a zygote-native fd -- clearing the module-opened dir/companion fds that
+ * would otherwise abort the fork. */
+void ctx_sanitize_fds(ZygiskContext *ctx) {
+  if (ctx->pid != 0)
+    return;
+  JNIEnv *env = ctx->env;
+
+  if (ctx->fds_to_ignore != nullptr) {
+    jintArray old = *ctx->fds_to_ignore;
+    int old_len = old != nullptr ? env->GetArrayLength(old) : 0;
+    if (old != nullptr) {
+      int *p = env->GetIntArrayElements(old, nullptr);
+      for (int i = 0; i < old_len; ++i)
+        mark_allowed(ctx, p[i]);
+      env->ReleaseIntArrayElements(old, p, JNI_ABORT);
+    }
+    if (!ctx->exempted_fds.empty()) {
+      jintArray arr = env->NewIntArray(
+          static_cast<jsize>(old_len + ctx->exempted_fds.size()));
+      if (arr != nullptr) {
+        if (old != nullptr) {
+          int *p = env->GetIntArrayElements(old, nullptr);
+          env->SetIntArrayRegion(arr, 0, old_len, p);
+          env->ReleaseIntArrayElements(old, p, JNI_ABORT);
+        }
+        env->SetIntArrayRegion(arr, old_len,
+                               static_cast<jsize>(ctx->exempted_fds.size()),
+                               ctx->exempted_fds.data());
+        for (int fd : ctx->exempted_fds)
+          mark_allowed(ctx, fd);
+        *ctx->fds_to_ignore = arr;
+      }
+    }
+  }
+
+  if (DIR *d = opendir("/proc/self/fd")) {
+    int dfd = dirfd(d);
+    while (dirent *e = readdir(d)) {
+      int fd = atoi(e->d_name);
+      if (fd < 0 || fd == dfd)
+        continue;
+      if (static_cast<size_t>(fd) >= ctx->allowed_fds.size() ||
+          !ctx->allowed_fds[fd])
+        close(fd);
+    }
+    closedir(d);
+  }
+}
+
 /* ---- Zygote native takeover --------------------------------------------- */
 
 /* Our replacement natives. hook_jni_methods() overwrites each .fnPtr below with
@@ -94,20 +203,31 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.whitelisted_data_info_list = &allowlisted_data_info;
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
-           zygisk_run_app_pre(&args);
+           ZygiskContext ctx;
+           ctx.env = env;
+           ctx.fds_to_ignore = &fds_to_ignore;
+           g_ctx = &ctx;
+           ctx_fork_pre(&ctx); // real fork; child snapshots fds
+           if (ctx.pid == 0) { // child: module pre + fd sanitize
+             zygisk_run_app_pre(&args);
+             ctx_sanitize_fds(&ctx);
+           }
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jintArray, jintArray, jboolean, jstring,
                jstring, jboolean, jobjectArray, jobjectArray, jboolean,
                jboolean)>(g_zygote_methods[0].fnPtr);
+           // the native's own fork() is now a no-op returning ctx.pid, so it
+           // specializes inside our child and returns 0 there / child-pid here
            jint pid =
                orig(env, clazz, uid, gid, gids, runtime_flags, rlimits,
                     mount_external, se_info, nice_name, fds_to_close,
                     fds_to_ignore, is_child_zygote, instruction_set,
                     app_data_dir, is_top_app, pkg_data_info_list,
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
-           if (pid == 0)
+           if (ctx.pid == 0)
              zygisk_run_app_post(&args);
+           g_ctx = nullptr;
            return pid;
          })},
     {"nativeForkAndSpecialize",
@@ -134,7 +254,15 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
            args.mount_sysprop_overrides = &mount_sysprop_overrides;
-           zygisk_run_app_pre(&args);
+           ZygiskContext ctx;
+           ctx.env = env;
+           ctx.fds_to_ignore = &fds_to_ignore;
+           g_ctx = &ctx;
+           ctx_fork_pre(&ctx); // real fork; child snapshots fds
+           if (ctx.pid == 0) { // child: module pre + fd sanitize
+             zygisk_run_app_pre(&args);
+             ctx_sanitize_fds(&ctx);
+           }
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jintArray, jintArray, jboolean, jstring,
@@ -146,8 +274,9 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            app_data_dir, is_top_app, pkg_data_info_list,
                            allowlisted_data_info, mount_data_dirs,
                            mount_storage_dirs, mount_sysprop_overrides);
-           if (pid == 0)
+           if (ctx.pid == 0)
              zygisk_run_app_post(&args);
+           g_ctx = nullptr;
            return pid;
          })},
     /* USAP path: process is already forked; specialize happens in-place, so
@@ -230,15 +359,24 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
        zygisk::ServerSpecializeArgs args(uid, gid, gids, runtime_flags,
                                          permitted_capabilities,
                                          effective_capabilities);
-       zygisk_run_server_pre(&args);
+       ZygiskContext ctx;
+       ctx.env = env;
+       ctx.fds_to_ignore = nullptr; // server fork has no exempt channel
+       g_ctx = &ctx;
+       ctx_fork_pre(&ctx);
+       if (ctx.pid == 0) { // child (system_server)
+         zygisk_run_server_pre(&args);
+         ctx_sanitize_fds(&ctx);
+       }
        auto orig =
            reinterpret_cast<jint (*)(JNIEnv *, jclass, jint, jint, jintArray,
                                      jint, jobjectArray, jlong, jlong)>(
                g_zygote_methods[4].fnPtr);
        jint pid = orig(env, clazz, uid, gid, gids, runtime_flags, rlimits,
                        permitted_capabilities, effective_capabilities);
-       if (pid == 0)
+       if (ctx.pid == 0)
          zygisk_run_server_post(&args);
+       g_ctx = nullptr;
        return pid;
      })},
 }};
@@ -318,6 +456,20 @@ void hook_zygote_jni() {
     ZLOGE("ArtMethod layout probe failed; not hooking natives");
     return;
   }
+  // Hook libandroid_runtime's fork() so the specialize wrappers fork early
+  // (module pre + fd sanitize run in the child) and the native's own fork
+  // becomes a no-op returning our pid. Must be armed before any specialize.
+  dev_t rt_dev = 0;
+  ino_t rt_inode = 0;
+  if (find_libandroid_runtime(rt_dev, rt_inode)) {
+    lsplt::RegisterHook(rt_dev, rt_inode, "fork",
+                        reinterpret_cast<void *>(new_fork),
+                        reinterpret_cast<void **>(&g_orig_fork));
+    if (!lsplt::CommitHook() || g_orig_fork == nullptr)
+      ZLOGE("fork hook failed -- fd sanitize will not engage");
+    else
+      ZLOGI("fork hook armed (orig=%p)", reinterpret_cast<void *>(g_orig_fork));
+  }
   hook_jni_methods(env, kZygote, g_zygote_methods.data(),
                    static_cast<int>(g_zygote_methods.size()));
   zygisk_load_modules(env);
@@ -366,3 +518,14 @@ bool zygisk_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
 }
 
 bool zygisk_plt_hook_commit() { return lsplt::CommitHook(); }
+
+/* Api::exemptFd glue: record an fd the current module wants to keep across the
+ * app fork. sanitize_fds() pushes these into fds_to_ignore so the native fd
+ * check skips them. Only meaningful during an app fork (others lack the
+ * fds_to_ignore channel and return false). */
+bool zygisk_exempt_fd(int fd) {
+  if (g_ctx == nullptr || g_ctx->fds_to_ignore == nullptr || fd < 0)
+    return false;
+  g_ctx->exempted_fds.push_back(fd);
+  return true;
+}

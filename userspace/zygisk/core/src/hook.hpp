@@ -30,3 +30,7 @@ void zygisk_hook_jni_methods(JNIEnv *env, const char *cls,
 bool zygisk_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
                               void *new_func, void **old_func);
 bool zygisk_plt_hook_commit();
+
+/* Api::exemptFd glue -- record an fd to keep across the app fork (sanitize_fds
+ * pushes it into fds_to_ignore). Only valid during app preAppSpecialize. */
+bool zygisk_exempt_fd(int fd);

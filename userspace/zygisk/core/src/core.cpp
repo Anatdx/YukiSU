@@ -39,9 +39,8 @@ struct Module {
 };
 
 std::vector<Module> g_modules;
-Module *g_cur = nullptr;       // module currently in onLoad/pre/post
-int g_loading_id = -1;         // zygiskd index of the module being loaded
-std::vector<int> g_exempt_fds; // fds modules asked to keep across fork
+Module *g_cur = nullptr; // module currently in onLoad/pre/post
+int g_loading_id = -1;   // zygiskd index of the module being loaded
 
 /* api_table impls -- signatures must match zygisk::internal::api_table. */
 
@@ -75,12 +74,7 @@ void api_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
 
 bool api_plt_hook_commit() { return zygisk_plt_hook_commit(); }
 
-bool api_exempt_fd(int fd) {
-  if (fd < 0)
-    return false;
-  g_exempt_fds.push_back(fd);
-  return true;
-}
+bool api_exempt_fd(int fd) { return zygisk_exempt_fd(fd); }
 
 int api_connect_companion(void * /*impl*/) {
   return g_cur != nullptr ? zd_connect_companion(g_cur->id) : -1;
@@ -92,11 +86,10 @@ void api_set_option(void * /*impl*/, Option opt) {
 }
 
 int api_get_module_dir(void * /*impl*/) {
-  if (g_cur == nullptr)
-    return -1;
-  if (g_cur->dir_fd < 0)
-    g_cur->dir_fd = zd_module_dir(g_cur->id);
-  return g_cur->dir_fd;
+  // Not cached: a cached dir fd would linger in the process and leak across
+  // fork. The module gets a fresh fd; sanitize_fds() closes it after the fork
+  // unless the module exemptFd'd it.
+  return g_cur != nullptr ? zd_module_dir(g_cur->id) : -1;
 }
 
 uint32_t api_get_flags(void * /*impl*/) { return zd_get_flags(g_app_uid); }

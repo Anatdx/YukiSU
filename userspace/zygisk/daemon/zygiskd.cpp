@@ -30,12 +30,15 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 
 // ksuctl() lives in the ksud core (same binary): it reaches the [ksu_driver] fd
 // and issues an ioctl. We use it for the kernel reverse channel.
 namespace ksud {
 int ksuctl(int request, void *arg);
-}
+bool uid_granted_root(uint32_t uid);
+bool uid_should_umount(uint32_t uid);
+} // namespace ksud
 
 namespace {
 
@@ -200,6 +203,20 @@ void *companion_thread(void *p) {
 /* Runs in the forked companion process; never returns. Writes a readiness byte
  * (1 = module has a companion entry) then serves client fds off ctrl. */
 [[noreturn]] void companion_main(const std::string &lib_path, int ctrl) {
+  // Drop every fd inherited from the daemon except ctrl + stdio. Critically
+  // this releases the [ksu_driver] fd, the netlink socket and the @zygiskd
+  // listen socket: a forked process must not keep the KSU driver fd alive
+  // (it disturbs kernel-side manager/driver bookkeeping) nor silently hold a
+  // netlink socket the kernel keeps multicasting specialize events into.
+  if (DIR *fdd = opendir("/proc/self/fd")) {
+    int dfd = dirfd(fdd);
+    while (dirent *e = readdir(fdd)) {
+      int fd = atoi(e->d_name);
+      if (fd > 2 && fd != ctrl && fd != dfd)
+        close(fd);
+    }
+    closedir(fdd);
+  }
   void *h = dlopen(lib_path.c_str(), RTLD_NOW | RTLD_LOCAL);
   auto fn = h ? reinterpret_cast<companion_entry_fn>(
                     dlsym(h, "zygisk_companion_entry"))
@@ -267,9 +284,16 @@ bool ensure_companion(uint32_t idx) {
   return c.has_entry;
 }
 
-/* Root-grant + denylist StateFlag bits for a uid. TODO: wire to the KSU
- * allowlist / denylist; report a defined zero state until then. */
-uint32_t query_flags(uint32_t /*uid*/) { return 0; }
+/* Root-grant + denylist StateFlag bits for a uid, from the KSU kernel
+ * (zygisk::StateFlag: PROCESS_GRANTED_ROOT=1<<0, PROCESS_ON_DENYLIST=1<<1). */
+uint32_t query_flags(uint32_t uid) {
+  uint32_t flags = 0;
+  if (ksud::uid_granted_root(uid))
+    flags |= 1u << 0;
+  if (ksud::uid_should_umount(uid))
+    flags |= 1u << 1;
+  return flags;
+}
 
 void handle_client(int client) {
   uint8_t op = 0;
