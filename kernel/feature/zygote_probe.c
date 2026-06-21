@@ -50,8 +50,9 @@ static bool zp_redirect_enabled;
 #define ZP_STUB_HANDLE_OFF 0x808
 #define ZP_STUB_EXTINFO_OFF 0xa00
 #define ZP_STUB_STR_OFF 0xc00
-#define ZP_STUB_ENTRY_STR_OFF 0xd00 /* "zygisk_loader_main" string for dlsym   \
-				     */
+#define ZP_STUB_ENTRY_STR_OFF                                                  \
+	0xd00 /* "zygisk_loader_main" string for dlsym                         \
+	       */
 #define ZP_STUB_MARKER 0x52414E21u /* "RAN!" */
 static pid_t zp_stub_pid;
 static unsigned long zp_stub_uaddr;
@@ -186,7 +187,8 @@ static bool zp_argv1_is_xzygote(struct mm_struct *mm)
  * SELinux-denied, and no linker-namespace path lookup.
  */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libzloader.so"
-#define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on the loader image */
+#define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
+#define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
 
 /* Mirrors bionic's android_dlextinfo (LP64 layout). Only .flags and
@@ -211,11 +213,12 @@ static void zp_close_current_fd(int fd)
 }
 
 /*
- * Read libzloader.so and republish it as an O_CLOEXEC fd in current pointing at
- * a private shmem copy. Returns the installed fd (>= 0) or a negative errno.
- * Runs in the zygote's context (task_work), where sleeping file IO is safe.
+ * Read a payload file (loader or core) and republish it as an O_CLOEXEC fd in
+ * current pointing at a private shmem copy. Returns the installed fd (>= 0) or
+ * a negative errno. Runs in the zygote's context (task_work), where sleeping
+ * file IO is safe.
  */
-static int zp_stage_loader_fd(void)
+static int zp_stage_fd(const char *path, const char *name)
 {
 	const struct cred *old_cred;
 	struct file *src, *mfd;
@@ -225,20 +228,19 @@ static int zp_stage_loader_fd(void)
 	int fd;
 
 	/*
-	 * Read the loader as ksu_cred all the way through kernel_read -- the
-	 * zygote can't read /data/adb, and reverting before the read leaves
-	 * kernel_read running in the zygote's context, where rw_verify_area's
-	 * SELinux check denies the adb_data_file read (the -EACCES that this
-	 * masked as -5/-EIO before). Revert only once the bytes are in hand.
+	 * Read as ksu_cred all the way through kernel_read -- the zygote can't
+	 * read /data/adb, and reverting before the read leaves kernel_read in
+	 * the zygote's context, where rw_verify_area's SELinux check denies the
+	 * adb_data_file read. Revert only once the bytes are in hand.
 	 */
 	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
 
-	src = filp_open(ZP_LOADER_PATH, O_RDONLY, 0);
+	src = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(src)) {
 		if (old_cred)
 			revert_creds(old_cred);
-		pr_info("zygote_probe: [2c-3b] open %s failed: %ld\n",
-			ZP_LOADER_PATH, PTR_ERR(src));
+		pr_info("zygote_probe: [2c-3b] open %s failed: %ld\n", path,
+			PTR_ERR(src));
 		return -ENOENT;
 	}
 	if (!S_ISREG(file_inode(src)->i_mode)) {
@@ -273,17 +275,28 @@ static int zp_stage_loader_fd(void)
 		revert_creds(old_cred);
 
 	if (r != sz) {
-		pr_info("zygote_probe: [2c-3b] read %s short: %zd/%lld\n",
-			ZP_LOADER_PATH, r, (long long)sz);
+		pr_info("zygote_probe: [2c-3b] read %s short: %zd/%lld\n", path,
+			r, (long long)sz);
 		kvfree(buf);
 		return r < 0 ? (int)r : -EIO;
 	}
 
-	mfd = shmem_file_setup("libzloader.so", sz, 0);
+	mfd = shmem_file_setup(name, sz, 0);
 	if (IS_ERR(mfd)) {
 		kvfree(buf);
 		return PTR_ERR(mfd);
 	}
+	/*
+	 * shmem_file_setup() goes through alloc_file_pseudo, not
+	 * do_dentry_open, so the file is left WITHOUT FMODE_PREAD/FMODE_PWRITE
+	 * -- only memfd_create() explicitly ORs those in. bionic's ElfReader
+	 * reads the ELF header/program-headers/segments with pread64(), which
+	 * the VFS rejects with -ESPIPE on a file lacking FMODE_PREAD. The net
+	 * effect is the zygote's android_dlopen_ext() returning NULL with no
+	 * SELinux denial (it never reaches an mmap). Grant pread/pwrite/lseek
+	 * exactly like memfd_create() does so the linker can read the image.
+	 */
+	mfd->f_mode |= FMODE_PREAD | FMODE_PWRITE | FMODE_LSEEK;
 	pos = 0;
 	r = kernel_write(mfd, buf, sz, &pos);
 	kvfree(buf);
@@ -299,8 +312,8 @@ static int zp_stage_loader_fd(void)
 	}
 	fd_install(fd, mfd); /* consumes the shmem reference */
 
-	pr_info("zygote_probe: [2c-3b] staged %s (%lld bytes) -> fd=%d\n",
-		ZP_LOADER_PATH, (long long)sz, fd);
+	pr_info("zygote_probe: [2c-3b] staged %s (%lld bytes) -> fd=%d\n", path,
+		(long long)sz, fd);
 	return fd;
 }
 
@@ -409,53 +422,68 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		/*
 		 * [2c-3b] offline-assembled stub. dlopens libzloader.so from
 		 * the kernel-staged fd, closes that fd (zygote's pre-fork fd
-		 * allowlist aborts on it otherwise), then dlsym's and CALLS the
-		 * loader entry
-		 * -- bionic does not run a dlopen'd lib's constructor this
-		 * early -- and finally tail-calls the real entry. idx2/6/10
-		 * (entry, dlopen, dlsym) are patched per-zygote. Disassembly:
-		 *   adr   x19, .            ; stub base (self)
-		 *   mov   x22, x0           ; preserve x0
-		 *   movz/movk x20,#<entry>  ; [2..5]   saved AT_ENTRY (patched)
-		 *   movz/movk x21,#<dlopen> ; [6..9]   android_dlopen_ext
-		 * (patched) movz/movk x23,#<dlsym>  ; [10..13] __loader_dlsym
-		 * (patched) movz/movk w16,#RAN!     ; proof marker value str
-		 * w16, [x19,#0x800] add   x0,  x19,#0xc00   ; "libzloader.so"
+		 * allowlist aborts on a leaked memfd), then dlsym's and CALLS
+		 * the loader entry with the core fd (bionic doesn't run a
+		 * dlopen'd lib's constructor this early), and finally
+		 * tail-calls the real entry. A libc call (dlopen/dlsym) does
+		 * NOT reliably preserve callee- saved regs at this
+		 * pre-__libc_init point, so we keep stub base / entry / dlsym /
+		 * orig-x0 / handle in a stack frame and reload them after every
+		 * blr. Patched: idx2 entry, idx6 dlopen, idx10 dlsym, idx40
+		 * core fd. Disassembly: adr   x19, .            ; stub base sub
+		 * sp,  sp, #64      ; scratch frame (16-aligned) movz/movk
+		 * x20,#<entry>  ; [2..5]   saved AT_ENTRY (patched) movz/movk
+		 * x21,#<dlopen> ; [6..9]   android_dlopen_ext (patched)
+		 *   movz/movk x23,#<dlsym>  ; [10..13] __loader_dlsym (patched)
+		 *   str   x19, [sp]         ; save stub base
+		 *   str   x20, [sp,#8]      ; save entry
+		 *   str   x23, [sp,#16]     ; save dlsym
+		 *   str   x0,  [sp,#24]     ; save orig x0
+		 *   movz/movk w16,#RAN!     ; proof marker
+		 *   str   w16, [x19,#0x800]
+		 *   add   x0,  x19,#0xc00   ; "libzloader.so"
 		 *   movz  x1,  #2           ; RTLD_NOW
 		 *   add   x2,  x19,#0xa00   ; &android_dlextinfo (fd load)
 		 *   mov   x3,  x20          ; caller = entry (default ns)
 		 *   blr   x21               ; handle = android_dlopen_ext(...)
+		 *   ldr   x19, [sp]         ; reload base
 		 *   str   x0,  [x19,#0x808] ; stash handle
-		 *   mov   x24, x0           ; save handle
+		 *   str   x0,  [sp,#32]     ; save handle
 		 *   ldr   w0,  [x19,#0xa1c] ; extinfo.library_fd
 		 *   movz  x8,  #57          ; __NR_close
 		 *   svc   #0                ; close(library_fd)
-		 *   mov   x0,  x24          ; handle
+		 *   ldr   x19, [sp]         ; reload base
+		 *   ldr   x0,  [sp,#32]     ; handle
 		 *   add   x1,  x19,#0xd00   ; "zygisk_loader_main"
-		 *   mov   x2,  x20          ; caller (for __loader_dlsym)
+		 *   ldr   x2,  [sp,#8]      ; caller = entry
+		 *   ldr   x23, [sp,#16]     ; dlsym
 		 *   blr   x23               ; entry = dlsym(handle, name)
 		 *   cbz   x0,  1f           ; skip call if not found
 		 *   mov   x25, x0
-		 *   movz  x0,  #0           ; core_path = NULL (default)
-		 *   blr   x25               ; zygisk_loader_main(NULL)
-		 * 1:mov   x0,  x22          ; restore x0
+		 *   movz  x0,  #<core_fd>   ; arg = core fd (patched at idx40)
+		 *   blr   x25               ; zygisk_loader_main(core_fd)
+		 * 1:ldr   x0,  [sp,#24]     ; restore orig x0
+		 *   ldr   x20, [sp,#8]      ; reload entry
+		 *   add   sp,  sp, #64      ; free frame
 		 *   mov   x16, x20          ; \ tail-call the real entry
 		 *   br    x16               ; /
 		 */
 		static const u32 tmpl[] = {
-		    0x10000013, 0xaa0003f6, 0xd2800014, 0xf2a00014, 0xf2c00014,
+		    0x10000013, 0xd10103ff, 0xd2800014, 0xf2a00014, 0xf2c00014,
 		    0xf2e00014, 0xd2800015, 0xf2a00015, 0xf2c00015, 0xf2e00015,
-		    0xd2800017, 0xf2a00017, 0xf2c00017, 0xf2e00017, 0x5289c430,
-		    0x72aa4830, 0xb9080270, 0x91300260, 0xd2800041, 0x91280262,
-		    0xaa1403e3, 0xd63f02a0, 0xf9040660, 0xaa0003f8, 0xb94a1c60,
-		    0xd2800728, 0xd4000001, 0xaa1803e0, 0x91340261, 0xaa1403e2,
-		    0xd63f02e0, 0xb4000080, 0xaa0003f9, 0xd2800000, 0xd63f0320,
-		    0xaa1603e0, 0xaa1403f0, 0xd61f0200,
+		    0xd2800017, 0xf2a00017, 0xf2c00017, 0xf2e00017, 0xf90003f3,
+		    0xf90007f4, 0xf9000bf7, 0xf9000fe0, 0x5289c430, 0x72aa4830,
+		    0xb9080270, 0x91300260, 0xd2800041, 0x91280262, 0xaa1403e3,
+		    0xd63f02a0, 0xf94003f3, 0xf9040660, 0xf90013e0, 0xb94a1e60,
+		    0xd2800728, 0xd4000001, 0xf94003f3, 0xf94013e0, 0x91340261,
+		    0xf94007e2, 0xf9400bf7, 0xd63f02e0, 0xb4000080, 0xaa0003f9,
+		    0xd2800000, 0xd63f0320, 0xf9400fe0, 0xf94007f4, 0x910103ff,
+		    0xaa1403f0, 0xd61f0200,
 		};
 		u32 code[ARRAY_SIZE(tmpl)];
 		struct zp_dlextinfo extinfo;
 		unsigned long stub, dlopen_addr, dlsym_addr;
-		int loader_fd, werr;
+		int loader_fd, core_fd, werr;
 
 		if (!at_base || !zp_dlopen_off || !zp_dlsym_off) {
 			pr_info("zygote_probe: [2c-3b] pid=%d no dlopen/dlsym "
@@ -466,11 +494,23 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		dlopen_addr = at_base + zp_dlopen_off;
 		dlsym_addr = at_base + zp_dlsym_off;
 
-		loader_fd = zp_stage_loader_fd();
+		/* Stage both payloads as fds in the zygote: the stub dlopens
+		 * the loader (and closes its own fd), then passes the core fd
+		 * to the loader entry, which dlopens the core and closes that
+		 * fd. */
+		loader_fd = zp_stage_fd(ZP_LOADER_PATH, "libzloader.so");
 		if (loader_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage loader "
 				"failed: %d, skipping\n",
 				current->pid, loader_fd);
+			goto out;
+		}
+		core_fd = zp_stage_fd(ZP_CORE_PATH, "libzygisk.so");
+		if (core_fd < 0) {
+			pr_info("zygote_probe: [2c-3b] pid=%d stage core "
+				"failed: %d, skipping\n",
+				current->pid, core_fd);
+			zp_close_current_fd(loader_fd);
 			goto out;
 		}
 
@@ -482,6 +522,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 				"%ld\n",
 				current->pid, (long)stub);
 			zp_close_current_fd(loader_fd);
+			zp_close_current_fd(core_fd);
 			goto out;
 		}
 
@@ -489,6 +530,8 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		zp_patch_imm64(&code[2], saved); /* x20 = real entry */
 		zp_patch_imm64(&code[6], dlopen_addr); /* x21 = dlopen */
 		zp_patch_imm64(&code[10], dlsym_addr); /* x23 = dlsym */
+		/* movz x0,#core_fd: the int arg to zygisk_loader_main(int) */
+		code[40] = 0xd2800000u | (((u32)core_fd & 0xffff) << 5);
 
 		memset(&extinfo, 0, sizeof(extinfo));
 		extinfo.flags = ZP_DLEXT_USE_LIBRARY_FD;
@@ -507,6 +550,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 				current->pid);
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
+			zp_close_current_fd(core_fd);
 			goto out;
 		}
 
@@ -514,13 +558,14 @@ static void zp_inject_tw_func(struct callback_head *cb)
 
 		werr = put_user(stub, (unsigned long __user *)at_entry_uaddr);
 		pr_info(
-		    "zygote_probe: [2c-3b] pid=%d stub@0x%lx fd=%d "
-		    "dlopen@0x%lx dlsym@0x%lx -> entry 0x%lx rewrite=%d %s\n",
-		    current->pid, stub, loader_fd, dlopen_addr, dlsym_addr,
-		    saved, werr, werr ? "FAIL" : "REDIRECTED");
+		    "zygote_probe: [2c-3b] pid=%d stub@0x%lx loader_fd=%d "
+		    "core_fd=%d dlopen@0x%lx dlsym@0x%lx -> entry 0x%lx %s\n",
+		    current->pid, stub, loader_fd, core_fd, dlopen_addr,
+		    dlsym_addr, saved, werr ? "FAIL" : "REDIRECTED");
 		if (werr) {
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
+			zp_close_current_fd(core_fd);
 		} else {
 			zp_stub_pid = current->pid;
 			zp_stub_uaddr = stub;
