@@ -12,9 +12,13 @@
 #include <fcntl.h>
 #include <linux/netlink.h>
 #include <poll.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+
+#include <elf.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +28,12 @@
 
 #include <cstdarg>
 #include <cstdio>
+
+// ksuctl() lives in the ksud core (same binary): it reaches the [ksu_driver] fd
+// and issues an ioctl. We use it for the kernel reverse channel.
+namespace ksud {
+int ksuctl(int request, void *arg);
+}
 
 namespace {
 
@@ -224,6 +234,40 @@ int nl_listen() {
   return fd;
 }
 
+// A just-specialized app: hand its applicable module fds to the kernel, which
+// takes its own references and brokers them until injection.
+void on_specialize(uint32_t pid, uint32_t appid) {
+  if (g_modules.empty())
+    return;
+
+  yz_handoff_cmd cmd{};
+  cmd.pid = pid;
+  cmd.appid = appid;
+
+  int opened[YZ_MAX_MODULE_FDS];
+  uint32_t n = 0;
+  for (const auto &m : g_modules) {
+    if (n >= YZ_MAX_MODULE_FDS)
+      break;
+    int fd = open(m.lib_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+      continue;
+    opened[n] = fd;
+    cmd.fds[n] = fd;
+    ++n;
+  }
+  cmd.n_fds = n;
+  if (n == 0)
+    return;
+
+  int ret = ksud::ksuctl(KSU_IOCTL_YZ_HANDOFF, &cmd);
+  DLOGI("handoff pid=%u appid=%u n=%u ret=%d", pid, appid, n, ret);
+
+  /* the kernel holds its own references now; drop ours */
+  for (uint32_t i = 0; i < n; ++i)
+    close(opened[i]);
+}
+
 void nl_drain(int fd) {
   char buf[4096];
   ssize_t got = recv(fd, buf, sizeof(buf), 0);
@@ -239,12 +283,75 @@ void nl_drain(int fd) {
       continue;
     auto *ev = static_cast<yz_event *>(NLMSG_DATA(nlh));
     DLOGI("event type=%u pid=%u appid=%u", ev->type, ev->pid, ev->appid);
+    if (ev->type == YZ_EV_SPECIALIZE)
+      on_specialize(ev->pid, ev->appid);
   }
+}
+
+// Resolve the offset of a symbol in linker64's dynamic symbol table, so the
+// kernel can compute its absolute address per-zygote as AT_BASE + offset.
+uint64_t resolve_linker_sym(const char *path, const char *want) {
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return 0;
+  struct stat st;
+  if (fstat(fd, &st) < 0 || st.st_size < (off_t)sizeof(Elf64_Ehdr)) {
+    close(fd);
+    return 0;
+  }
+  void *map = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  close(fd);
+  if (map == MAP_FAILED)
+    return 0;
+
+  auto *base = static_cast<const uint8_t *>(map);
+  auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
+  uint64_t result = 0;
+  if (memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0 &&
+      eh->e_ident[EI_CLASS] == ELFCLASS64) {
+    auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
+    for (int i = 0; i < eh->e_shnum && !result; i++) {
+      if (sh[i].sh_type != SHT_DYNSYM)
+        continue;
+      auto *syms = reinterpret_cast<const Elf64_Sym *>(base + sh[i].sh_offset);
+      const char *strs =
+          reinterpret_cast<const char *>(base + sh[sh[i].sh_link].sh_offset);
+      size_t n = sh[i].sh_size / sizeof(Elf64_Sym);
+      for (size_t j = 0; j < n; j++) {
+        if (strcmp(strs + syms[j].st_name, want) == 0) {
+          result = syms[j].st_value;
+          break;
+        }
+      }
+    }
+  }
+  munmap(map, st.st_size);
+  return result;
+}
+
+void send_dlopen_offset() {
+  static const char *const kCandidates[] = {
+      "__loader_android_dlopen_ext",
+      "android_dlopen_ext",
+  };
+  for (const char *want : kCandidates) {
+    uint64_t off = resolve_linker_sym("/system/bin/linker64", want);
+    if (off) {
+      yz_dlopen_cmd cmd{};
+      cmd.dlopen_offset = off;
+      int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_DLOPEN, &cmd);
+      DLOGI("linker '%s' offset=0x%llx -> kernel ret=%d", want,
+            (unsigned long long)off, ret);
+      return;
+    }
+  }
+  DLOGI("linker dlopen symbol not found");
 }
 
 int run_daemon() {
   g_modules = scan_modules();
   DLOGI("found %zu zygisk module(s) for %s", g_modules.size(), kAbi);
+  send_dlopen_offset();
 
   int srv = bind_listen();
   if (srv < 0)
