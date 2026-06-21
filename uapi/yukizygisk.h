@@ -39,12 +39,15 @@ struct yz_handoff_cmd {
   __s32 fds[YZ_MAX_MODULE_FDS];
 };
 
-/* zygiskd -> kernel: offset of the linker's dlopen within linker64, so the
- * kernel resolves it per-zygote as AT_BASE + offset. */
+/* zygiskd -> kernel: offsets of the linker's dlopen/dlsym within linker64, so
+ * the kernel resolves them per-zygote as AT_BASE + offset. The injected stub
+ * dlopens the loader, then dlsym's and calls its entry (bionic won't run a
+ * dlopen'd lib's constructor this early). */
 #define KSU_IOCTL_YZ_SET_DLOPEN _IOC(_IOC_WRITE, 'K', 51, 0)
 
 struct yz_dlopen_cmd {
   __u64 dlopen_offset;
+  __u64 dlsym_offset;
 };
 
 #endif /* _UAPI_YUKIZYGISK_H */

@@ -329,23 +329,45 @@ uint64_t resolve_linker_sym(const char *path, const char *want) {
   return result;
 }
 
+uint64_t resolve_first(const char *const *cands, size_t n, const char **hit) {
+  for (size_t i = 0; i < n; ++i) {
+    uint64_t off = resolve_linker_sym("/system/bin/linker64", cands[i]);
+    if (off) {
+      if (hit)
+        *hit = cands[i];
+      return off;
+    }
+  }
+  return 0;
+}
+
 void send_dlopen_offset() {
-  static const char *const kCandidates[] = {
+  static const char *const kDlopen[] = {
       "__loader_android_dlopen_ext",
       "android_dlopen_ext",
   };
-  for (const char *want : kCandidates) {
-    uint64_t off = resolve_linker_sym("/system/bin/linker64", want);
-    if (off) {
-      yz_dlopen_cmd cmd{};
-      cmd.dlopen_offset = off;
-      int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_DLOPEN, &cmd);
-      DLOGI("linker '%s' offset=0x%llx -> kernel ret=%d", want,
-            (unsigned long long)off, ret);
-      return;
-    }
+  static const char *const kDlsym[] = {
+      "__loader_dlsym",
+      "dlsym",
+  };
+
+  const char *dlopen_name = nullptr;
+  const char *dlsym_name = nullptr;
+  yz_dlopen_cmd cmd{};
+  cmd.dlopen_offset = resolve_first(kDlopen, 2, &dlopen_name);
+  cmd.dlsym_offset = resolve_first(kDlsym, 2, &dlsym_name);
+
+  if (!cmd.dlopen_offset || !cmd.dlsym_offset) {
+    DLOGI("linker resolve incomplete: dlopen=%s dlsym=%s",
+          dlopen_name ? dlopen_name : "(none)",
+          dlsym_name ? dlsym_name : "(none)");
+    return;
   }
-  DLOGI("linker dlopen symbol not found");
+
+  int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_DLOPEN, &cmd);
+  DLOGI("linker dlopen '%s'=0x%llx dlsym '%s'=0x%llx -> kernel ret=%d",
+        dlopen_name, (unsigned long long)cmd.dlopen_offset, dlsym_name,
+        (unsigned long long)cmd.dlsym_offset, ret);
 }
 
 int run_daemon() {

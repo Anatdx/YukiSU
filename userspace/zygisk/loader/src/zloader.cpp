@@ -13,7 +13,7 @@
 namespace {
 
 constexpr char kLogTag[] = "zloader";
-constexpr char kDefaultCorePath[] = "/data/adb/zygisk/libzygisk.so";
+constexpr char kDefaultCorePath[] = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
 constexpr char kCoreEntrySym[] = "zygisk_core_entry";
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
@@ -23,8 +23,14 @@ using core_entry_fn = void (*)(const char *self_path);
 
 } // namespace
 
-/* Called once by the injector inside the target process. core_path may be null
- * (-> default). Assumes the C library is already usable (post-__libc_init). */
+/* Entry point. The kernel-built stub dlopens us (by memfd), then dlsym's this
+ * symbol and calls it directly -- NOT via a constructor: bionic does not run a
+ * dlopen'd library's .init_array at the AT_ENTRY injection point (it is before
+ * __libc_init), so a self-firing constructor never executes. The stub also
+ * closes the leaked loader memfd before jumping here, so we don't have to.
+ *
+ * Runs very early: dlopen/dlsym (linker) are usable, but most of libc is not.
+ */
 extern "C" [[gnu::visibility("default")]] void
 zygisk_loader_main(const char *core_path) {
   const char *path = (core_path && core_path[0]) ? core_path : kDefaultCorePath;

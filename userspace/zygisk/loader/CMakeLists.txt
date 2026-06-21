@@ -12,14 +12,17 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
-add_library(zloader SHARED src/zloader.cpp)
+add_library(zloader SHARED src/zloader.cpp src/solist.cpp)
 # -> libzloader.so
 set_target_properties(zloader PROPERTIES PREFIX "lib" OUTPUT_NAME zloader)
 
 # Keep it tiny: no C++ runtime baggage, hide everything but the explicit entry.
 target_compile_options(zloader PRIVATE
     -Os -fno-exceptions -fno-rtti
-    -ffunction-sections -fdata-sections -fvisibility=hidden)
+    -ffunction-sections -fdata-sections -fvisibility=hidden
+    # injected at AT_ENTRY before __libc_init: the stack-protector canary lives
+    # in TLS, which isn't set up yet -- so disable it for this payload.
+    -fno-stack-protector)
 target_link_libraries(zloader PRIVATE log dl)
 target_link_options(zloader PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 

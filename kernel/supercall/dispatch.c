@@ -1020,7 +1020,7 @@ static int do_yz_set_dlopen(void __user *arg)
 
 	if (copy_from_user(&cmd, arg, sizeof(cmd)))
 		return -EFAULT;
-	ksu_zygote_probe_set_dlopen_off(cmd.dlopen_offset);
+	ksu_zygote_probe_set_dlopen_off(cmd.dlopen_offset, cmd.dlsym_offset);
 	return 0;
 }
 
