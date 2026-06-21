@@ -75,16 +75,25 @@ struct AppSpecializeArgs {
   jstring &app_data_dir;
 
   // Optional arguments. Null-check the pointer before dereferencing.
-  jintArray *const fds_to_ignore;
-  jboolean *const is_child_zygote;
-  jboolean *const is_top_app;
-  jobjectArray *const pkg_data_info_list;
-  jobjectArray *const whitelisted_data_info_list;
-  jboolean *const mount_data_dirs;
-  jboolean *const mount_storage_dirs;
-  jboolean *const mount_sysprop_overrides;
+  jintArray *fds_to_ignore = nullptr;
+  jboolean *is_child_zygote = nullptr;
+  jboolean *is_top_app = nullptr;
+  jobjectArray *pkg_data_info_list = nullptr;
+  jobjectArray *whitelisted_data_info_list = nullptr;
+  jboolean *mount_data_dirs = nullptr;
+  jboolean *mount_storage_dirs = nullptr;
+  jboolean *mount_sysprop_overrides = nullptr;
 
   AppSpecializeArgs() = delete;
+  // Core-internal: bind the required fields to the live JNI arguments. Optional
+  // pointers are filled in by the caller per the method signature. Modules
+  // never construct this -- they only read it.
+  AppSpecializeArgs(jint &uid_, jint &gid_, jintArray &gids_, jint &rf_,
+                    jobjectArray &rl_, jint &me_, jstring &si_, jstring &nn_,
+                    jstring &is_, jstring &ad_)
+      : uid(uid_), gid(gid_), gids(gids_), runtime_flags(rf_), rlimits(rl_),
+        mount_external(me_), se_info(si_), nice_name(nn_), instruction_set(is_),
+        app_data_dir(ad_) {}
 };
 
 struct ServerSpecializeArgs {

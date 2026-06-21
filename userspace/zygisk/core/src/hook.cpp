@@ -84,6 +84,17 @@ std::array<JNINativeMethod, 2> g_zygote_methods = {{
              jobjectArray pkg_data_info_list,
              jobjectArray allowlisted_data_info, jboolean mount_data_dirs,
              jboolean mount_storage_dirs) -> jint {
+           zygisk::AppSpecializeArgs args(
+               uid, gid, gids, runtime_flags, rlimits, mount_external, se_info,
+               nice_name, instruction_set, app_data_dir);
+           args.fds_to_ignore = &fds_to_ignore;
+           args.is_child_zygote = &is_child_zygote;
+           args.is_top_app = &is_top_app;
+           args.pkg_data_info_list = &pkg_data_info_list;
+           args.whitelisted_data_info_list = &allowlisted_data_info;
+           args.mount_data_dirs = &mount_data_dirs;
+           args.mount_storage_dirs = &mount_storage_dirs;
+           zygisk_run_app_pre(&args);
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jintArray, jintArray, jboolean, jstring,
@@ -96,7 +107,7 @@ std::array<JNINativeMethod, 2> g_zygote_methods = {{
                     app_data_dir, is_top_app, pkg_data_info_list,
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (pid == 0)
-             ZLOGI("[specialize] app forked (uid=%d) -- in child", uid);
+             zygisk_run_app_post(&args);
            return pid;
          })},
     {"nativeForkAndSpecialize",
@@ -112,6 +123,18 @@ std::array<JNINativeMethod, 2> g_zygote_methods = {{
              jobjectArray allowlisted_data_info, jboolean mount_data_dirs,
              jboolean mount_storage_dirs,
              jboolean mount_sysprop_overrides) -> jint {
+           zygisk::AppSpecializeArgs args(
+               uid, gid, gids, runtime_flags, rlimits, mount_external, se_info,
+               nice_name, instruction_set, app_data_dir);
+           args.fds_to_ignore = &fds_to_ignore;
+           args.is_child_zygote = &is_child_zygote;
+           args.is_top_app = &is_top_app;
+           args.pkg_data_info_list = &pkg_data_info_list;
+           args.whitelisted_data_info_list = &allowlisted_data_info;
+           args.mount_data_dirs = &mount_data_dirs;
+           args.mount_storage_dirs = &mount_storage_dirs;
+           args.mount_sysprop_overrides = &mount_sysprop_overrides;
+           zygisk_run_app_pre(&args);
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
                jint, jstring, jstring, jintArray, jintArray, jboolean, jstring,
@@ -124,7 +147,7 @@ std::array<JNINativeMethod, 2> g_zygote_methods = {{
                            allowlisted_data_info, mount_data_dirs,
                            mount_storage_dirs, mount_sysprop_overrides);
            if (pid == 0)
-             ZLOGI("[specialize] app forked (uid=%d) -- in child", uid);
+             zygisk_run_app_post(&args);
            return pid;
          })},
 }};
@@ -206,6 +229,7 @@ void hook_zygote_jni() {
   }
   hook_jni_methods(env, kZygote, g_zygote_methods.data(),
                    static_cast<int>(g_zygote_methods.size()));
+  zygisk_load_modules(env);
   ZLOGI("zygote JNI takeover done");
 }
 

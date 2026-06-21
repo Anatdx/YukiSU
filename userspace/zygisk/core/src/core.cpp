@@ -8,9 +8,16 @@
 #include "hook.hpp"
 #include "zygisk.hpp"
 
+#include <android/dlext.h>
 #include <android/log.h>
+#include <dlfcn.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 using zygisk::Option;
@@ -101,6 +108,131 @@ api_table g_api{
 volatile int g_ctors_done = 0;
 __attribute__((constructor)) void mark_ctors_done() { g_ctors_done = 1; }
 
+/* ---- module pipeline ---------------------------------------------------- */
+
+/* Mirrors daemon/zygiskd.hpp; kept local to avoid a cross-tree include. */
+enum class ZdRequest : uint8_t {
+  GetModuleCount = 2,
+  GetModuleFd = 3,
+  ConnectCompanion = 4,
+};
+constexpr char kZygiskdSocket[] = "zygiskd64";
+
+bool read_all(int fd, void *buf, size_t n) {
+  auto *p = static_cast<uint8_t *>(buf);
+  while (n > 0) {
+    ssize_t r = read(fd, p, n);
+    if (r <= 0)
+      return false;
+    p += r;
+    n -= static_cast<size_t>(r);
+  }
+  return true;
+}
+
+/* Receive one fd over a connected unix socket (SCM_RIGHTS). */
+int recv_fd(int sock) {
+  char data = 0;
+  char cbuf[CMSG_SPACE(sizeof(int))] = {};
+  iovec io{&data, 1};
+  msghdr msg{};
+  msg.msg_iov = &io;
+  msg.msg_iovlen = 1;
+  msg.msg_control = cbuf;
+  msg.msg_controllen = sizeof(cbuf);
+  if (recvmsg(sock, &msg, 0) <= 0)
+    return -1;
+  for (cmsghdr *c = CMSG_FIRSTHDR(&msg); c != nullptr; c = CMSG_NXTHDR(&msg, c))
+    if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
+      int fd = -1;
+      memcpy(&fd, CMSG_DATA(c), sizeof(fd));
+      return fd;
+    }
+  return -1;
+}
+
+int connect_zygiskd() {
+  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (fd < 0)
+    return -1;
+  sockaddr_un addr{};
+  addr.sun_family = AF_UNIX;
+  size_t len = std::strlen(kZygiskdSocket);
+  memcpy(addr.sun_path + 1, kZygiskdSocket, len); // abstract: leading NUL
+  auto alen = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + 1 + len);
+  if (connect(fd, reinterpret_cast<sockaddr *>(&addr), alen) != 0) {
+    close(fd);
+    return -1;
+  }
+  return fd;
+}
+
+using module_entry_fn = void (*)(api_table *, JNIEnv *);
+
+void load_modules_impl(JNIEnv *env) {
+  int sock = connect_zygiskd();
+  if (sock < 0) {
+    LOGE("cannot connect zygiskd");
+    return;
+  }
+  auto req = static_cast<uint8_t>(ZdRequest::GetModuleCount);
+  uint32_t count = 0;
+  if (write(sock, &req, 1) != 1 || !read_all(sock, &count, sizeof(count))) {
+    close(sock);
+    return;
+  }
+  close(sock);
+  LOGI("zygiskd reports %u module(s)", count);
+
+  for (uint32_t i = 0; i < count; ++i) {
+    int s = connect_zygiskd();
+    if (s < 0)
+      continue;
+    req = static_cast<uint8_t>(ZdRequest::GetModuleFd);
+    if (write(s, &req, 1) != 1 || write(s, &i, sizeof(i)) != sizeof(i)) {
+      close(s);
+      continue;
+    }
+    int lib_fd = recv_fd(s);
+    close(s);
+    if (lib_fd < 0) {
+      LOGE("no fd for module %u", i);
+      continue;
+    }
+
+    android_dlextinfo ext{};
+    ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
+    ext.library_fd = lib_fd;
+    void *handle =
+        android_dlopen_ext("libzygiskmodule.so", RTLD_NOW | RTLD_LOCAL, &ext);
+    close(lib_fd);
+    if (handle == nullptr) {
+      LOGE("dlopen module %u failed: %s", i, dlerror());
+      continue;
+    }
+    auto entry =
+        reinterpret_cast<module_entry_fn>(dlsym(handle, "zygisk_module_entry"));
+    if (entry == nullptr) {
+      LOGE("module %u has no zygisk_module_entry", i);
+      continue;
+    }
+    entry(&g_api, env); // registerModule + onLoad
+  }
+  LOGI("loaded %zu module(s)", g_modules.size());
+}
+
+void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
+  for (auto &m : g_modules)
+    if (m.abi != nullptr && m.abi->preAppSpecialize != nullptr)
+      m.abi->preAppSpecialize(m.abi->impl, args);
+}
+
+void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
+  for (auto &m : g_modules)
+    if (m.abi != nullptr && m.abi->postAppSpecialize != nullptr)
+      m.abi->postAppSpecialize(m.abi->impl, args);
+}
+
 } // namespace
 
 extern "C" {
@@ -117,7 +249,14 @@ zygisk_core_entry(const char *self_path) {
   }
   LOGI("core entry, self=%s", self_path ? self_path : "(null)");
   zygisk_hook_bootstrap(self_path);
-  // TODO: connect to zygiskd for the module list/fds; run the per-fork
-  // pipeline.
   (void)g_api;
+}
+
+/* Bridges driven from hook.cpp's JNI specialize wrappers. */
+void zygisk_load_modules(JNIEnv *env) { load_modules_impl(env); }
+void zygisk_run_app_pre(zygisk::AppSpecializeArgs *args) {
+  run_app_pre_impl(args);
+}
+void zygisk_run_app_post(const zygisk::AppSpecializeArgs *args) {
+  run_app_post_impl(args);
 }
