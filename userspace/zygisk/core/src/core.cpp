@@ -13,7 +13,10 @@
 #include <android/log.h>
 #include <dlfcn.h>
 #include <regex.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/sysmacros.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -34,6 +37,10 @@ namespace {
 constexpr char kLogTag[] = "zygisk-core";
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, kLogTag, __VA_ARGS__)
+
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif // #ifndef MFD_CLOEXEC
 
 /* core-side api_table -- same memory layout as the module-side
  * zygisk::internal::api_table (impl + registerModule + 8 fn-ptr slots). We
@@ -291,6 +298,42 @@ uint32_t zd_get_flags(int uid) {
 
 using module_entry_fn = void (*)(api_table *, JNIEnv *);
 
+/* Copy a fd's contents into an app-domain memfd named "jit-cache" so the module
+ * loads from an anonymous in-memory file -- /proc/self/fd and /proc/maps then
+ * show /memfd:jit-cache, hiding the /data/adb/modules path. The app creating
+ * its OWN memfd is allowed (ART JIT does the same, anon_inode class); zygiskd's
+ * kernel-domain memfd was blocked crossing into the app. Returns the memfd, or
+ * -1 to fall back to the real fd. */
+int make_app_memfd(int src_fd) {
+  struct stat st{};
+  if (fstat(src_fd, &st) != 0 || st.st_size <= 0)
+    return -1;
+  size_t sz = static_cast<size_t>(st.st_size);
+  void *src = mmap(nullptr, sz, PROT_READ, MAP_PRIVATE, src_fd, 0);
+  if (src == MAP_FAILED)
+    return -1;
+  int mfd =
+      static_cast<int>(syscall(__NR_memfd_create, "jit-cache", MFD_CLOEXEC));
+  bool ok = mfd >= 0 && ftruncate(mfd, static_cast<off_t>(sz)) == 0;
+  if (ok) {
+    void *dst = mmap(nullptr, sz, PROT_READ | PROT_WRITE, MAP_SHARED, mfd, 0);
+    if (dst != MAP_FAILED) {
+      memcpy(dst, src, sz);
+      munmap(dst, sz);
+    } else {
+      ok = false;
+    }
+  }
+  munmap(src, sz);
+  if (!ok) {
+    if (mfd >= 0)
+      close(mfd);
+    return -1;
+  }
+  lseek(mfd, 0, SEEK_SET);
+  return mfd;
+}
+
 void load_modules_impl(JNIEnv *env) {
   if (!g_modules.empty())
     return; // already loaded in this process (called per-specialize)
@@ -324,11 +367,19 @@ void load_modules_impl(JNIEnv *env) {
       continue;
     }
 
+    // Re-stage into an app-domain memfd so the module fd reads as
+    // /memfd:jit-cache, not /data/adb/modules (hides /proc/self/fd + maps).
+    // Falls back to the real fd if memfd staging fails -- correctness first.
+    int mfd = make_app_memfd(lib_fd);
+    int load_fd = mfd >= 0 ? mfd : lib_fd;
+
     android_dlextinfo ext{};
     ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
-    ext.library_fd = lib_fd;
+    ext.library_fd = load_fd;
     void *handle =
         android_dlopen_ext("libzygiskmodule.so", RTLD_NOW | RTLD_LOCAL, &ext);
+    if (mfd >= 0)
+      close(mfd);
     close(lib_fd);
     if (handle == nullptr) {
       LOGE("dlopen module %u failed: %s", i, dlerror());
@@ -422,7 +473,7 @@ void hide_injection() {
   zloader::hide_from_solist("libzloader");
   // Offsets validated via dry-run; unload ALL module soinfos via the linker's
   // own soinfo_unload (keeps the namespace list + handle map consistent).
-  zloader::drop_module_from_solist("/data/adb/modules", false);
+  zloader::drop_module_from_solist("jit-cache", false);
 }
 
 void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
@@ -440,12 +491,12 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   // maps anonymization (app only). We're single-threaded here (post-specialize,
   // before the app starts business threads), so mremap over module code can't
   // race -- the crashes before came from spoofing later, in a pthread hook.
-  zloader::spoof_virtual_maps("/data/adb/modules");
+  zloader::spoof_virtual_maps("/memfd:jit-cache", true);
   // A module maps its own MAP_SHARED page (shows as "/dev/zero (deleted)",
   // fixed addr, r--s, one per app) that detectors flag as injection. It's
   // read-only and per-app, so anonymizing it (private copy, same addr) drops
   // the name without breaking the module.
-  zloader::spoof_virtual_maps("/dev/zero (deleted)");
+  zloader::spoof_virtual_maps("/dev/zero (deleted)", false);
   // Name any remaining bare [anonymous] executable VMAs (hook trampolines our
   // file-backed spoof doesn't cover) so they read as ART JIT, not injection.
   zloader::name_anonymous_exec();

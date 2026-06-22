@@ -31,7 +31,7 @@ int drop_module_from_solist(const char *path_substr, bool dry_run);
  * to an anonymous mapping and mremap it back FIXED, dropping the file path from
  * /proc/self/maps. MUST be called single-threaded (run_app_post) -- mremap over
  * executing code races. Returns the number of segments anonymized. */
-int spoof_virtual_maps(const char *path_substr);
+int spoof_virtual_maps(const char *path_substr, bool private_only);
 
 /* Label every bare [anonymous] executable VMA (hook trampolines that the
  * file-backed spoof can't reach) as ART JIT via PR_SET_VMA_ANON_NAME. Labels

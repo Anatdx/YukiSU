@@ -443,7 +443,7 @@ int drop_module_from_solist(const char *path_substr, bool dry_run) {
  * mremap over executing code can race, so this MUST be called single-threaded
  * (run_app_post: post-specialize, before the app starts business threads --
  * module code is not running). */
-int spoof_virtual_maps(const char *path_substr) {
+int spoof_virtual_maps(const char *path_substr, bool private_only) {
   struct Range {
     uintptr_t start, end;
     int prot;
@@ -462,6 +462,8 @@ int spoof_virtual_maps(const char *path_substr) {
     char perms[5] = {};
     if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) != 3)
       continue;
+    if (private_only && perms[3] != 'p')
+      continue; // skip shared mappings (e.g. ART's own memfd) when asked
     int prot = (perms[0] == 'r' ? PROT_READ : 0) |
                (perms[1] == 'w' ? PROT_WRITE : 0) |
                (perms[2] == 'x' ? PROT_EXEC : 0);
