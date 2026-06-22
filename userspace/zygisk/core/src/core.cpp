@@ -12,6 +12,7 @@
 #include <android/dlext.h>
 #include <android/log.h>
 #include <dlfcn.h>
+#include <regex.h>
 #include <sys/socket.h>
 #include <sys/sysmacros.h>
 #include <sys/un.h>
@@ -77,28 +78,43 @@ void api_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
   zygisk_plt_hook_register(dev, inode, symbol, new_func, old_func);
 }
 
-/* v1/v2 pltHookRegister: (lib, symbol, newFn, oldFn) -- resolve the lib's
- * dev/inode from /proc/self/maps then hook by symbol. (v1 used a path regex;
- * a substring match covers the usual "libfoo.so".) */
-void api_plt_hook_register_byname(const char *lib, const char *symbol,
+/* v1/v2 pltHookRegister: (path_regex, symbol, newFn, oldFn). The first argument
+ * is a path *regex* matched against /proc/self/maps -- the Magisk/NeoZygisk
+ * contract real v1/v2 modules are written against -- not a literal substring.
+ * POSIX basic regex (REG_NOSUB, like the references) keeps '+'/'(' literal so
+ * "libc++.so" works, while honoring '.'/'*'/'$'/'[...]' so an anchored
+ * "libfoo\\.so$" matches and won't catch "libfoobar.so". Each mapped ELF has
+ * exactly one segment at file offset 0 (the header), so matching only those
+ * registers each library once -- and a regex that spans several libraries hooks
+ * them all. */
+void api_plt_hook_register_byname(const char *path_regex, const char *symbol,
                                   void *new_func, void **old_func) {
-  FILE *f = fopen("/proc/self/maps", "re");
-  if (f == nullptr)
+  if (path_regex == nullptr || symbol == nullptr || new_func == nullptr)
     return;
+  regex_t re;
+  if (regcomp(&re, path_regex, REG_NOSUB) != 0)
+    return;
+  FILE *f = fopen("/proc/self/maps", "re");
+  if (f == nullptr) {
+    regfree(&re);
+    return;
+  }
   char line[512];
   while (fgets(line, sizeof(line), f) != nullptr) {
     unsigned long start = 0, end = 0, off = 0, inode = 0;
     unsigned int maj = 0, min = 0;
     char perms[8] = {}, path[256] = {};
     if (sscanf(line, "%lx-%lx %7s %lx %x:%x %lu %255s", &start, &end, perms,
-               &off, &maj, &min, &inode, path) == 8 &&
-        std::strstr(path, lib) != nullptr) {
+               &off, &maj, &min, &inode, path) != 8)
+      continue;
+    if (off != 0 || perms[0] != 'r' || inode == 0)
+      continue; // ELF header segment of a file-backed lib -> one hit per lib
+    if (regexec(&re, path, 0, nullptr, 0) == 0)
       zygisk_plt_hook_register(makedev(maj, min), static_cast<ino_t>(inode),
                                symbol, new_func, old_func);
-      break;
-    }
   }
   fclose(f);
+  regfree(&re);
 }
 
 /* v1/v2 pltHookExclude -- lsplt has no exclusion list; no-op. */
