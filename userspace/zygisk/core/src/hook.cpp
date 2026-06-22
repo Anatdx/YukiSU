@@ -274,6 +274,13 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (run_modules)
              zygisk_run_app_post(&args);
+           // A child zygote keeps forking apps via forkRepeatedly, whose native
+           // FileDescriptorTable::Restat aborts on any /data/adb/modules fd.
+           // The modules' hooks are already mapped in memory, so the leftover
+           // .so fds are dead weight here -- drop them now that specialize
+           // finished, before the child zygote enters its fork loop.
+           if (is_child_zygote && ctx.pid == 0)
+             close_inherited_module_fds();
            g_ctx = nullptr;
            return pid;
          })},
@@ -330,6 +337,13 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            mount_storage_dirs, mount_sysprop_overrides);
            if (run_modules)
              zygisk_run_app_post(&args);
+           // A child zygote keeps forking apps via forkRepeatedly, whose native
+           // FileDescriptorTable::Restat aborts on any /data/adb/modules fd.
+           // The modules' hooks are already mapped in memory, so the leftover
+           // .so fds are dead weight here -- drop them now that specialize
+           // finished, before the child zygote enters its fork loop.
+           if (is_child_zygote && ctx.pid == 0)
+             close_inherited_module_fds();
            g_ctx = nullptr;
            return pid;
          })},
