@@ -58,8 +58,11 @@ int ensure_yukizygisk(bool ignore_if_exist) {
             continue;
         }
 
+        // Skip only when an identically-sized copy is already staged. A size
+        // mismatch means the embedded payload changed (new build) -- overwrite
+        // it, otherwise a stale lib would never be replaced across updates.
         struct stat st{};
-        if (ignore_if_exist && stat(p.dest, &st) == 0) {
+        if (ignore_if_exist && stat(p.dest, &st) == 0 && static_cast<size_t>(st.st_size) == size) {
             continue;
         }
         if (!copy_asset_to_file(p.asset, p.dest)) {
