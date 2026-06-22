@@ -149,6 +149,11 @@ static bool zp_argv1_is_xzygote(struct mm_struct *mm)
  */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libzloader.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
+/* Names shown for the staged memfds in the target's /proc/pid/maps. Kept
+ * innocuous (NOT libzygisk/libzloader) to dodge string-match detectors; full
+ * maps anonymisation is a separate, later step. */
+#define ZP_LOADER_VMA_NAME "jit-cache"
+#define ZP_CORE_VMA_NAME "jit-cache"
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
 
@@ -474,14 +479,14 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		 * the loader (and closes its own fd), then passes the core fd
 		 * to the loader entry, which dlopens the core and closes that
 		 * fd. */
-		loader_fd = zp_stage_fd(ZP_LOADER_PATH, "libzloader.so");
+		loader_fd = zp_stage_fd(ZP_LOADER_PATH, ZP_LOADER_VMA_NAME);
 		if (loader_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage loader "
 				"failed: %d, skipping\n",
 				current->pid, loader_fd);
 			goto out;
 		}
-		core_fd = zp_stage_fd(ZP_CORE_PATH, "libzygisk.so");
+		core_fd = zp_stage_fd(ZP_CORE_PATH, ZP_CORE_VMA_NAME);
 		if (core_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage core "
 				"failed: %d, skipping\n",
