@@ -199,13 +199,9 @@ int ensure_binaries(bool ignore_if_exist) {
         
         const std::string dest = std::string(BINARY_DIR) + name;
         
-        if (ignore_if_exist) {
-            struct stat st{};
-            if (stat(dest.c_str(), &st) == 0) {
-                continue;
-            }
-        }
-        
+        // Unconditionally overwrite so a stale binary from an older build is
+        // never left behind (copy_asset_to_file removes the dest first).
+        (void)ignore_if_exist;
         if (!copy_asset_to_file(name, dest)) {
             LOGE("Failed to extract binary: %s", name.c_str());
             return 1;
@@ -213,25 +209,32 @@ int ensure_binaries(bool ignore_if_exist) {
         chmod(dest.c_str(), 0755);
     }
     
-    // Ensure multi-call symlinks exist.
+    // Ensure the multi-call entries are symlinks to ksud -- NOT real files. A
+    // real busybox/ksud binary (e.g. left by another manager or an older build)
+    // would shadow the multi-call dispatch, so unless the path is already the
+    // correct symlink (verified via readlink), drop whatever is there -- real
+    // file, wrong link, or nothing -- and recreate the link.
     struct stat st{};
-    if (stat(DAEMON_PATH, &st) == 0 && stat(DAEMON_LINK_PATH, &st) != 0) {
-        unlink(DAEMON_LINK_PATH);  // Remove if broken symlink
-        if (symlink(DAEMON_PATH, DAEMON_LINK_PATH) != 0) {
-            LOGW("Failed to create ksud symlink: %s", strerror(errno));
-        } else {
-            LOGI("Created ksud symlink: %s -> %s", DAEMON_LINK_PATH, DAEMON_PATH);
-        }
-    }
-
-    const std::string busybox_link = std::string(BINARY_DIR) + "busybox";
-    if (stat(DAEMON_PATH, &st) == 0 && stat(busybox_link.c_str(), &st) != 0) {
-        unlink(busybox_link.c_str());
-        if (symlink(DAEMON_PATH, busybox_link.c_str()) != 0) {
-            LOGW("Failed to create busybox symlink: %s", strerror(errno));
-        } else {
-            LOGI("Created busybox symlink: %s -> %s", busybox_link.c_str(), DAEMON_PATH);
-        }
+    if (stat(DAEMON_PATH, &st) == 0) {
+        auto ensure_link = [](const char* link, const char* tag) {
+            char cur[512];
+            ssize_t n = readlink(link, cur, sizeof(cur) - 1);
+            if (n > 0) {
+                cur[n] = '\\0';
+                if (strcmp(cur, DAEMON_PATH) == 0) {
+                    return;  // already the correct symlink -> leave it
+                }
+            }
+            unlink(link);  // real file / wrong link / missing -> replace
+            if (symlink(DAEMON_PATH, link) != 0) {
+                LOGW("Failed to create %s symlink: %s", tag, strerror(errno));
+            } else {
+                LOGI("Created %s symlink: %s -> %s", tag, link, DAEMON_PATH);
+            }
+        };
+        const std::string busybox_link = std::string(BINARY_DIR) + "busybox";
+        ensure_link(DAEMON_LINK_PATH, "ksud");
+        ensure_link(busybox_link.c_str(), "busybox");
     }
     
     return 0;
