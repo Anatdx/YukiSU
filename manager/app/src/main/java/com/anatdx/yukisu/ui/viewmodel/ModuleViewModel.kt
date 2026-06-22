@@ -17,6 +17,9 @@ import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.ui.util.HanziToPinyin
 import com.anatdx.yukisu.ui.util.listModules
 import com.anatdx.yukisu.ui.util.getRootShell
+import com.anatdx.yukisu.ui.util.getFeatureValue
+import com.anatdx.yukisu.ui.util.toggleModule
+import com.anatdx.yukisu.ui.util.ZYGISK_IMPL_MODULE_IDS
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -92,6 +95,11 @@ class ModuleViewModel : ViewModel() {
         private set
     var search by mutableStateOf("")
 
+    /** True when built-in YukiZygisk is on; the UI then force-disables and locks
+     *  conflicting third-party zygisk implementations (see ZYGISK_IMPL_MODULE_IDS). */
+    var yukiZygiskEnabled by mutableStateOf(false)
+        private set
+
     var sortEnabledFirst by mutableStateOf(false)
     var sortActionFirst by mutableStateOf(false)
     val moduleList by derivedStateOf {
@@ -142,11 +150,17 @@ class ModuleViewModel : ViewModel() {
 
                 Log.i(TAG, "result: $result")
 
+                // Built-in YukiZygisk excludes third-party zygisk impls; show them disabled when on.
+                val yukiZygiskOn = getFeatureValue("yukizygisk")
+                yukiZygiskEnabled = yukiZygiskOn
+
                 val array = JSONArray(result)
                 val moduleInfos = (0 until array.length())
                     .asSequence()
                     .map { array.getJSONObject(it) }
                     .map { obj ->
+                        val dirId = obj.optString("dir_id", obj.getString("id"))
+                        val forceOff = yukiZygiskOn && dirId in ZYGISK_IMPL_MODULE_IDS
                         ModuleInfo(
                             obj.getString("id"),
                             obj.optString("name"),
@@ -154,20 +168,29 @@ class ModuleViewModel : ViewModel() {
                             obj.optString("version", "Unknown"),
                             obj.getIntCompat("versionCode", 0),
                             obj.optString("description"),
-                            obj.getBooleanCompat("enabled"),
+                            obj.getBooleanCompat("enabled") && !forceOff,
                             obj.getBooleanCompat("update"),
                             obj.getBooleanCompat("remove"),
                             obj.optString("updateJson"),
                             obj.getBooleanCompat("web"),
                             obj.getBooleanCompat("action"),
                             obj.getBooleanCompat("metamodule"),
-                            obj.optString("dir_id", obj.getString("id")),
+                            dirId,
                             obj.optString("actionIcon").takeIf { it.isNotBlank() },
                             obj.optString("webuiIcon").takeIf { it.isNotBlank() }
                         )
                     }.toList()
 
                 modules = moduleInfos
+
+                // Persist the disable flag so locked impls truly don't load (idempotent).
+                if (yukiZygiskOn) {
+                    moduleInfos.forEach { m ->
+                        if (m.dirId in ZYGISK_IMPL_MODULE_IDS) {
+                            runCatching { toggleModule(m.dirId, false) }
+                        }
+                    }
+                }
 
                 launch {
                     modules.forEach { module ->

@@ -842,15 +842,18 @@ fun getMetaModuleImplement(): String {
     }
 }
 
-fun getZygiskImplement(): String {
-    val zygiskModuleIds = listOf(
-        "zygisksu",
-        "rezygisk",
-        "shirokozygisk"
-    )
+/** Module IDs of known third-party Zygisk implementations ("zygisksu" covers
+ *  both ZygiskNext and NeoZygisk -- they share that id). Built-in YukiZygisk is
+ *  a kernel feature (detected via its flag), not a module, so it's not here.
+ *  These are the implementations YukiZygisk force-disables to avoid conflicts. */
+val ZYGISK_IMPL_MODULE_IDS = listOf("zygisksu", "rezygisk")
 
-    for (moduleId in zygiskModuleIds) {
-        // 忽略禁用/即将删除
+suspend fun getZygiskImplement(): String = withContext(Dispatchers.IO) {
+    // Built-in YukiZygisk wins: it's a kernel feature, not a /data/adb module.
+    if (getFeatureValue("yukizygisk")) return@withContext "YukiZygisk"
+
+    for (moduleId in ZYGISK_IMPL_MODULE_IDS) {
+        // skip disabled / pending-removal modules
         if (SuFile.open("/data/adb/modules/$moduleId/disable").isFile || SuFile.open("/data/adb/modules/$moduleId/remove").isFile) continue
 
         val propFile = SuFile.open("/data/adb/modules/$moduleId/module.prop")
@@ -861,11 +864,11 @@ fun getZygiskImplement(): String {
 
         val name = prop.getProperty("name")
         Log.i(TAG, "Zygisk implement: $name")
-        return name
+        return@withContext name
     }
 
     Log.i(TAG, "Zygisk implement: None")
-    return "None"
+    "None"
 }
 
 fun addUmountPath(path: String, flags: Int): Boolean {

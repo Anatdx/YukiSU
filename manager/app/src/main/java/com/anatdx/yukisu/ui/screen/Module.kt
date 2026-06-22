@@ -1530,6 +1530,9 @@ fun ModuleItem(
         var localEnabled by remember(module.enabled) { mutableStateOf(module.enabled) }
         val scope = rememberCoroutineScope()
 
+        // When built-in YukiZygisk is on, conflicting third-party zygisk impls are locked off.
+        val conflictDisabled = viewModel.yukiZygiskEnabled && module.dirId in ZYGISK_IMPL_MODULE_IDS
+
         val sizeStr = remember(module.dirId) {
             viewModel.getModuleSize(module.dirId)
         }
@@ -1636,7 +1639,7 @@ fun ModuleItem(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     Switch(
-                        enabled = !module.update,
+                        enabled = !module.update && !conflictDisabled,
                         checked = localEnabled,
                         onCheckedChange = { newChecked ->
                             localEnabled = newChecked
@@ -1664,6 +1667,17 @@ fun ModuleItem(
                 maxLines = 4,
                 textDecoration = textDecoration,
             )
+
+            if (conflictDisabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.module_disabled_by_yukizygisk),
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
+                    fontFamily = MaterialTheme.typography.bodySmall.fontFamily,
+                )
+            }
 
             if (!isHideTagRow) {
                 Spacer(modifier = Modifier.height(12.dp))
