@@ -131,6 +131,31 @@ void ctx_fork_pre(ZygiskContext *ctx) {
   }
 }
 
+/* child_zygote / isolated: we don't load modules there, but the process can
+ * inherit module .so fds from its parent app (e.g. magica's app_zygote). The
+ * native FileDescriptorTable check (forkRepeatedly / specialize) aborts on any
+ * fd under /data/adb/modules, so drop them. Safe -- these children never use
+ * the module fds. */
+void close_inherited_module_fds() {
+  DIR *d = opendir("/proc/self/fd");
+  if (d == nullptr)
+    return;
+  int dfd = dirfd(d);
+  char target[256];
+  for (dirent *e; (e = readdir(d)) != nullptr;) {
+    int fd = atoi(e->d_name);
+    if (fd < 0 || fd == dfd)
+      continue;
+    ssize_t n = readlinkat(dfd, e->d_name, target, sizeof(target) - 1);
+    if (n <= 0)
+      continue;
+    target[n] = '\0';
+    if (strstr(target, "/data/adb/modules") != nullptr)
+      close(fd);
+  }
+  closedir(d);
+}
+
 /* In the child, before the native fd check: push exempted fds into the
  * fds_to_ignore arg (the native skips those), then close every fd that is not
  * a zygote-native fd -- clearing the module-opened dir/companion fds that
@@ -226,6 +251,10 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
+           } else if (ctx.pid == 0) {
+             // child_zygote / isolated: not injected, but drop any inherited
+             // /data/adb/modules fd so the native fd check doesn't abort.
+             close_inherited_module_fds();
            }
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
@@ -283,6 +312,8 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
+           } else if (ctx.pid == 0) {
+             close_inherited_module_fds(); // child_zygote/isolated: drop leaks
            }
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
