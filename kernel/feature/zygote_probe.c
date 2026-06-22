@@ -6,6 +6,7 @@
  */
 
 #include <linux/binfmts.h>
+#include <linux/compat.h>
 #include <linux/compiler.h>
 #include <linux/cred.h>
 #include <linux/printk.h>
@@ -299,6 +300,21 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		goto out;
 	if (!zp_argv1_is_xzygote(mm))
 		goto out;
+
+#ifdef CONFIG_COMPAT
+	/*
+	 * A 32-bit secondary zygote (app_process32 -Xzygote) reaches here too,
+	 * but the auxv walk below uses 64-bit words and the injected stub is
+	 * AArch64 -- both wrong for a compat task. Until a 32-bit loader/stub
+	 * exists, leave 32-bit zygotes uninjected rather than corrupt them.
+	 */
+	if (is_compat_task()) {
+		pr_info(
+		    "zygote_probe: pid=%d 32-bit zygote, skipping injection\n",
+		    current->pid);
+		goto out;
+	}
+#endif // #ifdef CONFIG_COMPAT
 
 	for (k = 0; k < AT_VECTOR_SIZE - 1; k += 2) {
 		/* AT_ENTRY + AT_BASE (linker load base) from the saved copy */
