@@ -242,18 +242,21 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           // A child zygote (webview_zygote / app_zygote) is not an app: skip
-           // modules here. It inherits our JNI hooks and injects its OWN forked
-           // apps, where onLoad then runs in the real app's context.
-           bool run_modules =
-               ctx.pid == 0 && !is_isolated(uid) && !is_child_zygote;
+           // A child zygote (webview_zygote / app_zygote) inherits our JNI
+           // hooks and, when it serves a module scope, carries module .so fds.
+           // Like NeoZygisk we run the full load + sanitize for it too, so a
+           // module's exemptFd lands in fds_to_ignore and sanitize_fds drops
+           // the rest -- otherwise the child zygote's own later forkRepeatedly
+           // pre-fork fd scan aborts on a /data/adb/modules fd ('Not
+           // allowlisted').
+           bool run_modules = ctx.pid == 0 && !is_isolated(uid);
            if (run_modules) {
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
            } else if (ctx.pid == 0) {
-             // child_zygote / isolated: not injected, but drop any inherited
-             // /data/adb/modules fd so the native fd check doesn't abort.
+             // isolated: not injected, but drop any inherited /data/adb/modules
+             // fd so the native fd check doesn't abort.
              close_inherited_module_fds();
            }
            auto orig = reinterpret_cast<jint (*)(
@@ -303,17 +306,16 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           // A child zygote (webview_zygote / app_zygote) is not an app: skip
-           // modules here. It inherits our JNI hooks and injects its OWN forked
-           // apps, where onLoad then runs in the real app's context.
-           bool run_modules =
-               ctx.pid == 0 && !is_isolated(uid) && !is_child_zygote;
+           // See above: child zygotes run the full pipeline too, so module fds
+           // are sanitized / exempted instead of aborting a later
+           // forkRepeatedly.
+           bool run_modules = ctx.pid == 0 && !is_isolated(uid);
            if (run_modules) {
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
            } else if (ctx.pid == 0) {
-             close_inherited_module_fds(); // child_zygote/isolated: drop leaks
+             close_inherited_module_fds(); // isolated: drop inherited leaks
            }
            auto orig = reinterpret_cast<jint (*)(
                JNIEnv *, jclass, jint, jint, jintArray, jint, jobjectArray,
