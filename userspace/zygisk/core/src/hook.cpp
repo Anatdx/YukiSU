@@ -217,7 +217,12 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           if (ctx.pid == 0 && !is_isolated(uid)) { // non-isolated child
+           // A child zygote (webview_zygote / app_zygote) is not an app: skip
+           // modules here. It inherits our JNI hooks and injects its OWN forked
+           // apps, where onLoad then runs in the real app's context.
+           bool run_modules =
+               ctx.pid == 0 && !is_isolated(uid) && !is_child_zygote;
+           if (run_modules) {
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
@@ -235,7 +240,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                     fds_to_ignore, is_child_zygote, instruction_set,
                     app_data_dir, is_top_app, pkg_data_info_list,
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
-           if (ctx.pid == 0 && !is_isolated(uid))
+           if (run_modules)
              zygisk_run_app_post(&args);
            g_ctx = nullptr;
            return pid;
@@ -269,7 +274,12 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           if (ctx.pid == 0 && !is_isolated(uid)) { // non-isolated child
+           // A child zygote (webview_zygote / app_zygote) is not an app: skip
+           // modules here. It inherits our JNI hooks and injects its OWN forked
+           // apps, where onLoad then runs in the real app's context.
+           bool run_modules =
+               ctx.pid == 0 && !is_isolated(uid) && !is_child_zygote;
+           if (run_modules) {
              zygisk_load_modules(env); // dlopen + onLoad here, in the child
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
@@ -285,7 +295,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            app_data_dir, is_top_app, pkg_data_info_list,
                            allowlisted_data_info, mount_data_dirs,
                            mount_storage_dirs, mount_sysprop_overrides);
-           if (ctx.pid == 0 && !is_isolated(uid))
+           if (run_modules)
              zygisk_run_app_post(&args);
            g_ctx = nullptr;
            return pid;
