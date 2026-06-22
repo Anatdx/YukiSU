@@ -491,11 +491,12 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   // maps anonymization (app only). We're single-threaded here (post-specialize,
   // before the app starts business threads), so mremap over module code can't
   // race -- the crashes before came from spoofing later, in a pthread hook.
-  // Kernel-injected libzygisk/libzloader show as "/jit-cache (deleted)" r-xp;
-  // core's own module memfds as "/memfd:jit-cache". Match the "jit-cache"
-  // substring (private only, so ART's r--s /memfd:jit-cache data view is left
-  // alone) so name_anonymous_exec can relabel them as ART JIT afterwards.
-  zloader::spoof_virtual_maps("jit-cache", true);
+  // core's own module memfds map as "/memfd:jit-cache"; anonymize those only.
+  // Do NOT match the kernel-injected libzygisk/libzloader ("/jit-cache" r-xp):
+  // that IS the code running spoof_virtual_maps right now, so mremap'ing it
+  // SEGVs the process and boot-loops the device. Hiding libzygisk's own segment
+  // needs an unmap-self trampoline first (separate work).
+  zloader::spoof_virtual_maps("/memfd:jit-cache", true);
   // A module maps its own MAP_SHARED page (shows as "/dev/zero (deleted)",
   // fixed addr, r--s, one per app) that detectors flag as injection. It's
   // read-only and per-app, so anonymizing it (private copy, same addr) drops
