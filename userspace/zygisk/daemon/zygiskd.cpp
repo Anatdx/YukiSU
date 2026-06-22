@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <dlfcn.h>
@@ -251,6 +252,7 @@ struct Companion {
   bool has_entry = false;
 };
 std::vector<Companion> g_companions; // indexed like g_modules, spawned lazily
+constexpr int kCompanionReadyMs = 5000; // bound on a companion's startup
 
 /* Ensure module idx has a live companion; return whether it exposes an entry.
  */
@@ -277,10 +279,26 @@ bool ensure_companion(uint32_t idx) {
     companion_main(g_modules[idx].lib_path, sv[1]); // never returns
   }
   close(sv[1]);
+
+  // Bounded wait for the readiness byte. A module whose dlopen wedges -- or a
+  // companion that dies before announcing -- must not block the single-threaded
+  // daemon, which would starve every app of module fds. On timeout or error,
+  // kill and reap it; c stays default {pid=-1} so a later request re-spawns.
+  pollfd pfd{sv[0], POLLIN, 0};
+  uint8_t ready = 0;
+  if (poll(&pfd, 1, kCompanionReadyMs) != 1 || !(pfd.revents & POLLIN) ||
+      !read_exact(sv[0], &ready, 1)) {
+    DLOGE("companion for '%s' pid=%d not ready in %dms; killing",
+          g_modules[idx].name.c_str(), pid, kCompanionReadyMs);
+    kill(pid, SIGKILL);
+    waitpid(pid, nullptr, 0);
+    close(sv[0]);
+    return false;
+  }
+
   c.pid = pid;
   c.ctrl = sv[0];
-  uint8_t ready = 0;
-  c.has_entry = read_exact(c.ctrl, &ready, 1) && ready == 1;
+  c.has_entry = (ready == 1);
   DLOGI("companion for '%s' pid=%d entry=%d", g_modules[idx].name.c_str(), pid,
         c.has_entry);
   return c.has_entry;
