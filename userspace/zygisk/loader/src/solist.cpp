@@ -1,12 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - libzloader.so: unlink injected libs from the linker solist.
+ * YukiZygisk - libzloader.so: hide the injection from solist/maps scanners.
  *
- * Approach (learned from NeoZygisk/ReZygisk, implemented from scratch): resolve
- * a few internal linker symbols from linker64's .symtab, walk the soinfo list,
- * and splice our entry out of it under ProtectedDataGuard. We DON'T call
- * soinfo_unload -- we only re-link pointers, so the mapping (our code)
- * survives.
+ * Approach (learned from NeoZygisk/ReZygisk, implemented from scratch):
+ *  - hide_from_solist re-links our own injected libs out of the solist (they're
+ *    never queried, so a pointer splice under ProtectedDataGuard suffices);
+ *  - drop_module_from_solist unloads modules (which ARE queried) via the
+ *    linker's own soinfo_unload, keeping solist + namespace + handle map in
+ *    sync, with setSize(0) so the module code stays mapped;
+ *  - spoof_virtual_maps / name_anonymous_exec anonymise module segments and
+ *    label leftover anon executable VMAs as ART JIT.
  *
  * Author: Anatdx
  */
@@ -17,13 +20,22 @@
 
 #include <elf.h>
 #include <fcntl.h>
+#include <link.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+
+#ifndef PR_SET_VMA
+#define PR_SET_VMA 0x53564d41
+#endif // #ifndef PR_SET_VMA
+#ifndef PR_SET_VMA_ANON_NAME
+#define PR_SET_VMA_ANON_NAME 0
+#endif // #ifndef PR_SET_VMA_ANON_NAME
 
 namespace zloader {
 namespace {
@@ -157,6 +169,158 @@ inline void soinfo_set_next(void *si, void *next) {
       next;
 }
 
+/* ---- NeoZygisk-style proper module unload --------------------------------
+ * The simple re-link above is only safe for OUR injected libs (never queried
+ * via dlsym/dlopen-handle/dl_iterate_phdr). Dropping a *module* (LSPosed etc.,
+ * which IS queried) requires the linker's own soinfo_unload so the global
+ * solist, the namespace soinfo list AND g_soinfo_handles_map are updated
+ * together -- a plain re-link leaves the latter two dangling and crashes the
+ * app. setSize(0) makes unload skip munmap, so module code keeps running. */
+size_t g_size_off = 0, g_next_off = 0, g_ctor_off = 0;
+void (*g_soinfo_unload)(void *) = nullptr;
+uint64_t *g_load_counter = nullptr;
+realpath_fn g_realpath_u = nullptr;
+guard_fn g_pdg_ctor_u = nullptr, g_pdg_dtor_u = nullptr;
+void *g_solist_head = nullptr;
+bool g_unload_done = false, g_unload_ok = false;
+
+constexpr size_t kSizeBlockRange = 1024; /* bytes scanned for soinfo fields */
+constexpr size_t kSizeMax = 0x100000;
+constexpr size_t kSizeMin = 0x100;
+
+inline void *u_next(void *si) {
+  return *reinterpret_cast<void **>(reinterpret_cast<uintptr_t>(si) +
+                                    g_next_off);
+}
+inline size_t u_size(void *si) {
+  return *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(si) +
+                                     g_size_off);
+}
+inline void u_set_size(void *si, size_t v) {
+  *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(si) + g_size_off) = v;
+}
+inline void u_set_ctor(void *si, bool v) {
+  *reinterpret_cast<size_t *>(reinterpret_cast<uintptr_t>(si) + g_ctor_off) =
+      v ? 1 : 0;
+}
+
+/* Probe soinfo field offsets at runtime (robust across versions): size = a
+ * sane-range field of somain; next = a solinker field pointing at somain/vdso;
+ * constructor_called = the bool right after the embedded link_map whose l_name
+ * is the linker. somain/solinker/vdso are soinfo*; linker_path = linker
+ * realpath. Returns true only if all three offsets were found. */
+bool u_probe_offsets(void *somain, void *solinker, void *vdso,
+                     const char *linker_path) {
+  bool size_ok = false, next_ok = false, ctor_ok = false;
+  for (size_t i = 0; i < kSizeBlockRange / sizeof(void *); ++i) {
+    if (!size_ok) {
+      size_t v = *reinterpret_cast<size_t *>(
+          reinterpret_cast<uintptr_t>(somain) + i * sizeof(void *));
+      if (v > kSizeMin && v < kSizeMax) {
+        g_size_off = i * sizeof(void *);
+        size_ok = true;
+        continue;
+      }
+    }
+    if (!size_ok)
+      continue;
+    uintptr_t field =
+        reinterpret_cast<uintptr_t>(solinker) + i * sizeof(void *);
+    if (!next_ok) {
+      void *nx = *reinterpret_cast<void **>(field);
+      if (nx == somain || (vdso != nullptr && nx == vdso)) {
+        g_next_off = i * sizeof(void *);
+        next_ok = true;
+        continue;
+      }
+    }
+    if (!next_ok)
+      continue;
+    if (!ctor_ok) {
+      auto *lm = reinterpret_cast<link_map *>(field);
+      size_t gap = (sizeof(link_map) + sizeof(void *) - 1) / sizeof(void *);
+      uintptr_t fwd = field + gap * sizeof(void *);
+      if (*reinterpret_cast<bool *>(fwd) && lm->l_addr != 0 &&
+          lm->l_name != nullptr && strcmp(linker_path, lm->l_name) == 0) {
+        g_ctor_off = fwd - reinterpret_cast<uintptr_t>(solinker);
+        ctor_ok = true;
+        i += gap;
+        continue;
+      }
+    }
+  }
+  return size_ok && next_ok && ctor_ok;
+}
+
+/* Resolve linker symbols + probe offsets, once per process. */
+bool u_init() {
+  if (g_unload_done)
+    return g_unload_ok;
+  g_unload_done = true;
+
+  LinkerSyms syms;
+  if (!syms.init())
+    return false;
+
+  uintptr_t head_var = syms.find("__dl__ZL8solinker");
+  if (head_var == 0)
+    head_var = syms.find("__dl__ZL6solist");
+  uintptr_t somain_var = syms.find("__dl__ZL6somain");
+  uintptr_t vdso_var = syms.find("__dl__ZL4vdso");
+  g_soinfo_unload = reinterpret_cast<void (*)(void *)>(
+      syms.find("__dl__ZL13soinfo_unloadP6soinfo"));
+  g_load_counter = reinterpret_cast<uint64_t *>(
+      syms.find("__dl__ZL21g_module_load_counter"));
+  g_realpath_u = reinterpret_cast<realpath_fn>(
+      syms.find("__dl__ZNK6soinfo12get_realpathEv"));
+  g_pdg_ctor_u =
+      reinterpret_cast<guard_fn>(syms.find("__dl__ZN18ProtectedDataGuardC2Ev"));
+  if (g_pdg_ctor_u == nullptr)
+    g_pdg_ctor_u = reinterpret_cast<guard_fn>(
+        syms.find("__dl__ZN18ProtectedDataGuardC1Ev"));
+  g_pdg_dtor_u =
+      reinterpret_cast<guard_fn>(syms.find("__dl__ZN18ProtectedDataGuardD2Ev"));
+  if (g_pdg_dtor_u == nullptr)
+    g_pdg_dtor_u = reinterpret_cast<guard_fn>(
+        syms.find("__dl__ZN18ProtectedDataGuardD1Ev"));
+
+  if (head_var == 0 || somain_var == 0 || g_soinfo_unload == nullptr ||
+      g_realpath_u == nullptr || g_pdg_ctor_u == nullptr ||
+      g_pdg_dtor_u == nullptr) {
+    SLOGE("solist-unload: missing syms (head=%d somain=%d unload=%d rp=%d "
+          "guard=%d)",
+          head_var != 0, somain_var != 0, g_soinfo_unload != nullptr,
+          g_realpath_u != nullptr,
+          g_pdg_ctor_u != nullptr && g_pdg_dtor_u != nullptr);
+    return false;
+  }
+
+  g_solist_head = *reinterpret_cast<void **>(head_var);
+  void *somain = *reinterpret_cast<void **>(somain_var);
+  void *vdso = vdso_var != 0 ? *reinterpret_cast<void **>(vdso_var) : nullptr;
+  if (g_solist_head == nullptr || somain == nullptr)
+    return false;
+
+  const char *hp = g_realpath_u(g_solist_head);
+  if (hp == nullptr || strstr(hp, "linker") == nullptr) {
+    SLOGE("solist-unload: head realpath '%s' not linker-like",
+          hp != nullptr ? hp : "(null)");
+    return false;
+  }
+
+  if (!u_probe_offsets(somain, g_solist_head, vdso, hp)) {
+    SLOGE("solist-unload: offset probe failed [size=%zu next=%zu ctor=%zu]",
+          g_size_off, g_next_off, g_ctor_off);
+    return false;
+  }
+
+  SLOGI("solist-unload: ready [size=%zu next=%zu ctor=%zu] unload=%p",
+        g_size_off, g_next_off, g_ctor_off,
+        reinterpret_cast<void *>(g_soinfo_unload));
+  g_unload_ok = true;
+  return true;
+}
+
 } // namespace
 
 int hide_from_solist(const char *path_substr) {
@@ -235,6 +399,134 @@ int hide_from_solist(const char *path_substr) {
 
   SLOGI("solist: hid %d entry(ies) matching '%s'", hidden, path_substr);
   return hidden;
+}
+
+int drop_module_from_solist(const char *path_substr, bool dry_run) {
+  if (!u_init())
+    return 0;
+
+  int n = 0;
+  char guard_obj[16] = {}; /* dummy `this`; guard touches only linker globals */
+  g_pdg_ctor_u(guard_obj);
+  void *cur = g_solist_head;
+  for (int i = 0; i < kMaxWalk && cur != nullptr; ++i) {
+    void *next = u_next(cur); /* save before soinfo_unload mutates the list */
+    const char *p = g_realpath_u(cur);
+    if (p != nullptr && strstr(p, path_substr) != nullptr && u_size(cur) > 0) {
+      if (dry_run) {
+        SLOGI("solist-unload[dry]: would drop %s (size=%zu)", p, u_size(cur));
+      } else {
+        SLOGI("solist-unload: dropping %s", p);
+        u_set_size(cur, 0);     /* skip munmap -> module code survives */
+        u_set_ctor(cur, false); /* don't run the module's DT_FINI */
+        g_soinfo_unload(cur); /* linker removes it from solist+ns+handle map */
+        u_set_ctor(cur, true);
+        if (g_load_counter != nullptr && *g_load_counter > 0)
+          --(*g_load_counter);
+      }
+      ++n;
+    }
+    cur = next;
+  }
+  g_pdg_dtor_u(guard_obj);
+  SLOGI("solist-unload: %s %d module seg(s) matching '%s'",
+        dry_run ? "[dry] found" : "dropped", n, path_substr);
+  return n;
+}
+
+/* ---- maps anonymization --------------------------------------------------
+ * Detectors read /proc/self/maps and flag the module's real path
+ * (/data/adb/modules/.../so). soinfo_unload hides modules from dl_iterate_phdr
+ * but NOT from maps (a kernel VMA it never touches). Here we copy each module
+ * segment to an anonymous mapping and mremap it back FIXED, so the VMA loses
+ * its file backing -- no path, indistinguishable from a JIT/anon region.
+ * mremap over executing code can race, so this MUST be called single-threaded
+ * (run_app_post: post-specialize, before the app starts business threads --
+ * module code is not running). */
+int spoof_virtual_maps(const char *path_substr) {
+  struct Range {
+    uintptr_t start, end;
+    int prot;
+  };
+  Range ranges[64];
+  int nr = 0;
+
+  FILE *fp = fopen("/proc/self/maps", "re");
+  if (fp == nullptr)
+    return 0;
+  char line[512];
+  while (nr < 64 && fgets(line, sizeof(line), fp) != nullptr) {
+    if (strstr(line, path_substr) == nullptr)
+      continue;
+    uintptr_t start = 0, end = 0;
+    char perms[5] = {};
+    if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) != 3)
+      continue;
+    int prot = (perms[0] == 'r' ? PROT_READ : 0) |
+               (perms[1] == 'w' ? PROT_WRITE : 0) |
+               (perms[2] == 'x' ? PROT_EXEC : 0);
+    ranges[nr++] = {start, end, prot};
+  }
+  fclose(fp);
+
+  int done = 0;
+  for (int i = 0; i < nr; ++i) {
+    size_t size = ranges[i].end - ranges[i].start;
+    void *addr = reinterpret_cast<void *>(ranges[i].start);
+    void *copy = mmap(nullptr, size, PROT_READ | PROT_WRITE,
+                      MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (copy == MAP_FAILED)
+      continue;
+    if ((ranges[i].prot & PROT_READ) == 0)
+      mprotect(addr, size, PROT_READ);
+    memcpy(copy, addr, size);
+    if (mremap(copy, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, addr) ==
+        MAP_FAILED) {
+      munmap(copy, size);
+      continue;
+    }
+    mprotect(addr, size, ranges[i].prot);
+    // Name the new anon VMA so it reads as ART JIT / allocator instead of a
+    // bare [anonymous] mapping -- detectors flag anonymous executable memory as
+    // injection but must whitelist ART's JIT names to avoid false positives.
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, addr, size,
+          (ranges[i].prot & PROT_EXEC) ? "dalvik-jit-code-cache"
+                                       : "dalvik-LinearAlloc");
+    ++done;
+  }
+  SLOGI("maps-spoof: anonymized %d/%d segment(s) matching '%s'", done, nr,
+        path_substr);
+  return done;
+}
+
+int name_anonymous_exec() {
+  FILE *fp = fopen("/proc/self/maps", "re");
+  if (fp == nullptr)
+    return 0;
+  char line[512];
+  int n = 0;
+  while (fgets(line, sizeof(line), fp) != nullptr) {
+    uintptr_t start = 0, end = 0;
+    char perms[5] = {};
+    int path_off = 0;
+    if (sscanf(line, "%lx-%lx %4s %*s %*s %*s %n", &start, &end, perms,
+               &path_off) < 3)
+      continue;
+    if (strchr(perms, 'x') == nullptr)
+      continue; // executable only
+    const char *path = line + path_off;
+    while (*path == ' ')
+      ++path;
+    if (*path != '\0' && *path != '\n')
+      continue; // already named or file-backed -> leave alone
+    // Bare anonymous executable (hook trampoline etc.) -> label it as ART JIT.
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, reinterpret_cast<void *>(start),
+          end - start, "dalvik-jit-code-cache");
+    ++n;
+  }
+  fclose(fp);
+  SLOGI("maps-spoof: named %d bare anon exec seg(s)", n);
+  return n;
 }
 
 } // namespace zloader

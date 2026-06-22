@@ -420,6 +420,9 @@ void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
 void hide_injection() {
   zloader::hide_from_solist("libzygisk");
   zloader::hide_from_solist("libzloader");
+  // Offsets validated via dry-run; unload ALL module soinfos via the linker's
+  // own soinfo_unload (keeps the namespace list + handle map consistent).
+  zloader::drop_module_from_solist("/data/adb/modules", false);
 }
 
 void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
@@ -434,6 +437,18 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
     }
   g_cur = nullptr;
   hide_injection();
+  // maps anonymization (app only). We're single-threaded here (post-specialize,
+  // before the app starts business threads), so mremap over module code can't
+  // race -- the crashes before came from spoofing later, in a pthread hook.
+  zloader::spoof_virtual_maps("/data/adb/modules");
+  // A module maps its own MAP_SHARED page (shows as "/dev/zero (deleted)",
+  // fixed addr, r--s, one per app) that detectors flag as injection. It's
+  // read-only and per-app, so anonymizing it (private copy, same addr) drops
+  // the name without breaking the module.
+  zloader::spoof_virtual_maps("/dev/zero (deleted)");
+  // Name any remaining bare [anonymous] executable VMAs (hook trampolines our
+  // file-backed spoof doesn't cover) so they read as ART JIT, not injection.
+  zloader::name_anonymous_exec();
 }
 
 void run_server_pre_impl(zygisk::ServerSpecializeArgs *args) {
