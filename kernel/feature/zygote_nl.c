@@ -45,6 +45,34 @@ void ksu_zygote_nl_emit_specialize(u32 pid, u32 appid)
 	nlmsg_multicast(yz_sock, skb, 0, YZ_NL_GROUP_EVENTS, GFP_ATOMIC);
 }
 
+/* Ask every listening zygiskd to re-read yzconfig.json (manager changed it). */
+void ksu_zygote_nl_emit_reload(void)
+{
+	struct sk_buff *skb;
+	struct nlmsghdr *nlh;
+	struct yz_event *ev;
+
+	if (!yz_sock)
+		return;
+
+	skb = nlmsg_new(sizeof(*ev), GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	nlh = nlmsg_put(skb, 0, 0, YZ_NL_MSG_EVENT, sizeof(*ev), 0);
+	if (!nlh) {
+		nlmsg_free(skb);
+		return;
+	}
+
+	ev = nlmsg_data(nlh);
+	ev->type = YZ_EV_RELOAD;
+	ev->pid = 0;
+	ev->appid = 0;
+
+	nlmsg_multicast(yz_sock, skb, 0, YZ_NL_GROUP_EVENTS, GFP_ATOMIC);
+}
+
 void ksu_zygote_nl_init(void)
 {
 	struct netlink_kernel_cfg cfg = {

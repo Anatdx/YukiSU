@@ -1687,6 +1687,21 @@ fun ModuleItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    if (module.dirId in viewModel.loadedZygiskModules) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF2E7D32),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.module_zygisk_loaded),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                     if (module.metamodule) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),

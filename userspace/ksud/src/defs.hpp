@@ -46,6 +46,10 @@ constexpr const char* LIBADBROOT_PATH = "/data/adb/ksu/lib/libadbroot.so";
 constexpr const char* YUKIZYGISK_DIR = "/data/adb/ksu/lib/yukizygisk/";
 constexpr const char* ZLOADER_PATH = "/data/adb/ksu/lib/yukizygisk/libzloader.so";
 constexpr const char* ZCORE_PATH = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
+// Runtime config, kept apart from the binary payload dir so the manager can
+// rewrite it freely. zygiskd parses it and brokers it to core.
+constexpr const char* YZCONFIG_DIR = "/data/adb/ksu/yukizygisk/";
+constexpr const char* YZCONFIG_PATH = "/data/adb/ksu/yukizygisk/yzconfig.json";
 constexpr const char* DAEMON_LINK_PATH = "/data/adb/ksu/bin/ksud";
 constexpr const char* SULOGD_LOCK_PATH = "/data/adb/ksu/sulogd.lock";
 

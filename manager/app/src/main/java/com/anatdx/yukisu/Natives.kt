@@ -201,6 +201,19 @@ object Natives {
      * This reflects whether signature-based verification is in effect.
      */
     external fun isSignatureOk(): Boolean
+
+    /**
+     * YukiZygisk injection status as a JSON string, or null when the daemon is
+     * down or this process is not the kernel-authenticated manager.
+     *
+     * Native (jni.c): connects straight to zygiskd's abstract socket and asks
+     * for a snapshot. zygiskd gates the reply with SO_PEERCRED -- it compares the
+     * real uid the kernel stamped on our connection against the manager uid, so a
+     * hostile app spoofing our package name can't read it. JSON shape:
+     * `{ "count": Int, "recent": [appId...], "modules": ["name"...],
+     *    "yukilinker": Bool, "denylist_mode": Int, "dmesg_log": Bool }`.
+     */
+    external fun yzQueryStatus(): String?
     
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999

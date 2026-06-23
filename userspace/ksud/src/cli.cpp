@@ -22,6 +22,7 @@
 #include "sepolicy/sepolicy.hpp"
 #include "su.hpp"
 #include "sulog.hpp"
+#include "uapi/yukizygisk.h"
 #include "umount.hpp"
 #include "utils.hpp"
 
@@ -235,6 +236,20 @@ int cmd_initrc(const std::vector<std::string>& args) {
 
     printf("Unknown initrc subcommand: %s\n", subcmd.c_str());
     return 1;
+}
+
+int cmd_yukizygisk(const std::vector<std::string>& args) {
+    if (args.empty() || args[0] != "reload") {
+        printf("Usage: ksud yukizygisk reload\n");
+        return 1;
+    }
+    // Fires KSU_IOCTL_YZ_RELOAD -> kernel multicasts YZ_EV_RELOAD -> zygiskd
+    // re-reads yzconfig.json. Applies on the next specialize, no reboot.
+    // (Injection-status reporting goes manager -> core -> zygiskd in-process,
+    // not through any standalone monitor -- see YukiZygiskScreen.)
+    const int rc = ksud::ksuctl(KSU_IOCTL_YZ_RELOAD, nullptr);
+    printf(rc == 0 ? "yzconfig reload signalled\n" : "yzconfig reload failed\n");
+    return rc == 0 ? 0 : 1;
 }
 
 int cmd_feature(const std::vector<std::string>& args) {
@@ -860,8 +875,7 @@ int cli_run(int argc, char** argv) {
     if (cmd == "help" || cmd == "-h" || cmd == "--help") {
         print_usage();
         return 0;
-    } else if (cmd == "version" || cmd == "-v" || cmd == "-V" ||
-               cmd == "--version") {
+    } else if (cmd == "version" || cmd == "-v" || cmd == "-V" || cmd == "--version") {
         // -V is the conventional version flag (upstream's clap-based ksud
         // accepts it); some root-gating apps probe `ksud -V` and treat its
         // absence as "no/incompatible root". Alias it to `version`.
@@ -906,6 +920,8 @@ int cli_run(int argc, char** argv) {
         return cmd_profile(args);
     } else if (cmd == "feature") {
         return cmd_feature(args);
+    } else if (cmd == "yukizygisk") {
+        return cmd_yukizygisk(args);
     } else if (cmd == "dynamic") {
         return cmd_dynamic_manager(args);
     } else if (cmd == "initrc") {

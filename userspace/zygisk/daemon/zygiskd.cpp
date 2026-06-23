@@ -8,6 +8,9 @@
 #include "zygiskd.hpp"
 #include "uapi/yukizygisk.h"
 
+#include "core/json.hpp"
+#include "defs.hpp"
+
 #include <dirent.h>
 #include <fcntl.h>
 #include <linux/netlink.h>
@@ -26,6 +29,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -40,6 +44,9 @@ namespace ksud {
 int ksuctl(int request, void *arg);
 bool uid_granted_root(uint32_t uid);
 bool uid_should_umount(uint32_t uid);
+// Kernel-authenticated manager uid (preset/superkey full uid, dynamic managers
+// excluded); -1 if none. The trust anchor for SO_PEERCRED on GetStatus.
+int get_manager_uid();
 } // namespace ksud
 
 namespace {
@@ -315,6 +322,123 @@ uint32_t query_flags(uint32_t uid) {
   return flags;
 }
 
+/* Runtime config parsed from yzconfig.json. All-zero = everything off, the safe
+ * default when the file is missing or malformed. Re-read on YZ_EV_RELOAD. */
+yz_config g_yz_config{};
+
+void read_yzconfig() {
+  yz_config cfg{};
+  int fd = open(ksud::YZCONFIG_PATH, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    std::string buf;
+    char tmp[1024];
+    for (ssize_t n; (n = read(fd, tmp, sizeof(tmp))) > 0;)
+      buf.append(tmp, static_cast<size_t>(n));
+    close(fd);
+    json::Value root = json::parse(buf);
+    if (root.type == json::Type::Object) {
+      if (root.contains("yukilinker"))
+        cfg.yukilinker = root.at("yukilinker").as_bool() ? 1 : 0;
+      if (root.contains("denylist_mode"))
+        cfg.denylist_mode =
+            static_cast<__u8>(root.at("denylist_mode").as_number());
+      if (root.contains("dmesg_log"))
+        cfg.dmesg_log = root.at("dmesg_log").as_bool() ? 1 : 0;
+    }
+  }
+  g_yz_config = cfg;
+  DLOGI("yzconfig: yukilinker=%u denylist_mode=%u dmesg_log=%u", cfg.yukilinker,
+        cfg.denylist_mode, cfg.dmesg_log);
+}
+
+/* ---- injection telemetry (manager status panel) ------------------------- *
+ * Maintained from the netlink specialize stream. The daemon is single-threaded
+ * (one poll loop drains netlink and serves clients), so no locking is needed.
+ * count = total specialize events seen; recent = distinct appids, most-recent
+ * first, capped -- enough for "what just got injected" without unbounded
+ * growth.
+ */
+uint64_t g_inject_count = 0;
+std::deque<uint32_t> g_recent_appids;
+constexpr size_t kRecentMax = 16;
+
+void record_injection(uint32_t appid) {
+  ++g_inject_count;
+  for (auto it = g_recent_appids.begin(); it != g_recent_appids.end(); ++it)
+    if (*it == appid) {
+      g_recent_appids.erase(it); // move-to-front: keep the list distinct
+      break;
+    }
+  g_recent_appids.push_front(appid);
+  if (g_recent_appids.size() > kRecentMax)
+    g_recent_appids.pop_back();
+}
+
+void json_append_escaped(std::string &out, const std::string &s) {
+  for (char c : s) {
+    switch (c) {
+    case '"':
+      out += "\\\"";
+      break;
+    case '\\':
+      out += "\\\\";
+      break;
+    case '\n':
+      out += "\\n";
+      break;
+    case '\r':
+      out += "\\r";
+      break;
+    case '\t':
+      out += "\\t";
+      break;
+    default:
+      if (static_cast<unsigned char>(c) < 0x20) {
+        char b[8];
+        snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned char>(c));
+        out += b;
+      } else {
+        out += c;
+      }
+    }
+  }
+}
+
+/* Compact status JSON the manager parses (org.json). appids only -- the manager
+ * resolves them to package names via PackageManager; config is echoed so the
+ * panel can show what zygiskd actually loaded after a reload, not just the
+ * file. */
+std::string build_status_json() {
+  std::string s = "{\"count\":";
+  s += std::to_string(g_inject_count);
+  s += ",\"yukilinker\":";
+  s += g_yz_config.yukilinker ? "true" : "false";
+  s += ",\"denylist_mode\":";
+  s += std::to_string(g_yz_config.denylist_mode);
+  s += ",\"dmesg_log\":";
+  s += g_yz_config.dmesg_log ? "true" : "false";
+  s += ",\"recent\":[";
+  bool first = true;
+  for (uint32_t a : g_recent_appids) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += std::to_string(a);
+  }
+  s += "],\"modules\":[";
+  first = true;
+  for (const auto &m : g_modules) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += '"';
+    json_append_escaped(s, m.name);
+    s += '"';
+  }
+  s += "]}";
+  return s;
+}
+
 void handle_client(int client) {
   uint8_t op = 0;
   if (!read_exact(client, &op, sizeof(op)))
@@ -380,6 +504,34 @@ void handle_client(int client) {
       break;
     uint32_t flags = query_flags(uid);
     write_exact(client, &flags, sizeof(flags));
+    break;
+  }
+  case zygiskd::Request::GetConfig: {
+    write_exact(client, &g_yz_config, sizeof(g_yz_config));
+    break;
+  }
+  case zygiskd::Request::GetStatus: {
+    // SO_PEERCRED: the kernel stamps the connecting process's real uid onto the
+    // socket -- a caller cannot forge it (unlike a package name or class). Only
+    // the kernel-authenticated manager (preset/superkey full uid) may read the
+    // telemetry; anyone else gets an empty reply (len 0). The manager itself
+    // connects, so the peer uid is its own app uid.
+    std::string js;
+    struct ucred cr{};
+    socklen_t crlen = sizeof(cr);
+    int mgr = ksud::get_manager_uid();
+    if (mgr > 0 &&
+        getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
+        static_cast<int>(cr.uid) == mgr) {
+      js = build_status_json();
+    } else {
+      DLOGI("GetStatus denied: peer uid=%d manager uid=%d",
+            static_cast<int>(cr.uid), mgr);
+    }
+    uint32_t n = static_cast<uint32_t>(js.size());
+    write_exact(client, &n, sizeof(n));
+    if (n != 0)
+      write_exact(client, js.data(), n);
     break;
   }
   default:
@@ -482,8 +634,12 @@ void nl_drain(int fd) {
       continue;
     auto *ev = static_cast<yz_event *>(NLMSG_DATA(nlh));
     DLOGI("event type=%u pid=%u appid=%u", ev->type, ev->pid, ev->appid);
-    if (ev->type == YZ_EV_SPECIALIZE)
+    if (ev->type == YZ_EV_SPECIALIZE) {
+      record_injection(
+          ev->appid); // telemetry: count + recent, even with 0 mods
       on_specialize(ev->pid, ev->appid);
+    } else if (ev->type == YZ_EV_RELOAD)
+      read_yzconfig(); // manager changed yzconfig.json; re-read it now
   }
 }
 
@@ -589,6 +745,7 @@ int run_daemon() {
   }
 
   g_modules = scan_modules();
+  read_yzconfig();
   DLOGI("found %zu zygisk module(s) for %s", g_modules.size(), kAbi);
   send_dlopen_offset();
 

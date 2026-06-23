@@ -41,6 +41,7 @@
 #include "supercall/supercall.h"
 #include "supercall/internal.h"
 #include "feature/zygote_ctl.h"
+#include "feature/zygote_nl.h"
 #include "feature/zygote_probe.h"
 #include "uapi/yukizygisk.h"
 #include "hook/syscall_hook_manager.h"
@@ -1024,6 +1025,13 @@ static int do_yz_set_dlopen(void __user *arg)
 	return 0;
 }
 
+static int do_yz_reload(void __user *arg)
+{
+	(void)arg;
+	ksu_zygote_nl_emit_reload();
+	return 0;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1168,6 +1176,10 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "YZ_SET_DLOPEN",
      .handler = do_yz_set_dlopen,
      .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_RELOAD,
+     .name = "YZ_RELOAD",
+     .handler = do_yz_reload,
+     .perm_check = manager_or_root},
     {.cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL} // Sentinel
 };
 

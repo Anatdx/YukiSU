@@ -14,6 +14,7 @@ import com.dergoogler.mmrl.platform.model.ModuleConfig.Companion.asModuleConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.anatdx.yukisu.BuildConfig
+import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.ui.util.HanziToPinyin
 import com.anatdx.yukisu.ui.util.listModules
 import com.anatdx.yukisu.ui.util.getRootShell
@@ -100,6 +101,11 @@ class ModuleViewModel : ViewModel() {
     var yukiZygiskEnabled by mutableStateOf(false)
         private set
 
+    /** dirIds of zygisk modules the running zygiskd has actually loaded, from
+     *  Natives.yzQueryStatus(). ModuleItem tags these with a green "Loaded". */
+    var loadedZygiskModules by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     var sortEnabledFirst by mutableStateOf(false)
     var sortActionFirst by mutableStateOf(false)
     val moduleList by derivedStateOf {
@@ -153,6 +159,16 @@ class ModuleViewModel : ViewModel() {
                 // Built-in YukiZygisk excludes third-party zygisk impls; show them disabled when on.
                 val yukiZygiskOn = getFeatureValue("yukizygisk")
                 yukiZygiskEnabled = yukiZygiskOn
+
+                // Which zygisk modules the daemon actually loaded (dir names), so
+                // ModuleItem can tag them "Loaded". Null/failure -> none.
+                loadedZygiskModules = runCatching {
+                    Natives.yzQueryStatus()?.let { js ->
+                        JSONObject(js).optJSONArray("modules")?.let { a ->
+                            (0 until a.length()).map { a.getString(it) }.toSet()
+                        }
+                    }
+                }.getOrNull() ?: emptySet()
 
                 val array = JSONArray(result)
                 val moduleInfos = (0 until array.length())
