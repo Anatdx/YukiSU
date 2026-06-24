@@ -21,6 +21,11 @@ enum class Request : uint8_t {
   GetConfig = 6, // -> struct yz_config (runtime config from yzconfig.json)
   GetStatus = 7, // -> u32 len + len bytes of status JSON (manager only;
                  //    SO_PEERCRED-gated to the authenticated manager uid)
+  RevertMount =
+      8, // (denylist_mode==2) revert caller's module mounts: zygiskd
+         //   resolves caller pid via SO_PEERCRED, drives kernel umount
+  SelfDestruct =
+      9, // (denylist_mode==1) core unhooked; umount + munmap its segs
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */

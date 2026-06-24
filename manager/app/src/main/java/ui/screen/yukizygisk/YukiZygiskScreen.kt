@@ -1,3 +1,12 @@
+/* SPDX-License-Identifier: GPL-3.0 */
+/*
+ * YukiZygisk - manager control & monitoring panel: injection status card,
+ * module loader / denylist / dmesg toggles, and loaded-module count. Reads
+ * zygiskd telemetry via Natives.yzQueryStatus(), writes yzconfig.json and fires
+ * a netlink reload.
+ *
+ * Author: Anatdx
+ */
 package ui.screen.yukizygisk
 
 import android.content.pm.PackageInfo
@@ -95,14 +104,18 @@ private suspend fun readYzConfig(): YzConfig = withContext(Dispatchers.IO) {
 
 /** Write yzconfig.json then fire a netlink reload so it applies immediately. */
 private suspend fun writeYzConfig(cfg: YzConfig) = withContext(Dispatchers.IO) {
+    // Compact single-line JSON written via a single-quoted echo. A heredoc
+    // through libsu's job runner is unreliable (sentinel injection / multi-line
+    // stdin) and was silently dropping the write -- so the toggle never stuck.
+    // Our keys/values never contain a single quote, so '...' is safe.
     val json = JSONObject().apply {
         put("yukilinker", cfg.yukilinker)
         put("denylist_mode", cfg.denylistMode)
         put("dmesg_log", cfg.dmesgLog)
-    }.toString(2)
+    }.toString()
     withNewRootShell {
         newJob().add("mkdir -p $YZCONFIG_DIR").exec()
-        newJob().add("cat > $YZCONFIG_PATH <<'YZEOF'\n$json\nYZEOF").exec()
+        newJob().add("echo '$json' > $YZCONFIG_PATH").exec()
     }
     // Fires KSU_IOCTL_YZ_RELOAD -> kernel multicasts YZ_EV_RELOAD -> zygiskd
     // re-reads the file; takes effect on the next specialize, no reboot.
