@@ -25,7 +25,8 @@ enum class Request : uint8_t {
       8, // (denylist_mode==2) revert caller's module mounts: zygiskd
          //   resolves caller pid via SO_PEERCRED, drives kernel umount
   SelfDestruct =
-      9, // (denylist_mode==1) core unhooked; umount + munmap its segs
+      9,    // (denylist_mode==1) core unhooked; umount + munmap its segs
+  Log = 10, // u16 len + len bytes -> daemon writes them to /dev/kmsg (dmesg)
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */

@@ -683,6 +683,19 @@ void handle_client(int client) {
     write_exact(client, &ok, sizeof(ok));
     break;
   }
+  case zygiskd::Request::Log: {
+    // core forwards its log lines here -- it can't write /dev/kmsg from the
+    // zygote/app domain, and must never touch logcat. We emit to dmesg only.
+    uint16_t len = 0;
+    if (!read_exact(client, &len, sizeof(len)) || len == 0 || len > 256)
+      break;
+    char buf[257];
+    if (!read_exact(client, buf, len))
+      break;
+    buf[len] = '\0';
+    dlog("core: %s", buf);
+    break;
+  }
   default:
     break;
   }

@@ -6,6 +6,7 @@
  */
 
 #include "hook.hpp"
+#include "log.hpp"
 #include "solist.hpp"
 #include "zygisk.hpp"
 
@@ -13,7 +14,6 @@
 #include "uapi/yukizygisk.h"
 
 #include <android/dlext.h>
-#include <android/log.h>
 #include <dlfcn.h>
 #include <link.h>
 #include <regex.h>
@@ -27,6 +27,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -40,9 +41,8 @@ using zygisk::internal::module_abi;
 
 namespace {
 
-constexpr char kLogTag[] = "zygisk-core";
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, kLogTag, __VA_ARGS__)
+#define LOGE(...) ZLOGE(__VA_ARGS__)
+#define LOGI(...) ZLOGI(__VA_ARGS__)
 
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
@@ -211,6 +211,7 @@ enum class ZdRequest : uint8_t {
   // 7 = GetStatus (manager-only; core never sends it, kept for wire alignment)
   RevertMount = 8,  // revert this process's module mounts (denylist_mode==2)
   SelfDestruct = 9, // mode 1: unhooked, report core segs for kernel munmap
+  Log = 10,         // u16 len + len bytes: zygiskd writes them to /dev/kmsg
 };
 constexpr char kZygiskdSocket[] = "zygiskd64";
 
@@ -356,6 +357,32 @@ void zd_load_config() {
   yz_config cfg{};
   if (write(s, &req, 1) == 1 && read_all(s, &cfg, sizeof(cfg)))
     g_yz_config = cfg;
+  close(s);
+}
+
+/* Route a formatted line to dmesg via zygiskd (root), gated on dmesg_log -- the
+ * app/zygote domain can't write /dev/kmsg, so the root daemon does it. Strong
+ * definition of the weak yz_klog declared in log.hpp; the loader's solist build
+ * (no zygiskd channel) links it as null and its log macros become no-ops. */
+extern "C" void yz_klog(const char *fmt, ...) {
+  if (g_yz_config.dmesg_log == 0)
+    return;
+  char buf[224];
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (n <= 0)
+    return;
+  size_t len = n < static_cast<int>(sizeof(buf)) ? static_cast<size_t>(n)
+                                                 : sizeof(buf) - 1;
+  int s = connect_zygiskd();
+  if (s < 0)
+    return;
+  uint8_t req = static_cast<uint8_t>(ZdRequest::Log);
+  uint16_t l16 = static_cast<uint16_t>(len);
+  if (write(s, &req, 1) == 1 && write(s, &l16, sizeof(l16)) == sizeof(l16))
+    (void)!write(s, buf, len);
   close(s);
 }
 

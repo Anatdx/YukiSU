@@ -16,8 +16,6 @@
 
 #include "solist.hpp"
 
-#include <android/log.h>
-
 #include <elf.h>
 #include <fcntl.h>
 #include <link.h>
@@ -40,9 +38,16 @@
 namespace zloader {
 namespace {
 
-constexpr char kLogTag[] = "zloader";
-#define SLOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
-#define SLOGI(...) __android_log_print(ANDROID_LOG_INFO, kLogTag, __VA_ARGS__)
+/* Logs go to dmesg via zygiskd, never logcat. yz_klog is weak (strong def in
+ * core.cpp); in the loader build it links as null and these become no-ops. */
+extern "C" __attribute__((weak, format(printf, 1, 2))) void
+yz_klog(const char *fmt, ...);
+#define SLOGE(...)                                                             \
+  do {                                                                         \
+    if (yz_klog != nullptr)                                                    \
+      yz_klog(__VA_ARGS__);                                                    \
+  } while (0)
+#define SLOGI(...) SLOGE(__VA_ARGS__)
 
 /* soinfo::next sits right after phdr/phnum/base/size/dynamic on LP64 -- a
  * stable prefix of the struct across Android versions. */

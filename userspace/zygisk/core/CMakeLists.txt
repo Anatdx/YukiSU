@@ -17,6 +17,10 @@ set(LSPLT_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(
     ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lsplt/lsplt/src/main/jni
     ${CMAKE_BINARY_DIR}/lsplt)
+# Silence lsplt's logcat output: it logs hook details to the "LSPlt" tag, which a
+# detector reading logcat would see. LOG_DISABLED maps all its LOG* to 0, which
+# also drops the liblog dependency.
+target_compile_definitions(lsplt_static PRIVATE LOG_DISABLED)
 
 add_library(zygisk SHARED
     src/core.cpp
@@ -42,8 +46,11 @@ target_compile_options(zygisk PRIVATE
     # stack canary in TLS shifts -- disable the stack protector to avoid
     # spurious __stack_chk_fail aborts in the specialize wrappers/dispatch.
     -fno-stack-protector)
-target_link_libraries(zygisk PRIVATE log dl lsplt_static)
-target_link_options(zygisk PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+target_link_libraries(zygisk PRIVATE dl lsplt_static)
+# --as-needed drops the liblog DT_NEEDED that lsplt links PUBLIC: with LOG_DISABLED
+# we never call into it, so no point advertising the dependency.
+target_link_options(zygisk PRIVATE -Wl,--gc-sections -Wl,--strip-all
+                    -Wl,--as-needed)
 
 # libyukilinker.so -- the anonymous in-memory module loader, split into its own
 # .so that core dlopen+dlsym's at runtime (exports yuki_dlopen_memfd/dlsym/
@@ -57,7 +64,7 @@ target_compile_options(yukilinker PRIVATE
     -Os -fno-exceptions -fno-rtti
     -ffunction-sections -fdata-sections -fvisibility=hidden
     -fno-stack-protector)
-target_link_libraries(yukilinker PRIVATE log dl)
+target_link_libraries(yukilinker PRIVATE dl)
 target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 
 find_program(LLVM_STRIP NAMES llvm-strip)
