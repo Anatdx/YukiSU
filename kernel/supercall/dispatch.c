@@ -8,7 +8,10 @@
 #include <linux/fs.h>
 #include <linux/kprobes.h>
 #include <linux/pid.h>
+#include <linux/mm.h>
+#include <linux/ptrace.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/task.h>
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
@@ -1032,6 +1035,193 @@ static int do_yz_reload(void __user *arg)
 	return 0;
 }
 
+static int do_yz_set_yukilinker(void __user *arg)
+{
+	struct yz_yukilinker_cmd cmd;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	ksu_zygote_probe_set_yukilinker(cmd.enabled != 0);
+	return 0;
+}
+
+/* zygiskd (root) -> kernel: schedule a mount-revert on TARGET app task, run in
+ * that task's own (already unshare'd) namespace. core asks zygiskd over the
+ * daemon socket after loading modules (denylist_mode==2); zygiskd resolves the
+ * caller pid via SO_PEERCRED and issues this. Routed through zygiskd, not the
+ * app, so the ksu driver fd never enters an app fd table (a "[ksu_driver]" link
+ * there is exactly what detectors scan for). */
+static int do_yz_umount_pid(void __user *arg)
+{
+	struct yz_umount_pid_cmd cmd;
+	struct task_struct *task;
+	int ret;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	/* only revert for app processes; never a system/global-ns task */
+	if (!is_appuid(task_uid(task).val)) {
+		pr_info("yz_umount_pid: reject non-app pid=%u uid=%u\n",
+			cmd.pid, task_uid(task).val);
+		put_task_struct(task);
+		return -EPERM;
+	}
+
+	ret = ksu_umount_task_modules(task);
+	put_task_struct(task);
+	pr_info("yz_umount_pid: scheduled for pid=%u ret=%d\n", cmd.pid, ret);
+	return ret;
+}
+
+struct yz_unmap_tw {
+	struct callback_head cb;
+	unsigned long addr[YZ_MAX_UNMAP_SEGS];
+	unsigned long size[YZ_MAX_UNMAP_SEGS];
+	unsigned int n;
+	unsigned int retry;
+};
+
+/* Runs in the TARGET app's context (task_work) as it returns to userspace.
+ * core has unhooked, so nothing references its segments -- BUT if the app is
+ * about to resume with its PC still inside a segment we're dropping, it hasn't
+ * left core yet (e.g. mid-return through self_destruct). munmap'ing under its
+ * PC would SIGSEGV/boot-loop, so re-queue until the PC is in JVM/app code. */
+static void yz_unmap_tw_func(struct callback_head *cb)
+{
+	struct yz_unmap_tw *tw = container_of(cb, struct yz_unmap_tw, cb);
+	struct pt_regs *regs = task_pt_regs(current);
+	unsigned long pc = regs ? instruction_pointer(regs) : 0;
+	unsigned int i;
+
+	for (i = 0; i < tw->n; i++) {
+		if (pc >= tw->addr[i] && pc < tw->addr[i] + tw->size[i]) {
+			if (++tw->retry < 16) {
+				init_task_work(&tw->cb, yz_unmap_tw_func);
+				if (!task_work_add(current, &tw->cb,
+						   TWA_RESUME))
+					return; /* re-queued; keep tw */
+			}
+			pr_warn("yz_unmap: pc=0x%lx still in core after %u "
+				"tries, skip pid=%d\n",
+				pc, tw->retry, current->pid);
+			kfree(tw);
+			return;
+		}
+	}
+
+	for (i = 0; i < tw->n; i++) {
+		pr_info("yz_unmap: munmap [0x%lx +0x%lx] pid=%d\n", tw->addr[i],
+			tw->size[i], current->pid);
+		vm_munmap(tw->addr[i], tw->size[i]);
+	}
+	kfree(tw);
+}
+
+/* zygiskd (root) -> kernel: schedule vm_munmap of the reported core segments on
+ * TARGET pid (denylist_mode==1, after core unhooked itself). */
+static int do_yz_unmap_pid(void __user *arg)
+{
+	struct yz_unmap_pid_cmd cmd;
+	struct task_struct *task;
+	struct yz_unmap_tw *tw;
+	unsigned int i;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.n_segs == 0 || cmd.n_segs > YZ_MAX_UNMAP_SEGS)
+		return -EINVAL;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	if (!is_appuid(task_uid(task).val)) {
+		pr_info("yz_unmap_pid: reject non-app pid=%u uid=%u\n", cmd.pid,
+			task_uid(task).val);
+		put_task_struct(task);
+		return -EPERM;
+	}
+
+	tw = kzalloc(sizeof(*tw), GFP_KERNEL);
+	if (!tw) {
+		put_task_struct(task);
+		return -ENOMEM;
+	}
+	init_task_work(&tw->cb, yz_unmap_tw_func);
+	tw->n = cmd.n_segs;
+	for (i = 0; i < cmd.n_segs; i++) {
+		tw->addr[i] = (unsigned long)cmd.addr[i];
+		tw->size[i] = (unsigned long)cmd.size[i];
+	}
+	if (task_work_add(task, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		put_task_struct(task);
+		return -ESRCH;
+	}
+	put_task_struct(task);
+	pr_info("yz_unmap_pid: scheduled %u seg(s) for pid=%u\n", cmd.n_segs,
+		cmd.pid);
+	return 0;
+}
+
+/* core (app) -> kernel, DIRECT: unmap-self for denylist_mode==1. See
+ * KSU_IOCTL_YZ_UNMAP_SELF in uapi/yukizygisk.h. Reuses yz_unmap_tw_func (PC
+ * guard + retry + munmap); the caller IS the target, so it arms on current. On
+ * failure core falls back to its spoof path, so returning an error is safe. */
+static int do_yz_unmap_self(void __user *arg)
+{
+	struct yz_unmap_self_cmd cmd;
+	struct yz_unmap_tw *tw;
+	unsigned int i;
+
+	if (!current->mm)
+		return -EINVAL;
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.n_segs == 0 || cmd.n_segs > YZ_MAX_UNMAP_SEGS)
+		return -EINVAL;
+	/* every segment must be a non-empty userspace range (defense in depth;
+	 * an app can munmap its own memory anyway -- this rejects garbage). */
+	for (i = 0; i < cmd.n_segs; i++) {
+		unsigned long a = (unsigned long)cmd.addr[i];
+		unsigned long s = (unsigned long)cmd.size[i];
+
+		if (a == 0 || s == 0 || a >= TASK_SIZE || s > TASK_SIZE ||
+		    a + s < a || a + s > TASK_SIZE) {
+			pr_warn(
+			    "yz_unmap_self: bad seg [0x%lx +0x%lx] pid=%d\n", a,
+			    s, current->pid);
+			return -EINVAL;
+		}
+	}
+
+	tw = kzalloc(sizeof(*tw), GFP_KERNEL);
+	if (!tw)
+		return -ENOMEM;
+	init_task_work(&tw->cb, yz_unmap_tw_func);
+	tw->n = cmd.n_segs;
+	for (i = 0; i < cmd.n_segs; i++) {
+		tw->addr[i] = (unsigned long)cmd.addr[i];
+		tw->size[i] = (unsigned long)cmd.size[i];
+	}
+	if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		return -ESRCH;
+	}
+	pr_info("yz_unmap_self: pid=%d armed %u seg(s)\n", current->pid,
+		cmd.n_segs);
+	return 0;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1176,6 +1366,22 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "YZ_SET_DLOPEN",
      .handler = do_yz_set_dlopen,
      .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_SET_YUKILINKER,
+     .name = "YZ_SET_YUKILINKER",
+     .handler = do_yz_set_yukilinker,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UMOUNT_PID,
+     .name = "YZ_UMOUNT_PID",
+     .handler = do_yz_umount_pid,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UNMAP_PID,
+     .name = "YZ_UNMAP_PID",
+     .handler = do_yz_unmap_pid,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UNMAP_SELF,
+     .name = "YZ_UNMAP_SELF",
+     .handler = do_yz_unmap_self,
+     .perm_check = injected_app},
     {.cmd = KSU_IOCTL_YZ_RELOAD,
      .name = "YZ_RELOAD",
      .handler = do_yz_reload,

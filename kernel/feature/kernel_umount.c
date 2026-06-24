@@ -92,6 +92,30 @@ static void umount_tw_func(struct callback_head *cb)
 	kfree(tw);
 }
 
+/* Schedule the mount-revert task_work on an arbitrary app task (not just
+ * current). Used by the YukiZygisk YZ_UMOUNT_PID path: zygiskd asks the kernel
+ * to revert mounts for a just-injected app; the work runs in that task's own
+ * mount namespace when it next returns to userspace. */
+int ksu_umount_task_modules(struct task_struct *task)
+{
+	struct umount_tw *tw;
+
+	if (!ksu_module_mounted || !ksu_kernel_umount_enabled || !ksu_cred)
+		return 0;
+
+	tw = kzalloc(sizeof(*tw), GFP_KERNEL);
+	if (!tw)
+		return -ENOMEM;
+
+	tw->cb.func = umount_tw_func;
+	if (task_work_add(task, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		return -ESRCH;
+	}
+
+	return 0;
+}
+
 int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 {
 	struct umount_tw *tw;

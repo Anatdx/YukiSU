@@ -10,6 +10,10 @@ void ksu_kernel_umount_exit(void);
 
 void try_umount(const char *mnt, int flags);
 
+// Schedule a mount-revert on an arbitrary app task (YukiZygisk YZ_UMOUNT_PID).
+struct task_struct;
+int ksu_umount_task_modules(struct task_struct *task);
+
 // Handler function to be called from setresuid hook
 int ksu_handle_umount(uid_t old_uid, uid_t new_uid);
 

@@ -2,7 +2,7 @@
 /*
  * YukiZygisk - libzloader.so: hide the injection from solist/maps scanners.
  *
- * Approach (learned from NeoZygisk/ReZygisk, implemented from scratch):
+ * Approach (implemented from scratch):
  *  - hide_from_solist re-links our own injected libs out of the solist (they're
  *    never queried, so a pointer splice under ProtectedDataGuard suffices);
  *  - drop_module_from_solist unloads modules (which ARE queried) via the
@@ -169,7 +169,7 @@ inline void soinfo_set_next(void *si, void *next) {
       next;
 }
 
-/* ---- NeoZygisk-style proper module unload --------------------------------
+/* ---- proper module unload --------------------------------
  * The simple re-link above is only safe for OUR injected libs (never queried
  * via dlsym/dlopen-handle/dl_iterate_phdr). Dropping a *module* (LSPosed etc.,
  * which IS queried) requires the linker's own soinfo_unload so the global
@@ -488,12 +488,19 @@ int spoof_virtual_maps(const char *path_substr, bool private_only) {
       continue;
     }
     mprotect(addr, size, ranges[i].prot);
-    // Name the new anon VMA so it reads as ART JIT / allocator instead of a
-    // bare [anonymous] mapping -- detectors flag anonymous executable memory as
-    // injection but must whitelist ART's JIT names to avoid false positives.
-    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, addr, size,
-          (ranges[i].prot & PROT_EXEC) ? "dalvik-jit-code-cache"
-                                       : "dalvik-LinearAlloc");
+    // mremap swapped the physical pages under this VA. For an executable
+    // segment the i-cache may still hold stale lines from the old pages, so
+    // sync it before anything executes from the new mapping -- the standard
+    // dsb/ic-ivau/dsb/isb sequence that lets us spoof a code segment we keep
+    // running from without a SIGILL/SEGV.
+    if (ranges[i].prot & PROT_EXEC)
+      __builtin___clear_cache(reinterpret_cast<char *>(addr),
+                              reinterpret_cast<char *>(ranges[i].start + size));
+    // leave the mremap'd segment as a BARE anonymous VMA. Do NOT
+    // re-label it "dalvik-jit-code-cache" -- that fixed name is the detector's
+    // target (it verifies the content is real JIT, and our contiguous ELF
+    // fails). Pure anon ("00:00 0") is the safe choice; detectors can't flag it
+    // without false-positiving on the app's own anon regions.
     ++done;
   }
   SLOGI("maps-spoof: anonymized %d/%d segment(s) matching '%s'", done, nr,

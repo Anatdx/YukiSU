@@ -57,6 +57,75 @@ struct yz_dlopen_cmd {
  */
 #define KSU_IOCTL_YZ_RELOAD _IOC(_IOC_WRITE, 'K', 52, 0)
 
+/* zygiskd -> kernel: set the yukilinker first-stage toggle (from yzconfig). On:
+ * the AT_ENTRY stub dlopens libyukilinker (which anonymously loads the core);
+ * off (default): the stub dlopens the core directly. Read at injection time, so
+ * a change applies to the next zygote (module load mode still hot-reloads). */
+#define KSU_IOCTL_YZ_SET_YUKILINKER _IOC(_IOC_WRITE, 'K', 53, 0)
+
+struct yz_yukilinker_cmd {
+  __u32 enabled; /* 0 = off (stub loads core directly), 1 = on */
+};
+
+/* zygiskd (root) -> kernel: schedule a mount-revert on TARGET pid's task, run
+ * in that task's OWN (already unshare'd) namespace. For denylist_mode==2
+ * (inject + revert-mount-only): after core loads modules, it asks zygiskd over
+ * the daemon socket to revert mounts; zygiskd resolves the caller pid via
+ * SO_PEERCRED and issues this. Modules stay loaded (anonymous), but
+ * /proc/<pid>/mountinfo no longer shows the module mounts. Routed through
+ * zygiskd (not the app) so the ksu driver fd never enters an app's fd table --
+ * a "[ksu_driver]" link there is exactly what detectors scan for. Kernel
+ * verifies the target is an app uid. */
+#define KSU_IOCTL_YZ_UMOUNT_PID _IOC(_IOC_WRITE, 'K', 54, 0)
+
+struct yz_umount_pid_cmd {
+  __u32 pid; /* target app process to revert mounts for */
+};
+
+/* core (app) -> kernel (via zygiskd): vm_munmap the listed segments in TARGET
+ * pid's address space. For denylist_mode==1 (force-hide): after core unhooks
+ * itself it reports its own segments (libzygisk + libyukilinker) and the kernel
+ * task_work's a vm_munmap onto the target -- executed when the app NEXT returns
+ * to userspace, where its PC is in JVM/app code, never in the (now unhooked,
+ * dead) core segments. The segments then vanish from /proc/<pid>/maps entirely
+ * (truly gone, not disguised as ART). This is a kernel-level capability a
+ * userspace ptrace approach cannot match -- it can't munmap another process's
+ * code from outside. Kernel verifies the target is an app uid. */
+#define KSU_IOCTL_YZ_UNMAP_PID _IOC(_IOC_WRITE, 'K', 55, 0)
+
+#define YZ_MAX_UNMAP_SEGS 8
+
+struct yz_unmap_pid_cmd {
+  __u32 pid;    /* target app process */
+  __u32 n_segs; /* valid entries in addr[]/size[] */
+  __u64 addr[YZ_MAX_UNMAP_SEGS];
+  __u64 size[YZ_MAX_UNMAP_SEGS];
+};
+
+/* core (app) -> kernel, DIRECT (no zygiskd hop): unmap-self for
+ * denylist_mode==1. Same kernel task_work + vm_munmap as YZ_UNMAP_PID, but the
+ * caller IS the target (no pid arg) so core arms it on itself: after restoring
+ * every hook in the single-threaded post-specialize window, core calls this
+ * with its own segment list, then returns NORMALLY through the JNI specialize
+ * hook to libart -- the PC leaves the now-dead core. The task_work
+ * (yz_unmap_tw_func) fires on the next return-to-userspace and, once the PC is
+ * no longer inside a reported segment, vm_munmap's them: the core/loader VMAs
+ * vanish entirely from /proc/<pid>/maps (truly gone, not spoofed). Removes the
+ * zygiskd round-trip of YZ_UNMAP_PID -- the ksu fd is opened+used+closed within
+ * this one ioctl, never lingering in the app fd table. Operates on current
+ * only: an app can already munmap its own memory, so this grants no
+ * cross-process power; it only lets the kernel drop the caller's executing code
+ * segment at the safe return-to-user boundary (which the app can't do itself --
+ * munmap'ing the segment under its own PC SIGSEGVs). */
+#define KSU_IOCTL_YZ_UNMAP_SELF _IOC(_IOC_WRITE, 'K', 56, 0)
+
+struct yz_unmap_self_cmd {
+  __u32 n_segs; /* valid entries in addr[]/size[] */
+  __u32 reserved;
+  __u64 addr[YZ_MAX_UNMAP_SEGS];
+  __u64 size[YZ_MAX_UNMAP_SEGS];
+};
+
 /* ---- runtime config ---- */
 
 /* Mirrors /data/adb/ksu/yukizygisk/yzconfig.json. zygiskd parses the JSON and

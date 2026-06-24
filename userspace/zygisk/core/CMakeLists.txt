@@ -2,7 +2,7 @@
 # Standalone NDK CMake build, like userspace/su and the loader.
 
 cmake_minimum_required(VERSION 3.14)
-project(zygisk_core VERSION 1.0.0 LANGUAGES CXX)
+project(zygisk_core VERSION 1.0.0 LANGUAGES CXX ASM)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +21,8 @@ add_subdirectory(
 add_library(zygisk SHARED
     src/core.cpp
     src/hook.cpp
+    # synchronous self-unmap: capture-stub template + tail-call munmap.
+    src/self_unmap.S
     # solist unlink (anti-detection) -- the same source the loader uses.
     ../loader/src/solist.cpp
 )
@@ -30,7 +32,8 @@ set_target_properties(zygisk PROPERTIES PREFIX "lib" OUTPUT_NAME zygisk)
 # The public ABI contract (zygisk.hpp) lives in ../include.
 target_include_directories(zygisk PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../loader/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../loader/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../..)  # repo root for uapi/yukizygisk.h
 
 target_compile_options(zygisk PRIVATE
     -Os -fno-exceptions -fno-rtti
@@ -41,6 +44,21 @@ target_compile_options(zygisk PRIVATE
     -fno-stack-protector)
 target_link_libraries(zygisk PRIVATE log dl lsplt_static)
 target_link_options(zygisk PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+
+# libyukilinker.so -- the anonymous in-memory module loader, split into its own
+# .so that core dlopen+dlsym's at runtime (exports yuki_dlopen_memfd/dlsym/
+# dlclose). Same source as compiled-in; no lsplt/solist deps.
+add_library(yukilinker SHARED src/yukilinker.cpp)
+set_target_properties(yukilinker PROPERTIES PREFIX "lib" OUTPUT_NAME yukilinker)
+target_include_directories(yukilinker PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../..)  # repo root
+target_compile_options(yukilinker PRIVATE
+    -Os -fno-exceptions -fno-rtti
+    -ffunction-sections -fdata-sections -fvisibility=hidden
+    -fno-stack-protector)
+target_link_libraries(yukilinker PRIVATE log dl)
+target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 
 find_program(LLVM_STRIP NAMES llvm-strip)
 if(LLVM_STRIP)
