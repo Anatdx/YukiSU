@@ -27,8 +27,8 @@ int ensure_yukizygisk(bool ignore_if_exist) {
         const char* dest;
     };
     static const Payload payload[] = {
-        {"libzloader.so", ZLOADER_PATH},
         {"libzygisk.so", ZCORE_PATH},
+        {"libyukilinker.so", ZYUKILINKER_PATH},
     };
 
     // Only touch the dir if at least one lib is actually embedded in this ksud.

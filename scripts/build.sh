@@ -250,7 +250,8 @@ if cmake .. -G Ninja \
 	-DCMAKE_CXX_COMPILER="$CXX" \
 	-DCMAKE_BUILD_TYPE=Release && ninja; then
 	cp "$ZCORE_DIR/build/libzygisk.so" "$KSUD_ASSETS/"
-	echo "    libzygisk.so 已构建并嵌入 assets"
+	cp "$ZCORE_DIR/build/libyukilinker.so" "$KSUD_ASSETS/"
+	echo "    libzygisk.so + libyukilinker.so 已构建并嵌入 assets"
 else
 	echo "    ⚠️  libzygisk.so 构建失败，跳过（需 lsplt 子模块；不影响主流程）"
 fi

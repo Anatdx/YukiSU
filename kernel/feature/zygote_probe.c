@@ -66,6 +66,18 @@ void ksu_zygote_probe_set_dlopen_off(u64 dlopen_off, u64 dlsym_off)
 		dlsym_off);
 }
 
+/* yukilinker first-stage toggle (yzconfig.yukilinker), handed in by zygiskd.
+ * ON: the stub dlopens libyukilinker, which anonymously loads the core. OFF
+ * (default): the stub dlopens the core directly. Fixed at injection time, so a
+ * change applies to the next zygote (module load mode still hot-reloads). */
+static bool zp_yukilinker_enabled;
+
+void ksu_zygote_probe_set_yukilinker(bool enabled)
+{
+	zp_yukilinker_enabled = enabled;
+	pr_info("zygote_probe: yukilinker first-stage = %d\n", enabled);
+}
+
 /* patch a movz/movk x<d> sequence (4 insns, hw 0..3) with a 64-bit immediate */
 static void __maybe_unused zp_patch_imm64(u32 *insn, u64 val)
 {
@@ -140,14 +152,15 @@ static bool zp_argv1_is_xzygote(struct mm_struct *mm)
 }
 
 /*
- * [2c-3b] libzloader.so is the first-stage loader the zygote must dlopen. It
- * lives under /data/adb, which the zygote itself cannot open -- so the kernel
- * reads it (with ksu_cred) and republishes the bytes as an anonymous shmem fd
- * installed into the zygote. The injected stub hands that fd to
- * android_dlopen_ext(USE_LIBRARY_FD): no on-disk path the zygote could be
- * SELinux-denied, and no linker-namespace path lookup.
+ * [2c-3b] libyukilinker.so is the first-stage loader the zygote must dlopen
+ * (it replaced the old thin libzloader -- it both stays hidden AND anonymously
+ * loads the core itself via its own ELF loader). It lives under /data/adb,
+ * which the zygote itself cannot open -- so the kernel reads it (with ksu_cred)
+ * and republishes the bytes as an anonymous shmem fd installed into the zygote.
+ * The injected stub hands that fd to android_dlopen_ext(USE_LIBRARY_FD): no
+ * on-disk path the zygote could be SELinux-denied, and no namespace lookup.
  */
-#define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libzloader.so"
+#define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
 /* Names shown for the staged memfds in the target's /proc/pid/maps. Kept
  * innocuous (NOT libzygisk/libzloader) to dodge string-match detectors; full
@@ -465,6 +478,9 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		struct zp_dlextinfo extinfo;
 		unsigned long stub, dlopen_addr, dlsym_addr;
 		int loader_fd, core_fd, werr;
+		bool yuki;
+		const char *lib_str, *entry_str;
+		size_t lib_len, entry_len;
 
 		if (!at_base || !zp_dlopen_off || !zp_dlsym_off) {
 			pr_info("zygote_probe: [2c-3b] pid=%d no dlopen/dlsym "
@@ -479,15 +495,22 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		 * the loader (and closes its own fd), then passes the core fd
 		 * to the loader entry, which dlopens the core and closes that
 		 * fd. */
-		loader_fd = zp_stage_fd(ZP_LOADER_PATH, ZP_LOADER_VMA_NAME);
+		yuki = zp_yukilinker_enabled;
+		loader_fd =
+		    zp_stage_fd(yuki ? ZP_LOADER_PATH : ZP_CORE_PATH,
+				yuki ? ZP_LOADER_VMA_NAME : ZP_CORE_VMA_NAME);
 		if (loader_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage loader "
 				"failed: %d, skipping\n",
 				current->pid, loader_fd);
 			goto out;
 		}
-		core_fd = zp_stage_fd(ZP_CORE_PATH, ZP_CORE_VMA_NAME);
-		if (core_fd < 0) {
+		if (yuki) {
+			core_fd = zp_stage_fd(ZP_CORE_PATH, ZP_CORE_VMA_NAME);
+		} else {
+			core_fd = loader_fd; /* dlopen the core directly */
+		}
+		if (yuki && core_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage core "
 				"failed: %d, skipping\n",
 				current->pid, core_fd);
@@ -503,7 +526,9 @@ static void zp_inject_tw_func(struct callback_head *cb)
 				"%ld\n",
 				current->pid, (long)stub);
 			zp_close_current_fd(loader_fd);
-			zp_close_current_fd(core_fd);
+			if (yuki) /* OFF: core_fd == loader_fd, already closed
+				   */
+				zp_close_current_fd(core_fd);
 			goto out;
 		}
 
@@ -511,8 +536,21 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		zp_patch_imm64(&code[2], saved); /* x20 = real entry */
 		zp_patch_imm64(&code[6], dlopen_addr); /* x21 = dlopen */
 		zp_patch_imm64(&code[10], dlsym_addr); /* x23 = dlsym */
-		/* movz x0,#core_fd: the int arg to zygisk_loader_main(int) */
+		/* movz x0,#core_fd: arg to the entry. ON:
+		 * yuki_bootstrap(core_fd). OFF: zygisk_core_entry_direct
+		 * ignores it (core already mapped). */
 		code[40] = 0xd2800000u | (((u32)core_fd & 0xffff) << 5);
+
+		/* ON: stub dlopens libyukilinker + calls yuki_bootstrap. OFF:
+		 * stub dlopens the core itself + calls
+		 * zygisk_core_entry_direct. */
+		lib_str = yuki ? "libyukilinker.so" : "libzygisk.so";
+		lib_len =
+		    yuki ? sizeof("libyukilinker.so") : sizeof("libzygisk.so");
+		entry_str =
+		    yuki ? "yuki_bootstrap" : "zygisk_core_entry_direct";
+		entry_len = yuki ? sizeof("yuki_bootstrap")
+				 : sizeof("zygisk_core_entry_direct");
 
 		memset(&extinfo, 0, sizeof(extinfo));
 		extinfo.flags = ZP_DLEXT_USE_LIBRARY_FD;
@@ -522,16 +560,17 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		    copy_to_user((void __user *)(stub + ZP_STUB_EXTINFO_OFF),
 				 &extinfo, sizeof(extinfo)) ||
 		    copy_to_user((void __user *)(stub + ZP_STUB_STR_OFF),
-				 "libzloader.so", sizeof("libzloader.so")) ||
+				 lib_str, lib_len) ||
 		    copy_to_user((void __user *)(stub + ZP_STUB_ENTRY_STR_OFF),
-				 "zygisk_loader_main",
-				 sizeof("zygisk_loader_main"))) {
+				 entry_str, entry_len)) {
 			pr_info("zygote_probe: [2c-3b] pid=%d copy_to_user "
 				"failed\n",
 				current->pid);
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
-			zp_close_current_fd(core_fd);
+			if (yuki) /* OFF: core_fd == loader_fd, already closed
+				   */
+				zp_close_current_fd(core_fd);
 			goto out;
 		}
 
@@ -546,7 +585,9 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		if (werr) {
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
-			zp_close_current_fd(core_fd);
+			if (yuki) /* OFF: core_fd == loader_fd, already closed
+				   */
+				zp_close_current_fd(core_fd);
 		}
 #else
 		pr_info("zygote_probe: [1c] pid=%d redirect: arm64 only\n",
