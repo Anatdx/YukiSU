@@ -27,6 +27,10 @@ enum class Request : uint8_t {
   SelfDestruct =
       9,    // (denylist_mode==1) core unhooked; umount + munmap its segs
   Log = 10, // u16 len + len bytes -> daemon writes them to /dev/kmsg (dmesg)
+  PatchText =
+      11, // u64 addr + u32 len + len bytes -> kernel writes them into the
+          //   caller's mm via access_process_vm(FOLL_FORCE) (no mprotect, no
+          //   VMA split); used by the specialize inline-hook to patch code
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */

@@ -318,10 +318,13 @@ bool ensure_companion(uint32_t idx) {
 /* ── mount revert ─────────────────────────────────────────────────────────
  * Enter app_pid's mount namespace and unmount every module mount by scanning
  * its mountinfo -- not just KSU's tagged mount_list, so non-standard mounts
- * (other modules / manual binds) get cleaned too. A mount is reverted if its
- * source is KSU/magisk/APatch, its target is under /data/adb/modules, OR (the
- * killer) its mountinfo root field is under /adb/modules/ -- every magic-mount
- * bound out of /data/adb/modules carries that root wherever its target lands.
+ * (other modules / manual binds / storage tmpfs) get cleaned too. A mount is
+ * reverted if its source is KSU/magisk/APatch, its target is under /data/adb,
+ * OR its mountinfo root field is under /adb/modules -- every magic-mount bound
+ * out of /data/adb/modules carries that root wherever its target lands. Kept in
+ * sync with the kernel-side predicate (ksu_mount_is_module). NOTE: the kernel
+ * task_work path now covers main + isolated processes robustly; this userspace
+ * path is the redundant belt-and-suspenders for the core-driven revert.
  */
 static bool yz_mi_parse(const std::string &line, std::string &root,
                         std::string &target, std::string &source) {
@@ -364,8 +367,8 @@ static void yz_umount_root_in_ns() {
     if (!yz_mi_parse(line, root, target, source))
       continue;
     bool should = source == "KSU" || source == "magisk" || source == "APatch" ||
-                  target.rfind("/data/adb/modules", 0) == 0 ||
-                  root.rfind("/adb/modules/", 0) == 0;
+                  target.rfind("/data/adb/", 0) == 0 ||
+                  root.rfind("/adb/modules", 0) == 0;
     if (should)
       targets.push_back(target);
   }
@@ -679,6 +682,37 @@ void handle_client(int client) {
         mcmd.pid = ucmd.pid;
         ok = ksud::ksuctl(KSU_IOCTL_YZ_UMOUNT_PID, &mcmd) == 0 ? 1 : 0;
       }
+    }
+    write_exact(client, &ok, sizeof(ok));
+    break;
+  }
+  case zygiskd::Request::PatchText: {
+    // core asks us to write `len` bytes at `addr` in ITS OWN memory (the
+    // specialize inline-hook patching libandroid_runtime's code). SO_PEERCRED
+    // pins the target to the caller (unforgeable), so this only writes the
+    // caller's process. The kernel uses access_process_vm(FOLL_FORCE): a COW
+    // write that patches the read-only, file-backed code page WITHOUT mprotect,
+    // so the executable VMA is never split (defeats the exec-VMA-count check).
+    uint64_t addr = 0;
+    uint32_t len = 0;
+    if (!read_exact(client, &addr, sizeof(addr)) ||
+        !read_exact(client, &len, sizeof(len)) || len == 0 ||
+        len > YZ_PATCH_TEXT_MAX)
+      break;
+    uint8_t bytes[YZ_PATCH_TEXT_MAX];
+    if (!read_exact(client, bytes, len))
+      break;
+    struct ucred cr{};
+    socklen_t crlen = sizeof(cr);
+    uint8_t ok = 0;
+    if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
+        cr.pid > 0) {
+      yz_patch_text_cmd pcmd{};
+      pcmd.pid = static_cast<uint32_t>(cr.pid);
+      pcmd.len = len;
+      pcmd.addr = addr;
+      memcpy(pcmd.bytes, bytes, len);
+      ok = ksud::ksuctl(KSU_IOCTL_YZ_PATCH_TEXT, &pcmd) == 0 ? 1 : 0;
     }
     write_exact(client, &ok, sizeof(ok));
     break;
