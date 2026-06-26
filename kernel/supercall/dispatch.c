@@ -1222,6 +1222,59 @@ static int do_yz_unmap_self(void __user *arg)
 	return 0;
 }
 
+/* zygiskd (root) -> kernel: write cmd.len bytes at cmd.addr in TARGET pid's mm
+ * via access_process_vm(FOLL_FORCE|FOLL_WRITE) -- see KSU_IOCTL_YZ_PATCH_TEXT
+ * in uapi/yukizygisk.h. FOLL_FORCE COWs the read-only, file-backed code page
+ * and writes through it WITHOUT mprotect, so the executable mapping is not
+ * split (the specialize inline-hook needs this; an mprotect patch fragments the
+ * VMA, which detectors flag). copy_to_user_page on the write path flushes the
+ * I-cache for the exec range. zygiskd pins the target to the SO_PEERCRED
+ * caller, so this only writes the caller's own memory -- no cross-process
+ * power. */
+static int do_yz_patch_text(void __user *arg)
+{
+	struct yz_patch_text_cmd cmd;
+	struct task_struct *task;
+	int n;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.len == 0 || cmd.len > YZ_PATCH_TEXT_MAX)
+		return -EINVAL;
+	if (cmd.addr == 0 || cmd.addr >= TASK_SIZE ||
+	    cmd.addr + cmd.len < cmd.addr || cmd.addr + cmd.len > TASK_SIZE)
+		return -EINVAL;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	/* app, or the zygote (uid 0) -- the specialize hook is installed in the
+	 * zygote body before it forks. The write targets the caller's own mm
+	 * only (zygiskd resolves it via SO_PEERCRED), granting no cross-process
+	 * power; the uid gate just keeps system daemons out. */
+	if (!is_appuid(task_uid(task).val) && task_uid(task).val != 0) {
+		pr_info("yz_patch_text: reject pid=%u uid=%u\n", cmd.pid,
+			task_uid(task).val);
+		put_task_struct(task);
+		return -EPERM;
+	}
+
+	n = access_process_vm(task, (unsigned long)cmd.addr, cmd.bytes, cmd.len,
+			      FOLL_FORCE | FOLL_WRITE);
+	put_task_struct(task);
+	if (n != (int)cmd.len) {
+		pr_warn("yz_patch_text: wrote %d/%u @0x%llx pid=%u\n", n,
+			cmd.len, cmd.addr, cmd.pid);
+		return -EFAULT;
+	}
+	pr_info("yz_patch_text: %u byte(s) @0x%llx pid=%u\n", cmd.len, cmd.addr,
+		cmd.pid);
+	return 0;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1382,6 +1435,10 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "YZ_UNMAP_SELF",
      .handler = do_yz_unmap_self,
      .perm_check = injected_app},
+    {.cmd = KSU_IOCTL_YZ_PATCH_TEXT,
+     .name = "YZ_PATCH_TEXT",
+     .handler = do_yz_patch_text,
+     .perm_check = only_root},
     {.cmd = KSU_IOCTL_YZ_RELOAD,
      .name = "YZ_RELOAD",
      .handler = do_yz_reload,

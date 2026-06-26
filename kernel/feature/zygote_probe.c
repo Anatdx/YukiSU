@@ -28,6 +28,7 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/proc_fs.h>
+#include <linux/random.h>
 #include <linux/shmem_fs.h>
 #include <linux/syscalls.h>
 #include <linux/version.h>
@@ -162,11 +163,21 @@ static bool zp_argv1_is_xzygote(struct mm_struct *mm)
  */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
-/* Names shown for the staged memfds in the target's /proc/pid/maps. Kept
- * innocuous (NOT libzygisk/libzloader) to dodge string-match detectors; full
- * maps anonymisation is a separate, later step. */
-#define ZP_LOADER_VMA_NAME "jit-cache"
-#define ZP_CORE_VMA_NAME "jit-cache"
+/* The staged shmem images are named at injection time with a fresh random
+ * alphanumeric string (zp_rand_name) instead of a fixed name. The loader is
+ * mapped file-backed by the stub's android_dlopen_ext(USE_LIBRARY_FD) (the
+ * system linker), so it shows in the target's /proc/pid/maps as a named mapping
+ * the whole app inherits. A native injection detector (reveny) carries an
+ * explicit "Futile jit-cache hiding" check: it knows the genuine ART JIT names
+ * (/memfd:jit-cache, /memfd:jit-zygote-cache, anon_shmem:dalvik-jit-code-cache)
+ * and flags anything imitating them that isn't a real JIT mapping -- a private
+ * r-xp ELF called jit-cache is an obvious forgery. The detector's OWN decrypted
+ * payload, by contrast, loads as /memfd:<random> and is waved through. So a
+ * random per-injection name -- indistinguishable from any app's transient memfd
+ * -- is the camouflage; a fixed "jit-cache" walked straight into the trap.
+ * (Fully unmapping the loader once it hands the core off, as a transient
+ * stage-1, is the stronger later step.) */
+#define ZP_VMA_NAME_LEN 17 /* "memfd:" + 10 random alnum chars + NUL */
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
 
@@ -189,6 +200,34 @@ static void zp_close_current_fd(int fd)
 #else
 	close_fd(fd);
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
+}
+
+/*
+ * Build a "memfd:<random alnum>" name into buf. memfd_create() shows its images
+ * in /proc/pid/maps as "/memfd:<user-name>"; shmem_file_setup() shows the bare
+ * name verbatim, so we prepend the "memfd:" ourselves and fill the rest with a
+ * fresh random suffix. The result is indistinguishable from any app's transient
+ * memfd (ART's, or the detector's OWN decrypted payload -- both waved through),
+ * whereas a bare/un-prefixed name or the literal "jit-cache" is what reveny
+ * flags (see the ZP_VMA_NAME_LEN comment re: its "Futile jit-cache hiding").
+ */
+static void zp_rand_name(char *buf, size_t len)
+{
+	static const char pfx[] = "memfd:";
+	static const char cs[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+				 "abcdefghijklmnopqrstuvwxyz0123456789";
+	size_t plen = sizeof(pfx) - 1;
+	size_t i;
+
+	if (len <= plen) { /* defensive: buffer too small for the prefix */
+		if (len)
+			buf[0] = '\0';
+		return;
+	}
+	memcpy(buf, pfx, plen);
+	for (i = plen; i + 1 < len; i++)
+		buf[i] = cs[get_random_u32() % (sizeof(cs) - 1)];
+	buf[i] = '\0';
 }
 
 /*
@@ -481,6 +520,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		bool yuki;
 		const char *lib_str, *entry_str;
 		size_t lib_len, entry_len;
+		char loader_name[ZP_VMA_NAME_LEN], core_name[ZP_VMA_NAME_LEN];
 
 		if (!at_base || !zp_dlopen_off || !zp_dlsym_off) {
 			pr_info("zygote_probe: [2c-3b] pid=%d no dlopen/dlsym "
@@ -496,9 +536,10 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		 * to the loader entry, which dlopens the core and closes that
 		 * fd. */
 		yuki = zp_yukilinker_enabled;
-		loader_fd =
-		    zp_stage_fd(yuki ? ZP_LOADER_PATH : ZP_CORE_PATH,
-				yuki ? ZP_LOADER_VMA_NAME : ZP_CORE_VMA_NAME);
+		zp_rand_name(loader_name, sizeof(loader_name));
+		zp_rand_name(core_name, sizeof(core_name));
+		loader_fd = zp_stage_fd(yuki ? ZP_LOADER_PATH : ZP_CORE_PATH,
+					yuki ? loader_name : core_name);
 		if (loader_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d stage loader "
 				"failed: %d, skipping\n",
@@ -506,7 +547,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			goto out;
 		}
 		if (yuki) {
-			core_fd = zp_stage_fd(ZP_CORE_PATH, ZP_CORE_VMA_NAME);
+			core_fd = zp_stage_fd(ZP_CORE_PATH, core_name);
 		} else {
 			core_fd = loader_fd; /* dlopen the core directly */
 		}
