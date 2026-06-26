@@ -25,6 +25,10 @@ target_compile_definitions(lsplt_static PRIVATE LOG_DISABLED)
 add_library(zygisk SHARED
     src/core.cpp
     src/hook.cpp
+    # the anonymous in-memory loader, compiled INTO the core so libzygisk carries
+    # its own copy -- the separate libyukilinker first stage is then unloaded
+    # right after handoff (zygisk_finalize_loader) instead of lingering.
+    src/yukilinker.cpp
     # synchronous self-unmap: capture-stub template + tail-call munmap.
     src/self_unmap.S
     # solist unlink (anti-detection) -- the same source the loader uses.

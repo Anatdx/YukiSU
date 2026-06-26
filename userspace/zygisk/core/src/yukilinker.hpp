@@ -59,7 +59,8 @@ struct SoHandle {
  * module's INIT_ARRAY before returning. Returns nullptr on ANY failure (caller
  * falls back to android_dlopen_ext); never aborts. Does not take ownership of
  * `memfd` -- caller closes it. */
-SoHandle *dlopen_memfd(int memfd, const char *vma_name);
+SoHandle *dlopen_memfd(int memfd, const char *vma_name,
+                       bool file_backed = false);
 
 /* Resolve an exported symbol via GNU hash. nullptr if absent. */
 void *dlsym(SoHandle *h, const char *name);

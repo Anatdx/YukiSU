@@ -212,6 +212,9 @@ enum class ZdRequest : uint8_t {
   RevertMount = 8,  // revert this process's module mounts (denylist_mode==2)
   SelfDestruct = 9, // mode 1: unhooked, report core segs for kernel munmap
   Log = 10,         // u16 len + len bytes: zygiskd writes them to /dev/kmsg
+  PatchText = 11,   // u64 addr + u32 len + len bytes: kernel writes them into
+                    // our own mm via access_process_vm(FOLL_FORCE) -- a COW
+                    // write with no mprotect, so the exec VMA never splits
 };
 constexpr char kZygiskdSocket[] = "zygiskd64";
 
@@ -386,10 +389,17 @@ extern "C" void yz_klog(const char *fmt, ...) {
   close(s);
 }
 
-/* libyukilinker is our first-stage loader: it loaded the core and handed us its
- * dlopen/dlsym fns via zygisk_core_entry, so we DON'T dlopen it ourselves.
- * These are set in the entry and used by load_modules_impl to load modules
- * anonymously; null only if the core was loaded some legacy way. */
+/* The anonymous in-memory loader (yukilinker.cpp) is COMPILED INTO the core, so
+ * libzygisk carries its own copy of these and does NOT depend on the separate
+ * libyukilinker.so after startup. That independence is what lets the spent
+ * first-stage loader be fully unloaded (zygisk_finalize_loader) right after it
+ * hands us control, instead of lingering as a soinfo a detector can enumerate.
+ * The symbols resolve to the compiled-in definitions. */
+extern "C" {
+void *yuki_dlopen_memfd(int memfd, const char *vma_name);
+void *yuki_dlsym(void *handle, const char *name);
+void yuki_dlclose(void *handle);
+}
 using yuki_dlopen_fn = void *(*)(int, const char *);
 using yuki_dlsym_fn = void *(*)(void *, const char *);
 using yuki_dlclose_fn = void (*)(void *);
@@ -639,6 +649,11 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   // NOTE: deliberately NOT calling name_anonymous_exec() -- leaving hook
   // trampolines as bare anon r-x is safer than labelling them
   // "dalvik-jit-code-cache", which detectors content-verify against real JIT.
+  // Drop the libandroid_runtime header pages that lsplt's PLT-hook symbol scan
+  // faulted resident (inherited COW from the zygote): they inflate the
+  // library's r--p Rss/Pss into an smaps anomaly. Restores it to the pristine
+  // baseline.
+  yz_drop_runtime_header_pages();
 }
 
 void run_server_pre_impl(zygisk::ServerSpecializeArgs *args) {
@@ -671,6 +686,34 @@ void run_server_post_impl(const zygisk::ServerSpecializeArgs *args) {
 
 } // namespace
 
+/* Ask zygiskd to patch `len` bytes at `addr` in OUR OWN address space via the
+ * kernel's access_process_vm(FOLL_FORCE) (zygiskd resolves us by SO_PEERCRED).
+ * The inline-hook uses this to write its 16-byte jump into libandroid_runtime's
+ * code: the COW write patches the read-only code page without mprotect, so the
+ * executable VMA never splits. Used at install (in the zygote body) and would
+ * be used at restore (we instead madvise the page clean). extern "C" so the
+ * inline_hook.hpp header in the hook.cpp TU links to this definition. */
+extern "C" bool yz_patch_text(uintptr_t addr, const void *bytes,
+                              unsigned int len) {
+  if (bytes == nullptr || len == 0 || len > 64)
+    return false;
+  int s = connect_zygiskd();
+  if (s < 0)
+    return false;
+  uint8_t req = static_cast<uint8_t>(ZdRequest::PatchText);
+  uint64_t a64 = addr;
+  uint32_t l32 = len;
+  uint8_t ack = 0;
+  bool ok = write(s, &req, 1) == 1 &&
+            write(s, &a64, sizeof(a64)) == static_cast<ssize_t>(sizeof(a64)) &&
+            write(s, &l32, sizeof(l32)) == static_cast<ssize_t>(sizeof(l32)) &&
+            write(s, bytes, len) == static_cast<ssize_t>(len);
+  if (ok)
+    ok = read_all(s, &ack, 1) && ack != 0;
+  close(s);
+  return ok;
+}
+
 extern "C" {
 extern void (*__init_array_start[])(void) __attribute__((visibility("hidden")));
 extern void (*__init_array_end[])(void) __attribute__((visibility("hidden")));
@@ -692,13 +735,153 @@ static void core_start(const char *self_path, void *yuki_dlopen,
   zygisk_hook_bootstrap(self_path);
 }
 
+/* Address inside the first-stage loader's mapping, handed in by yuki_bootstrap
+ * (it passes &yuki_bootstrap in the first vestigial slot).
+ * zygisk_finalize_loader uses it to find the loader's soinfo BY ADDRESS -- the
+ * loader is loaded via android_dlopen_ext(USE_LIBRARY_FD), so its realpath is
+ * the random memfd path (not "libyukilinker"), and this device's linker has
+ * get_soname inlined away, so neither realpath nor soname matching is reliable.
+ * An address hit is. */
+uintptr_t g_loader_base = 0;
+
+/* aarch64 GOT-slot reloc types (only the two that can hold a resolved fn ptr).
+ */
+#ifndef R_AARCH64_GLOB_DAT
+#define R_AARCH64_GLOB_DAT 1025
+#endif // #ifndef R_AARCH64_GLOB_DAT
+#ifndef R_AARCH64_JUMP_SLOT
+#define R_AARCH64_JUMP_SLOT 1026
+#endif // #ifndef R_AARCH64_JUMP_SLOT
+
+/* Linker-provided: our own .dynamic, at its true runtime address (the compiler
+ * emits a PC-relative reference, so this is valid before any GOT is usable). */
+extern "C" const ElfW(Dyn) _DYNAMIC[];
+
+/* Resolve libc's real dl_iterate_phdr. The name is rebuilt at runtime so clang
+ * can't fold dlsym(RTLD_DEFAULT, "dl_iterate_phdr") into a &dl_iterate_phdr
+ * reference -- that would read our GOT slot, which still points at the loader's
+ * hook right now, instead of the libc symbol we actually want. */
+static void *resolve_system_dl_iterate_phdr() {
+  volatile char vn[] = "dl_iterate_phdr";
+  char nm[sizeof(vn)];
+  for (size_t i = 0; i < sizeof(vn); ++i)
+    nm[i] = vn[i];
+  return dlsym(RTLD_DEFAULT, nm);
+}
+
+/* Make the spent first-stage loader fully unmappable. When libyukilinker
+ * anonymously mapped this core, its resolve() bound our ONE special import,
+ * dl_iterate_phdr, to a hook INSIDE the loader's own mapping (every other
+ * import went to a permanent system library). The static libunwind linked into
+ * this core reaches that import, so once zygisk_finalize_loader munmaps the
+ * loader the slot would dangle and the next stack unwind (an abort backtrace, a
+ * module exception) would jump into freed memory.
+ *
+ * Re-point our own dl_iterate_phdr GOT slot at the REAL libc dl_iterate_phdr
+ * before the loader goes away: that is exactly what libunwind expects, it is
+ * never unloaded, and it adds no re-entrancy. Modules keep enumerating
+ * themselves through the core's compiled-in hook via THEIR own slots (bound by
+ * the core's builtin loader), so only the core's own slot changes. With no live
+ * reference left, the loader can be munmap'd whole -- no lingering soinfo and
+ * no VMA, the clean state every forked app then inherits. Walks .rela.plt (and
+ * .rela.dyn) via _DYNAMIC; load_bias is the core base yuki_bootstrap handed in.
+ */
+/* Returns true if it is now safe to munmap the loader -- i.e. no live reference
+ * into it remains: either there was no dl_iterate_phdr slot at all, or every
+ * such slot was successfully re-pointed at libc. Returns false (caller keeps
+ * the loader mapped as a fallback) only if a slot exists but couldn't be fixed.
+ */
+static bool rebind_self_dl_iterate_slot(uintptr_t load_bias) {
+  if (load_bias == 0)
+    return true; // OFF path (system-linker-loaded core): no loader to unmap
+  void *sysfn = resolve_system_dl_iterate_phdr();
+
+  const ElfW(Sym) *symtab = nullptr;
+  const char *strtab = nullptr;
+  const ElfW(Rela) *jmprel = nullptr, *rela = nullptr;
+  size_t pltrelsz = 0, relasz = 0;
+  for (const ElfW(Dyn) *d = _DYNAMIC; d->d_tag != DT_NULL; ++d) {
+    switch (d->d_tag) {
+    case DT_SYMTAB:
+      symtab = reinterpret_cast<const ElfW(Sym) *>(load_bias + d->d_un.d_ptr);
+      break;
+    case DT_STRTAB:
+      strtab = reinterpret_cast<const char *>(load_bias + d->d_un.d_ptr);
+      break;
+    case DT_JMPREL:
+      jmprel = reinterpret_cast<const ElfW(Rela) *>(load_bias + d->d_un.d_ptr);
+      break;
+    case DT_PLTRELSZ:
+      pltrelsz = d->d_un.d_val;
+      break;
+    case DT_RELA:
+      rela = reinterpret_cast<const ElfW(Rela) *>(load_bias + d->d_un.d_ptr);
+      break;
+    case DT_RELASZ:
+      relasz = d->d_un.d_val;
+      break;
+    default:
+      break;
+    }
+  }
+  if (symtab == nullptr || strtab == nullptr)
+    return false; // can't parse our own dynamic table -> can't prove safety
+
+  const long pg = getpagesize();
+  bool safe = true;
+  auto patch = [&](const ElfW(Rela) * r, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+      uint32_t type = ELF64_R_TYPE(r[i].r_info);
+      if (type != R_AARCH64_JUMP_SLOT && type != R_AARCH64_GLOB_DAT)
+        continue;
+      uint32_t si = ELF64_R_SYM(r[i].r_info);
+      if (strcmp(strtab + symtab[si].st_name, "dl_iterate_phdr") != 0)
+        continue;
+      if (sysfn == nullptr) {
+        safe = false; // a slot exists but we have no libc target for it
+        continue;
+      }
+      auto **slot = reinterpret_cast<void **>(load_bias + r[i].r_offset);
+      // yukilinker maps the GOT writable (it applies no RELRO), but be
+      // defensive in case that ever changes. One page fully covers the 8-byte
+      // aligned slot and can't touch an adjacent segment.
+      uintptr_t pbase =
+          reinterpret_cast<uintptr_t>(slot) & ~static_cast<uintptr_t>(pg - 1);
+      mprotect(reinterpret_cast<void *>(pbase), static_cast<size_t>(pg),
+               PROT_READ | PROT_WRITE);
+      *slot = sysfn;
+    }
+  };
+  if (jmprel != nullptr)
+    patch(jmprel, pltrelsz / sizeof(ElfW(Rela)));
+  if (rela != nullptr)
+    patch(rela, relasz / sizeof(ElfW(Rela)));
+  return safe;
+}
+
+/* Set by rebind_self_dl_iterate_slot at core entry: true once our only pointer
+ * into the loader is severed, so zygisk_finalize_loader may munmap it. */
+bool g_loader_unmap_safe = false;
+
 /* yukilinker ON: libyukilinker is the first stage; it anonymously loaded the
- * core and hands us its loader fns so modules load the same anonymous way. */
+ * core, then hands us control. We IGNORE the loader fn pointers it passes: the
+ * core was compiled with its own copy of the loader, and the loader is unloaded
+ * the moment we return (zygisk_finalize_loader), so calling back into it would
+ * dereference a freed mapping. The first slot is repurposed to carry an address
+ * inside the loader (so we can unload it precisely); the rest are unused. */
 extern "C" [[gnu::visibility("default")]] void
-zygisk_core_entry(const char *self_path, void *yuki_dlopen, void *yuki_dlsym,
-                  void *yuki_dlclose) {
-  g_yuki_dlclose = reinterpret_cast<yuki_dlclose_fn>(yuki_dlclose);
-  core_start(self_path, yuki_dlopen, yuki_dlsym);
+zygisk_core_entry(const char *self_path, void *loader_self, void *core_base,
+                  void *core_size) {
+  g_loader_base = reinterpret_cast<uintptr_t>(loader_self);
+  g_self_base = reinterpret_cast<uintptr_t>(core_base);
+  g_self_size = reinterpret_cast<size_t>(core_size);
+  g_yuki_dlclose = yuki_dlclose;
+  // Sever our only live pointer into the loader's mapping BEFORE it is unmapped
+  // (zygisk_finalize_loader, right after we return), so munmapping it is safe.
+  // If this can't be proven, the loader is kept mapped as a fallback.
+  g_loader_unmap_safe = rebind_self_dl_iterate_slot(g_self_base);
+  core_start(self_path, reinterpret_cast<void *>(yuki_dlopen_memfd),
+             reinterpret_cast<void *>(yuki_dlsym));
 }
 
 /* yukilinker OFF: the kernel stub dlopen'd the core directly -- no first-stage
@@ -707,6 +890,29 @@ zygisk_core_entry(const char *self_path, void *yuki_dlopen, void *yuki_dlsym,
 extern "C" [[gnu::visibility("default")]] void
 zygisk_core_entry_direct(int /*core_fd*/) {
   core_start(nullptr, nullptr, nullptr);
+}
+
+/* Called by the first-stage loader (libyukilinker's yuki_bootstrap) via a
+ * guaranteed tail call, right after zygisk_core_entry returns. By now the core
+ * is fully set up and carries its own loader, so the kernel-staged
+ * libyukilinker is spent. Fully unload it: the linker's own soinfo_unload frees
+ * its soinfo back to the allocator AND munmaps its mapping, so no soinfo and no
+ * VMA are left for a detector to enumerate, and every app the zygote later
+ * forks inherits the clean state. The tail call means the loader's frame is
+ * already gone, so unmapping the page yuki_bootstrap ran from is safe --
+ * control returns straight to the injection stub. Runs once, in the zygote. */
+extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int) {
+  // Load the runtime config first so the unload below actually logs: this runs
+  // at zygote-injection time, before any specialize has fetched the config, so
+  // dmesg_log would otherwise still be 0 and every SLOG/LOG a silent no-op.
+  zd_load_config();
+  LOGI("finalize_loader: unloading loader at base=%p munmap=%d",
+       (void *)g_loader_base, g_loader_unmap_safe);
+  // munmap the loader only if the core proved its dl_iterate_phdr slot was
+  // severed (rebind_self_dl_iterate_slot); otherwise keep it mapped so a
+  // dangling slot can never SIGSEGV the zygote (boot hang).
+  int n = zloader::drop_lib_containing(g_loader_base, !g_loader_unmap_safe);
+  LOGI("finalize_loader: unloaded %d soinfo(s)", n);
 }
 
 /* Bridges driven from hook.cpp's JNI specialize wrappers. */
@@ -750,41 +956,17 @@ void zygisk_revert_mounts() { yz_revert_self_mounts(); }
  * solist. Anchored on a core code address. Page-aligned for vm_munmap. false if
  * not found. */
 static bool yz_find_self_range(uintptr_t *base, size_t *size) {
-  struct Ctx {
-    uintptr_t anchor;
-    uintptr_t base;
-    size_t size;
-    bool found;
-  } ctx{reinterpret_cast<uintptr_t>(&yz_find_self_range), 0, 0, false};
-  dl_iterate_phdr(
-      [](struct dl_phdr_info *info, size_t, void *data) -> int {
-        auto *c = static_cast<Ctx *>(data);
-        uintptr_t lo = UINTPTR_MAX, hi = 0;
-        for (int i = 0; i < info->dlpi_phnum; ++i) {
-          const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
-          if (ph->p_type != PT_LOAD)
-            continue;
-          uintptr_t s = info->dlpi_addr + ph->p_vaddr;
-          uintptr_t e = s + ph->p_memsz;
-          if (s < lo)
-            lo = s;
-          if (e > hi)
-            hi = e;
-        }
-        if (hi > lo && lo <= c->anchor && c->anchor < hi) {
-          c->base = lo;
-          c->size = hi - lo;
-          c->found = true;
-          return 1; // stop the walk
-        }
-        return 0;
-      },
-      &ctx);
-  if (!ctx.found)
+  // Use the base+span the first-stage loader handed us at zygisk_core_entry,
+  // NOT dl_iterate_phdr: importing dl_iterate_phdr would make the loader (which
+  // maps us) bind that GOT slot to its in-mapping hook, and unmapping the spent
+  // loader would dangle it. With no such import the loader is fully
+  // munmap'able, so the spent first stage leaves no trace. Page-align for
+  // vm_munmap.
+  if (g_self_base == 0 || g_self_size == 0)
     return false;
   const uintptr_t pg = static_cast<uintptr_t>(getpagesize());
-  uintptr_t lo = ctx.base & ~(pg - 1);
-  uintptr_t hi = (ctx.base + ctx.size + pg - 1) & ~(pg - 1);
+  uintptr_t lo = g_self_base & ~(pg - 1);
+  uintptr_t hi = (g_self_base + g_self_size + pg - 1) & ~(pg - 1);
   *base = lo;
   *size = hi - lo;
   return true;
@@ -850,7 +1032,7 @@ static bool yz_report_self_unmap() {
  * lands straight in ART -- no core code runs after the unmap. [[noreturn]]. */
 extern "C" [[noreturn]] void yz_self_unmap_tail(void *base, size_t size);
 
-void zygisk_self_destruct(JNIEnv *env) {
+void zygisk_self_destruct(JNIEnv *env, bool isolated) {
   // Whether the tail-call munmap is usable -- snapshot BEFORE unhooking
   // clears the hook records. Safe only if every specialize native was inline-
   // hooked: then the capture stub saved THIS specialize's ART entry frame (x30,
@@ -858,20 +1040,36 @@ void zygisk_self_destruct(JNIEnv *env) {
   // stale, so we must disguise instead of tail-calling munmap.
   bool can_unmap = zygisk_specialize_fully_inline_hooked();
   zygisk_self_unhook(env);
+  // self_unhook re-hooks strdup/fork to restore the originals, which makes
+  // lsplt re-parse libandroid_runtime's .dynsym and re-fault its header. Drop
+  // those pages (plus the set inherited from the zygote) so the library's r--p
+  // Rss/Pss returns to the pristine baseline -- the force-hide process must
+  // look untouched.
+  yz_drop_runtime_header_pages();
   // Our own contiguous image range, resolved while still on the solist.
   uintptr_t cbase = 0;
   size_t csize = 0;
   bool have_range =
       yz_find_self_range(&cbase, &csize) && cbase != 0 && csize != 0;
-  // Ask zygiskd (root) to revert our module mounts (YZ_UMOUNT_PID, pid resolved
-  // via SO_PEERCRED). This no longer carries the munmap: the async kernel
-  // task_work raced our own execution and crashed the app (libc returned into
-  // the just-unmapped core). We unmap ourselves synchronously below instead.
-  bool reverted = yz_report_self_unmap();
-  zloader::hide_from_solist("libzygisk");
-  zloader::hide_from_solist("libyukilinker");
-  if (!reverted)
-    yz_revert_self_mounts(); // zygiskd unreachable: revert in-app as a fallback
+  // Mount/solist cleanup goes through zygiskd (mount revert) -- skip it
+  // entirely for an isolated process: its tight SELinux domain CANNOT reach
+  // zygiskd, so the connect attempt only emits an avc denial (which can surface
+  // in logcat for a detector to read), and its module mounts are already
+  // handled by the kernel's per-process umount task_work. An isolated teardown
+  // is purely unhook + munmap.
+  if (!isolated) {
+    // Ask zygiskd (root) to revert our module mounts (YZ_UMOUNT_PID, pid
+    // resolved via SO_PEERCRED). This no longer carries the munmap: the async
+    // kernel task_work raced our own execution and crashed the app (libc
+    // returned into the just-unmapped core). We unmap ourselves synchronously
+    // below instead.
+    bool reverted = yz_report_self_unmap();
+    zloader::hide_from_solist("libzygisk");
+    zloader::hide_from_solist("libyukilinker");
+    if (!reverted)
+      yz_revert_self_mounts(); // zygiskd unreachable: revert in-app as a
+                               // fallback
+  }
   if (have_range && can_unmap) {
     // Restore the specialize hook's entry frame (captured by the inline-hook
     // capture stub into g_yz_ret_ctx) and tail-call munmap. munmap runs in

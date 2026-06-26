@@ -185,6 +185,7 @@ size_t g_size_off = 0, g_next_off = 0, g_ctor_off = 0;
 void (*g_soinfo_unload)(void *) = nullptr;
 uint64_t *g_load_counter = nullptr;
 realpath_fn g_realpath_u = nullptr;
+realpath_fn g_soname_u = nullptr;
 guard_fn g_pdg_ctor_u = nullptr, g_pdg_dtor_u = nullptr;
 void *g_solist_head = nullptr;
 bool g_unload_done = false, g_unload_ok = false;
@@ -278,6 +279,12 @@ bool u_init() {
       syms.find("__dl__ZL21g_module_load_counter"));
   g_realpath_u = reinterpret_cast<realpath_fn>(
       syms.find("__dl__ZNK6soinfo12get_realpathEv"));
+  // get_soname: a library loaded via android_dlopen_ext(USE_LIBRARY_FD) (our
+  // first-stage loader) gets a realpath of the random memfd path, not its name,
+  // so we ALSO match on the stable DT_SONAME. Optional -- realpath-only still
+  // works for the path-named module case.
+  g_soname_u = reinterpret_cast<realpath_fn>(
+      syms.find("__dl__ZNK6soinfo10get_sonameEv"));
   g_pdg_ctor_u =
       reinterpret_cast<guard_fn>(syms.find("__dl__ZN18ProtectedDataGuardC2Ev"));
   if (g_pdg_ctor_u == nullptr)
@@ -406,7 +413,8 @@ int hide_from_solist(const char *path_substr) {
   return hidden;
 }
 
-int drop_module_from_solist(const char *path_substr, bool dry_run) {
+int drop_module_from_solist(const char *path_substr, bool dry_run,
+                            bool keep_mapped) {
   if (!u_init())
     return 0;
 
@@ -417,14 +425,32 @@ int drop_module_from_solist(const char *path_substr, bool dry_run) {
   for (int i = 0; i < kMaxWalk && cur != nullptr; ++i) {
     void *next = u_next(cur); /* save before soinfo_unload mutates the list */
     const char *p = g_realpath_u(cur);
-    if (p != nullptr && strstr(p, path_substr) != nullptr && u_size(cur) > 0) {
+    const char *sn = g_soname_u != nullptr ? g_soname_u(cur) : nullptr;
+    /* Match realpath OR soname: a USE_LIBRARY_FD load (the first-stage loader)
+     * carries a random memfd realpath but the stable DT_SONAME we passed. */
+    bool match = (p != nullptr && strstr(p, path_substr) != nullptr) ||
+                 (sn != nullptr && strstr(sn, path_substr) != nullptr);
+    /* Diagnostic (loader-unload pass only, zygote, low volume): surface every
+     * non-system soinfo so its realpath/soname are visible even if no match. */
+    if (!keep_mapped && !dry_run && p != nullptr && strncmp(p, "/system", 7) &&
+        strncmp(p, "/apex", 5) && strncmp(p, "/vendor", 7) &&
+        strncmp(p, "/product", 8) && strncmp(p, "/system_ext", 11))
+      SLOGI("solist-scan: realpath=%s soname=%s size=%zu", p,
+            sn != nullptr ? sn : "(null)", u_size(cur));
+    if (match && u_size(cur) > 0) {
       if (dry_run) {
-        SLOGI("solist-unload[dry]: would drop %s (size=%zu)", p, u_size(cur));
+        SLOGI("solist-unload[dry]: would drop realpath=%s soname=%s (size=%zu)",
+              p != nullptr ? p : "(null)", sn != nullptr ? sn : "(null)",
+              u_size(cur));
       } else {
-        SLOGI("solist-unload: dropping %s", p);
-        u_set_size(cur, 0);     /* skip munmap -> module code survives */
-        u_set_ctor(cur, false); /* don't run the module's DT_FINI */
-        g_soinfo_unload(cur); /* linker removes it from solist+ns+handle map */
+        SLOGI("solist-unload: dropping realpath=%s soname=%s (munmap=%d)",
+              p != nullptr ? p : "(null)", sn != nullptr ? sn : "(null)",
+              !keep_mapped);
+        if (keep_mapped)
+          u_set_size(cur, 0);   /* skip munmap -> module code survives */
+        u_set_ctor(cur, false); /* don't run its DT_FINI */
+        g_soinfo_unload(cur);   /* linker removes it from solist+ns+handle map
+                                 * (and munmaps the mapping when size was kept) */
         u_set_ctor(cur, true);
         if (g_load_counter != nullptr && *g_load_counter > 0)
           --(*g_load_counter);
@@ -436,6 +462,65 @@ int drop_module_from_solist(const char *path_substr, bool dry_run) {
   g_pdg_dtor_u(guard_obj);
   SLOGI("solist-unload: %s %d module seg(s) matching '%s'",
         dry_run ? "[dry] found" : "dropped", n, path_substr);
+  return n;
+}
+
+int drop_lib_containing(uintptr_t addr, bool keep_mapped) {
+  if (!u_init() || addr == 0)
+    return 0;
+  /* soinfo (LP64): phdr, phnum, base, size -- base is the pointer field right
+   * before the size field u_probe_offsets located. */
+  if (g_size_off < sizeof(void *))
+    return 0;
+  const size_t base_off = g_size_off - sizeof(void *);
+
+  int n = 0;
+  char guard_obj[16] = {}; /* dummy `this`; guard touches only linker globals */
+  g_pdg_ctor_u(guard_obj);
+  void *cur = g_solist_head;
+  for (int i = 0; i < kMaxWalk && cur != nullptr; ++i) {
+    void *next = u_next(cur); /* save before soinfo_unload mutates the list */
+    uintptr_t base = *reinterpret_cast<uintptr_t *>(
+        reinterpret_cast<uintptr_t>(cur) + base_off);
+    size_t size = u_size(cur);
+    if (size > 0 && base != 0 && addr >= base && addr < base + size) {
+      const char *p = g_realpath_u(cur);
+      SLOGI("solist-unload: dropping loader realpath=%s base=%p size=%zu "
+            "munmap=%d",
+            p != nullptr ? p : "(null)", reinterpret_cast<void *>(base), size,
+            !keep_mapped);
+      /* Default: full unload, mapping included. The core severed its only
+       * pointer into this loader before calling us -- its lone dl_iterate_phdr
+       * GOT slot was re-pointed at libc (rebind_self_dl_iterate_slot), every
+       * other import already resolved to a system library, the loader
+       * registered no atexit handlers (no init_array), and the injection stub
+       * stashed but never re-touches the loader handle. We run from the
+       * core/linker/libc here, never from the loader, so keeping the recorded
+       * size lets soinfo_unload munmap the loader's VMA: no soinfo AND no maps
+       * entry are left for a detector, the clean state every forked app
+       * inherits.
+       *
+       * keep_mapped is the safety fallback the core requests when it could NOT
+       * prove the GOT slot was severed (rebind failed): free the soinfo but
+       * setSize(0) so unload skips munmap, leaving the mapping resident. Less
+       * stealthy, but it can never dangle the slot into freed memory -> no boot
+       * hang. */
+      if (keep_mapped)
+        u_set_size(cur, 0);   /* unload skips munmap; mapping survives */
+      u_set_ctor(cur, false); /* skip the spent loader's DT_FINI (a no-op) */
+      g_soinfo_unload(
+          cur); /* off solist/ns/handle map (+ munmaps if size kept);
+                 * do NOT touch cur after: the soinfo is freed */
+      if (g_load_counter != nullptr && *g_load_counter > 0)
+        --(*g_load_counter);
+      ++n;
+      break; /* exactly one library can contain the address */
+    }
+    cur = next;
+  }
+  g_pdg_dtor_u(guard_obj);
+  SLOGI("solist-unload: drop_lib_containing(%p) -> %d",
+        reinterpret_cast<void *>(addr), n);
   return n;
 }
 

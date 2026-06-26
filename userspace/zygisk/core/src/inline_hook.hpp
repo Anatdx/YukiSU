@@ -6,24 +6,49 @@
  * ArtMethod entry, so ART (especially the USAP pool's cached entries) holds a
  * pointer INTO the core; when denylist mode-1 munmaps the core that pointer
  * dangles and the next call SIGSEGVs. Instead we patch the original native's
- * first 16 bytes to jump to our wrapper and run the saved prologue from a
+ * prologue to jump to our wrapper and run the displaced instructions from a
  * trampoline -- ART's ArtMethod entry keeps pointing at the (unchanged) system-
  * library address, so after we restore the bytes and munmap the core there is
  * no residue.
  *
- * Relocation: we only copy the first 4 instructions verbatim; if any is
- * PC-relative (adr/adrp/b/bl/b.cond/cbz/cbnz/tbz/tbnz/ldr-literal) we bail and
- * the caller falls back to RegisterNatives. A non-leaf JNI prologue is
- * push/sub/mov (never PC-relative), so the common case hooks cleanly.
+ * BTI: libandroid_runtime is compiled with branch-target-identification, so its
+ * code pages are guarded and each native begins with `paciasp` (a valid call
+ * landing pad). ART reaches the native via an indirect BLR, which on a guarded
+ * page demands the target be a landing pad. Two consequences shape the patch:
+ *   1. the patched first instruction MUST be a landing pad -> we write `BTI c`.
+ *   2. the trampoline's jump BACK into the (guarded) library lands
+ * mid-function, which an indirect BR cannot do -> it must be a *direct* B, and
+ * direct branches only reach +-128MB, so the trampoline page is allocated near
+ * the target. (The old mprotect-based patch sidestepped all this by
+ * mprotect'ing the page R-X without PROT_BTI, which silently STRIPPED the guard
+ * -- but that also split the VMA, the very thing we now avoid by writing
+ * through the kernel's FOLL_FORCE path instead of mprotect.)
+ *
+ * Relocation: we copy the first 2 instructions verbatim; if either is
+ * PC-relative we bail and the caller falls back to RegisterNatives. A non-leaf
+ * JNI prologue is paciasp + sub-sp (never PC-relative), so the common case
+ * hooks cleanly.
  *
  * Author: Anatdx
  */
 #pragma once
 
+#include <sys/auxv.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 
 #include <cstdint>
 #include <cstring>
+
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif // #ifndef MAP_FIXED_NOREPLACE
+#ifndef PR_SET_VMA
+#define PR_SET_VMA 0x53564d41
+#endif // #ifndef PR_SET_VMA
+#ifndef PR_SET_VMA_ANON_NAME
+#define PR_SET_VMA_ANON_NAME 0
+#endif // #ifndef PR_SET_VMA_ANON_NAME
 
 /* capture-stub template + ret-ctx slot, defined in self_unmap.S. */
 extern "C" {
@@ -32,14 +57,21 @@ extern uint8_t yz_cap_tmpl_ctx[];
 extern uint8_t yz_cap_tmpl_wrap[];
 extern uint8_t yz_cap_tmpl_end[];
 extern uint64_t g_yz_ret_ctx[];
+/* Write `len` bytes at `addr` in our own mm via the kernel (defined in
+ * core.cpp): zygiskd -> KSU_IOCTL_YZ_PATCH_TEXT ->
+ * access_process_vm(FOLL_FORCE). A copy-on-write patch with NO mprotect, so the
+ * patched system library's executable VMA stays a single mapping instead of
+ * being split. */
+bool yz_patch_text(uintptr_t addr, const void *bytes, unsigned int len);
 }
 
 namespace yuki::ihook {
 
 struct Hook {
   uint32_t *target = nullptr; // patched function start
-  uint32_t saved[4] = {};     // original 4 instructions (for restore)
-  void *trampoline = nullptr; // R-X: saved 4 insns + jump back to target+16
+  uint32_t saved[2] = {};     // original 2 instructions (paciasp + sub-sp)
+  void *trampoline =
+      nullptr; // R-X near page: capture stub + [2 insns + B back]
   bool active = false;
 };
 
@@ -60,23 +92,66 @@ inline bool is_pcrel(uint32_t i) {
   return false;
 }
 
-inline bool set_prot(void *addr, bool writable) {
-  auto a = reinterpret_cast<uintptr_t>(addr);
-  uintptr_t start = a & ~0xFFFul;
-  uintptr_t end = (a + 16 + 0xFFFul) & ~0xFFFul;
-  int prot =
-      writable ? (PROT_READ | PROT_WRITE | PROT_EXEC) : (PROT_READ | PROT_EXEC);
-  return mprotect(reinterpret_cast<void *>(start), end - start, prot) == 0;
+/* Encode a direct `B` from `from` to `to` (both must be within +-128MB). */
+inline uint32_t enc_b(uintptr_t from, uintptr_t to) {
+  int64_t off = static_cast<int64_t>(to) - static_cast<int64_t>(from);
+  return 0x14000000u | (static_cast<uint32_t>(off >> 2) & 0x03FFFFFFu);
 }
 
-/* Patch `target`'s first 16 bytes to jump to a per-hook capture stub (copied
- * from yz_cap_tmpl, literal-patched to save the entry frame into g_yz_ret_ctx
- * and then jump to `replacement`). Returns the call-original trampoline (run it
- * to reach the un-hooked native), or nullptr on failure (caller should fall
- * back to RegisterNatives). */
+/* mmap a page within ~120MB of `target` so a direct B reaches both ways. The
+ * library we hook is BTI-guarded, so the only way to branch back into it
+ * mid-function is a direct B (+-128MB). Returns nullptr if no near slot is free
+ * (caller falls back to RegisterNatives). */
+inline void *alloc_near(uintptr_t target) {
+  const uintptr_t reach = 0x7800000; // ~120MB, comfortably under B's +-128MB
+  uintptr_t base = target & ~static_cast<uintptr_t>(0xFFF);
+  for (uintptr_t off = 0x10000; off <= reach; off += 0x10000) {
+    for (int up = 0; up < 2; ++up) {
+      uintptr_t hint = up ? base + off : base - off;
+      void *p =
+          mmap(reinterpret_cast<void *>(hint), 0x1000, PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+      if (p == MAP_FAILED)
+        continue;
+      if (reinterpret_cast<uintptr_t>(p) == hint)
+        return p;
+      munmap(p, 0x1000); // old kernel ignored the hint -> not near, retry
+    }
+  }
+  return nullptr;
+}
+
+/* A random, stable-per-process name to label our trampoline VMAs with. A
+ * NAMELESS executable anonymous mapping is exactly what an "unknown exec item"
+ * scan inside an isolated process (which inherited this page from the zygote,
+ * where our code can't run to clean up) flags; a named one reads like the app's
+ * own JIT/allocator anon. Generated once from AT_RANDOM, so every fork inherits
+ * the same label -- mirrors the reference implementation's "[anon:<random>]"
+ * rwx labelling. */
+inline const char *tramp_vma_name() {
+  static char name[16];
+  static bool ready = false;
+  if (!ready) {
+    static const char cs[] =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const auto *r = reinterpret_cast<const uint8_t *>(getauxval(AT_RANDOM));
+    for (int i = 0; i < 11; ++i) {
+      uint8_t b = r != nullptr ? r[i % 16] : static_cast<uint8_t>(i * 37 + 11);
+      name[i] = cs[b % (sizeof(cs) - 1)];
+    }
+    name[11] = '\0';
+    ready = true;
+  }
+  return name;
+}
+
+/* Patch `target`'s prologue (BTI c + direct B) to jump to a per-hook capture
+ * stub; the stub saves the ART entry frame then jumps to `replacement`. Returns
+ * the call-original trampoline (run it to reach the un-hooked native), or
+ * nullptr on failure (caller should fall back to RegisterNatives). */
 inline void *install(void *target, void *replacement, Hook *out) {
   auto *t = reinterpret_cast<uint32_t *>(target);
-  for (int i = 0; i < 4; ++i)
+  for (int i = 0; i < 2; ++i)
     if (is_pcrel(t[i]))
       return nullptr; // un-relocatable prologue -> bail
 
@@ -85,10 +160,10 @@ inline void *install(void *target, void *replacement, Hook *out) {
   const size_t wrap_off = static_cast<size_t>(yz_cap_tmpl_wrap - yz_cap_tmpl);
   const size_t co_off = (cap_size + 3U) & ~static_cast<size_t>(3); // 4-aligned
 
-  // page layout: [capture stub][call-orig trampoline]. RW now, R-X after write.
-  void *tr = mmap(nullptr, 0x1000, PROT_READ | PROT_WRITE,
-                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (tr == MAP_FAILED)
+  // Trampoline page near the target so both the patch's forward B and the
+  // call-orig's backward B reach (BTI: the jump back must be a direct branch).
+  void *tr = alloc_near(reinterpret_cast<uintptr_t>(target));
+  if (tr == nullptr)
     return nullptr;
   auto *base = reinterpret_cast<uint8_t *>(tr);
   // capture stub: copy the template, patch its two literals.
@@ -97,34 +172,41 @@ inline void *install(void *target, void *replacement, Hook *out) {
       reinterpret_cast<uint64_t>(g_yz_ret_ctx);
   *reinterpret_cast<uint64_t *>(base + wrap_off) =
       reinterpret_cast<uint64_t>(replacement);
-  // call-orig trampoline: original 4 insns + absolute jump to target+16.
+  // call-orig trampoline: original 2 insns + direct B back to target+8. The
+  // displaced paciasp + sub-sp re-establish the frame, then we re-enter the
+  // real native past the prologue we overwrote.
   auto *co = reinterpret_cast<uint32_t *>(base + co_off);
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 2; ++i) {
     out->saved[i] = t[i];
     co[i] = t[i];
   }
-  const uint64_t back = reinterpret_cast<uint64_t>(target) + 16;
-  co[4] = 0x58000050; // LDR X16, #8
-  co[5] = 0xD61F0200; // BR  X16
-  co[6] = static_cast<uint32_t>(back & 0xFFFFFFFF);
-  co[7] = static_cast<uint32_t>(back >> 32);
+  co[2] = enc_b(reinterpret_cast<uintptr_t>(co + 2),
+                reinterpret_cast<uintptr_t>(target) + 8);
   __builtin___clear_cache(reinterpret_cast<char *>(tr),
-                          reinterpret_cast<char *>(base + co_off + 32));
+                          reinterpret_cast<char *>(base + co_off + 12));
   mprotect(tr, 0x1000, PROT_READ | PROT_EXEC);
+  // Label it so the page isn't a NAMELESS r-x anon region (an "unknown exec"
+  // signature in isolated processes that inherit it). Pure-anon execmem keeps
+  // working; only the maps name changes. Best-effort -- ignore failure.
+  prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, tr, 0x1000, tramp_vma_name());
 
-  // patch target's first 16 bytes -> capture stub at tr.
-  if (!set_prot(target, true)) {
+  // patch target's first 8 bytes: BTI c (landing pad for ART's indirect BLR on
+  // the guarded page) + direct B to the capture stub. Written via the kernel
+  // (zygiskd -> access_process_vm FOLL_FORCE): a copy-on-write patch with NO
+  // mprotect, so the library's executable VMA stays a single mapping (an
+  // mprotect patch fragments it, which detectors flag). Kernel flushes I-cache.
+  uint32_t patch[2] = {
+      0xD503245F, // BTI c
+      enc_b(reinterpret_cast<uintptr_t>(target) + 4,
+            reinterpret_cast<uintptr_t>(tr)), // B <capture stub>
+  };
+  if (!yz_patch_text(reinterpret_cast<uintptr_t>(target), patch,
+                     sizeof(patch))) {
     munmap(tr, 0x1000);
     return nullptr;
   }
-  const uint64_t cap = reinterpret_cast<uint64_t>(tr);
-  t[0] = 0x58000050; // LDR X16, #8
-  t[1] = 0xD61F0200; // BR  X16
-  t[2] = static_cast<uint32_t>(cap & 0xFFFFFFFF);
-  t[3] = static_cast<uint32_t>(cap >> 32);
-  set_prot(target, false);
   __builtin___clear_cache(reinterpret_cast<char *>(target),
-                          reinterpret_cast<char *>(target) + 16);
+                          reinterpret_cast<char *>(target) + 8);
 
   out->target = t;
   out->trampoline = tr;
@@ -137,24 +219,21 @@ inline void *install(void *target, void *replacement, Hook *out) {
 inline void uninstall(Hook *h) {
   if (!h->active)
     return;
-  if (set_prot(h->target, true)) {
-    for (int i = 0; i < 4; ++i)
-      h->target[i] = h->saved[i];
-    set_prot(h->target, false);
-    __builtin___clear_cache(reinterpret_cast<char *>(h->target),
-                            reinterpret_cast<char *>(h->target) + 16);
-    // Drop the COW-dirtied page(s) so they reload clean from the backing file.
-    // Patching forced a private copy-on-write; even after restoring the bytes
-    // the page stays private-dirty + anonymous on libandroid_runtime.so, which
-    // duck's maps_anomaly flags ("shared-dirty / anonymous executable pages on
-    // a system mapping"). MADV_DONTNEED on a private file mapping discards our
-    // COW copy; the next fault re-reads the original bytes from the file as a
-    // clean, file-backed page. The patch may straddle a page boundary, so cover
-    // two.
-    auto pg =
-        reinterpret_cast<uintptr_t>(h->target) & ~static_cast<uintptr_t>(0xFFF);
-    madvise(reinterpret_cast<void *>(pg), 0x2000, MADV_DONTNEED);
-  }
+  // Restore by dropping the copy-on-write page rather than writing bytes back.
+  // The patch was a private COW over libandroid_runtime.so's read-only code
+  // page (FOLL_FORCE write, no mprotect, so the VMA stayed whole).
+  // MADV_DONTNEED discards that private copy; the next fault re-reads the
+  // ORIGINAL bytes from the backing file as a clean, file-backed, shared page
+  // -- the patch is gone AND no private-dirty/anonymous page lingers on the
+  // system mapping (which duck's maps_anomaly would flag). No bytes to write
+  // back (the file already holds them) and no kernel round-trip. Safe in the
+  // single-thread post- specialize window: nothing is executing inside this
+  // page. Then sync I-cache.
+  auto pg =
+      reinterpret_cast<uintptr_t>(h->target) & ~static_cast<uintptr_t>(0xFFF);
+  madvise(reinterpret_cast<void *>(pg), 0x2000, MADV_DONTNEED);
+  __builtin___clear_cache(reinterpret_cast<char *>(h->target),
+                          reinterpret_cast<char *>(h->target) + 8);
   if (h->trampoline != nullptr)
     munmap(h->trampoline, 0x1000);
   h->trampoline = nullptr;

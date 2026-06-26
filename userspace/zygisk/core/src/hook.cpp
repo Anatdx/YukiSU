@@ -89,13 +89,31 @@ struct ZygiskContext {
 ZygiskContext *g_ctx = nullptr;
 int (*g_orig_fork)() = nullptr;
 
-/* Isolated processes (appId 99000-99999, e.g. webview/chrome sandboxes) run
- * under a very tight SELinux domain -- they can't reach zygiskd and module
- * onLoad code tends to crash there. We skip loading modules in
- * them (they still fork+specialize normally). */
+/* Isolated processes (regular isolated appId 99000-99999 e.g. webview/chrome
+ * sandboxes, plus app-zygote isolated 90000-98999) run under a very tight
+ * SELinux domain -- they can't reach zygiskd and module onLoad code tends to
+ * crash there. We skip loading modules in them (they still fork+specialize
+ * normally). */
 bool is_isolated(int uid) {
   int app_id = uid % 100000;
-  return app_id >= 99000 && app_id <= 99999;
+  return app_id >= 90000 && app_id <= 99999;
+}
+
+/* Per-fork verdict for a specialize. An isolated child self-destructs (2): it
+ * never ran the AT_ENTRY bootstrap (that only fires on exec, not the fork that
+ * spawns it), so the core + hook trampolines it inherited from the zygote are
+ * dead code nobody there calls -- yet an "unknown/anonymous exec" scan inside
+ * the isolated process flags those anon mappings. Tearing them down reuses
+ * denylist mode 1's path (unhook + tail-call munmap of the core), which needs
+ * no zygiskd (isolated can't reach it; the munmap is synchronous and
+ * in-process). Non- isolated children take the denylist decision; the zygote
+ * parent never self-destructs (is_child=false -> 0). */
+int forked_decision(bool is_child, int uid) {
+  if (!is_child)
+    return 0;
+  if (is_isolated(uid))
+    return 2;
+  return zygisk_inject_decision(uid);
 }
 
 /* the fork() the native specialize code calls: once we've forked in
@@ -256,7 +274,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            // pre-fork fd scan aborts on a /data/adb/modules fd ('Not
            // allowlisted').
            bool run_modules = ctx.pid == 0 && !is_isolated(uid);
-           int decision = run_modules ? zygisk_inject_decision(uid) : 0;
+           int decision = forked_decision(ctx.pid == 0, uid);
            if (decision == 2) // denylist + force mode: do not inject
              run_modules = false;
            if (run_modules) {
@@ -284,7 +302,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            if (run_modules)
              zygisk_run_app_post(&args);
            if (decision == 2)
-             zygisk_self_destruct(env); // mode 1: unhook + kernel munmap core
+             zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
            // A child zygote keeps forking apps via forkRepeatedly, whose native
@@ -330,7 +348,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            // are sanitized / exempted instead of aborting a later
            // forkRepeatedly.
            bool run_modules = ctx.pid == 0 && !is_isolated(uid);
-           int decision = run_modules ? zygisk_inject_decision(uid) : 0;
+           int decision = forked_decision(ctx.pid == 0, uid);
            if (decision == 2) // denylist + force mode: do not inject
              run_modules = false;
            if (run_modules) {
@@ -354,7 +372,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            if (run_modules)
              zygisk_run_app_post(&args);
            if (decision == 2)
-             zygisk_self_destruct(env); // mode 1: unhook + kernel munmap core
+             zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
            // A child zygote keeps forking apps via forkRepeatedly, whose native
@@ -390,7 +408,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.mount_data_dirs = &mount_data_dirs;
            args.mount_storage_dirs = &mount_storage_dirs;
            bool run_modules = !is_isolated(uid);
-           int decision = run_modules ? zygisk_inject_decision(uid) : 0;
+           int decision = forked_decision(true, uid);
            if (decision == 2) // denylist + force mode: do not inject
              run_modules = false;
            if (run_modules) { // USAP: skip isolated processes
@@ -409,7 +427,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            if (run_modules)
              zygisk_run_app_post(&args);
            if (decision == 2)
-             zygisk_self_destruct(env); // mode 1: unhook + kernel munmap core
+             zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
          })},
@@ -436,7 +454,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            args.mount_storage_dirs = &mount_storage_dirs;
            args.mount_sysprop_overrides = &mount_sysprop_overrides;
            bool run_modules = !is_isolated(uid);
-           int decision = run_modules ? zygisk_inject_decision(uid) : 0;
+           int decision = forked_decision(true, uid);
            if (decision == 2) // denylist + force mode: do not inject
              run_modules = false;
            if (run_modules) { // USAP: skip isolated processes
@@ -456,7 +474,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            if (run_modules)
              zygisk_run_app_post(&args);
            if (decision == 2)
-             zygisk_self_destruct(env); // mode 1: unhook + kernel munmap core
+             zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
          })},
@@ -650,6 +668,30 @@ void hook_zygote_jni() {
 }
 
 } // namespace
+
+/* Drop the libandroid_runtime header pages that PLT-hooking faulted resident.
+ * lsplt resolves "strdup"/"fork" by parsing the library's .dynsym/.dynstr from
+ * the LOADED segment (elf_util reads base_addr_), a linear symbol scan that
+ * faults ~320 KB of its r--p header (offset 0) into residency. That occurs in
+ * the zygote (inherited COW by every fork) and again when we re-hook to unhook
+ * at self-destruct, so libandroid_runtime's header carries a much higher
+ * Rss/Pss than a pristine process -- its pages end up shared only across the
+ * injected zygote lineage (Pss ~60 vs a system-wide ~2), an smaps anomaly. (A
+ * first stage that parsed a separate file mmap would never fault the loaded
+ * segment; we drop the pages after the fact instead.) MADV_DONTNEED frees them;
+ * the kernel reloads them clean from the file on any later access. Call
+ * post-specialize, in the child, single-threaded -- no concurrent .dynsym
+ * reader. kAndroidRuntime / lsplt are the anonymous-namespace members above,
+ * visible throughout this TU. */
+void yz_drop_runtime_header_pages() {
+  for (const auto &m : lsplt::MapInfo::Scan()) {
+    if (m.offset == 0 && m.perms == PROT_READ &&
+        m.path.ends_with(kAndroidRuntime)) {
+      madvise(reinterpret_cast<void *>(m.start),
+              static_cast<size_t>(m.end - m.start), MADV_DONTNEED);
+    }
+  }
+}
 
 /* PLT-hooks libandroid_runtime's strdup; Zygote's startup drives us from there.
  * No JNI here -- safe as early as the program entry. */

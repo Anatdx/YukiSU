@@ -13,6 +13,8 @@
  */
 #pragma once
 
+#include <cstdint>
+
 namespace zloader {
 
 /* Unlink every soinfo whose realpath contains path_substr from the linker's
@@ -20,12 +22,28 @@ namespace zloader {
  * failure -- never aborts the host. */
 int hide_from_solist(const char *path_substr);
 
-/* Properly drop modules (which ARE queried via dlsym/dl_iterate_phdr) from the
- * solist using the linker's own soinfo_unload, keeping the namespace list and
- * handle map consistent (a plain re-link would crash the app). setSize(0) keeps
- * the module code mapped. dry_run only probes offsets + logs, touching nothing.
- * Returns the number matched. */
-int drop_module_from_solist(const char *path_substr, bool dry_run);
+/* Properly drop libraries (which ARE queried via dlsym/dl_iterate_phdr, or
+ * whose soinfo a detector enumerates via the allocator) from the linker using
+ * its own soinfo_unload, keeping the namespace list and handle map consistent
+ * (a plain re-link would crash the app). dry_run only probes offsets + logs,
+ * touching nothing. keep_mapped=true (modules) setSize(0)s first so unload
+ * skips munmap and the code stays mapped; keep_mapped=false (the spent
+ * first-stage loader) lets unload munmap the mapping too, leaving no soinfo AND
+ * no VMA behind. Returns the number matched. */
+int drop_module_from_solist(const char *path_substr, bool dry_run,
+                            bool keep_mapped = true);
+
+/* Remove (soinfo_unload: out of solist/ns/handle-map) the single library whose
+ * loaded range [base, base+size) contains `addr` -- used to drop the spent
+ * first-stage loader by an address inside it, since its realpath (random memfd)
+ * and soname (inlined away in the linker) are both unmatchable by string.
+ * keep_mapped=false (default): also munmap the mapping (the core re-pointed its
+ * lone dl_iterate_phdr GOT slot off the loader first, so nothing dangles) ->
+ * leaves no soinfo AND no VMA. keep_mapped=true: safety fallback when that GOT
+ * slot could NOT be severed -- free the soinfo but setSize(0) so unload skips
+ * munmap and the mapping stays resident (can't dangle -> no boot hang). Returns
+ * 1 if a library was dropped, else 0. */
+int drop_lib_containing(uintptr_t addr, bool keep_mapped = false);
 
 /* Anonymize module VMAs: copy each segment whose maps line contains path_substr
  * to an anonymous mapping and mremap it back FIXED, dropping the file path from

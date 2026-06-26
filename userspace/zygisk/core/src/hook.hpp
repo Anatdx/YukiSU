@@ -26,6 +26,11 @@ void zygisk_revert_mounts();
 /* denylist mode 1 self-destruct helpers: undo all hooks, then report the
  * contiguous mapping containing `known` so the kernel can munmap it. */
 void zygisk_self_unhook(JNIEnv *env);
+/* Drop the libandroid_runtime r--p header pages that PLT-hook symbol resolution
+ * faulted resident (inflated Rss/Pss = an smaps anomaly). Call post-specialize
+ * in the child, single-threaded. Full rationale at the definition in hook.cpp.
+ */
+void yz_drop_runtime_header_pages();
 /* True iff all specialize natives were inline-hooked (no RegisterNatives
  * fallback) -> each wrapper ran its capture stub, so g_yz_ret_ctx is valid and
  * the tail-call munmap is safe. Query BEFORE zygisk_self_unhook clears
@@ -33,7 +38,7 @@ void zygisk_self_unhook(JNIEnv *env);
 bool zygisk_specialize_fully_inline_hooked();
 int zygisk_collect_path_segs(const char *substr, uint64_t *addr, uint64_t *size,
                              int max);
-void zygisk_self_destruct(JNIEnv *env);
+void zygisk_self_destruct(JNIEnv *env, bool isolated = false);
 void zygisk_load_modules(JNIEnv *env);
 void zygisk_run_app_pre(zygisk::AppSpecializeArgs *args);
 void zygisk_run_app_post(const zygisk::AppSpecializeArgs *args);

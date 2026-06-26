@@ -276,7 +276,7 @@ bool apply_relr(SoHandle *h, const ElfW(Addr) * relr, size_t count) {
 
 } // namespace
 
-SoHandle *dlopen_memfd(int memfd, const char *vma_name) {
+SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   struct stat st;
   if (fstat(memfd, &st) != 0 || st.st_size < (off_t)sizeof(ElfW(Ehdr))) {
     ZLOGE("yukilinker: fstat memfd: %s", strerror(errno));
@@ -340,16 +340,60 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name) {
     uintptr_t seg = (uintptr_t)(bias + page_down(phdr[i].p_vaddr));
     size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
     size_t len = page_up(pre + phdr[i].p_memsz);
-    /* Map writable anonymous, copy file bytes; BSS tail is already zero. */
-    if (mmap((void *)seg, len, PROT_READ | PROT_WRITE,
-             MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
-      ZLOGE("yukilinker: map seg: %s", strerror(errno));
-      munmap(reserve, map_size);
-      cleanup_src();
-      return nullptr;
+    if (file_backed) {
+      /* Map the file-backed pages straight from the memfd so the segment
+       * carries a "/memfd:<name> (deleted)" path + inode in /proc/maps. An
+       * "unknown exec" / anonymous-executable scan (a detector inside an
+       * isolated process that inherited this mapping, where our injected code
+       * never runs to clean up) ignores file-backed mappings but flags
+       * pure-anonymous (inode 0, no path) ones.
+       *
+       * Map each segment at its FINAL protection. We must NOT map writable then
+       * mprotect-to-exec: making a *modified* MAP_PRIVATE file mapping
+       * executable is SELinux "execmod", which the zygote domain is denied on
+       * memfd/tmpfs (boot loop). A PIC text segment is never written (no text
+       * relocations), so mapping it r-x straight from the file needs only
+       * "execute" -- allowed, exactly how the system linker maps a .so.
+       * Writable data segments are mapped r-w so relocations can write them;
+       * they aren't executable. */
+      int seg_prot = prot_of(phdr[i].p_flags);
+      size_t file_len = page_up(pre + phdr[i].p_filesz);
+      off_t file_off = (off_t)(phdr[i].p_offset - pre); // page-aligned (ELF)
+      if (file_len > 0 &&
+          mmap((void *)seg, file_len, seg_prot, MAP_FIXED | MAP_PRIVATE, memfd,
+               file_off) == MAP_FAILED) {
+        ZLOGE("yukilinker: map seg from memfd: %s", strerror(errno));
+        munmap(reserve, map_size);
+        cleanup_src();
+        return nullptr;
+      }
+      // Zero the BSS bytes sharing the last file page (writable segments only
+      // -- an r-x/r-- segment has no BSS to zero and can't be written anyway).
+      size_t file_end = pre + phdr[i].p_filesz;
+      if ((seg_prot & PROT_WRITE) && file_len > file_end)
+        memset((void *)(seg + file_end), 0, file_len - file_end);
+      if (len > file_len &&
+          mmap((void *)(seg + file_len), len - file_len, seg_prot,
+               MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
+        ZLOGE("yukilinker: map bss: %s", strerror(errno));
+        munmap(reserve, map_size);
+        cleanup_src();
+        return nullptr;
+      }
+    } else {
+      /* Modules: writable anonymous + copy. They never reach an isolated
+       * process, so pure-anon is fine and avoids leaving a per-module backing
+       * around. */
+      if (mmap((void *)seg, len, PROT_READ | PROT_WRITE,
+               MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
+        ZLOGE("yukilinker: map seg: %s", strerror(errno));
+        munmap(reserve, map_size);
+        cleanup_src();
+        return nullptr;
+      }
+      memcpy((void *)(seg + pre), (const uint8_t *)src + phdr[i].p_offset,
+             phdr[i].p_filesz);
     }
-    memcpy((void *)(seg + pre), (const uint8_t *)src + phdr[i].p_offset,
-           phdr[i].p_filesz);
     name_vma((void *)seg, len, phdr[i].p_flags, vma_name);
   }
 
@@ -467,15 +511,20 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name) {
     return nullptr; // h is arena-backed; not individually freed
   }
 
-  /* Final segment protections (drop the temporary write permission). */
-  for (size_t i = 0; i < phnum; i++) {
-    if (phdr[i].p_type != PT_LOAD)
-      continue;
-    uintptr_t seg = (uintptr_t)(bias + page_down(phdr[i].p_vaddr));
-    size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
-    size_t len = page_up(pre + phdr[i].p_memsz);
-    mprotect((void *)seg, len, prot_of(phdr[i].p_flags));
-  }
+  /* Final segment protections (drop the temporary write permission). Only the
+   * anonymous path needs this -- file_backed segments were already mapped at
+   * their final protection (mapping them writable-then-mprotect-exec would be
+   * the "execmod" the zygote is denied on memfd; the text segment is also never
+   * written, so re-mprotect'ing it to exec must be avoided). */
+  if (!file_backed)
+    for (size_t i = 0; i < phnum; i++) {
+      if (phdr[i].p_type != PT_LOAD)
+        continue;
+      uintptr_t seg = (uintptr_t)(bias + page_down(phdr[i].p_vaddr));
+      size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
+      size_t len = page_up(pre + phdr[i].p_memsz);
+      mprotect((void *)seg, len, prot_of(phdr[i].p_flags));
+    }
 
   cleanup_src(); // done copying; drop the file-backed view
   if (g_image_count < kMaxImages)
@@ -518,10 +567,32 @@ void dlclose(SoHandle *h) {
   // h is arena-backed; not individually freed (dlclose is a rare path).
 }
 
+/* Resolved once via dlsym (NOT a static import): if the core imported
+ * dl_iterate_phdr, the loader that mapped the core would bind that GOT slot to
+ * THIS hook, and unmapping the spent loader would dangle it. Going through
+ * dlsym keeps the slot out of our dynsym entirely, so the spent loader can be
+ * fully munmap'd with no lingering trace. */
+using sys_iter_fn = int (*)(int (*)(struct dl_phdr_info *, size_t, void *),
+                            void *);
+static sys_iter_fn g_sys_dl_iterate = nullptr;
+
 int dl_iterate_phdr_hook(int (*cb)(struct dl_phdr_info *, size_t, void *),
                          void *data) {
+  if (g_sys_dl_iterate == nullptr) {
+    // Defeat clang's "dlsym(RTLD_DEFAULT, constant)" folding: it would rewrite
+    // this into a direct dl_iterate_phdr reference, re-creating the import
+    // whose GOT slot the loader binds to ITS in-mapping hook -> dangles when we
+    // unmap the loader. A volatile-sourced name forces a genuine runtime
+    // lookup, so the core ends up with NO dl_iterate_phdr import at all and the
+    // loader is fully munmap'able.
+    volatile char vn[] = "dl_iterate_phdr";
+    char nm[sizeof(vn)];
+    for (size_t i = 0; i < sizeof(vn); i++)
+      nm[i] = vn[i];
+    g_sys_dl_iterate = reinterpret_cast<sys_iter_fn>(::dlsym(RTLD_DEFAULT, nm));
+  }
   /* First the real system libraries. */
-  int rc = ::dl_iterate_phdr(cb, data);
+  int rc = g_sys_dl_iterate != nullptr ? g_sys_dl_iterate(cb, data) : 0;
   if (rc != 0)
     return rc;
   /* Then our anonymously-mapped modules, so they can find themselves. */
@@ -587,19 +658,40 @@ extern "C" {
 [[gnu::visibility("default")]] void yuki_bootstrap(int core_fd) {
   if (core_fd < 0)
     return;
-  yukilinker::SoHandle *core = yukilinker::dlopen_memfd(core_fd, "jit-cache");
+  // file_backed: map the core from the memfd so its segments show a "/memfd:"
+  // path + inode (not pure-anon). Isolated processes inherit this mapping and
+  // our injected code never runs in them to hide it, so it must look innocuous
+  // as mapped: an anonymous-executable / "unknown exec" scan skips file-backed
+  // maps.
+  yukilinker::SoHandle *core =
+      yukilinker::dlopen_memfd(core_fd, "jit-cache", /*file_backed=*/true);
   yuki_raw_close(core_fd); // before the zygote's pre-fork fd allowlist check
   if (core == nullptr)
     return;
   using core_entry_fn = void (*)(const char *, void *, void *, void *);
   auto entry = reinterpret_cast<core_entry_fn>(
       yukilinker::dlsym(core, "zygisk_core_entry"));
-  if (entry != nullptr)
-    // Also hand the core yuki_dlclose so it can honor a module's
-    // DLCLOSE_MODULE_LIBRARY (unload a module that isn't in scope for the app).
-    entry(kCorePath, reinterpret_cast<void *>(yuki_dlopen_memfd),
-          reinterpret_cast<void *>(yuki_dlsym),
-          reinterpret_cast<void *>(yuki_dlclose));
+  if (entry == nullptr)
+    return;
+  // The core carries its own compiled-in copy of this loader, so the dlopen/
+  // dlsym/dlclose pointers are vestigial. We repurpose the slots to hand the
+  // core: (1) an address inside our mapping (&yuki_bootstrap) so it can unload
+  // us by address; (2,3) the core's own loaded base+span so it never needs
+  // dl_iterate_phdr to find itself (which would re-introduce the import we are
+  // dropping so the loader can be fully munmap'd).
+  entry(kCorePath, reinterpret_cast<void *>(&yuki_bootstrap),
+        reinterpret_cast<void *>(core->load_bias),
+        reinterpret_cast<void *>(core->map_size));
+  // Hand control to the core to unload US. A *guaranteed* tail call: this frame
+  // is destroyed before the core munmaps the page this code lives on, so it's
+  // safe. zygisk_finalize_loader frees our soinfo + munmaps our mapping, then
+  // returns to our caller (the injection stub), which jumps to the real zygote
+  // entry. After this, no app the zygote forks inherits a trace of the loader.
+  using fin_fn = void (*)(int);
+  auto fin = reinterpret_cast<fin_fn>(
+      yukilinker::dlsym(core, "zygisk_finalize_loader"));
+  if (fin != nullptr) [[clang::musttail]]
+    return fin(0);
 }
 
 } // extern "C"
