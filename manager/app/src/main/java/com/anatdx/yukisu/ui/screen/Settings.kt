@@ -42,7 +42,6 @@ import com.ramcosta.composedestinations.generated.destinations.LogViewerScreenDe
 import com.ramcosta.composedestinations.generated.destinations.UmountManagerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MoreSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.KasumiConfigScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.YukiZygiskScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
@@ -470,16 +469,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         onCheckedChange = { enabled ->
                             MagicaHelper.setAutoJailbreakEnabled(context, enabled)
                             autoJailbreak = enabled
-                        }
-                    )
-
-                    // YukiZygisk
-                    SettingItem(
-                        icon = Icons.Filled.Memory,
-                        title = "YukiZygisk",
-                        summary = "Zygisk injection & module loading",
-                        onClick = {
-                            navigator.navigate(YukiZygiskScreenDestination)
                         }
                     )
 

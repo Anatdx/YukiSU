@@ -39,6 +39,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.KasumiConfigScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.YukiZygiskScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
 import com.anatdx.yukisu.Natives
@@ -331,6 +332,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isHideSeccompStatus = viewModel.isHideSeccompStatus,
                         kasumiAvailable = kasumiStatus == KasumiStatus.AVAILABLE,
                         onKernelClick = { showKernelSpoofDialog = true },
+                        onYukiZygiskClick = { navigator.navigate(YukiZygiskScreenDestination) },
                     )
 
                     // 链接卡片
@@ -881,6 +883,7 @@ private fun InfoCard(
     isHideSeccompStatus: Boolean = false,
     kasumiAvailable: Boolean = false,
     onKernelClick: () -> Unit = {},
+    onYukiZygiskClick: () -> Unit = {},
 ) {
     var showKsudDialog by remember { mutableStateOf(false) }
     var ksudApkVersion by remember { mutableStateOf<String?>(null) }
@@ -910,6 +913,7 @@ private fun InfoCard(
                 icon: ImageVector? = null,
                 contentColor: Color = Color.Unspecified,
                 onClick: (() -> Unit)? = null,
+                trailing: @Composable (() -> Unit)? = null,
             ) {
                 Row(
                     verticalAlignment = Alignment.Top,
@@ -936,7 +940,6 @@ private fun InfoCard(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
                             .weight(1f)
                     ) {
                         Text(
@@ -953,6 +956,9 @@ private fun InfoCard(
                             },
                             softWrap = true
                         )
+                    }
+                    if (trailing != null) {
+                        trailing()
                     }
                 }
             }
@@ -1035,10 +1041,25 @@ private fun InfoCard(
             }
 
             if (!isHideZygiskImplement && !isSimpleMode && systemInfo.zygiskImplement != "None") {
+                val isYukiZygisk = systemInfo.zygiskImplement == "YukiZygisk"
                 InfoCardItem(
                     stringResource(R.string.home_zygisk_implement),
                     systemInfo.zygiskImplement,
                     icon = Icons.Default.Adb,
+                    trailing = if (isYukiZygisk) {
+                        {
+                            IconButton(
+                                onClick = onYukiZygiskClick,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Build,
+                                    contentDescription = stringResource(R.string.settings_yukizygisk),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    } else null,
                 )
             }
 
