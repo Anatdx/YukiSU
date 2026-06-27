@@ -174,8 +174,30 @@ const ElfW(Sym) * gnu_lookup(const SoHandle *h, const char *name) {
   return nullptr;
 }
 
+/* Pretend-success stub for the module's __cxa_atexit imports. Each C++ static
+ * global a module declares produces a ctor that calls
+ *   __cxa_atexit(dtor, obj, &module_dso_handle)
+ * to register its destructor with libc's atexit table. After
+ * drop_module_from_solist unlinks the module's soinfo (so dl_iterate_phdr /
+ * dladdr can no longer see it), each of those callback addresses still sits
+ * in libc's table pointing into module code -- but a detector that walks the
+ * atexit list and calls dladdr on every callback now gets a null back and
+ * reports "found_injection" (the dangling-callback fingerprint
+ * __cxa_finalize already fixes for our own dso on the unmap path). Modules
+ * are third-party so we can't recompile them with
+ * -fno-c++-static-destructors; intercept their __cxa_atexit import here at
+ * link time and never let the entry enter libc's table in the first place.
+ * The cost is module static destructors never run, which is fine -- modules
+ * live for the app process lifetime and the OS reclaims the whole address
+ * space at exit. */
+extern "C" int yz_module_atexit_noop(void (* /*dtor*/)(void *), void * /*obj*/,
+                                     void * /*dso_handle*/) {
+  return 0;
+}
+
 /* Resolve symbol number `symidx` for image `h`:
  *   1. dl_iterate_phdr  -> our hook (so module enumerates itself)
+ *   1b. __cxa_atexit    -> no-op (don't pollute libc's atexit table)
  *   2. module's own defined symbol
  *   3. dependency dlopen handles, then RTLD_DEFAULT
  * Returns the address, or nullptr for a weak-undefined (caller leaves 0). */
@@ -188,6 +210,11 @@ void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
    *    anonymous in maps (every real module imports this). */
   if (strcmp(name, "dl_iterate_phdr") == 0)
     return (void *)&dl_iterate_phdr_hook;
+
+  /* 1b. swallow __cxa_atexit so the module's C++ static-destructor registry
+   *     never enters libc's atexit table (see yz_module_atexit_noop above). */
+  if (strcmp(name, "__cxa_atexit") == 0)
+    return (void *)&yz_module_atexit_noop;
 
   /* 2. module's own definition (an ifunc symbol's st_value is a resolver to
    *    CALL, passing hwcap as the aarch64 resolver's first arg). */

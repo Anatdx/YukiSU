@@ -49,7 +49,20 @@ target_compile_options(zygisk PRIVATE
     # zygisk core is injected and runs across fork()+specialize, where the
     # stack canary in TLS shifts -- disable the stack protector to avoid
     # spurious __stack_chk_fail aborts in the specialize wrappers/dispatch.
-    -fno-stack-protector)
+    -fno-stack-protector
+    # Don't register C++ static-global destructors into libc's atexit table.
+    # When this dso later disappears from the linker's bookkeeping (either
+    # because we munmap it, or because hide_from_solist unlinks it from the
+    # solist), every registered atexit handler still has its address sitting in
+    # libc's table, but dladdr can no longer resolve it back to a soinfo. A
+    # detector that walks libc's atexit list and calls dladdr on each callback
+    # then reports "found_injection" -- the same dangling-callback fingerprint
+    # __cxa_finalize fixes on the unmap path, except hide_from_solist can't be
+    # cleaned up after the fact (core stays live). Suppressing registration at
+    # compile time covers both paths uniformly. Trade-off: process-lifetime
+    # static destructors never run, but our exit path is the app process exit
+    # (the OS reclaims the whole address space) so there is nothing to clean.
+    -fno-c++-static-destructors)
 target_link_libraries(zygisk PRIVATE dl lsplt_static)
 # --as-needed drops the liblog DT_NEEDED that lsplt links PUBLIC: with LOG_DISABLED
 # we never call into it, so no point advertising the dependency.
@@ -67,7 +80,13 @@ target_include_directories(yukilinker PRIVATE
 target_compile_options(yukilinker PRIVATE
     -Os -fno-exceptions -fno-rtti
     -ffunction-sections -fdata-sections -fvisibility=hidden
-    -fno-stack-protector)
+    -fno-stack-protector
+    # Match the core: don't register C++ static-global destructors. The
+    # standalone first-stage already calls __cxa_finalize(&__dso_handle) before
+    # the core munmaps it, so the dangling-callback risk is covered there too;
+    # this flag is belt-and-suspenders, and prevents any handler from being
+    # registered in the first place.
+    -fno-c++-static-destructors)
 target_link_libraries(yukilinker PRIVATE dl)
 target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 
