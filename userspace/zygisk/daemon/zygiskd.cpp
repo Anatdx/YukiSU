@@ -781,38 +781,18 @@ int nl_listen() {
   return fd;
 }
 
-// A just-specialized app: hand its applicable module fds to the kernel, which
-// takes its own references and brokers them until injection.
-void on_specialize(uint32_t pid, uint32_t appid) {
-  if (g_modules.empty())
-    return;
-
-  yz_handoff_cmd cmd{};
-  cmd.pid = pid;
-  cmd.appid = appid;
-
-  int opened[YZ_MAX_MODULE_FDS];
-  uint32_t n = 0;
-  for (const auto &m : g_modules) {
-    if (n >= YZ_MAX_MODULE_FDS)
-      break;
-    int fd = open(m.lib_path.c_str(), O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
-      continue;
-    opened[n] = fd;
-    cmd.fds[n] = fd;
-    ++n;
-  }
-  cmd.n_fds = n;
-  if (n == 0)
-    return;
-
-  int ret = ksud::ksuctl(KSU_IOCTL_YZ_HANDOFF, &cmd);
-  DLOGI("handoff pid=%u appid=%u n=%u ret=%d", pid, appid, n, ret);
-
-  /* the kernel holds its own references now; drop ours */
-  for (uint32_t i = 0; i < n; ++i)
-    close(opened[i]);
+// A just-specialized app: previously we eagerly opened each module's .so here
+// and handed the fds to the kernel, which task_work'd them into the target's
+// own fd table -- the brokered fds outlived the load and surfaced as
+// /data/adb/modules/.../arm64-v8a.so entries in /proc/<app>/fd. The core never
+// knew the fd numbers so it could not close them. The core's regular request
+// path (zygiskd::Request::GetModuleFd over the daemon socket) already brokers
+// every module fd on demand and closes it immediately after loading, so the
+// kernel push channel is pure overhead that leaves an observable fingerprint.
+// Drop it. The kernel side (ksu_zygote_ctl_handoff / yz_deliver_cb) remains
+// compiled in but is now dead code that no caller reaches.
+void on_specialize(uint32_t /*pid*/, uint32_t /*appid*/) {
+  // intentionally empty -- see comment above.
 }
 
 void nl_drain(int fd) {
