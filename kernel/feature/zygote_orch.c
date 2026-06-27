@@ -170,6 +170,14 @@ void ksu_zygote_orch_on_setresuid(uid_t old_uid, uid_t new_uid)
 	if (new_uid < 10000) /* app uids only */
 		return;
 
+	/* Isolated processes (appId 90000-99999) live in a tightly confined
+	 * sandbox the core already tears itself out of in-process. The kernel
+	 * must not specialize them or broker fds into them -- that domain is
+	 * expected to stay pristine, and any kernel-side residue there is
+	 * observable from inside the sandbox. */
+	if (new_uid % 100000 >= 90000)
+		return;
+
 	spin_lock_irqsave(&zo_lock, flags);
 	i = zo_slot_of(pid);
 	if (i >= 0 && zo_children[i].state == ZO_FORKED) {
