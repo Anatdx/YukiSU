@@ -184,6 +184,7 @@ inline void soinfo_set_next(void *si, void *next) {
 size_t g_size_off = 0, g_next_off = 0, g_ctor_off = 0;
 void (*g_soinfo_unload)(void *) = nullptr;
 uint64_t *g_load_counter = nullptr;
+uint64_t *g_unload_counter = nullptr;
 realpath_fn g_realpath_u = nullptr;
 realpath_fn g_soname_u = nullptr;
 guard_fn g_pdg_ctor_u = nullptr, g_pdg_dtor_u = nullptr;
@@ -277,6 +278,8 @@ bool u_init() {
       syms.find("__dl__ZL13soinfo_unloadP6soinfo"));
   g_load_counter = reinterpret_cast<uint64_t *>(
       syms.find("__dl__ZL21g_module_load_counter"));
+  g_unload_counter = reinterpret_cast<uint64_t *>(
+      syms.find("__dl__ZL23g_module_unload_counter"));
   g_realpath_u = reinterpret_cast<realpath_fn>(
       syms.find("__dl__ZNK6soinfo12get_realpathEv"));
   // get_soname: a library loaded via android_dlopen_ext(USE_LIBRARY_FD) (our
@@ -452,8 +455,17 @@ int drop_module_from_solist(const char *path_substr, bool dry_run,
         g_soinfo_unload(cur);   /* linker removes it from solist+ns+handle map
                                  * (and munmaps the mapping when size was kept) */
         u_set_ctor(cur, true);
-        if (g_load_counter != nullptr && *g_load_counter > 0)
+        /* soinfo_unload already bumped g_module_unload_counter, so (load -
+         * unload) still equals the solist length -- the balance an untouched
+         * linker always keeps. Erase OUR load AND unload from the pair together
+         * (all-or-nothing) so the counters read as if this lib had never been
+         * mapped; dropping load alone would leave the pair one short of the
+         * solist length, a desync a clean process never shows. */
+        if (g_load_counter != nullptr && g_unload_counter != nullptr &&
+            *g_load_counter > 0 && *g_unload_counter > 0) {
           --(*g_load_counter);
+          --(*g_unload_counter);
+        }
       }
       ++n;
     }
@@ -511,8 +523,15 @@ int drop_lib_containing(uintptr_t addr, bool keep_mapped) {
       g_soinfo_unload(
           cur); /* off solist/ns/handle map (+ munmaps if size kept);
                  * do NOT touch cur after: the soinfo is freed */
-      if (g_load_counter != nullptr && *g_load_counter > 0)
+      /* Erase our load AND unload from BOTH counters together (all-or-nothing):
+       * the original dlopen bumped load, soinfo_unload just bumped unload, so
+       * dropping one without the other would leave (load - unload) one short of
+       * the solist length -- a mismatch an untouched linker never has. */
+      if (g_load_counter != nullptr && g_unload_counter != nullptr &&
+          *g_load_counter > 0 && *g_unload_counter > 0) {
         --(*g_load_counter);
+        --(*g_unload_counter);
+      }
       ++n;
       break; /* exactly one library can contain the address */
     }
