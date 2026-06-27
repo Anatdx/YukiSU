@@ -301,7 +301,15 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (run_modules)
              zygisk_run_app_post(&args);
-           if (decision == 2)
+           // A child zygote (app_zygote / webview_zygote) keeps the core
+           // resident like the main zygote: self-destructing it makes a
+           // denylist app's app_zygote asymmetric with the system zygote (which
+           // stays injected), so the two flavours of isolated child it spawns
+           // -- one forked from the resident-core system zygote, one from a
+           // torn-down app_zygote -- end up in observably different states.
+           // Keep the core here; the per-fork verdict still tears it down in
+           // the CHILDREN.
+           if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
@@ -371,7 +379,15 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            mount_storage_dirs, mount_sysprop_overrides);
            if (run_modules)
              zygisk_run_app_post(&args);
-           if (decision == 2)
+           // A child zygote (app_zygote / webview_zygote) keeps the core
+           // resident like the main zygote: self-destructing it makes a
+           // denylist app's app_zygote asymmetric with the system zygote (which
+           // stays injected), so the two flavours of isolated child it spawns
+           // -- one forked from the resident-core system zygote, one from a
+           // torn-down app_zygote -- end up in observably different states.
+           // Keep the core here; the per-fork verdict still tears it down in
+           // the CHILDREN.
+           if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
@@ -426,7 +442,15 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (run_modules)
              zygisk_run_app_post(&args);
-           if (decision == 2)
+           // A child zygote (app_zygote / webview_zygote) keeps the core
+           // resident like the main zygote: self-destructing it makes a
+           // denylist app's app_zygote asymmetric with the system zygote (which
+           // stays injected), so the two flavours of isolated child it spawns
+           // -- one forked from the resident-core system zygote, one from a
+           // torn-down app_zygote -- end up in observably different states.
+           // Keep the core here; the per-fork verdict still tears it down in
+           // the CHILDREN.
+           if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
@@ -473,7 +497,15 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                mount_sysprop_overrides);
            if (run_modules)
              zygisk_run_app_post(&args);
-           if (decision == 2)
+           // A child zygote (app_zygote / webview_zygote) keeps the core
+           // resident like the main zygote: self-destructing it makes a
+           // denylist app's app_zygote asymmetric with the system zygote (which
+           // stays injected), so the two flavours of isolated child it spawns
+           // -- one forked from the resident-core system zygote, one from a
+           // torn-down app_zygote -- end up in observably different states.
+           // Keep the core here; the per-fork verdict still tears it down in
+           // the CHILDREN.
+           if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              zygisk_revert_mounts(); // mode 2: revert mounts only (core stays)
