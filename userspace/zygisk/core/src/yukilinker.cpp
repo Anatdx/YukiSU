@@ -567,6 +567,23 @@ void dlclose(SoHandle *h) {
   // h is arena-backed; not individually freed (dlclose is a rare path).
 }
 
+/* Run + unregister every atexit handler libc has registered against THIS dso
+ * (libyukilinker as a standalone .so; in the core build this is the libzygisk
+ * dso, but the standalone yuki_bootstrap entry below is only present in the
+ * standalone .so). Each C++ static-global ctor and each fini_array entry
+ * registers via __cxa_atexit(handler, obj, &__dso_handle); if those handlers
+ * stay registered after we unmap libyukilinker, a detector that walks libc's
+ * atexit table (e.g. reveny) sees dangling callbacks that fail dladdr and
+ * reports "found_injection". Drain the list with our own dso handle. */
+extern "C" void __cxa_finalize(void *);
+// crtbegin_so.o defines `__dso_handle` per-DSO with hidden visibility, so a
+// non-weak extern here always resolves to OUR libyukilinker's dso handle. A
+// weak ref could resolve to nullptr, and __cxa_finalize(nullptr) means
+// "finalize EVERYTHING" -- it would drain libc's entire atexit table inside the
+// zygote pre-fork, which kills boot.
+extern "C" __attribute__((visibility("hidden"))) void *__dso_handle;
+inline void finalize_self_dso() { __cxa_finalize(&__dso_handle); }
+
 /* Resolved once via dlsym (NOT a static import): if the core imported
  * dl_iterate_phdr, the loader that mapped the core would bind that GOT slot to
  * THIS hook, and unmapping the spent loader would dangle it. Going through
@@ -682,6 +699,13 @@ extern "C" {
   entry(kCorePath, reinterpret_cast<void *>(&yuki_bootstrap),
         reinterpret_cast<void *>(core->load_bias),
         reinterpret_cast<void *>(core->map_size));
+  // Clear our own atexit list entries from libc BEFORE the core munmaps our
+  // mapping. The compiler/linker registers a __cxa_atexit handler per dso for
+  // its fini_array; once we're unmapped those handlers point to nothing, and a
+  // detector that snapshots libc's atexit table (e.g. reveny's getDetections
+  // walking the registered callbacks) sees dangling pointers that fail dladdr
+  // and reports "found_injection". __cxa_finalize(&__dso_handle) drains them.
+  yukilinker::finalize_self_dso();
   // Hand control to the core to unload US. A *guaranteed* tail call: this frame
   // is destroyed before the core munmaps the page this code lives on, so it's
   // safe. zygisk_finalize_loader frees our soinfo + munmaps our mapping, then

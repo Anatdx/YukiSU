@@ -1032,6 +1032,22 @@ static bool yz_report_self_unmap() {
  * lands straight in ART -- no core code runs after the unmap. [[noreturn]]. */
 extern "C" [[noreturn]] void yz_self_unmap_tail(void *base, size_t size);
 
+/* Run + unregister every atexit handler libc has registered against this dso.
+ * Each C++ static-global ctor calls __cxa_atexit(dtor, obj, &__dso_handle); if
+ * those handlers stay registered after we unmap libzygisk, a detector that
+ * walks libc's atexit table (e.g. reveny) sees dangling callback pointers that
+ * fail dladdr and reports "found_injection". Calling __cxa_finalize ourselves
+ * with our dso handle drains the list cleanly. Safe to call once before the
+ * self-unmap; libc is unaffected. */
+extern "C" void __cxa_finalize(void *);
+// crtbegin_so.o defines `__dso_handle` per-DSO with hidden visibility, so a
+// non-weak extern always resolves to OUR libzygisk's dso handle. A weak ref
+// could resolve to nullptr, and __cxa_finalize(nullptr) means "finalize
+// EVERYTHING" -- it would drain libc's entire atexit table inside the zygote
+// pre-fork, which kills boot (cf. the boot loop the weak version caused).
+extern "C" __attribute__((visibility("hidden"))) void *__dso_handle;
+static inline void yz_finalize_self_dso() { __cxa_finalize(&__dso_handle); }
+
 void zygisk_self_destruct(JNIEnv *env, bool isolated) {
   // Whether the tail-call munmap is usable -- snapshot BEFORE unhooking
   // clears the hook records. Safe only if every specialize native was inline-
@@ -1071,6 +1087,15 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
                                // fallback
   }
   if (have_range && can_unmap) {
+    // Clear our own atexit list entries from libc BEFORE the synchronous
+    // munmap. The C++ runtime registers a __cxa_atexit handler per dso for its
+    // fini_array entries (and for every C++ static global's destructor); once
+    // we're unmapped those handlers point to nothing, and a detector that
+    // snapshots libc's atexit table (e.g. reveny's getDetections walking the
+    // registered callbacks via dladdr) sees dangling pointers that fail dladdr
+    // and reports "found_injection". __cxa_finalize(&__dso_handle) walks libc's
+    // list, runs and unregisters every entry whose dso_handle matches ours.
+    yz_finalize_self_dso();
     // Restore the specialize hook's entry frame (captured by the inline-hook
     // capture stub into g_yz_ret_ctx) and tail-call munmap. munmap runs in
     // libc, drops the whole core image, and rets straight back into ART. The
