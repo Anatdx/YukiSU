@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU 本地构建: DDK LKM -> ksuinit -> ksud -> Manager App
 # 签名环境变量: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
+# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
 
 set -euo pipefail
 
@@ -14,6 +14,7 @@ SKIP_LKM=false
 SKIP_KASUMI=false
 DDK_RELEASE="20260313"
 DO_INSTALL=false
+ENABLE_YUKIZYGISK=false
 # 默认从当前 Kasumi 主仓库编译 ko；可用 --kasumi-dir 覆盖
 KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
 
@@ -37,6 +38,10 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--build-kasumi)
 		SKIP_KASUMI=false
+		shift
+		;;
+	--yukizygisk)
+		ENABLE_YUKIZYGISK=true
 		shift
 		;;
 	--kasumi-dir)
@@ -115,13 +120,22 @@ echo "=== YukiSU 本地构建 ==="
 echo "KMI: $KMI | ABI: $ABI | NDK: $ANDROID_NDK_HOME"
 echo ""
 
+KSU_YUKIZYGISK_MAKE=""
+if [[ "$ENABLE_YUKIZYGISK" == "true" ]]; then
+	KSU_YUKIZYGISK_MAKE="CONFIG_KSU_YUKIZYGISK=y"
+	echo "YukiZygisk kernel hooks: enabled"
+else
+	echo "YukiZygisk kernel hooks: disabled"
+fi
+echo ""
+
 if [[ "$SKIP_LKM" != "true" ]]; then
 	echo ">>> [1/5] 构建 KernelSU LKM (DDK) ..."
 	mkdir -p "$OUT_DIR"
 	docker run --rm -v "$REPO_ROOT:/src" -w /src \
 		"ghcr.io/ylarod/ddk-min:${KMI}-${DDK_RELEASE}" \
 		bash -c "cd kernel && test -f include/uapi/supercall.h && \
-	             CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y CC=clang make -j${MAKE_JOBS} && \
+	             CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y ${KSU_YUKIZYGISK_MAKE} CC=clang make -j${MAKE_JOBS} && \
 	             mkdir -p /src/out && cp kernelsu.ko /src/out/${KMI}_kernelsu.ko && \
 	             (llvm-strip -d /src/out/${KMI}_kernelsu.ko 2>/dev/null || true)"
 	echo "    LKM 已输出: $OUT_DIR/${KMI}_kernelsu.ko"

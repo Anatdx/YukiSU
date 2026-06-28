@@ -271,15 +271,7 @@ void ksu_execve_hook_ksud(const struct pt_regs *regs)
 	ksu_handle_execveat_ksud(path, &argv, NULL, NULL);
 }
 
-/*
- * Persistent zygote detector for the kernel-zygisk experiment (Phase 0.5).
- * Unlike the ksud hook above, this is NOT one-shot: it fires for every
- * execve so we observe every zygote (re)start. The real zygote is the one
- * exec'ing /system/bin/app_process[64] with "-Xzygote" as argv[1] -- that
- * argument is what cleanly separates it from app_process CLI tools (which
- * also exec app_process) and from idmap2 (which merely inherits the zygote
- * SELinux domain). Read-only: logs only, no marking/injection yet.
- */
+#ifdef CONFIG_KSU_YUKIZYGISK
 void ksu_zygote_probe_execve(const struct pt_regs *regs)
 {
 	const char __user **filename_user =
@@ -316,6 +308,7 @@ void ksu_zygote_probe_execve(const struct pt_regs *regs)
 		    "file=%s\n",
 		    current->pid, current->comm, path);
 }
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
 
 // ---------------------------------------------------------------
 // init.rc injection via sys_read/sys_fstat syscall table hooks

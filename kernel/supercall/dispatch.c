@@ -43,10 +43,12 @@
 #include "sulog/fd.h"
 #include "supercall/supercall.h"
 #include "supercall/internal.h"
+#ifdef CONFIG_KSU_YUKIZYGISK
 #include "feature/zygote_ctl.h"
 #include "feature/zygote_nl.h"
 #include "feature/zygote_probe.h"
 #include "uapi/yukizygisk.h"
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
 #include "hook/syscall_hook_manager.h"
 
 #ifdef CONFIG_KSU_SUPERKEY
@@ -1013,6 +1015,7 @@ static int do_get_uapi_version(void __user *arg)
 	return 0;
 }
 
+#ifdef CONFIG_KSU_YUKIZYGISK
 static int do_yz_handoff(void __user *arg)
 {
 	return ksu_zygote_ctl_handoff(arg);
@@ -1274,6 +1277,7 @@ static int do_yz_patch_text(void __user *arg)
 		cmd.pid);
 	return 0;
 }
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
 
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
@@ -1411,6 +1415,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "LIST_TRY_UMOUNT",
      .handler = list_try_umount,
      .perm_check = manager_or_root},
+#ifdef CONFIG_KSU_YUKIZYGISK
     {.cmd = KSU_IOCTL_YZ_HANDOFF,
      .name = "YZ_HANDOFF",
      .handler = do_yz_handoff,
@@ -1443,6 +1448,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "YZ_RELOAD",
      .handler = do_yz_reload,
      .perm_check = manager_or_root},
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
     {.cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL} // Sentinel
 };
 
