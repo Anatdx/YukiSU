@@ -8,6 +8,7 @@
 #include "hook.hpp"
 #include "log.hpp"
 #include "solist.hpp"
+#include "yukilinker.hpp"
 #include "zygisk.hpp"
 
 #include "uapi/supercall.h"
@@ -1095,6 +1096,7 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
     // registered callbacks via dladdr) sees dangling pointers that fail dladdr
     // and reports "found_injection". __cxa_finalize(&__dso_handle) walks libc's
     // list, runs and unregisters every entry whose dso_handle matches ours.
+    yukilinker::shutdown();
     yz_finalize_self_dso();
     // Restore the specialize hook's entry frame (captured by the inline-hook
     // capture stub into g_yz_ret_ctx) and tail-call munmap. munmap runs in

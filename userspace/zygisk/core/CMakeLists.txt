@@ -63,6 +63,7 @@ target_compile_options(zygisk PRIVATE
     # static destructors never run, but our exit path is the app process exit
     # (the OS reclaims the whole address space) so there is nothing to clean.
     -fno-c++-static-destructors)
+target_compile_definitions(zygisk PRIVATE YUKILINKER_FULL=1)
 target_link_libraries(zygisk PRIVATE dl lsplt_static)
 # --as-needed drops the liblog DT_NEEDED that lsplt links PUBLIC: with LOG_DISABLED
 # we never call into it, so no point advertising the dependency.
@@ -87,6 +88,7 @@ target_compile_options(yukilinker PRIVATE
     # this flag is belt-and-suspenders, and prevents any handler from being
     # registered in the first place.
     -fno-c++-static-destructors)
+target_compile_definitions(yukilinker PRIVATE YUKILINKER_BOOTSTRAP=1)
 target_link_libraries(yukilinker PRIVATE dl)
 target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
 

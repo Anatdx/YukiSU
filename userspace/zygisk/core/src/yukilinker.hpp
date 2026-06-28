@@ -6,8 +6,9 @@
  * module reads its embedded dex from the anonymous mapping -- never openat()s
  * the real .so, so there is no descriptor to detect.
  *
- * arm64 (aarch64) only, v1. Relocation types limited to those real modules use
- * (RELATIVE / JUMP_SLOT / GLOB_DAT / ABS64 / RELR). See YUKILINKER_DESIGN.md.
+ * arm64 (aarch64) only. The bootstrap build keeps the early-entry constraints;
+ * the core/full build also handles module finalizers, RELRO, and dynamic TLS.
+ * See YUKILINKER_DESIGN.md.
  *
  * Author: Anatdx
  */
@@ -41,11 +42,31 @@ struct SoHandle {
   const uint32_t *gnu_buckets = nullptr;
   const uint32_t *gnu_chain = nullptr;
 
+  // SysV hash fallback for older or non-Android-built modules
+  uint32_t sysv_nbucket = 0;
+  const uint32_t *sysv_buckets = nullptr;
+  const uint32_t *sysv_chain = nullptr;
+
   // initializers
   using init_fn = void (*)();
   init_fn *init_array = nullptr;
   size_t init_array_count = 0;
   init_fn init_func = nullptr; // DT_INIT (legacy, optional)
+  bool did_init = false;
+
+  // finalizers (core/full loader path)
+  init_fn *fini_array = nullptr;
+  size_t fini_array_count = 0;
+  init_fn fini_func = nullptr; // DT_FINI (legacy, optional)
+
+  // standard program-header metadata used by the core/full loader path
+  uintptr_t relro_start = 0;
+  size_t relro_size = 0;
+  uintptr_t tls_vaddr = 0;
+  size_t tls_memsz = 0;
+  size_t tls_filesz = 0;
+  size_t tls_align = 0;
+  size_t tls_mod_id = 0;
 
   // dependency dlopen handles (system libs) for symbol resolution; kept so
   // dlclose can release them. Arena-backed array (no STL -- early boot has no
@@ -68,6 +89,10 @@ void *dlsym(SoHandle *h, const char *name);
 /* Unmap the image and release dependency handles. (Modules are usually
  * resident, so this is rarely called.) */
 void dlclose(SoHandle *h);
+
+/* Drop process-wide loader state that may hold libc callbacks into this DSO.
+ * Call before the core self-unmaps. */
+void shutdown();
 
 /* Replacement for libc dl_iterate_phdr that ALSO reports yukilinker-loaded
  * modules. resolve() binds a module's `dl_iterate_phdr` import to this, so the
