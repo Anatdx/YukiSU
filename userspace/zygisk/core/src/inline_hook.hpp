@@ -36,6 +36,8 @@
 #include <sys/auxv.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <cstring>
@@ -49,6 +51,9 @@
 #ifndef PR_SET_VMA_ANON_NAME
 #define PR_SET_VMA_ANON_NAME 0
 #endif // #ifndef PR_SET_VMA_ANON_NAME
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif // #ifndef MFD_CLOEXEC
 
 /* capture-stub template + ret-ctx slot, defined in self_unmap.S. */
 extern "C" {
@@ -98,27 +103,59 @@ inline uint32_t enc_b(uintptr_t from, uintptr_t to) {
   return 0x14000000u | (static_cast<uint32_t>(off >> 2) & 0x03FFFFFFu);
 }
 
+struct ExecPage {
+  void *addr = nullptr;
+  int fd = -1;
+  bool file_backed = false;
+};
+
+inline int make_exec_memfd() {
+  int fd = static_cast<int>(syscall(__NR_memfd_create, "data-code-cache",
+                                    static_cast<unsigned>(MFD_CLOEXEC)));
+  if (fd < 0)
+    return -1;
+  if (ftruncate(fd, 0x1000) != 0) {
+    close(fd);
+    return -1;
+  }
+  return fd;
+}
+
 /* mmap a page within ~120MB of `target` so a direct B reaches both ways. The
  * library we hook is BTI-guarded, so the only way to branch back into it
- * mid-function is a direct B (+-128MB). Returns nullptr if no near slot is free
- * (caller falls back to RegisterNatives). */
-inline void *alloc_near(uintptr_t target) {
+ * mid-function is a direct B (+-128MB). Returns an empty ExecPage if no near
+ * slot is free (caller falls back to RegisterNatives). */
+inline ExecPage alloc_near(uintptr_t target) {
   const uintptr_t reach = 0x7800000; // ~120MB, comfortably under B's +-128MB
   uintptr_t base = target & ~static_cast<uintptr_t>(0xFFF);
+  int fd = make_exec_memfd();
   for (uintptr_t off = 0x10000; off <= reach; off += 0x10000) {
     for (int up = 0; up < 2; ++up) {
       uintptr_t hint = up ? base + off : base - off;
+      if (fd >= 0) {
+        void *p =
+            mmap(reinterpret_cast<void *>(hint), 0x1000, PROT_READ | PROT_EXEC,
+                 MAP_SHARED | MAP_FIXED_NOREPLACE, fd, 0);
+        if (p != MAP_FAILED && reinterpret_cast<uintptr_t>(p) == hint)
+          return {p, fd, true};
+        if (p != MAP_FAILED)
+          munmap(p, 0x1000); // old kernel ignored the hint -> retry
+      }
       void *p =
           mmap(reinterpret_cast<void *>(hint), 0x1000, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-      if (p == MAP_FAILED)
-        continue;
-      if (reinterpret_cast<uintptr_t>(p) == hint)
-        return p;
-      munmap(p, 0x1000); // old kernel ignored the hint -> not near, retry
+      if (p != MAP_FAILED && reinterpret_cast<uintptr_t>(p) == hint) {
+        if (fd >= 0)
+          close(fd);
+        return {p, -1, false};
+      }
+      if (p != MAP_FAILED)
+        munmap(p, 0x1000);
     }
   }
-  return nullptr;
+  if (fd >= 0)
+    close(fd);
+  return {};
 }
 
 /* A random, stable-per-process name to label our trampoline VMAs with. A
@@ -162,10 +199,13 @@ inline void *install(void *target, void *replacement, Hook *out) {
 
   // Trampoline page near the target so both the patch's forward B and the
   // call-orig's backward B reach (BTI: the jump back must be a direct branch).
-  void *tr = alloc_near(reinterpret_cast<uintptr_t>(target));
-  if (tr == nullptr)
+  ExecPage page = alloc_near(reinterpret_cast<uintptr_t>(target));
+  if (page.addr == nullptr)
     return nullptr;
-  auto *base = reinterpret_cast<uint8_t *>(tr);
+  uint8_t file_page[0x1000] = {};
+  auto *base =
+      page.file_backed ? file_page : reinterpret_cast<uint8_t *>(page.addr);
+  auto *mapped_base = reinterpret_cast<uint8_t *>(page.addr);
   // capture stub: copy the template, patch its two literals.
   memcpy(base, yz_cap_tmpl, cap_size);
   *reinterpret_cast<uint64_t *>(base + ctx_off) =
@@ -176,19 +216,33 @@ inline void *install(void *target, void *replacement, Hook *out) {
   // displaced paciasp + sub-sp re-establish the frame, then we re-enter the
   // real native past the prologue we overwrote.
   auto *co = reinterpret_cast<uint32_t *>(base + co_off);
+  auto *mapped_co = reinterpret_cast<uint32_t *>(mapped_base + co_off);
   for (int i = 0; i < 2; ++i) {
     out->saved[i] = t[i];
     co[i] = t[i];
   }
-  co[2] = enc_b(reinterpret_cast<uintptr_t>(co + 2),
+  co[2] = enc_b(reinterpret_cast<uintptr_t>(mapped_co + 2),
                 reinterpret_cast<uintptr_t>(target) + 8);
-  __builtin___clear_cache(reinterpret_cast<char *>(tr),
-                          reinterpret_cast<char *>(base + co_off + 12));
-  mprotect(tr, 0x1000, PROT_READ | PROT_EXEC);
-  // Label it so the page isn't a NAMELESS r-x anon region (an "unknown exec"
-  // signature in isolated processes that inherit it). Pure-anon execmem keeps
-  // working; only the maps name changes. Best-effort -- ignore failure.
-  prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, tr, 0x1000, tramp_vma_name());
+  if (page.file_backed) {
+    if (pwrite(page.fd, file_page, sizeof(file_page), 0) !=
+        static_cast<ssize_t>(sizeof(file_page))) {
+      munmap(page.addr, 0x1000);
+      close(page.fd);
+      return nullptr;
+    }
+    close(page.fd);
+  } else {
+    __builtin___clear_cache(
+        reinterpret_cast<char *>(page.addr),
+        reinterpret_cast<char *>(mapped_base + co_off + 12));
+    mprotect(page.addr, 0x1000, PROT_READ | PROT_EXEC);
+    // Label it so the page isn't a nameless executable anonymous region.
+    // Best-effort: ignore failure.
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, page.addr, 0x1000,
+          tramp_vma_name());
+  }
+  __builtin___clear_cache(reinterpret_cast<char *>(page.addr),
+                          reinterpret_cast<char *>(mapped_base + co_off + 12));
 
   // patch target's first 8 bytes: BTI c (landing pad for ART's indirect BLR on
   // the guarded page) + direct B to the capture stub. Written via the kernel
@@ -198,20 +252,20 @@ inline void *install(void *target, void *replacement, Hook *out) {
   uint32_t patch[2] = {
       0xD503245F, // BTI c
       enc_b(reinterpret_cast<uintptr_t>(target) + 4,
-            reinterpret_cast<uintptr_t>(tr)), // B <capture stub>
+            reinterpret_cast<uintptr_t>(page.addr)), // B <capture stub>
   };
   if (!yz_patch_text(reinterpret_cast<uintptr_t>(target), patch,
                      sizeof(patch))) {
-    munmap(tr, 0x1000);
+    munmap(page.addr, 0x1000);
     return nullptr;
   }
   __builtin___clear_cache(reinterpret_cast<char *>(target),
                           reinterpret_cast<char *>(target) + 8);
 
   out->target = t;
-  out->trampoline = tr;
+  out->trampoline = page.addr;
   out->active = true;
-  return co; // wrapper reaches the ORIGINAL native via this trampoline
+  return mapped_co; // wrapper reaches the ORIGINAL native via this trampoline
 }
 
 /* Restore the original bytes and free the trampoline. Call in the single-thread

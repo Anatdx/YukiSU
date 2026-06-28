@@ -46,7 +46,6 @@
 #ifndef PR_SET_VMA_ANON_NAME
 #define PR_SET_VMA_ANON_NAME 0
 #endif // #ifndef PR_SET_VMA_ANON_NAME
-
 /* aarch64 relocation types (the four real modules actually use). */
 #ifndef R_AARCH64_ABS64
 #define R_AARCH64_ABS64 257
@@ -1162,7 +1161,7 @@ extern "C" {
 
 [[gnu::visibility("default")]] void *yuki_dlopen_memfd(int memfd,
                                                        const char *vma_name) {
-  return yukilinker::dlopen_memfd(memfd, vma_name);
+  return yukilinker::dlopen_memfd(memfd, vma_name, /*file_backed=*/true);
 }
 
 [[gnu::visibility("default")]] void *yuki_dlsym(void *h, const char *name) {
@@ -1188,7 +1187,8 @@ extern "C" {
   // as mapped: an anonymous-executable / "unknown exec" scan skips file-backed
   // maps.
   yukilinker::SoHandle *core =
-      yukilinker::dlopen_memfd(core_fd, "jit-cache", /*file_backed=*/true);
+      yukilinker::dlopen_memfd(core_fd, "data-code-cache",
+                               /*file_backed=*/true);
   yuki_raw_close(core_fd); // before the zygote's pre-fork fd allowlist check
   if (core == nullptr)
     return;

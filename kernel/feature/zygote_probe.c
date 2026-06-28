@@ -163,21 +163,13 @@ static bool zp_argv1_is_xzygote(struct mm_struct *mm)
  */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
-/* The staged shmem images are named at injection time with a fresh random
- * alphanumeric string (zp_rand_name) instead of a fixed name. The loader is
- * mapped file-backed by the stub's android_dlopen_ext(USE_LIBRARY_FD) (the
- * system linker), so it shows in the target's /proc/pid/maps as a named mapping
- * the whole app inherits. A native injection detector (reveny) carries an
- * explicit "Futile jit-cache hiding" check: it knows the genuine ART JIT names
- * (/memfd:jit-cache, /memfd:jit-zygote-cache, anon_shmem:dalvik-jit-code-cache)
- * and flags anything imitating them that isn't a real JIT mapping -- a private
- * r-xp ELF called jit-cache is an obvious forgery. The detector's OWN decrypted
- * payload, by contrast, loads as /memfd:<random> and is waved through. So a
- * random per-injection name -- indistinguishable from any app's transient memfd
- * -- is the camouflage; a fixed "jit-cache" walked straight into the trap.
- * (Fully unmapping the loader once it hands the core off, as a transient
- * stage-1, is the stronger later step.) */
-#define ZP_VMA_NAME_LEN 17 /* "memfd:" + 10 random alnum chars + NUL */
+/* The staged shmem images use an ART data-code-cache marker. They are mapped
+ * file-backed by android_dlopen_ext(USE_LIBRARY_FD), so the name is visible in
+ * /proc/pid/maps while the core remains resident. Avoid the primary JIT cache
+ * marker: multiple executable mappings with distinct inodes are easy to
+ * separate from a normal single app runtime cache. */
+#define ZP_VMA_NAME "memfd:data-code-cache"
+#define ZP_VMA_NAME_LEN sizeof(ZP_VMA_NAME)
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
 
@@ -202,31 +194,16 @@ static void zp_close_current_fd(int fd)
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
 }
 
-/*
- * Build a "memfd:<random alnum>" name into buf. memfd_create() shows its images
- * in /proc/pid/maps as "/memfd:<user-name>"; shmem_file_setup() shows the bare
- * name verbatim, so we prepend the "memfd:" ourselves and fill the rest with a
- * fresh random suffix. The result is indistinguishable from any app's transient
- * memfd (ART's, or the detector's OWN decrypted payload -- both waved through),
- * whereas a bare/un-prefixed name or the literal "jit-cache" is what reveny
- * flags (see the ZP_VMA_NAME_LEN comment re: its "Futile jit-cache hiding").
- */
-static void zp_rand_name(char *buf, size_t len)
+/* shmem_file_setup() shows the name verbatim in /proc/pid/maps, unlike
+ * memfd_create() which prepends "memfd:" itself. */
+static void zp_cache_name(char *buf, size_t len)
 {
-	static const char pfx[] = "memfd:";
-	static const char cs[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-				 "abcdefghijklmnopqrstuvwxyz0123456789";
-	size_t plen = sizeof(pfx) - 1;
 	size_t i;
 
-	if (len <= plen) { /* defensive: buffer too small for the prefix */
-		if (len)
-			buf[0] = '\0';
+	if (!len)
 		return;
-	}
-	memcpy(buf, pfx, plen);
-	for (i = plen; i + 1 < len; i++)
-		buf[i] = cs[get_random_u32() % (sizeof(cs) - 1)];
+	for (i = 0; i + 1 < len && i < sizeof(ZP_VMA_NAME) - 1; i++)
+		buf[i] = ZP_VMA_NAME[i];
 	buf[i] = '\0';
 }
 
@@ -536,8 +513,8 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		 * to the loader entry, which dlopens the core and closes that
 		 * fd. */
 		yuki = zp_yukilinker_enabled;
-		zp_rand_name(loader_name, sizeof(loader_name));
-		zp_rand_name(core_name, sizeof(core_name));
+		zp_cache_name(loader_name, sizeof(loader_name));
+		zp_cache_name(core_name, sizeof(core_name));
 		loader_fd = zp_stage_fd(yuki ? ZP_LOADER_PATH : ZP_CORE_PATH,
 					yuki ? loader_name : core_name);
 		if (loader_fd < 0) {

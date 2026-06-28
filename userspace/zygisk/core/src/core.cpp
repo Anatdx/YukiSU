@@ -312,13 +312,14 @@ uint32_t zd_get_flags(int uid) {
 }
 
 using module_entry_fn = void (*)(api_table *, JNIEnv *);
+constexpr char kExecMemfdName[] = "data-code-cache";
 
-/* Copy a fd's contents into an app-domain memfd named "jit-cache" so the module
+/* Copy a fd's contents into an app-domain code-cache memfd so the module
  * loads from an anonymous in-memory file -- /proc/self/fd and /proc/maps then
- * show /memfd:jit-cache, hiding the /data/adb/modules path. The app creating
- * its OWN memfd is allowed (ART JIT does the same, anon_inode class); zygiskd's
- * kernel-domain memfd was blocked crossing into the app. Returns the memfd, or
- * -1 to fall back to the real fd. */
+ * show a runtime cache path, hiding the /data/adb/modules path. The app
+ * creating its OWN memfd is allowed (ART JIT does the same, anon_inode class);
+ * zygiskd's kernel-domain memfd was blocked crossing into the app. Returns the
+ * memfd, or -1 to fall back to the real fd. */
 int make_app_memfd(int src_fd) {
   struct stat st{};
   if (fstat(src_fd, &st) != 0 || st.st_size <= 0)
@@ -328,7 +329,7 @@ int make_app_memfd(int src_fd) {
   if (src == MAP_FAILED)
     return -1;
   int mfd =
-      static_cast<int>(syscall(__NR_memfd_create, "jit-cache", MFD_CLOEXEC));
+      static_cast<int>(syscall(__NR_memfd_create, kExecMemfdName, MFD_CLOEXEC));
   bool ok = mfd >= 0 && ftruncate(mfd, static_cast<off_t>(sz)) == 0;
   if (ok) {
     void *dst = mmap(nullptr, sz, PROT_READ | PROT_WRITE, MAP_SHARED, mfd, 0);
@@ -409,8 +410,8 @@ yuki_dlsym_fn g_yuki_dlsym = nullptr;
 yuki_dlclose_fn g_yuki_dlclose = nullptr; // unload a single module (DLCLOSE)
 /* libzygisk's OWN exact mapping range, handed in by yukilinker (ON path). Used
  * by denylist mode-1 self-destruct to report a precise segment instead of
- * guessing from maps. Both 0 when loaded the OFF way (then it's "/jit-cache",
- * found by path). */
+ * guessing from maps. Both 0 when loaded the OFF way (then it's a staged
+ * code-cache memfd, found by path). */
 uintptr_t g_self_base = 0;
 size_t g_self_size = 0;
 
@@ -457,10 +458,11 @@ void load_modules_impl(JNIEnv *env) {
       // then close the real /data/adb/modules fd immediately: feeding lib_fd
       // straight to the loader would make its source mmap file-backed (the
       // module path shows in maps during load). Via the memfd the source reads
-      // as /memfd:jit-cache, and the module fd is gone before onLoad runs.
+      // as a runtime code-cache memfd, and the module fd is gone before onLoad
+      // runs.
       int mfd = make_app_memfd(lib_fd);
       close(lib_fd);
-      void *h = mfd >= 0 ? g_yuki_dlopen(mfd, "jit-cache") : nullptr;
+      void *h = mfd >= 0 ? g_yuki_dlopen(mfd, kExecMemfdName) : nullptr;
       if (mfd >= 0)
         close(mfd);
       if (h != nullptr) {
@@ -470,8 +472,9 @@ void load_modules_impl(JNIEnv *env) {
       }
     } else {
       // Legacy path: stage into an app-domain memfd + system dlopen. Hides the
-      // path (fd reads /memfd:jit-cache) but the module still openat()s its own
-      // .so for the embedded dex. Falls back to the real fd on staging failure.
+      // path (fd reads as a runtime code-cache memfd) but the module still
+      // openat()s its own .so for the embedded dex. Falls back to the real fd
+      // on staging failure.
       int mfd = make_app_memfd(lib_fd);
       int load_fd = mfd >= 0 ? mfd : lib_fd;
       android_dlextinfo ext{};
@@ -595,7 +598,7 @@ void hide_injection() {
   zloader::hide_from_solist("libyukilinker"); // split-out loader .so
   // Offsets validated via dry-run; unload ALL module soinfos via the linker's
   // own soinfo_unload (keeps the namespace list + handle map consistent).
-  zloader::drop_module_from_solist("jit-cache", false);
+  zloader::drop_module_from_solist(kExecMemfdName, false);
 }
 
 /* denylist_mode==2 (inject + revert-mount-only): after modules are loaded, ask
@@ -634,22 +637,16 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   // before business threads), so mremap over code can't race;
   // spoof_virtual_maps now also syncs the i-cache after each mremap, so
   // spoofing an executable segment we keep running from no longer SEGVs.
-  // libyukilinker is kernel-staged as "/jit-cache (deleted)" r-xp. It is NOT
-  // the libzygisk we run in (that's the yukilinker-loaded [anon] copy), so
-  // spoofing /jit-cache touches only the loader, never the spoof code itself.
-  // strstr's
-  // "/jit-cache" won't match ART's "/memfd:jit-cache" (":jit-cache").
-  zloader::spoof_virtual_maps("/jit-cache", true);
-  // module libs anonymously loaded by yukilinker map as "/memfd:jit-cache".
-  zloader::spoof_virtual_maps("/memfd:jit-cache", true);
+  // Keep JIT-like memfd/path mappings file-backed. The fd is already closed,
+  // and the stable code-cache path avoids executable anonymous VMAs.
   // A module maps its own MAP_SHARED page (shows as "/dev/zero (deleted)",
   // fixed addr, r--s, one per app) that detectors flag as injection. It's
   // read-only and per-app, so anonymizing it (private copy, same addr) drops
   // the name without breaking the module.
   zloader::spoof_virtual_maps("/dev/zero (deleted)", false);
-  // NOTE: deliberately NOT calling name_anonymous_exec() -- leaving hook
-  // trampolines as bare anon r-x is safer than labelling them
-  // "dalvik-jit-code-cache", which detectors content-verify against real JIT.
+  // NOTE: deliberately NOT calling name_anonymous_exec(). Hook trampolines now
+  // prefer closed memfd-backed code-cache mappings, and the anonymous fallback
+  // keeps its private random label instead of a fixed ART JIT name.
   // Drop the libandroid_runtime header pages that lsplt's PLT-hook symbol scan
   // faulted resident (inherited COW from the zygote): they inflate the
   // library's r--p Rss/Pss into an smaps anomaly. Restores it to the pristine
@@ -982,7 +979,7 @@ static bool yz_find_self_range(uintptr_t *base, size_t *size) {
  * mapping that is pure-anonymous (empty path) or writable+executable (lsplt
  * trampolines) -- those are ours; the app's own code is file-backed or
  * ART-named.
- * "/jit-cache" is NOT flagged by duck (file-backed, non-anon) but we drop it
+ * The staged code-cache memfd is file-backed and non-anonymous, but we drop it
  * too. Returns false if zygiskd declined. Call after unhook, while still on
  * solist. */
 static bool yz_report_self_unmap() {
@@ -998,12 +995,13 @@ static bool yz_report_self_unmap() {
     size[n] = csize;
     n++;
   }
-  // loader: kernel-staged "/jit-cache" -- EXACT per-segment path match only.
-  // We deliberately do NOT anon-walk: a pure-anon scan sweeps in the app's own
-  // ART JIT / heap, and munmap'ing those CRASHES the app (exactly the bug the
-  // zygisk_collect_path_segs comment documents -- a previous contiguous-anon
-  // walk merged a 10KB loader seg with ~630KB of app heap and dropped it).
-  int got = zygisk_collect_path_segs("/jit-cache", addr + n, size + n,
+  // loader: kernel-staged code-cache memfd -- EXACT per-segment path match
+  // only. We deliberately do NOT anon-walk: a pure-anon scan sweeps in the
+  // app's own ART JIT / heap, and munmap'ing those CRASHES the app (exactly the
+  // bug the zygisk_collect_path_segs comment documents -- a previous
+  // contiguous-anon walk merged a 10KB loader seg with ~630KB of app heap and
+  // dropped it).
+  int got = zygisk_collect_path_segs(kExecMemfdName, addr + n, size + n,
                                      YZ_MAX_UNMAP_SEGS - n);
   if (got > 0)
     n += got;
@@ -1106,15 +1104,14 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
     // task_work hit).
     //   - the inline-hook trampolines were already munmap'd by
     //   zygisk_self_unhook
-    //   - the loader's "/jit-cache" stays mapped on purpose: duck's
-    //     maps_anomaly_detector exempts ART-code-cache names, so it isn't
-    //     flagged
+    //   - the loader's code-cache memfd stays mapped on purpose: it is
+    //     file-backed and non-anonymous.
     yz_self_unmap_tail(reinterpret_cast<void *>(cbase), csize); // [[noreturn]]
   }
   // Fallback (a specialize method used the RegisterNatives path, or our range
   // was not found): a tail-call munmap would dangle -> disguise the exec
   // segments.
-  zloader::spoof_virtual_maps("/jit-cache", true);
+  zloader::spoof_virtual_maps(kExecMemfdName, true);
   (void)env;
 }
 

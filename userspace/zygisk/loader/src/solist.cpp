@@ -53,9 +53,26 @@ yz_klog(const char *fmt, ...);
  * stable prefix of the struct across Android versions. */
 constexpr size_t kSoinfoNextOff = 40;
 constexpr int kMaxWalk = 2000; /* guard against a wrong offset / cyclic list */
+/* Android bionic CFI shadow format:
+ * https://android.googlesource.com/platform/bionic/+/master/libc/private/CFIShadow.h
+ */
+constexpr uintptr_t kCfiShadowGranularity = 18;
+constexpr uintptr_t kCfiShadowEntrySize = sizeof(uint16_t);
 
 using realpath_fn = const char *(*)(void *);
 using guard_fn = void (*)(void *);
+
+size_t page_size() {
+  long sz = sysconf(_SC_PAGESIZE);
+  return sz > 0 ? static_cast<size_t>(sz) : 4096;
+}
+
+inline uintptr_t page_down(uintptr_t addr, size_t pg) {
+  return addr & ~(static_cast<uintptr_t>(pg) - 1);
+}
+inline uintptr_t page_up(uintptr_t addr, size_t pg) {
+  return (addr + pg - 1) & ~(static_cast<uintptr_t>(pg) - 1);
+}
 
 /* ---- linker64 .symtab resolver ------------------------------------------ */
 
@@ -543,6 +560,82 @@ int drop_lib_containing(uintptr_t addr, bool keep_mapped) {
   return n;
 }
 
+struct CfiShadowRange {
+  uintptr_t start = 0;
+  uintptr_t end = 0;
+  int prot = 0;
+};
+
+uintptr_t cfi_shadow_offset(uintptr_t addr) {
+  return (addr >> kCfiShadowGranularity) << 1;
+}
+
+bool find_cfi_shadow(CfiShadowRange *out) {
+  FILE *fp = fopen("/proc/self/maps", "re");
+  if (fp == nullptr)
+    return false;
+  char line[512];
+  while (fgets(line, sizeof(line), fp) != nullptr) {
+    if (strstr(line, "[anon:cfi shadow]") == nullptr)
+      continue;
+    uintptr_t start = 0, end = 0;
+    char perms[5] = {};
+    if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) != 3)
+      continue;
+    out->start = start;
+    out->end = end;
+    out->prot = (perms[0] == 'r' ? PROT_READ : 0) |
+                (perms[1] == 'w' ? PROT_WRITE : 0) |
+                (perms[2] == 'x' ? PROT_EXEC : 0);
+    fclose(fp);
+    return true;
+  }
+  fclose(fp);
+  return false;
+}
+
+bool sync_cfi_shadow(uintptr_t old_start, uintptr_t new_start, size_t size) {
+  if (old_start == new_start || size == 0)
+    return true;
+
+  CfiShadowRange shadow;
+  if (!find_cfi_shadow(&shadow))
+    return true;
+
+  uintptr_t old_end = old_start + size - 1;
+  uintptr_t new_end = new_start + size - 1;
+  uintptr_t src = shadow.start + cfi_shadow_offset(old_start);
+  uintptr_t src_end =
+      shadow.start + cfi_shadow_offset(old_end) + kCfiShadowEntrySize;
+  uintptr_t dst = shadow.start + cfi_shadow_offset(new_start);
+  uintptr_t dst_end =
+      shadow.start + cfi_shadow_offset(new_end) + kCfiShadowEntrySize;
+  if (src < shadow.start || src_end > shadow.end || dst < shadow.start ||
+      dst_end > shadow.end || src_end < src || dst_end < dst) {
+    SLOGE("cfi-shadow: range outside shadow map");
+    return false;
+  }
+
+  size_t pg = page_size();
+  uintptr_t prot_start = page_down(dst, pg);
+  uintptr_t prot_end = page_up(dst_end, pg);
+  bool reprotect = (shadow.prot & PROT_WRITE) == 0;
+  if (reprotect &&
+      mprotect(reinterpret_cast<void *>(prot_start), prot_end - prot_start,
+               shadow.prot | PROT_WRITE) != 0) {
+    SLOGE("cfi-shadow: make writable failed");
+    return false;
+  }
+  memmove(reinterpret_cast<void *>(dst), reinterpret_cast<const void *>(src),
+          dst_end - dst);
+  if (reprotect && mprotect(reinterpret_cast<void *>(prot_start),
+                            prot_end - prot_start, shadow.prot) != 0) {
+    SLOGE("cfi-shadow: restore protection failed");
+    return false;
+  }
+  return true;
+}
+
 /* ---- maps anonymization --------------------------------------------------
  * Detectors read /proc/self/maps and flag the module's real path
  * (/data/adb/modules/.../so). soinfo_unload hides modules from dl_iterate_phdr
@@ -602,9 +695,11 @@ int spoof_virtual_maps(const char *path_substr, bool private_only) {
     // sync it before anything executes from the new mapping -- the standard
     // dsb/ic-ivau/dsb/isb sequence that lets us spoof a code segment we keep
     // running from without a SIGILL/SEGV.
-    if (ranges[i].prot & PROT_EXEC)
+    if (ranges[i].prot & PROT_EXEC) {
+      sync_cfi_shadow(ranges[i].start, ranges[i].start, size);
       __builtin___clear_cache(reinterpret_cast<char *>(addr),
                               reinterpret_cast<char *>(ranges[i].start + size));
+    }
     // leave the mremap'd segment as a BARE anonymous VMA. Do NOT
     // re-label it "dalvik-jit-code-cache" -- that fixed name is the detector's
     // target (it verifies the content is real JIT, and our contiguous ELF

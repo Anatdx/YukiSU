@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk yukilinker: load a Zygisk module from a memfd into ANONYMOUS
- * memory, so the module leaves no /data/adb/modules fd and no file-backed maps
- * entry (defeats duck's "Threads and FDs: Residue" + "Maps anomaly"). The
- * module reads its embedded dex from the anonymous mapping -- never openat()s
- * the real .so, so there is no descriptor to detect.
+ * YukiZygisk yukilinker: load a Zygisk module from an app-owned memfd, so the
+ * module leaves no /data/adb/modules fd or path. The full loader can either
+ * keep the memfd as a closed file-backed code-cache mapping or copy segments
+ * into anonymous memory, depending on the caller's detection surface.
  *
  * arm64 (aarch64) only. The bootstrap build keeps the early-entry constraints;
  * the core/full build also handles module finalizers, RELRO, and dynamic TLS.
@@ -27,7 +26,8 @@ struct SoHandle {
   // saved for the dl_iterate_phdr hook so the module can enumerate itself
   const ElfW(Phdr) *phdr = nullptr;
   size_t phnum = 0;
-  const char *soname = "libjit-cache.so"; // disguised name, not a real path
+  const char *soname =
+      "libdata-code-cache.so"; // disguised name, not a real path
 
   // dynamic symbol/string tables (pointers already biased)
   const ElfW(Sym) *symtab = nullptr;
@@ -75,11 +75,11 @@ struct SoHandle {
   size_t dep_count = 0;
 };
 
-/* Load a .so from `memfd` into anonymous memory, naming its VMAs after
- * `vma_name` (e.g. "jit-cache") so /proc/self/maps reads like ART JIT. Runs the
- * module's INIT_ARRAY before returning. Returns nullptr on ANY failure (caller
- * falls back to android_dlopen_ext); never aborts. Does not take ownership of
- * `memfd` -- caller closes it. */
+/* Load a .so from `memfd`, naming file-backed VMAs after `vma_name` (e.g.
+ * "data-code-cache") when requested. Runs the module's INIT_ARRAY before
+ * returning. Returns nullptr on ANY failure (caller falls back to
+ * android_dlopen_ext); never aborts. Does not take ownership of `memfd` --
+ * caller closes it. */
 SoHandle *dlopen_memfd(int memfd, const char *vma_name,
                        bool file_backed = false);
 
