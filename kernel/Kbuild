@@ -35,6 +35,18 @@ kernelsu-objs += feature/zygote_orch.o
 kernelsu-objs += feature/zygote_nl.o
 kernelsu-objs += feature/zygote_ctl.o
 ccflags-y += -DCONFIG_KSU_YUKIZYGISK
+ifeq ($(CONFIG_KSU_YZ_PROBE),y)
+ccflags-y += -DCONFIG_KSU_YZ_PROBE
+endif
+ifeq ($(CONFIG_KSU_YZ_ORCH),y)
+ccflags-y += -DCONFIG_KSU_YZ_ORCH
+endif
+ifeq ($(CONFIG_KSU_YZ_NL),y)
+ccflags-y += -DCONFIG_KSU_YZ_NL
+endif
+ifeq ($(CONFIG_KSU_YZ_CTL),y)
+ccflags-y += -DCONFIG_KSU_YZ_CTL
+endif
 endif
 kernelsu-objs += infra/symbol_resolver.o
 kernelsu-objs += runtime/boot_event.o

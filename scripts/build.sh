@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU 本地构建: DDK LKM -> ksuinit -> ksud -> Manager App
 # 签名环境变量: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
+# 用法: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
 
 set -euo pipefail
 
@@ -15,6 +15,7 @@ SKIP_KASUMI=false
 DDK_RELEASE="20260313"
 DO_INSTALL=false
 ENABLE_YUKIZYGISK=false
+YUKIZYGISK_PARTS="all"
 # 默认从当前 Kasumi 主仓库编译 ko；可用 --kasumi-dir 覆盖
 KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
 
@@ -42,7 +43,13 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--yukizygisk)
 		ENABLE_YUKIZYGISK=true
+		YUKIZYGISK_PARTS="all"
 		shift
+		;;
+	--yukizygisk-parts)
+		ENABLE_YUKIZYGISK=true
+		YUKIZYGISK_PARTS="$2"
+		shift 2
 		;;
 	--kasumi-dir)
 		KASUMI_DIR="$2"
@@ -123,7 +130,26 @@ echo ""
 KSU_YUKIZYGISK_MAKE=""
 if [[ "$ENABLE_YUKIZYGISK" == "true" ]]; then
 	KSU_YUKIZYGISK_MAKE="CONFIG_KSU_YUKIZYGISK=y"
-	echo "YukiZygisk kernel hooks: enabled"
+	if [[ "$YUKIZYGISK_PARTS" == "all" ]]; then
+		YUKIZYGISK_PARTS="probe,nl,orch,ctl"
+	elif [[ "$YUKIZYGISK_PARTS" == "none" ]]; then
+		YUKIZYGISK_PARTS=""
+	fi
+	IFS=',' read -r -a yz_parts <<<"$YUKIZYGISK_PARTS"
+	for part in "${yz_parts[@]}"; do
+		case "$part" in
+		"" ) ;;
+		probe) KSU_YUKIZYGISK_MAKE+=" CONFIG_KSU_YZ_PROBE=y" ;;
+		orch) KSU_YUKIZYGISK_MAKE+=" CONFIG_KSU_YZ_ORCH=y" ;;
+		nl) KSU_YUKIZYGISK_MAKE+=" CONFIG_KSU_YZ_NL=y" ;;
+		ctl) KSU_YUKIZYGISK_MAKE+=" CONFIG_KSU_YZ_CTL=y" ;;
+		*)
+			echo "未知 YukiZygisk part: $part"
+			exit 1
+			;;
+		esac
+	done
+	echo "YukiZygisk kernel hooks: enabled (${YUKIZYGISK_PARTS:-none})"
 else
 	echo "YukiZygisk kernel hooks: disabled"
 fi

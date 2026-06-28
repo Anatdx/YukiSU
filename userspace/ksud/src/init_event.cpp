@@ -24,11 +24,13 @@
 #include "hymo/hymo_cli.hpp"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <array>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -149,14 +151,28 @@ void run_stage(const std::string& stage, bool block) {
 }
 
 // Launch the zygisk daemon (ksud's zygiskd multi-call applet) detached.
-// Mirrors spawn_sulogd: own pgrp, stdio to /dev/null, double-fork, exec.
+// Mirrors spawn_sulogd: own pgrp, stdio to /dev/null, double-fork, exec. The
+// ready pipe closes the race between arming the kernel hook and zygote exec:
+// zygiskd reports ready only after it has pushed linker offsets to the kernel.
 int spawn_zygiskd() {
+    int ready_pipe[2] = {-1, -1};
+    if (pipe(ready_pipe) != 0) {
+        LOGW("Failed to create zygiskd ready pipe: %s", strerror(errno));
+    }
+
     pid_t pid = fork();
     if (pid < 0) {
         LOGE("Failed to fork zygiskd launcher: %s", strerror(errno));
+        if (ready_pipe[0] >= 0)
+            close(ready_pipe[0]);
+        if (ready_pipe[1] >= 0)
+            close(ready_pipe[1]);
         return -1;
     }
     if (pid == 0) {
+        if (ready_pipe[0] >= 0)
+            close(ready_pipe[0]);
+
         if (setpgid(0, 0) != 0) {
             LOGW("Failed to detach zygiskd process group: %s", strerror(errno));
         }
@@ -174,10 +190,23 @@ int spawn_zygiskd() {
 
         const pid_t grandchild = fork();
         if (grandchild < 0) {
+            if (ready_pipe[1] >= 0) {
+                const char fail = '0';
+                write(ready_pipe[1], &fail, 1);
+                close(ready_pipe[1]);
+            }
             _exit(127);
         }
         if (grandchild > 0) {
+            if (ready_pipe[1] >= 0)
+                close(ready_pipe[1]);
             _exit(0);
+        }
+
+        if (ready_pipe[1] >= 0) {
+            char fd_env[16];
+            snprintf(fd_env, sizeof(fd_env), "%d", ready_pipe[1]);
+            setenv("YUKIZYGISK_READY_FD", fd_env, 1);
         }
 
         char* const argv[] = {const_cast<char*>(DAEMON_PATH), const_cast<char*>("zygiskd"),
@@ -187,12 +216,35 @@ int spawn_zygiskd() {
         char* const fallback_argv[] = {const_cast<char*>("ksud"), const_cast<char*>("zygiskd"),
                                        nullptr};
         execv("/proc/self/exe", fallback_argv);
+        if (ready_pipe[1] >= 0) {
+            const char fail = '0';
+            write(ready_pipe[1], &fail, 1);
+            close(ready_pipe[1]);
+        }
         _exit(127);
     }
+
+    if (ready_pipe[1] >= 0)
+        close(ready_pipe[1]);
 
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) {
         LOGW("waitpid for zygiskd launcher failed: %s", strerror(errno));
+    }
+
+    if (ready_pipe[0] >= 0) {
+        pollfd pfd{};
+        pfd.fd = ready_pipe[0];
+        pfd.events = POLLIN | POLLHUP;
+        const int pr = poll(&pfd, 1, 5000);
+        char ready = '0';
+
+        if (pr > 0 && read(ready_pipe[0], &ready, 1) == 1 && ready == '1') {
+            LOGI("zygiskd reported ready");
+        } else {
+            LOGW("zygiskd did not report ready before zygote exec (poll=%d, byte=%c)", pr, ready);
+        }
+        close(ready_pipe[0]);
     }
     return 0;
 }

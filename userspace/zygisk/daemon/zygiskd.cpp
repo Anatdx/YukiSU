@@ -28,6 +28,7 @@
 #include <elf.h>
 #include <pthread.h>
 
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -100,6 +101,29 @@ struct Module {
 };
 
 std::vector<Module> g_modules;
+
+int consume_ready_fd() {
+  const char *env = getenv("YUKIZYGISK_READY_FD");
+  if (env == nullptr || *env == '\0')
+    return -1;
+
+  errno = 0;
+  char *end = nullptr;
+  long fd = strtol(env, &end, 10);
+  unsetenv("YUKIZYGISK_READY_FD");
+  if (errno || end == env || *end != '\0' || fd < 0 || fd > INT32_MAX)
+    return -1;
+  return static_cast<int>(fd);
+}
+
+void notify_ready(int fd, bool ok) {
+  if (fd < 0)
+    return;
+  const char byte = ok ? '1' : '0';
+  ssize_t w = write(fd, &byte, 1);
+  (void)w;
+  close(fd);
+}
 
 /* enabled module = not disabled + ships a zygisk lib for our ABI */
 std::vector<Module> scan_modules() {
@@ -872,7 +896,7 @@ uint64_t resolve_first(const char *const *cands, size_t n, const char **hit) {
   return 0;
 }
 
-void send_dlopen_offset() {
+bool send_dlopen_offset() {
   static const char *const kDlopen[] = {
       "__loader_android_dlopen_ext",
       "android_dlopen_ext",
@@ -892,16 +916,19 @@ void send_dlopen_offset() {
     DLOGI("linker resolve incomplete: dlopen=%s dlsym=%s",
           dlopen_name ? dlopen_name : "(none)",
           dlsym_name ? dlsym_name : "(none)");
-    return;
+    return false;
   }
 
   int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_DLOPEN, &cmd);
   DLOGI("linker dlopen '%s'=0x%llx dlsym '%s'=0x%llx -> kernel ret=%d",
         dlopen_name, (unsigned long long)cmd.dlopen_offset, dlsym_name,
         (unsigned long long)cmd.dlsym_offset, ret);
+  return ret == 0;
 }
 
 int run_daemon() {
+  int ready_fd = consume_ready_fd();
+
   // A client (zygote/app) can disconnect mid-reply; without this a write to
   // the dead socket raises SIGPIPE and kills the daemon (it then lingers as a
   // zombie holding @zygiskd64, so new processes connect but are never served).
@@ -917,17 +944,19 @@ int run_daemon() {
   if (srv < 0) {
     DLOGI("@%s already owned by another zygiskd; exiting",
           zygiskd::kSocketName);
+    notify_ready(ready_fd, true);
     return 0;
   }
 
   g_modules = scan_modules();
   read_yzconfig();
   DLOGI("found %zu zygisk module(s) for %s", g_modules.size(), kAbi);
-  send_dlopen_offset();
+  bool offsets_ready = send_dlopen_offset();
 
   int nlfd = nl_listen();
   DLOGI("zygiskd up: unix @%s, netlink proto=%d", zygiskd::kSocketName,
         YZ_NETLINK_PROTO);
+  notify_ready(ready_fd, offsets_ready);
 
   pollfd pfds[2] = {{srv, POLLIN, 0}, {nlfd, POLLIN, 0}};
   nfds_t nfds = (nlfd >= 0) ? 2 : 1;

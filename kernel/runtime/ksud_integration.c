@@ -141,6 +141,68 @@ fail:
 	return false;
 }
 
+#ifdef CONFIG_KSU_YZ_PROBE
+static void copy_karg_name(char *dst, size_t dst_len, const char *src)
+{
+	size_t i;
+
+	if (!dst_len)
+		return;
+	for (i = 0; i + 1 < dst_len && src[i]; i++)
+		dst[i] = src[i];
+	dst[i] = '\0';
+}
+
+static bool copy_argv_arg(struct user_arg_ptr argv, int index, char *buf,
+			  size_t buf_len)
+{
+	const char __user *p;
+
+	if (!buf_len)
+		return false;
+
+	p = get_user_arg_ptr(argv, index);
+	if (!p || IS_ERR(p))
+		return false;
+
+	if (strncpy_from_user(buf, p, buf_len) <= 0)
+		return false;
+	buf[buf_len - 1] = '\0';
+	return true;
+}
+
+static bool parse_zygote_argv(struct user_arg_ptr argv, char *socket_name,
+			      size_t socket_name_len)
+{
+	int argc = count(argv, MAX_ARG_STRINGS);
+	bool found = false;
+	int i;
+
+	if (socket_name_len)
+		socket_name[0] = '\0';
+	if (argc <= 0)
+		return false;
+
+	for (i = 0; i < argc && i < 64; i++) {
+		static const char socket_prefix[] = "--socket-name=";
+		char arg[96];
+
+		if (!copy_argv_arg(argv, i, arg, sizeof(arg)))
+			continue;
+		if (!strcmp(arg, "-Xzygote"))
+			found = true;
+		else if (!strncmp(arg, socket_prefix,
+				  sizeof(socket_prefix) - 1))
+			copy_karg_name(socket_name, socket_name_len,
+				       arg + sizeof(socket_prefix) - 1);
+	}
+
+	if (found && socket_name_len && socket_name[0] == '\0')
+		copy_karg_name(socket_name, socket_name_len, "zygote");
+	return found;
+}
+#endif // #ifdef CONFIG_KSU_YZ_PROBE
+
 /*
  * IMPORTANT NOTE: the TSR execve path still cannot rely on envp/flags on some
  * GKI kernels, so callers may legitimately pass NULL for those arguments.
@@ -271,7 +333,7 @@ void ksu_execve_hook_ksud(const struct pt_regs *regs)
 	ksu_handle_execveat_ksud(path, &argv, NULL, NULL);
 }
 
-#ifdef CONFIG_KSU_YUKIZYGISK
+#ifdef CONFIG_KSU_YZ_PROBE
 void ksu_zygote_probe_execve(const struct pt_regs *regs)
 {
 	const char __user **filename_user =
@@ -281,8 +343,8 @@ void ksu_zygote_probe_execve(const struct pt_regs *regs)
 	struct user_arg_ptr argv = {
 	    .ptr.native = __argv,
 	};
-	char path[32];
-	char buf[16];
+	char path[64];
+	char socket_name[32];
 	const char __user *fn;
 	unsigned long addr;
 	long ret;
@@ -302,13 +364,12 @@ void ksu_zygote_probe_execve(const struct pt_regs *regs)
 	if (!strstr(path, "/app_process"))
 		return;
 
-	if (check_argv(argv, 1, "-Xzygote", buf, sizeof(buf)))
-		pr_info(
-		    "zygote_probe: CONFIRMED zygote (-Xzygote): pid=%d by=%s "
-		    "file=%s\n",
-		    current->pid, current->comm, path);
+	if (parse_zygote_argv(argv, socket_name, sizeof(socket_name)))
+		pr_info("zygote_probe: execve zygote pid=%d socket=%s by=%s "
+			"file=%s\n",
+			current->pid, socket_name, current->comm, path);
 }
-#endif // #ifdef CONFIG_KSU_YUKIZYGISK
+#endif // #ifdef CONFIG_KSU_YZ_PROBE
 
 // ---------------------------------------------------------------
 // init.rc injection via sys_read/sys_fstat syscall table hooks
