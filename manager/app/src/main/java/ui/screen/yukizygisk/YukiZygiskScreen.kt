@@ -130,10 +130,18 @@ private data class RecentApp(
     val packageInfo: PackageInfo?, // feeds Coil for the icon
 )
 
+/** One zygote process that reported a successful core injection to zygiskd. */
+private data class InjectedZygote(
+    val pid: Int,
+    val name: String,
+    val abi: String,
+)
+
 /** Parsed view of zygiskd's status JSON (Natives.yzQueryStatus). */
 private data class YzStatus(
     val count: Int,
     val recent: List<Int>, // appids, most-recent first
+    val zygotes: List<InjectedZygote>,
     val modules: List<String>,
 )
 
@@ -145,7 +153,17 @@ private fun parseYzStatus(json: String): YzStatus? = runCatching {
     val modules = o.optJSONArray("modules")?.let { a ->
         (0 until a.length()).map { a.getString(it) }
     } ?: emptyList()
-    YzStatus(o.optInt("count", 0), recent, modules)
+    val zygotes = o.optJSONArray("zygotes")?.let { a ->
+        (0 until a.length()).map { i ->
+            val z = a.getJSONObject(i)
+            InjectedZygote(
+                pid = z.optInt("pid", 0),
+                name = z.optString("name", "zygote"),
+                abi = z.optString("abi", "unknown"),
+            )
+        }
+    } ?: emptyList()
+    YzStatus(o.optInt("count", 0), recent, zygotes, modules)
 }.getOrNull()
 
 /**
@@ -160,6 +178,13 @@ private fun resolveRecentApp(pm: PackageManager, appId: Int): RecentApp {
     val label = info?.applicationInfo?.loadLabel(pm)?.toString() ?: pkg
     return RecentApp(appId, label, pkg, info)
 }
+
+private data class YzSnapshot(
+    val count: Int,
+    val recentApps: List<RecentApp>,
+    val zygotes: List<InjectedZygote>,
+    val modulesLoadedCount: Int,
+)
 
 private const val YZ_POLL_INTERVAL_MS = 2000L
 
@@ -177,6 +202,7 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
     var injectionActive by remember { mutableStateOf(false) }
     var injectionCount by remember { mutableIntStateOf(0) }
     var recentApps by remember { mutableStateOf<List<RecentApp>>(emptyList()) }
+    var injectedZygotes by remember { mutableStateOf<List<InjectedZygote>>(emptyList()) }
     var modulesLoadedCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -198,13 +224,19 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 val json = runCatching { Natives.yzQueryStatus() }.getOrNull()
                     ?: return@withContext null
                 val st = parseYzStatus(json) ?: return@withContext null
-                Triple(st.count, st.recent.map { resolveRecentApp(pm, it) }, st.modules.size)
+                YzSnapshot(
+                    count = st.count,
+                    recentApps = st.recent.map { resolveRecentApp(pm, it) },
+                    zygotes = st.zygotes,
+                    modulesLoadedCount = st.modules.size,
+                )
             }
             if (snapshot != null) {
                 injectionActive = true
-                injectionCount = snapshot.first
-                recentApps = snapshot.second
-                modulesLoadedCount = snapshot.third
+                injectionCount = snapshot.count
+                recentApps = snapshot.recentApps
+                injectedZygotes = snapshot.zygotes
+                modulesLoadedCount = snapshot.modulesLoadedCount
             }
             delay(YZ_POLL_INTERVAL_MS)
         }
@@ -276,6 +308,20 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                     stringResource(R.string.yukizygisk_injections_session),
                     injectionCount.toString(),
                 )
+            }
+
+            // --- Injected zygotes ---
+            SettingsCard(title = stringResource(R.string.yukizygisk_injected_zygotes)) {
+                if (injectedZygotes.isEmpty()) {
+                    Text(
+                        stringResource(R.string.yukizygisk_no_zygotes),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                } else {
+                    injectedZygotes.forEach { zygote -> InjectedZygoteRow(zygote) }
+                }
             }
 
             // --- Recent injections ---
@@ -372,6 +418,33 @@ private fun RecentAppRow(app: RecentApp) {
             Text(
                 app.packageName?.let { "$it  ·  uid ${app.uid}" }
                     ?: stringResource(R.string.yukizygisk_uid_fallback, app.uid),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
+}
+
+@Composable
+private fun InjectedZygoteRow(zygote: InjectedZygote) {
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = {
+            Text(
+                zygote.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
+            Text(
+                stringResource(
+                    R.string.yukizygisk_zygote_detail,
+                    zygote.abi,
+                    zygote.pid,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

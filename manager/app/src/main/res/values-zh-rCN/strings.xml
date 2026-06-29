@@ -759,6 +759,9 @@
     <string name="yukizygisk_denylist_force_long">强制卸载 + 不注入</string>
     <string name="yukizygisk_denylist_restore_long">注入 + 仅卸载</string>
     <string name="yukizygisk_injections_session">本次会话注入数</string>
+    <string name="yukizygisk_injected_zygotes">已注入的 zygote</string>
+    <string name="yukizygisk_no_zygotes">还没有 zygote 回报注入。</string>
+    <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
     <string name="yukizygisk_recent_injections">最近注入</string>
     <string name="yukizygisk_no_injections">暂无注入。</string>
     <string name="yukizygisk_module_loading">模块加载</string>

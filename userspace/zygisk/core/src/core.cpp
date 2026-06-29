@@ -210,14 +210,19 @@ enum class ZdRequest : uint8_t {
   GetModuleDir = 5,
   GetConfig = 6,
   // 7 = GetStatus (manager-only; core never sends it, kept for wire alignment)
-  RevertMount = 8,  // revert this process's module mounts (denylist_mode==2)
-  SelfDestruct = 9, // mode 1: unhooked, report core segs for kernel munmap
-  Log = 10,         // u16 len + len bytes: zygiskd writes them to /dev/kmsg
-  PatchText = 11,   // u64 addr + u32 len + len bytes: kernel writes them into
-                    // our own mm via access_process_vm(FOLL_FORCE) -- a COW
-                    // write with no mprotect, so the exec VMA never splits
+  RevertMount = 8,   // revert this process's module mounts (denylist_mode==2)
+  SelfDestruct = 9,  // mode 1: unhooked, report core segs for kernel munmap
+  Log = 10,          // u16 len + len bytes: zygiskd writes them to /dev/kmsg
+  PatchText = 11,    // u64 addr + u32 len + len bytes: kernel writes them into
+                     // our own mm via access_process_vm(FOLL_FORCE) -- a COW
+                     // write with no mprotect, so the exec VMA never splits
+  ReportZygote = 12, // no args: daemon records peer pid + zygote cmdline
 };
+#if defined(__LP64__)
 constexpr char kZygiskdSocket[] = "zygiskd64";
+#else
+constexpr char kZygiskdSocket[] = "zygiskd32";
+#endif // #if defined(__LP64__)
 
 bool read_all(int fd, void *buf, size_t n) {
   auto *p = static_cast<uint8_t *>(buf);
@@ -362,6 +367,17 @@ void zd_load_config() {
   yz_config cfg{};
   if (write(s, &req, 1) == 1 && read_all(s, &cfg, sizeof(cfg)))
     g_yz_config = cfg;
+  close(s);
+}
+
+void zd_report_zygote() {
+  int s = connect_zygiskd();
+  if (s < 0)
+    return;
+  uint8_t req = static_cast<uint8_t>(ZdRequest::ReportZygote);
+  uint8_t ack = 0;
+  if (write(s, &req, 1) == 1)
+    (void)read_all(s, &ack, sizeof(ack));
   close(s);
 }
 
@@ -728,6 +744,7 @@ static void core_start(const char *self_path, void *yuki_dlopen,
   }
   g_yuki_dlopen = reinterpret_cast<yuki_dlopen_fn>(yuki_dlopen);
   g_yuki_dlsym = reinterpret_cast<yuki_dlsym_fn>(yuki_dlsym);
+  zd_report_zygote();
   LOGI("core start, self=%s yuki=%p", self_path ? self_path : "(null)",
        yuki_dlopen);
   zygisk_hook_bootstrap(self_path);

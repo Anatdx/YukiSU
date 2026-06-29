@@ -31,6 +31,9 @@ enum class Request : uint8_t {
       11, // u64 addr + u32 len + len bytes -> kernel writes them into the
           //   caller's mm via access_process_vm(FOLL_FORCE) (no mprotect, no
           //   VMA split); used by the specialize inline-hook to patch code
+  ReportZygote =
+      12, // core -> daemon, no args: daemon records peer pid + zygote socket
+          //   name parsed from /proc/<pid>/cmdline for manager status
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */

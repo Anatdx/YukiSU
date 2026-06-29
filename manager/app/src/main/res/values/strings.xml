@@ -760,6 +760,9 @@
     <string name="yukizygisk_denylist_force_long">Force unmount + no inject</string>
     <string name="yukizygisk_denylist_restore_long">Inject + unmount only</string>
     <string name="yukizygisk_injections_session">Injections this session</string>
+    <string name="yukizygisk_injected_zygotes">Injected zygotes</string>
+    <string name="yukizygisk_no_zygotes">No zygote has reported injection yet.</string>
+    <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
     <string name="yukizygisk_recent_injections">Recent injections</string>
     <string name="yukizygisk_no_injections">Nothing injected yet.</string>
     <string name="yukizygisk_module_loading">Module loading</string>

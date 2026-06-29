@@ -210,8 +210,10 @@ object Natives {
      * for a snapshot. zygiskd gates the reply with SO_PEERCRED -- it compares the
      * real uid the kernel stamped on our connection against the manager uid, so a
      * hostile app spoofing our package name can't read it. JSON shape:
-     * `{ "count": Int, "recent": [appId...], "modules": ["name"...],
-     *    "yukilinker": Bool, "denylist_mode": Int, "dmesg_log": Bool }`.
+     * `{ "count": Int, "recent": [appId...],
+     *    "zygotes": [{"pid": Int, "name": String, "abi": String}...],
+     *    "modules": ["name"...], "yukilinker": Bool, "denylist_mode": Int,
+     *    "dmesg_log": Bool }`.
      */
     external fun yzQueryStatus(): String?
     

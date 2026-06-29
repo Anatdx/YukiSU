@@ -486,6 +486,15 @@ uint64_t g_inject_count = 0;
 std::deque<uint32_t> g_recent_appids;
 constexpr size_t kRecentMax = 16;
 
+struct ZygoteRecord {
+  uint32_t pid;
+  std::string name;
+  std::string abi;
+};
+
+std::deque<ZygoteRecord> g_zygotes;
+constexpr size_t kZygoteMax = 8;
+
 void record_injection(uint32_t appid) {
   ++g_inject_count;
   for (auto it = g_recent_appids.begin(); it != g_recent_appids.end(); ++it)
@@ -496,6 +505,66 @@ void record_injection(uint32_t appid) {
   g_recent_appids.push_front(appid);
   if (g_recent_appids.size() > kRecentMax)
     g_recent_appids.pop_back();
+}
+
+bool parse_zygote_cmdline(pid_t pid, std::string *socket_name) {
+  char path[64];
+  snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return false;
+
+  char buf[4096];
+  ssize_t n = read(fd, buf, sizeof(buf));
+  close(fd);
+  if (n <= 0)
+    return false;
+
+  bool found = false;
+  std::string sock;
+  size_t off = 0;
+  while (off < static_cast<size_t>(n)) {
+    const char *arg = buf + off;
+    size_t len = strnlen(arg, static_cast<size_t>(n) - off);
+    if (len == 0) {
+      ++off;
+      continue;
+    }
+    if (strcmp(arg, "-Xzygote") == 0) {
+      found = true;
+    } else {
+      constexpr char kSocketPrefix[] = "--socket-name=";
+      constexpr size_t kSocketPrefixLen = sizeof(kSocketPrefix) - 1;
+      if (len >= kSocketPrefixLen &&
+          strncmp(arg, kSocketPrefix, kSocketPrefixLen) == 0)
+        sock.assign(arg + kSocketPrefixLen, len - kSocketPrefixLen);
+    }
+    off += len + 1;
+  }
+
+  if (socket_name != nullptr)
+    *socket_name = sock.empty() ? "zygote" : sock;
+  return found;
+}
+
+void record_zygote(pid_t pid) {
+  std::string name;
+  if (!parse_zygote_cmdline(pid, &name))
+    name = "zygote";
+
+  for (auto it = g_zygotes.begin(); it != g_zygotes.end(); ++it) {
+    if (it->pid == static_cast<uint32_t>(pid) ||
+        (it->name == name && it->abi == kAbi)) {
+      g_zygotes.erase(it);
+      break;
+    }
+  }
+  g_zygotes.push_front(
+      ZygoteRecord{static_cast<uint32_t>(pid), std::move(name), kAbi});
+  if (g_zygotes.size() > kZygoteMax)
+    g_zygotes.pop_back();
+  DLOGI("zygote injected: pid=%d name=%s abi=%s", pid,
+        g_zygotes.front().name.c_str(), g_zygotes.front().abi.c_str());
 }
 
 void json_append_escaped(std::string &out, const std::string &s) {
@@ -548,6 +617,20 @@ std::string build_status_json() {
       s += ',';
     first = false;
     s += std::to_string(a);
+  }
+  s += "],\"zygotes\":[";
+  first = true;
+  for (const auto &z : g_zygotes) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += "{\"pid\":";
+    s += std::to_string(z.pid);
+    s += ",\"name\":\"";
+    json_append_escaped(s, z.name);
+    s += "\",\"abi\":\"";
+    json_append_escaped(s, z.abi);
+    s += "\"}";
   }
   s += "],\"modules\":[";
   first = true;
@@ -752,6 +835,18 @@ void handle_client(int client) {
       break;
     buf[len] = '\0';
     dlog("core: %s", buf);
+    break;
+  }
+  case zygiskd::Request::ReportZygote: {
+    struct ucred cr{};
+    socklen_t crlen = sizeof(cr);
+    uint8_t ok = 0;
+    if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
+        cr.pid > 0) {
+      record_zygote(static_cast<pid_t>(cr.pid));
+      ok = 1;
+    }
+    write_exact(client, &ok, sizeof(ok));
     break;
   }
   default:
