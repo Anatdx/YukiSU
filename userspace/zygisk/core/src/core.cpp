@@ -383,8 +383,8 @@ void zd_report_zygote() {
 
 /* Route a formatted line to dmesg via zygiskd (root), gated on dmesg_log -- the
  * app/zygote domain can't write /dev/kmsg, so the root daemon does it. Strong
- * definition of the weak yz_klog declared in log.hpp; the loader's solist build
- * (no zygiskd channel) links it as null and its log macros become no-ops. */
+ * definition of the weak yz_klog declared in log.hpp; helper-only users without
+ * a zygiskd channel link it as null and their log macros become no-ops. */
 extern "C" void yz_klog(const char *fmt, ...) {
   if (g_yz_config.dmesg_log == 0)
     return;
@@ -609,12 +609,11 @@ void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
  * re-link pointers), so our code keeps running. Run after specialize, in the
  * child -- "libzygisk" also covers the module soname libzygiskmodule.so. */
 void hide_injection() {
-  zloader::hide_from_solist("libzygisk");
-  zloader::hide_from_solist("libzloader");
-  zloader::hide_from_solist("libyukilinker"); // split-out loader .so
+  yuki::solist::hide_from_solist("libzygisk");
+  yuki::solist::hide_from_solist("libyukilinker"); // split-out loader .so
   // Offsets validated via dry-run; unload ALL module soinfos via the linker's
   // own soinfo_unload (keeps the namespace list + handle map consistent).
-  zloader::drop_module_from_solist(kExecMemfdName, false);
+  yuki::solist::drop_module_from_solist(kExecMemfdName, false);
 }
 
 /* denylist_mode==2 (inject + revert-mount-only): after modules are loaded, ask
@@ -659,7 +658,7 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
   // fixed addr, r--s, one per app) that detectors flag as injection. It's
   // read-only and per-app, so anonymizing it (private copy, same addr) drops
   // the name without breaking the module.
-  zloader::spoof_virtual_maps("/dev/zero (deleted)", false);
+  yuki::solist::spoof_virtual_maps("/dev/zero (deleted)", false);
   // NOTE: deliberately NOT calling name_anonymous_exec(). Hook trampolines now
   // prefer closed memfd-backed code-cache mappings, and the anonymous fallback
   // keeps its private random label instead of a fixed ART JIT name.
@@ -926,7 +925,8 @@ extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int) {
   // munmap the loader only if the core proved its dl_iterate_phdr slot was
   // severed (rebind_self_dl_iterate_slot); otherwise keep it mapped so a
   // dangling slot can never SIGSEGV the zygote (boot hang).
-  int n = zloader::drop_lib_containing(g_loader_base, !g_loader_unmap_safe);
+  int n =
+      yuki::solist::drop_lib_containing(g_loader_base, !g_loader_unmap_safe);
   LOGI("finalize_loader: unloaded %d soinfo(s)", n);
 }
 
@@ -991,14 +991,13 @@ static bool yz_find_self_range(uintptr_t *base, size_t *size) {
  * kernel vm_munmap (YZ_UNMAP_PID, task_work after we return to the JVM). core
  * runs as an untrusted_app and CANNOT get the ksu driver fd itself (prctl
  * GET_FD is manager/root only) -- so it MUST go through zygiskd, which already
- * brokers this and resolves our pid via SO_PEERCRED. Collect everything duck's
- * maps_anomaly_detector flags: the core (full phdr span), plus every executable
- * mapping that is pure-anonymous (empty path) or writable+executable (lsplt
+ * brokers this and resolves our pid via SO_PEERCRED. Collect everything maps
+ * anomaly checks flag: the core (full phdr span), plus every executable mapping
+ * that is pure-anonymous (empty path) or writable+executable (lsplt
  * trampolines) -- those are ours; the app's own code is file-backed or
- * ART-named.
- * The staged code-cache memfd is file-backed and non-anonymous, but we drop it
- * too. Returns false if zygiskd declined. Call after unhook, while still on
- * solist. */
+ * ART-named. The staged code-cache memfd is file-backed and non-anonymous, but
+ * we drop it too. Returns false if zygiskd declined. Call after unhook, while
+ * still on solist. */
 static bool yz_report_self_unmap() {
   uint64_t addr[YZ_MAX_UNMAP_SEGS];
   uint64_t size[YZ_MAX_UNMAP_SEGS];
@@ -1051,8 +1050,8 @@ extern "C" [[noreturn]] void yz_self_unmap_tail(void *base, size_t size);
 /* Run + unregister every atexit handler libc has registered against this dso.
  * Each C++ static-global ctor calls __cxa_atexit(dtor, obj, &__dso_handle); if
  * those handlers stay registered after we unmap libzygisk, a detector that
- * walks libc's atexit table (e.g. reveny) sees dangling callback pointers that
- * fail dladdr and reports "found_injection". Calling __cxa_finalize ourselves
+ * walks libc's atexit table sees dangling callback pointers that fail dladdr
+ * and reports an injection. Calling __cxa_finalize ourselves
  * with our dso handle drains the list cleanly. Safe to call once before the
  * self-unmap; libc is unaffected. */
 extern "C" void __cxa_finalize(void *);
@@ -1096,8 +1095,8 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
     // returned into the just-unmapped core). We unmap ourselves synchronously
     // below instead.
     bool reverted = yz_report_self_unmap();
-    zloader::hide_from_solist("libzygisk");
-    zloader::hide_from_solist("libyukilinker");
+    yuki::solist::hide_from_solist("libzygisk");
+    yuki::solist::hide_from_solist("libyukilinker");
     if (!reverted)
       yz_revert_self_mounts(); // zygiskd unreachable: revert in-app as a
                                // fallback
@@ -1107,9 +1106,9 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
     // munmap. The C++ runtime registers a __cxa_atexit handler per dso for its
     // fini_array entries (and for every C++ static global's destructor); once
     // we're unmapped those handlers point to nothing, and a detector that
-    // snapshots libc's atexit table (e.g. reveny's getDetections walking the
-    // registered callbacks via dladdr) sees dangling pointers that fail dladdr
-    // and reports "found_injection". __cxa_finalize(&__dso_handle) walks libc's
+    // snapshots libc's atexit table and resolves registered callbacks via
+    // dladdr sees dangling pointers that fail dladdr and reports an injection.
+    // __cxa_finalize(&__dso_handle) walks libc's
     // list, runs and unregisters every entry whose dso_handle matches ours.
     yukilinker::shutdown();
     yz_finalize_self_dso();
@@ -1128,7 +1127,7 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
   // Fallback (a specialize method used the RegisterNatives path, or our range
   // was not found): a tail-call munmap would dangle -> disguise the exec
   // segments.
-  zloader::spoof_virtual_maps(kExecMemfdName, true);
+  yuki::solist::spoof_virtual_maps(kExecMemfdName, true);
   (void)env;
 }
 

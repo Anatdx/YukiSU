@@ -1079,8 +1079,8 @@ void shutdown() {
  * standalone .so). Each C++ static-global ctor and each fini_array entry
  * registers via __cxa_atexit(handler, obj, &__dso_handle); if those handlers
  * stay registered after we unmap libyukilinker, a detector that walks libc's
- * atexit table (e.g. reveny) sees dangling callbacks that fail dladdr and
- * reports "found_injection". Drain the list with our own dso handle. */
+ * atexit table sees dangling callbacks that fail dladdr and reports an
+ * injection. Drain the list with our own dso handle. */
 extern "C" void __cxa_finalize(void *);
 // crtbegin_so.o defines `__dso_handle` per-DSO with hidden visibility, so a
 // non-weak extern here always resolves to OUR libyukilinker's dso handle. A
@@ -1172,12 +1172,11 @@ extern "C" {
   yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(h));
 }
 
-/* First-stage entry: replacing libzloader, the kernel stub dlopen's US
- * (libyukilinker) and calls this with the core's staged memfd. We anonymously
- * load the core via our own loader (no /memfd, maps read as ART JIT), then hand
- * the core our dlopen/dlsym fns so it loads its modules the same anonymous way.
- * self-hide from the solist still happens in the core's hide_injection (post-
- * specialize), exactly as it did for libzloader. */
+/* First-stage entry: the kernel stub dlopens libyukilinker and calls this with
+ * the core's staged memfd. We anonymously load the core via our own loader (no
+ * /memfd, maps read as ART JIT), then hand the core our dlopen/dlsym fns so it
+ * loads its modules the same anonymous way. Self-hide from the solist still
+ * happens in the core's hide_injection path after handoff. */
 [[gnu::visibility("default")]] void yuki_bootstrap(int core_fd) {
   if (core_fd < 0)
     return;
@@ -1209,9 +1208,9 @@ extern "C" {
   // Clear our own atexit list entries from libc BEFORE the core munmaps our
   // mapping. The compiler/linker registers a __cxa_atexit handler per dso for
   // its fini_array; once we're unmapped those handlers point to nothing, and a
-  // detector that snapshots libc's atexit table (e.g. reveny's getDetections
-  // walking the registered callbacks) sees dangling pointers that fail dladdr
-  // and reports "found_injection". __cxa_finalize(&__dso_handle) drains them.
+  // detector that snapshots libc's atexit table and resolves registered
+  // callbacks sees dangling pointers that fail dladdr and reports an injection.
+  // __cxa_finalize(&__dso_handle) drains them.
   yukilinker::finalize_self_dso();
   // Hand control to the core to unload US. A *guaranteed* tail call: this frame
   // is destroyed before the core munmaps the page this code lives on, so it's

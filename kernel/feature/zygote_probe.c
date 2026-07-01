@@ -27,11 +27,14 @@
 #include <linux/err.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/proc_fs.h>
 #include <linux/random.h>
 #include <linux/shmem_fs.h>
 #include <linux/syscalls.h>
 #include <linux/version.h>
+#include <linux/workqueue.h>
 #include <asm/cacheflush.h>
 
 #include "policy/feature.h"
@@ -40,6 +43,7 @@
 #include "selinux/selinux.h"
 #include "ksu.h"
 #include "klog.h" // IWYU pragma: keep
+#include "uapi/yukizygisk.h"
 
 static const char app_process[] = "app_process";
 
@@ -75,10 +79,180 @@ void ksu_zygote_probe_set_dlopen_off(u64 dlopen_off, u64 dlsym_off)
  * change applies to the next zygote (module load mode still hot-reloads). */
 static bool zp_yukilinker_enabled;
 
+static DEFINE_MUTEX(zp_native_targets_lock);
+static struct yz_native_target zp_native_targets[YZ_NATIVE_TARGET_MAX];
+static u32 zp_native_target_count;
+
+#define ZP_NATIVE_POLICY_TIMEOUT (10 * HZ)
+
+struct zp_native_policy_pending {
+	struct list_head list;
+	pid_t tgid;
+	struct ksu_file_load_policy state;
+	struct delayed_work timeout;
+	bool pending;
+};
+
+static DEFINE_MUTEX(zp_native_policy_lock);
+static LIST_HEAD(zp_native_policy_pending);
+
+static bool
+zp_native_policy_has_additions(const struct ksu_file_load_policy *state)
+{
+	return state && (state->added_av || state->tmpfs_added_av);
+}
+
 void ksu_zygote_probe_set_yukilinker(bool enabled)
 {
 	zp_yukilinker_enabled = enabled;
 	pr_info("zygote_probe: yukilinker first-stage = %d\n", enabled);
+}
+
+int ksu_zygote_probe_set_native_targets(const struct yz_native_targets_cmd *cmd)
+{
+	u32 i, n;
+
+	if (!cmd)
+		return -EINVAL;
+
+	n = cmd->count;
+	if (n > YZ_NATIVE_TARGET_MAX)
+		n = YZ_NATIVE_TARGET_MAX;
+
+	mutex_lock(&zp_native_targets_lock);
+	zp_native_target_count = 0;
+	for (i = 0; i < n; i++) {
+		const struct yz_native_target *src = &cmd->targets[i];
+		struct yz_native_target *dst =
+		    &zp_native_targets[zp_native_target_count];
+
+		if (src->type != YZ_NATIVE_TARGET_NAME &&
+		    src->type != YZ_NATIVE_TARGET_PATH)
+			continue;
+		if (src->value[0] == '\0')
+			continue;
+		memcpy(dst, src, sizeof(*dst));
+		dst->value[YZ_NATIVE_TARGET_VALUE_MAX - 1] = '\0';
+		zp_native_target_count++;
+	}
+	mutex_unlock(&zp_native_targets_lock);
+
+	pr_info("zygote_probe: native target count=%u\n",
+		zp_native_target_count);
+	return 0;
+}
+
+static void zp_restore_native_policy_state(struct ksu_file_load_policy *state)
+{
+	if (!zp_native_policy_has_additions(state))
+		return;
+	ksu_file_load_policy_restore(state);
+	memset(state, 0, sizeof(*state));
+}
+
+static void zp_native_policy_timeout(struct work_struct *work)
+{
+	struct zp_native_policy_pending *entry = container_of(
+	    to_delayed_work(work), struct zp_native_policy_pending, timeout);
+	bool restore = false;
+
+	mutex_lock(&zp_native_policy_lock);
+	if (entry->pending) {
+		entry->pending = false;
+		list_del_init(&entry->list);
+		restore = true;
+	}
+	mutex_unlock(&zp_native_policy_lock);
+
+	if (!restore)
+		return;
+
+	pr_info("zygote_probe: native policy timeout pid=%d added=0x%x "
+		"tmpfs=0x%x\n",
+		entry->tgid, entry->state.added_av,
+		entry->state.tmpfs_added_av);
+	zp_restore_native_policy_state(&entry->state);
+	kfree(entry);
+}
+
+static void zp_publish_native_policy_state(pid_t tgid,
+					   struct ksu_file_load_policy *state)
+{
+	struct zp_native_policy_pending *entry;
+	struct zp_native_policy_pending *cur;
+	struct zp_native_policy_pending *tmp;
+	LIST_HEAD(old_entries);
+
+	if (!zp_native_policy_has_additions(state))
+		return;
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry) {
+		pr_info("zygote_probe: native policy pid=%d alloc failed, "
+			"restoring immediately\n",
+			tgid);
+		zp_restore_native_policy_state(state);
+		return;
+	}
+	entry->tgid = tgid;
+	entry->state = *state;
+	entry->pending = true;
+	INIT_LIST_HEAD(&entry->list);
+	INIT_DELAYED_WORK(&entry->timeout, zp_native_policy_timeout);
+	memset(state, 0, sizeof(*state));
+
+	mutex_lock(&zp_native_policy_lock);
+	list_for_each_entry_safe (cur, tmp, &zp_native_policy_pending, list) {
+		if (cur->tgid != tgid)
+			continue;
+		cur->pending = false;
+		list_move_tail(&cur->list, &old_entries);
+	}
+	list_add_tail(&entry->list, &zp_native_policy_pending);
+	mutex_unlock(&zp_native_policy_lock);
+
+	schedule_delayed_work(&entry->timeout, ZP_NATIVE_POLICY_TIMEOUT);
+
+	list_for_each_entry_safe (cur, tmp, &old_entries, list) {
+		cancel_delayed_work_sync(&cur->timeout);
+		list_del(&cur->list);
+		zp_restore_native_policy_state(&cur->state);
+		kfree(cur);
+	}
+	pr_info("zygote_probe: native policy pid=%d pending added=0x%x "
+		"tmpfs=0x%x\n",
+		tgid, entry->state.added_av, entry->state.tmpfs_added_av);
+}
+
+int ksu_zygote_probe_restore_native_policy(pid_t tgid)
+{
+	struct zp_native_policy_pending *entry;
+	struct zp_native_policy_pending *tmp;
+	LIST_HEAD(todo);
+	int n = 0;
+
+	if (tgid <= 0)
+		return -EINVAL;
+
+	mutex_lock(&zp_native_policy_lock);
+	list_for_each_entry_safe (entry, tmp, &zp_native_policy_pending, list) {
+		if (entry->tgid != tgid)
+			continue;
+		entry->pending = false;
+		list_move_tail(&entry->list, &todo);
+	}
+	mutex_unlock(&zp_native_policy_lock);
+
+	list_for_each_entry_safe (entry, tmp, &todo, list) {
+		cancel_delayed_work_sync(&entry->timeout);
+		list_del(&entry->list);
+		zp_restore_native_policy_state(&entry->state);
+		kfree(entry);
+		n++;
+	}
+	pr_info("zygote_probe: native policy restore pid=%d entries=%d\n", tgid,
+		n);
+	return 0;
 }
 
 /* patch a movz/movk x<d> sequence (4 insns, hw 0..3) with a 64-bit immediate */
@@ -169,6 +343,16 @@ static bool zp_is_app_process_path(const char *filename)
 	return !strncmp(base, app_process, sizeof(app_process) - 1);
 }
 
+static const char *zp_basename(const char *path)
+{
+	const char *base;
+
+	if (!path)
+		return NULL;
+	base = strrchr(path, '/');
+	return base ? base + 1 : path;
+}
+
 static void zp_copy_name(char *dst, size_t dst_len, const char *src)
 {
 	size_t i;
@@ -178,6 +362,37 @@ static void zp_copy_name(char *dst, size_t dst_len, const char *src)
 	for (i = 0; i + 1 < dst_len && src[i]; i++)
 		dst[i] = src[i];
 	dst[i] = '\0';
+}
+
+static bool zp_match_native_target(const char *filename, char *label,
+				   size_t label_len)
+{
+	const char *base = zp_basename(filename);
+	bool matched = false;
+	u32 i;
+
+	if (!filename || !base)
+		return false;
+
+	mutex_lock(&zp_native_targets_lock);
+	for (i = 0; i < zp_native_target_count; i++) {
+		const struct yz_native_target *t = &zp_native_targets[i];
+
+		if (t->type == YZ_NATIVE_TARGET_NAME) {
+			if (strcmp(base, t->value))
+				continue;
+		} else if (t->type == YZ_NATIVE_TARGET_PATH) {
+			if (strcmp(filename, t->value))
+				continue;
+		} else {
+			continue;
+		}
+		zp_copy_name(label, label_len, t->value);
+		matched = true;
+		break;
+	}
+	mutex_unlock(&zp_native_targets_lock);
+	return matched;
 }
 
 static bool zp_next_arg(unsigned long *p, unsigned long end, char *arg,
@@ -246,16 +461,16 @@ static bool zp_parse_zygote_args(struct mm_struct *mm, char *socket_name,
 }
 
 /*
- * [2c-3b] libyukilinker.so is the first-stage loader the zygote must dlopen
- * (it replaced the old thin libzloader -- it both stays hidden AND anonymously
- * loads the core itself via its own ELF loader). It lives under /data/adb,
- * which the zygote itself cannot open -- so the kernel reads it (with ksu_cred)
- * and republishes the bytes as an anonymous shmem fd installed into the zygote.
- * The injected stub hands that fd to android_dlopen_ext(USE_LIBRARY_FD): no
- * on-disk path the zygote could be SELinux-denied, and no namespace lookup.
+ * [2c-3b] YukiZygisk may either dlopen libyukilinker first or dlopen the core
+ * directly. Zygote yukilinker mode republishes payload bytes as anonymous shmem
+ * so app processes do not inherit /data/adb paths. Native-service injection
+ * always uses the first-stage loader for the core: vendor linker namespaces can
+ * reject a direct core dlopen even with USE_LIBRARY_FD. The native modules
+ * themselves are still opened by the native core from their real module paths.
  */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
+#define ZP_NATIVE_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libyukizncore.so"
 /* The staged shmem images use an ART data-code-cache marker. They are mapped
  * file-backed by android_dlopen_ext(USE_LIBRARY_FD), so the name is visible in
  * /proc/pid/maps while the core remains resident. Avoid the primary JIT cache
@@ -265,6 +480,7 @@ static bool zp_parse_zygote_args(struct mm_struct *mm, char *socket_name,
 #define ZP_VMA_NAME_LEN sizeof(ZP_VMA_NAME)
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
+#define ZP_DLEXT_FORCE_LOAD 0x40
 
 /* Mirrors bionic's android_dlextinfo (LP64 layout). Only .flags and
  * .library_fd are populated; everything else stays zero. */
@@ -303,10 +519,11 @@ static void zp_cache_name(char *buf, size_t len)
 /*
  * Read a payload file (loader or core) and republish it as an O_CLOEXEC fd in
  * current pointing at a private shmem copy. Returns the installed fd (>= 0) or
- * a negative errno. Runs in the zygote's context (task_work), where sleeping
- * file IO is safe.
+ * a negative errno. Runs in the target task's context (task_work), where
+ * sleeping file IO is safe.
  */
-static int zp_stage_fd(const char *path, const char *name)
+static int zp_stage_fd(const char *path, const char *name,
+		       struct ksu_file_load_policy *policy_state)
 {
 	const struct cred *old_cred;
 	struct file *src, *mfd;
@@ -316,10 +533,11 @@ static int zp_stage_fd(const char *path, const char *name)
 	int fd;
 
 	/*
-	 * Read as ksu_cred all the way through kernel_read -- the zygote can't
+	 * Read as ksu_cred all the way through kernel_read -- the target can't
 	 * read /data/adb, and reverting before the read leaves kernel_read in
-	 * the zygote's context, where rw_verify_area's SELinux check denies the
-	 * adb_data_file read. Revert only once the bytes are in hand.
+	 * the target's context, where rw_verify_area's SELinux check can deny
+	 * the adb_data_file read. Revert once the bytes are in hand so the
+	 * shmem file and write path stay in the target domain.
 	 */
 	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
 
@@ -355,24 +573,39 @@ static int zp_stage_fd(const char *path, const char *name)
 	}
 	pos = 0;
 	r = kernel_read(src, buf, sz, &pos);
-	filp_close(src, NULL);
 
-	/* bytes in hand -- back to the zygote so the memfd is created and
-	 * labeled by it (so the zygote can later mmap it executable) */
-	if (old_cred)
+	if (old_cred) {
 		revert_creds(old_cred);
+		old_cred = NULL;
+	}
 
 	if (r != sz) {
 		pr_info("zygote_probe: [2c-3b] read %s short: %zd/%lld\n", path,
 			r, (long long)sz);
+		filp_close(src, NULL);
 		kvfree(buf);
 		return r < 0 ? (int)r : -EIO;
 	}
 
+	if (policy_state) {
+		int ret = ksu_file_load_policy_allow_current(src, policy_state);
+		if (ret)
+			pr_info("zygote_probe: [2c-3b] native policy allow %s "
+				"failed: %d\n",
+				path, ret);
+	}
+	filp_close(src, NULL);
+
 	mfd = shmem_file_setup(name, sz, 0);
 	if (IS_ERR(mfd)) {
+		long err = PTR_ERR(mfd);
+
+		pr_info("zygote_probe: [2c-3b] shmem %s failed: %ld\n", name,
+			err);
+		if (policy_state)
+			zp_restore_native_policy_state(policy_state);
 		kvfree(buf);
-		return PTR_ERR(mfd);
+		return err;
 	}
 	/*
 	 * shmem_file_setup() goes through alloc_file_pseudo, not
@@ -389,12 +622,19 @@ static int zp_stage_fd(const char *path, const char *name)
 	r = kernel_write(mfd, buf, sz, &pos);
 	kvfree(buf);
 	if (r != sz) {
+		pr_info("zygote_probe: [2c-3b] write staged %s short: "
+			"%zd/%lld\n",
+			path, r, (long long)sz);
+		if (policy_state)
+			zp_restore_native_policy_state(policy_state);
 		fput(mfd);
 		return r < 0 ? (int)r : -EIO;
 	}
 
 	fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0) {
+		if (policy_state)
+			zp_restore_native_policy_state(policy_state);
 		fput(mfd);
 		return fd;
 	}
@@ -405,8 +645,71 @@ static int zp_stage_fd(const char *path, const char *name)
 	return fd;
 }
 
+/*
+ * Open a payload file as ksu and install the real file into current. This keeps
+ * native-service core/module compatibility mappings file-backed while avoiding
+ * target directory traversal under /data/adb.
+ */
+static int zp_stage_file_fd(const char *path,
+			    struct ksu_file_load_policy *policy_state)
+{
+	const struct cred *old_cred;
+	struct file *file;
+	loff_t sz;
+	int fd;
+	int ret;
+
+	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
+	file = filp_open(path, O_RDONLY, 0);
+	if (old_cred)
+		revert_creds(old_cred);
+	if (IS_ERR(file)) {
+		pr_info("zygote_probe: [2c-3b] open real %s failed: %ld\n",
+			path, PTR_ERR(file));
+		return PTR_ERR(file);
+	}
+	if (!S_ISREG(file_inode(file)->i_mode)) {
+		filp_close(file, NULL);
+		return -EINVAL;
+	}
+
+	sz = i_size_read(file_inode(file));
+	if (sz <= 0 || sz > ZP_LOADER_MAX_SZ) {
+		filp_close(file, NULL);
+		return -EINVAL;
+	}
+
+	if (policy_state) {
+		ret = ksu_file_load_policy_allow_current(file, policy_state);
+		if (ret)
+			pr_info("zygote_probe: [2c-3b] native policy allow %s "
+				"failed: %d\n",
+				path, ret);
+	}
+
+	fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		if (policy_state)
+			zp_restore_native_policy_state(policy_state);
+		filp_close(file, NULL);
+		return fd;
+	}
+	fd_install(fd, file);
+
+	pr_info("zygote_probe: [2c-3b] staged real %s (%lld bytes) -> fd=%d\n",
+		path, (long long)sz, fd);
+	return fd;
+}
+
+enum zp_inject_kind {
+	ZP_INJECT_ZYGOTE = 1,
+	ZP_INJECT_NATIVE = 2,
+};
+
 struct zp_inject_tw {
 	struct callback_head cb;
+	enum zp_inject_kind kind;
+	char label[64];
 };
 
 /*
@@ -421,13 +724,19 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	unsigned long sp, p, word, val;
 	unsigned long saved = 0, at_entry_uaddr = 0, at_entry_uval = 0;
 	unsigned long at_base = 0;
-	char socket_name[32];
+	char socket_name[64];
 	int argc, k;
+	bool native = tw->kind == ZP_INJECT_NATIVE;
 
 	if (!mm)
 		goto out;
-	if (!zp_parse_zygote_args(mm, socket_name, sizeof(socket_name)))
-		goto out;
+	if (native) {
+		zp_copy_name(socket_name, sizeof(socket_name),
+			     tw->label[0] ? tw->label : "native");
+	} else {
+		if (!zp_parse_zygote_args(mm, socket_name, sizeof(socket_name)))
+			goto out;
+	}
 
 #ifdef CONFIG_COMPAT
 	/*
@@ -437,7 +746,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	 * exists, leave 32-bit zygotes uninjected rather than corrupt them.
 	 */
 	if (is_compat_task()) {
-		pr_info("zygote_probe: pid=%d socket=%s 32-bit zygote, "
+		pr_info("zygote_probe: pid=%d socket=%s 32-bit target, "
 			"skipping injection\n",
 			current->pid, socket_name);
 		goto out;
@@ -521,59 +830,24 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	}
 
 	/* [1c] real redirect, gated. Fail-safe: rewrite AT_ENTRY only once the
-	 * stub is fully staged. The stub (below) dlopens libzloader.so from a
-	 * kernel-provided fd, then chains to the saved entry. */
+	 * stub is fully staged. The stub (below) dlopens the first-stage loader
+	 * from a kernel-provided fd, then chains to the saved entry. */
 	if (yukizygisk_enabled && at_entry_uaddr && at_entry_uval == saved &&
 	    saved) {
 #ifdef CONFIG_ARM64
 		/*
-		 * [2c-3b] offline-assembled stub. dlopens libzloader.so from
-		 * the kernel-staged fd, closes that fd (zygote's pre-fork fd
-		 * allowlist aborts on a leaked memfd), then dlsym's and CALLS
-		 * the loader entry with the core fd (bionic doesn't run a
-		 * dlopen'd lib's constructor this early), and finally
-		 * tail-calls the real entry. A libc call (dlopen/dlsym) does
-		 * NOT reliably preserve callee- saved regs at this
-		 * pre-__libc_init point, so we keep stub base / entry / dlsym /
-		 * orig-x0 / handle in a stack frame and reload them after every
-		 * blr. Patched: idx2 entry, idx6 dlopen, idx10 dlsym, idx40
-		 * core fd. Disassembly: adr   x19, .            ; stub base sub
-		 * sp,  sp, #64      ; scratch frame (16-aligned) movz/movk
-		 * x20,#<entry>  ; [2..5]   saved AT_ENTRY (patched) movz/movk
-		 * x21,#<dlopen> ; [6..9]   android_dlopen_ext (patched)
-		 *   movz/movk x23,#<dlsym>  ; [10..13] __loader_dlsym (patched)
-		 *   str   x19, [sp]         ; save stub base
-		 *   str   x20, [sp,#8]      ; save entry
-		 *   str   x23, [sp,#16]     ; save dlsym
-		 *   str   x0,  [sp,#24]     ; save orig x0
-		 *   movz/movk w16,#RAN!     ; proof marker
-		 *   str   w16, [x19,#0x800]
-		 *   add   x0,  x19,#0xc00   ; "libzloader.so"
-		 *   movz  x1,  #2           ; RTLD_NOW
-		 *   add   x2,  x19,#0xa00   ; &android_dlextinfo (fd load)
-		 *   mov   x3,  x20          ; caller = entry (default ns)
-		 *   blr   x21               ; handle = android_dlopen_ext(...)
-		 *   ldr   x19, [sp]         ; reload base
-		 *   str   x0,  [x19,#0x808] ; stash handle
-		 *   str   x0,  [sp,#32]     ; save handle
-		 *   ldr   w0,  [x19,#0xa1c] ; extinfo.library_fd
-		 *   movz  x8,  #57          ; __NR_close
-		 *   svc   #0                ; close(library_fd)
-		 *   ldr   x19, [sp]         ; reload base
-		 *   ldr   x0,  [sp,#32]     ; handle
-		 *   add   x1,  x19,#0xd00   ; "zygisk_loader_main"
-		 *   ldr   x2,  [sp,#8]      ; caller = entry
-		 *   ldr   x23, [sp,#16]     ; dlsym
-		 *   blr   x23               ; entry = dlsym(handle, name)
-		 *   cbz   x0,  1f           ; skip call if not found
-		 *   mov   x25, x0
-		 *   movz  x0,  #<core_fd>   ; arg = core fd (patched at idx40)
-		 *   blr   x25               ; zygisk_loader_main(core_fd)
-		 * 1:ldr   x0,  [sp,#24]     ; restore orig x0
-		 *   ldr   x20, [sp,#8]      ; reload entry
-		 *   add   sp,  sp, #64      ; free frame
-		 *   mov   x16, x20          ; \ tail-call the real entry
-		 *   br    x16               ; /
+		 * [2c-3b] offline-assembled stub. It dlopens the first-stage
+		 * loader from the kernel-staged fd, closes that fd, dlsym's and
+		 * calls the loader entry with the core fd, then tail-calls the
+		 * real entry. A libc call does not reliably preserve
+		 * callee-saved registers this early, so the stub keeps all
+		 * state in its own stack frame and reloads after each call.
+		 *
+		 * Patched slots: idx2 real entry, idx6 android_dlopen_ext,
+		 * idx10 __loader_dlsym, idx24 caller_addr, idx40/idx45 core fd.
+		 * The failure path closes core_fd before jumping to the real
+		 * entry, which prevents a leaked staged fd from reaching
+		 * zygote's fork-time fd allowlist.
 		 */
 		static const u32 tmpl[] = {
 		    0x10000013, 0xd10103ff, 0xd2800014, 0xf2a00014, 0xf2c00014,
@@ -582,17 +856,20 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		    0xf90007f4, 0xf9000bf7, 0xf9000fe0, 0x5289c430, 0x72aa4830,
 		    0xb9080270, 0x91300260, 0xd2800041, 0x91280262, 0xaa1403e3,
 		    0xd63f02a0, 0xf94003f3, 0xf9040660, 0xf90013e0, 0xb94a1e60,
-		    0xd2800728, 0xd4000001, 0xf94003f3, 0xf94013e0, 0x91340261,
-		    0xf94007e2, 0xf9400bf7, 0xd63f02e0, 0xb4000080, 0xaa0003f9,
+		    0xd2800728, 0xd4000001, 0xf94003f3, 0xf94013e0, 0xb40000c0,
+		    0x91340261, 0xf94007e2, 0xf9400bf7, 0xd63f02e0, 0xb50000a0,
+		    0xd2800000, 0xd2800728, 0xd4000001, 0x14000004, 0xaa0003f9,
 		    0xd2800000, 0xd63f0320, 0xf9400fe0, 0xf94007f4, 0x910103ff,
 		    0xaa1403f0, 0xd61f0200,
 		};
 		u32 code[ARRAY_SIZE(tmpl)];
 		struct zp_dlextinfo extinfo;
+		struct ksu_file_load_policy native_policy = {};
 		unsigned long stub, dlopen_addr, dlsym_addr;
-		int loader_fd, core_fd, werr;
+		int loader_fd, core_fd, stub_core_fd, werr;
 		bool yuki;
 		const char *lib_str, *entry_str;
+		const char *core_path;
 		size_t lib_len, entry_len;
 		char loader_name[ZP_VMA_NAME_LEN], core_name[ZP_VMA_NAME_LEN];
 
@@ -606,15 +883,22 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		dlopen_addr = at_base + zp_dlopen_off;
 		dlsym_addr = at_base + zp_dlsym_off;
 
-		/* Stage both payloads as fds in the zygote: the stub dlopens
-		 * the loader (and closes its own fd), then passes the core fd
-		 * to the loader entry, which dlopens the core and closes that
-		 * fd. */
-		yuki = zp_yukilinker_enabled;
+		/* Stage payload fds in the target. Native and zygote
+		 * yukilinker mode dlopen the first-stage loader, then pass the
+		 * selected core fd to it. Direct zygote mode makes loader_fd
+		 * the core fd and calls zygisk_core_entry_direct after linker64
+		 * maps the core. */
+		yuki = native || zp_yukilinker_enabled;
+		core_path = native ? ZP_NATIVE_CORE_PATH : ZP_CORE_PATH;
 		zp_cache_name(loader_name, sizeof(loader_name));
 		zp_cache_name(core_name, sizeof(core_name));
-		loader_fd = zp_stage_fd(yuki ? ZP_LOADER_PATH : ZP_CORE_PATH,
-					yuki ? loader_name : core_name);
+		if (yuki)
+			loader_fd = zp_stage_fd(ZP_LOADER_PATH, loader_name,
+						native ? &native_policy : NULL);
+		else if (native)
+			loader_fd = zp_stage_file_fd(core_path, &native_policy);
+		else
+			loader_fd = zp_stage_fd(core_path, core_name, NULL);
 		if (loader_fd < 0) {
 			pr_info("zygote_probe: [2c-3b] pid=%d socket=%s stage "
 				"loader "
@@ -623,7 +907,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			goto out;
 		}
 		if (yuki) {
-			core_fd = zp_stage_fd(ZP_CORE_PATH, core_name);
+			core_fd = zp_stage_fd(core_path, core_name, NULL);
 		} else {
 			core_fd = loader_fd; /* dlopen the core directly */
 		}
@@ -633,6 +917,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			    "failed: %d, skipping\n",
 			    current->pid, socket_name, core_fd);
 			zp_close_current_fd(loader_fd);
+			zp_restore_native_policy_state(&native_policy);
 			goto out;
 		}
 
@@ -648,6 +933,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			if (yuki) /* OFF: core_fd == loader_fd, already closed
 				   */
 				zp_close_current_fd(core_fd);
+			zp_restore_native_policy_state(&native_policy);
 			goto out;
 		}
 
@@ -655,24 +941,32 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		zp_patch_imm64(&code[2], saved); /* x20 = real entry */
 		zp_patch_imm64(&code[6], dlopen_addr); /* x21 = dlopen */
 		zp_patch_imm64(&code[10], dlsym_addr); /* x23 = dlsym */
-		/* movz x0,#core_fd: arg to the entry. ON:
+		/* movz x0,#core_fd: close on failure and arg to the entry. ON:
 		 * yuki_bootstrap(core_fd). OFF: zygisk_core_entry_direct
 		 * ignores it (core already mapped). */
-		code[40] = 0xd2800000u | (((u32)core_fd & 0xffff) << 5);
+		stub_core_fd = yuki ? core_fd : -1;
+		code[40] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
+		code[45] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
 
 		/* ON: stub dlopens libyukilinker + calls yuki_bootstrap. OFF:
-		 * stub dlopens the core itself + calls
+		 * stub dlopens the selected core itself + calls
 		 * zygisk_core_entry_direct. */
-		lib_str = yuki ? "libyukilinker.so" : "libzygisk.so";
-		lib_len =
-		    yuki ? sizeof("libyukilinker.so") : sizeof("libzygisk.so");
-		entry_str =
-		    yuki ? "yuki_bootstrap" : "zygisk_core_entry_direct";
-		entry_len = yuki ? sizeof("yuki_bootstrap")
-				 : sizeof("zygisk_core_entry_direct");
+		if (yuki) {
+			lib_str = "libyukilinker.so";
+			lib_len = sizeof("libyukilinker.so");
+			entry_str = "yuki_bootstrap";
+			entry_len = sizeof("yuki_bootstrap");
+		} else {
+			lib_str = native ? "libyukizncore.so" : "libzygisk.so";
+			lib_len = native ? sizeof("libyukizncore.so")
+					 : sizeof("libzygisk.so");
+			entry_str = "zygisk_core_entry_direct";
+			entry_len = sizeof("zygisk_core_entry_direct");
+		}
 
 		memset(&extinfo, 0, sizeof(extinfo));
-		extinfo.flags = ZP_DLEXT_USE_LIBRARY_FD;
+		extinfo.flags = ZP_DLEXT_USE_LIBRARY_FD |
+				(native ? ZP_DLEXT_FORCE_LOAD : 0);
 		extinfo.library_fd = loader_fd;
 
 		if (copy_to_user((void __user *)stub, code, sizeof(code)) ||
@@ -691,6 +985,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			if (yuki) /* OFF: core_fd == loader_fd, already closed
 				   */
 				zp_close_current_fd(core_fd);
+			zp_restore_native_policy_state(&native_policy);
 			goto out;
 		}
 
@@ -710,6 +1005,10 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			if (yuki) /* OFF: core_fd == loader_fd, already closed
 				   */
 				zp_close_current_fd(core_fd);
+			zp_restore_native_policy_state(&native_policy);
+		} else if (native) {
+			zp_publish_native_policy_state(current->tgid,
+						       &native_policy);
 		}
 #else
 		pr_info("zygote_probe: [1c] pid=%d socket=%s redirect: arm64 "
@@ -724,8 +1023,10 @@ out:
 static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 {
 	const char *filename = bprm ? bprm->filename : NULL;
+	char native_label[64] = {};
 	bool by_sid;
 	bool by_path;
+	bool by_native;
 
 	((bprm_committed_creds_fn)zygote_probe_hook.original)(bprm);
 	if (unlikely(!READ_ONCE(yukizygisk_enabled)))
@@ -733,15 +1034,23 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 
 	by_sid = is_zygote(current_cred());
 	by_path = zp_is_app_process_path(filename);
-	if (unlikely(by_sid || by_path)) {
+	by_native = !by_path && zp_match_native_target(filename, native_label,
+						       sizeof(native_label));
+	if (unlikely(by_sid || by_path || by_native)) {
+		if (by_native)
+			pr_info("zygote_probe: native exec pid=%d tgid=%d "
+				"comm=%s file=%s target=%s\n",
+				current->pid, current->tgid, current->comm,
+				filename ?: "(null)", native_label);
+
 		/* every app_process invocation (cmd, am, dumpsys, ...) hits
 		 * by_path, so keep this at debug to avoid drowning dmesg -- the
 		 * real signal is the [1a]/[2c-3b] lines, emitted only for the
 		 * actual -Xzygote process. */
-		pr_debug("zygote_probe: zygote exec pid=%d tgid=%d comm=%s "
-			 "file=%s [sid=%d path=%d]\n",
+		pr_debug("zygote_probe: exec pid=%d tgid=%d comm=%s "
+			 "file=%s [sid=%d path=%d native=%d]\n",
 			 current->pid, current->tgid, current->comm,
-			 filename ?: "(null)", by_sid, by_path);
+			 filename ?: "(null)", by_sid, by_path, by_native);
 
 		/* app_process only (by_path excludes idmap2): defer AT_ENTRY
 		 * work to task_work, where auxv exists and user access is safe.
@@ -749,11 +1058,17 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 		 * this is a real -Xzygote launch; it also records
 		 * --socket-name= so vendor zygote variants show up in dmesg.
 		 */
-		if (by_path) {
+		if (by_path || by_native) {
 			struct zp_inject_tw *tw =
 			    kzalloc(sizeof(*tw), GFP_ATOMIC);
 
 			if (tw) {
+				tw->kind = by_native ? ZP_INJECT_NATIVE
+						     : ZP_INJECT_ZYGOTE;
+				if (by_native)
+					zp_copy_name(tw->label,
+						     sizeof(tw->label),
+						     native_label);
 				init_task_work(&tw->cb, zp_inject_tw_func);
 				if (task_work_add(current, &tw->cb, TWA_RESUME))
 					kfree(tw);

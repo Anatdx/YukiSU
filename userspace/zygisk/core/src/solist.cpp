@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - libzloader.so: hide the injection from solist/maps scanners.
+ * YukiZygisk - hide injected code from solist/maps scanners.
  *
  * Approach (implemented from scratch):
  *  - hide_from_solist re-links our own injected libs out of the solist (they're
@@ -35,11 +35,11 @@
 #define PR_SET_VMA_ANON_NAME 0
 #endif // #ifndef PR_SET_VMA_ANON_NAME
 
-namespace zloader {
+namespace yuki::solist {
 namespace {
 
 /* Logs go to dmesg via zygiskd, never logcat. yz_klog is weak (strong def in
- * core.cpp); in the loader build it links as null and these become no-ops. */
+ * core.cpp); helper-only users can link it as null and these become no-ops. */
 extern "C" __attribute__((weak, format(printf, 1, 2))) void
 yz_klog(const char *fmt, ...);
 #define SLOGE(...)                                                             \
@@ -742,4 +742,4 @@ int name_anonymous_exec() {
   return n;
 }
 
-} // namespace zloader
+} // namespace yuki::solist

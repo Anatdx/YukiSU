@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - libzloader.so: hide injected libraries from the linker's solist.
+ * YukiZygisk - linker solist and maps hiding helpers.
  *
  * Android's zygote walks the linker soinfo list before each fork and aborts
  * (`JNI FatalError ... Not allowlisted`) if it finds a library outside the
- * system path allowlist. We unlink our injected library (memfd, realpath like
- * "/libzloader.so (deleted)") from that list so the pre-fork scan can't see it.
- * We only re-link the list pointers -- the mapping stays, so our code keeps
- * running.
+ * system path allowlist. We unlink injected libraries from that list so the
+ * pre-fork scan can't see them. Some module paths also need proper linker-side
+ * unload bookkeeping, and some mappings need path anonymization.
  *
  * Author: Anatdx
  */
@@ -15,7 +14,7 @@
 
 #include <cstdint>
 
-namespace zloader {
+namespace yuki::solist {
 
 /* Unlink every soinfo whose realpath contains path_substr from the linker's
  * solist. Returns the number of entries hidden. Safe no-op (returns 0) on any
@@ -56,4 +55,4 @@ int spoof_virtual_maps(const char *path_substr, bool private_only);
  * only -- no remap/reprotect. Returns the number named. */
 int name_anonymous_exec();
 
-} // namespace zloader
+} // namespace yuki::solist

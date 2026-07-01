@@ -249,18 +249,31 @@ int spawn_zygiskd() {
     return 0;
 }
 
+bool yukizygisk_feature_enabled() {
+    if (is_safe_mode()) {
+        return false;
+    }
+    const auto [value, supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
+    return supported && value != 0;
+}
+
+// Stage the YukiZygisk payload only after init_features() has applied the
+// persisted feature gate. If the feature is off, leave the payload absent so a
+// reboot cannot accidentally re-arm zygote/native injection.
+void ensure_yukizygisk_payload_if_enabled() {
+    if (!yukizygisk_feature_enabled()) {
+        return;
+    }
+    ensure_yukizygisk(true);
+}
+
 // YukiZygisk gate: only when the feature is on and we're NOT in safe mode.
 // Bring zygiskd up at post-fs-data so it has resolved the linker dlopen
 // offsets and is listening before zygote starts; the kernel then injects
 // zygote on the KSU_FEATURE_YUKIZYGISK gate. Feature off / safe mode: no-op.
 void ensure_zygiskd_running_if_enabled() {
-    if (is_safe_mode()) {
+    if (!yukizygisk_feature_enabled())
         return;
-    }
-    const auto [value, supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
-    if (!supported || value == 0) {
-        return;
-    }
     LOGI("YukiZygisk feature on -- launching zygiskd");
     spawn_zygiskd();
 }
@@ -314,10 +327,6 @@ int on_post_data_fs() {
         LOGW("Failed to ensure binaries");
     }
 
-    // Stage the YukiZygisk payload into /data/adb/ksu/lib/yukizygisk/ (no-op if
-    // this ksud wasn't built with the payload embedded).
-    ensure_yukizygisk(true);
-
     // if we are in safe mode, we should disable all modules
     if (safe_mode) {
         LOGW("safe mode, skip post-fs-data scripts and disable all modules!");
@@ -348,6 +357,7 @@ int on_post_data_fs() {
 
     // Load feature config (with init_features handling managed features)
     init_features();
+    ensure_yukizygisk_payload_if_enabled();
     ensure_sulogd_running_if_enabled();
     ensure_zygiskd_running_if_enabled();
 

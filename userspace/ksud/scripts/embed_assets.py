@@ -193,7 +193,8 @@ int ensure_binaries(bool ignore_if_exist) {
         // Skip ksuinit and kernel modules - they are extracted on demand
         if (name == "ksuinit" || name.find("_kernelsu.ko") != std::string::npos ||
             name.find("_kasumi_lkm.ko") != std::string::npos ||
-            name == "libzloader.so" || name == "libzygisk.so") {
+            name == "libzygisk.so" || name == "libyukizncore.so" ||
+            name == "libyukilinker.so") {
             continue;
         }
         

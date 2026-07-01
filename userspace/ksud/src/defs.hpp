@@ -40,12 +40,13 @@ constexpr const char* MAGISKBOOT_PATH = "/data/adb/ksu/bin/magiskboot";
 constexpr const char* LIBADBROOT_PATH = "/data/adb/ksu/lib/libadbroot.so";
 
 // YukiZygisk runtime payload: ksud stages these at post-fs-data; the kernel
-// reads libzloader.so (as ksu_cred) and hands it to the zygote via a memfd, so
-// the zygote never opens these paths directly. Private to ksu's lib dir to
-// avoid colliding with other zygisk implementations under /data/adb/zygisk.
+// reads the first-stage/core libraries as ksu_cred and hands them to target
+// processes via memfd, so target processes never open these paths directly.
+// Private to ksu's lib dir to avoid colliding with other zygisk implementations
+// under /data/adb/zygisk.
 constexpr const char* YUKIZYGISK_DIR = "/data/adb/ksu/lib/yukizygisk/";
-constexpr const char* ZLOADER_PATH = "/data/adb/ksu/lib/yukizygisk/libzloader.so";
 constexpr const char* ZCORE_PATH = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
+constexpr const char* ZNCORE_PATH = "/data/adb/ksu/lib/yukizygisk/libyukizncore.so";
 // Split-out anonymous module loader; core dlopen's it (fd brokered by zygiskd).
 constexpr const char* ZYUKILINKER_PATH = "/data/adb/ksu/lib/yukizygisk/libyukilinker.so";
 // Runtime config, kept apart from the binary payload dir so the manager can

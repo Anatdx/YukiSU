@@ -1048,6 +1048,28 @@ static int do_yz_set_yukilinker(void __user *arg)
 	return 0;
 }
 
+static int do_yz_set_native_targets(void __user *arg)
+{
+	struct yz_native_targets_cmd *cmd;
+	int ret;
+
+	cmd = memdup_user(arg, sizeof(*cmd));
+	if (IS_ERR(cmd))
+		return PTR_ERR(cmd);
+	ret = ksu_zygote_probe_set_native_targets(cmd);
+	kfree(cmd);
+	return ret;
+}
+
+static int do_yz_restore_native_load_policy(void __user *arg)
+{
+	struct yz_native_load_policy_cmd cmd;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	return ksu_zygote_probe_restore_native_policy((pid_t)cmd.pid);
+}
+
 /* zygiskd (root) -> kernel: schedule a mount-revert on TARGET app task, run in
  * that task's own (already unshare'd) namespace. core asks zygiskd over the
  * daemon socket after loading modules (denylist_mode==2); zygiskd resolves the
@@ -1254,16 +1276,9 @@ static int do_yz_patch_text(void __user *arg)
 	if (!task)
 		return -ESRCH;
 
-	/* app, or the zygote (uid 0) -- the specialize hook is installed in the
-	 * zygote body before it forks. The write targets the caller's own mm
-	 * only (zygiskd resolves it via SO_PEERCRED), granting no cross-process
-	 * power; the uid gate just keeps system daemons out. */
-	if (!is_appuid(task_uid(task).val) && task_uid(task).val != 0) {
-		pr_info("yz_patch_text: reject pid=%u uid=%u\n", cmd.pid,
-			task_uid(task).val);
-		put_task_struct(task);
-		return -EPERM;
-	}
+	/* zygiskd resolves cmd.pid from SO_PEERCRED before issuing this ioctl,
+	 * so the target is the caller's own mm. Native service processes need
+	 * the same read-only text COW path as app processes. */
 
 	n = access_process_vm(task, (unsigned long)cmd.addr, cmd.bytes, cmd.len,
 			      FOLL_FORCE | FOLL_WRITE);
@@ -1427,6 +1442,14 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_YZ_SET_YUKILINKER,
      .name = "YZ_SET_YUKILINKER",
      .handler = do_yz_set_yukilinker,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_SET_NATIVE_TARGETS,
+     .name = "YZ_SET_NATIVE_TARGETS",
+     .handler = do_yz_set_native_targets,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY,
+     .name = "YZ_RESTORE_NATIVE_LOAD_POLICY",
+     .handler = do_yz_restore_native_load_policy,
      .perm_check = only_root},
     {.cmd = KSU_IOCTL_YZ_UMOUNT_PID,
      .name = "YZ_UMOUNT_PID",

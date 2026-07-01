@@ -15,12 +15,12 @@ namespace ksud {
 // generated/assets_data.cpp (scripts/embed_assets.py at build time). This file
 // holds hand-written asset helpers.
 
-// Stage the YukiZygisk payload into /data/adb/ksu/lib/yukizygisk/. The kernel
-// later reads libzloader.so from there (as ksu_cred) and hands it to the zygote
-// through a memfd, so these files only need to be writable by ksud and readable
-// by the privileged kernel path -- the zygote never opens them. Labeled
-// adb_data_file like the rest of /data/adb/ksu. No-op for builds that don't
-// embed the payload.
+// Stage the YukiZygisk payload into /data/adb/ksu/lib/yukizygisk/. Zygote
+// injection still republishes anonymous staged images, while native
+// compatibility injection can hand real file fds to service processes. Label
+// the payload files like system libraries so executable fd mappings are
+// accepted by those service domains. No-op for builds that don't embed the
+// payload.
 int ensure_yukizygisk(bool ignore_if_exist) {
     struct Payload {
         const char* asset;
@@ -28,6 +28,7 @@ int ensure_yukizygisk(bool ignore_if_exist) {
     };
     static const Payload payload[] = {
         {"libzygisk.so", ZCORE_PATH},
+        {"libyukizncore.so", ZNCORE_PATH},
         {"libyukilinker.so", ZYUKILINKER_PATH},
     };
 
@@ -67,7 +68,7 @@ int ensure_yukizygisk(bool ignore_if_exist) {
             continue;
         }
         chmod(p.dest, 0644);
-        lsetfilecon(p.dest, ADB_CON);
+        lsetfilecon(p.dest, SYSTEM_LIB_CON);
         LOGI("yukizygisk: staged %s", p.dest);
     }
     return 0;

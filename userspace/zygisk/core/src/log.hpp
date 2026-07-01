@@ -9,8 +9,8 @@
  * no-op with zero cost.
  *
  * yz_klog's strong definition is in core.cpp (formats + forwards to zygiskd).
- * It is declared weak so the loader build of solist.cpp -- which has no zygiskd
- * channel -- links it as null; the macros then skip the call.
+ * It is declared weak so helper-only users without a zygiskd channel can link
+ * it as null; the macros then skip the call.
  *
  * Author: Anatdx
  */

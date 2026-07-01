@@ -140,8 +140,7 @@ struct yz_unmap_self_cmd {
  * app/zygote cannot get the ksu driver fd; zygiskd resolves the caller pid via
  * SO_PEERCRED, so the target is always the caller's OWN process -- this only
  * lets a process write its own read-only code (which it could otherwise do via
- * /proc/self/mem, modulo SELinux), granting no cross-process power. Kernel
- * verifies app-or-zygote. */
+ * /proc/self/mem, modulo SELinux), granting no cross-process power. */
 #define KSU_IOCTL_YZ_PATCH_TEXT _IOC(_IOC_WRITE, 'K', 57, 0)
 
 #define YZ_PATCH_TEXT_MAX 64
@@ -151,6 +150,33 @@ struct yz_patch_text_cmd {
   __u32 len;  /* number of bytes to write, 1..YZ_PATCH_TEXT_MAX */
   __u64 addr; /* target virtual address */
   __u8 bytes[YZ_PATCH_TEXT_MAX]; /* the patch bytes */
+};
+
+#define KSU_IOCTL_YZ_SET_NATIVE_TARGETS _IOC(_IOC_WRITE, 'K', 58, 0)
+
+#define YZ_NATIVE_TARGET_MAX 64
+#define YZ_NATIVE_TARGET_VALUE_MAX 256
+
+enum yz_native_target_type {
+  YZ_NATIVE_TARGET_NAME = 1,
+  YZ_NATIVE_TARGET_PATH = 2,
+};
+
+struct yz_native_target {
+  __u8 type; /* enum yz_native_target_type */
+  __u8 reserved[3];
+  char value[YZ_NATIVE_TARGET_VALUE_MAX];
+};
+
+struct yz_native_targets_cmd {
+  __u32 count;
+  struct yz_native_target targets[YZ_NATIVE_TARGET_MAX];
+};
+
+#define KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY _IOC(_IOC_WRITE, 'K', 59, 0)
+
+struct yz_native_load_policy_cmd {
+  __u32 pid; /* native process that finished its core/module load window */
 };
 
 /* ---- runtime config ---- */

@@ -34,6 +34,24 @@ enum class Request : uint8_t {
   ReportZygote =
       12, // core -> daemon, no args: daemon records peer pid + zygote socket
           //   name parsed from /proc/<pid>/cmdline for manager status
+  GetNativeModuleCount = 13,    // -> u32 count
+  GetNativeModuleInfo = 14,     // arg u32 index -> NativeModuleInfo
+  GetNativeModuleFd = 15,       // arg u32 index -> module lib fd
+  ConnectNativeCompanion = 16,  // arg u32 index -> companion socket fd
+  RestoreNativeLoadPolicy = 17, // restore temporary native load file allow
+};
+
+inline constexpr uint32_t kNativeModuleNameMax = 64;
+inline constexpr uint32_t kNativeModuleTargetMax = 256;
+inline constexpr uint32_t kNativeModulePathMax = 512;
+
+struct NativeModuleInfo {
+  uint8_t target_type;
+  uint8_t has_companion;
+  uint16_t reserved;
+  char module_id[kNativeModuleNameMax];
+  char target[kNativeModuleTargetMax];
+  char lib_path[kNativeModulePathMax];
 };
 
 /* abstract socket name (callers prepend the NUL); ABI-specific */

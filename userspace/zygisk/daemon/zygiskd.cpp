@@ -9,6 +9,7 @@
 #include "uapi/yukizygisk.h"
 
 #include "core/json.hpp"
+#include "core/restorecon.hpp"
 #include "defs.hpp"
 
 #include <dirent.h>
@@ -20,6 +21,7 @@
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -28,6 +30,7 @@
 #include <elf.h>
 #include <pthread.h>
 
+#include <cctype>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -81,6 +84,10 @@ namespace {
 #define DLOGE(...) dlog(__VA_ARGS__)
 #define DLOGI(...) dlog(__VA_ARGS__)
 
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif // #ifndef MFD_CLOEXEC
+
 #if defined(__aarch64__)
 constexpr char kAbi[] = "arm64-v8a";
 #elif defined(__arm__)
@@ -101,6 +108,16 @@ struct Module {
 };
 
 std::vector<Module> g_modules;
+
+struct NativeModule {
+  std::string module_id;
+  uint8_t target_type = 0;
+  std::string target;
+  std::string lib_path;
+  bool has_companion = false;
+};
+
+std::vector<NativeModule> g_native_modules;
 
 int consume_ready_fd() {
   const char *env = getenv("YUKIZYGISK_READY_FD");
@@ -145,6 +162,146 @@ std::vector<Module> scan_modules() {
   }
   closedir(d);
   return mods;
+}
+
+std::string trim_copy(const std::string &s) {
+  size_t first = 0;
+  while (first < s.size() &&
+         std::isspace(static_cast<unsigned char>(s[first])) != 0)
+    ++first;
+  size_t last = s.size();
+  while (last > first &&
+         std::isspace(static_cast<unsigned char>(s[last - 1])) != 0)
+    --last;
+  return s.substr(first, last - first);
+}
+
+void replace_all(std::string &s, const std::string &from,
+                 const std::string &to) {
+  if (from.empty())
+    return;
+  size_t pos = 0;
+  while ((pos = s.find(from, pos)) != std::string::npos) {
+    s.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+}
+
+bool parse_native_module_line(const std::string &module_id,
+                              const std::string &base, const std::string &line,
+                              NativeModule *out) {
+  std::string text = trim_copy(line);
+  if (text.empty() || text[0] == '#')
+    return false;
+
+  std::istringstream iss(text);
+  std::string head;
+  if (!(iss >> head))
+    return false;
+
+  NativeModule m{};
+  m.module_id = module_id;
+  constexpr char kNamePrefix[] = "name=";
+  constexpr char kPathPrefix[] = "path=";
+  if (head.rfind(kNamePrefix, 0) == 0) {
+    m.target_type = YZ_NATIVE_TARGET_NAME;
+    m.target = head.substr(sizeof(kNamePrefix) - 1);
+  } else if (head.rfind(kPathPrefix, 0) == 0) {
+    m.target_type = YZ_NATIVE_TARGET_PATH;
+    m.target = head.substr(sizeof(kPathPrefix) - 1);
+  } else {
+    return false;
+  }
+  if (m.target.empty() || m.target.size() >= YZ_NATIVE_TARGET_VALUE_MAX)
+    return false;
+
+  std::string token;
+  std::string lib_rel;
+  while (iss >> token) {
+    if (token == "companion") {
+      m.has_companion = true;
+    } else if (lib_rel.empty()) {
+      lib_rel = token;
+    }
+  }
+  if (lib_rel.empty())
+    return false;
+
+  replace_all(lib_rel, "${moduleId}", module_id);
+  replace_all(lib_rel, "$moduleId", module_id);
+  if (!lib_rel.empty() && lib_rel[0] == '/')
+    m.lib_path = lib_rel;
+  else
+    m.lib_path = base + "/" + lib_rel;
+
+  if (access(m.lib_path.c_str(), F_OK) != 0)
+    return false;
+  *out = std::move(m);
+  return true;
+}
+
+std::vector<NativeModule> scan_native_modules() {
+  std::vector<NativeModule> mods;
+  DIR *d = opendir(kModulesDir);
+  if (d == nullptr)
+    return mods;
+
+  while (dirent *e = readdir(d)) {
+    if (e->d_name[0] == '.')
+      continue;
+    std::string module_id = e->d_name;
+    std::string base = std::string(kModulesDir) + "/" + module_id;
+    if (access((base + "/disable").c_str(), F_OK) == 0)
+      continue;
+
+    std::ifstream f(base + "/zn_modules.txt");
+    if (!f.is_open())
+      continue;
+    std::string line;
+    while (std::getline(f, line)) {
+      NativeModule m{};
+      if (parse_native_module_line(module_id, base, line, &m)) {
+        if (!ksud::lsetfilecon(m.lib_path, ksud::SYSTEM_LIB_CON))
+          DLOGE("native module: failed to label lib=%s", m.lib_path.c_str());
+        DLOGI("native module: id=%s target=%s%s lib=%s companion=%u",
+              m.module_id.c_str(),
+              m.target_type == YZ_NATIVE_TARGET_PATH ? "path=" : "name=",
+              m.target.c_str(), m.lib_path.c_str(), m.has_companion ? 1 : 0);
+        mods.push_back(std::move(m));
+      } else if (!trim_copy(line).empty() && trim_copy(line)[0] != '#') {
+        DLOGI("native module: ignored invalid line in %s: %s",
+              module_id.c_str(), trim_copy(line).c_str());
+      }
+    }
+  }
+  closedir(d);
+  return mods;
+}
+
+void publish_native_targets() {
+  yz_native_targets_cmd cmd{};
+  for (const auto &m : g_native_modules) {
+    if (cmd.count >= YZ_NATIVE_TARGET_MAX)
+      break;
+    yz_native_target &t = cmd.targets[cmd.count++];
+    t.type = m.target_type;
+    snprintf(t.value, sizeof(t.value), "%s", m.target.c_str());
+  }
+  int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_NATIVE_TARGETS, &cmd);
+  if (ret == 0) {
+    DLOGI("native targets: %u module(s), kernel ret=0", cmd.count);
+  } else {
+    DLOGI("native targets: %u module(s), kernel ret=%d errno=%d (%s)",
+          cmd.count, ret, errno, strerror(errno));
+  }
+}
+
+void rescan_modules() {
+  g_modules = scan_modules();
+  g_native_modules = scan_native_modules();
+  publish_native_targets();
+  DLOGI("found %zu zygisk module(s), %zu native module(s) for %s",
+        g_modules.size(), g_native_modules.size(), kAbi);
 }
 
 bool read_exact(int fd, void *buf, size_t n) {
@@ -193,6 +350,90 @@ bool send_fd(int sock, int fd) {
   }
   return sendmsg(sock, &msg, MSG_NOSIGNAL) >
          0; // EPIPE not SIGPIPE on dead client
+}
+
+int copy_file_to_memfd(const std::string &path) {
+  int src = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (src < 0) {
+    DLOGE("native module memfd: open failed path=%s err=%s", path.c_str(),
+          strerror(errno));
+    return -1;
+  }
+
+  struct stat st{};
+  if (fstat(src, &st) != 0 || st.st_size <= 0 || !S_ISREG(st.st_mode)) {
+    DLOGE("native module memfd: invalid source path=%s err=%s", path.c_str(),
+          strerror(errno));
+    close(src);
+    return -1;
+  }
+
+  int mfd = static_cast<int>(
+      syscall(__NR_memfd_create, "data-code-cache", MFD_CLOEXEC));
+  if (mfd < 0) {
+    DLOGE("native module memfd: memfd_create failed path=%s err=%s",
+          path.c_str(), strerror(errno));
+    close(src);
+    return -1;
+  }
+
+  if (ftruncate(mfd, st.st_size) != 0) {
+    DLOGE("native module memfd: ftruncate failed size=%lld err=%s",
+          static_cast<long long>(st.st_size), strerror(errno));
+    close(mfd);
+    close(src);
+    return -1;
+  }
+
+  std::vector<uint8_t> buf(64 * 1024);
+  while (true) {
+    ssize_t r = read(src, buf.data(), buf.size());
+    if (r == 0)
+      break;
+    if (r < 0) {
+      if (errno == EINTR)
+        continue;
+      DLOGE("native module memfd: read failed path=%s err=%s", path.c_str(),
+            strerror(errno));
+      close(mfd);
+      close(src);
+      return -1;
+    }
+
+    const uint8_t *p = buf.data();
+    size_t left = static_cast<size_t>(r);
+    while (left > 0) {
+      ssize_t w = write(mfd, p, left);
+      if (w < 0) {
+        if (errno == EINTR)
+          continue;
+        DLOGE("native module memfd: write failed path=%s err=%s", path.c_str(),
+              strerror(errno));
+        close(mfd);
+        close(src);
+        return -1;
+      }
+      if (w == 0) {
+        DLOGE("native module memfd: short write path=%s", path.c_str());
+        close(mfd);
+        close(src);
+        return -1;
+      }
+      p += w;
+      left -= static_cast<size_t>(w);
+    }
+  }
+
+  close(src);
+  if (lseek(mfd, 0, SEEK_SET) < 0) {
+    DLOGE("native module memfd: rewind failed err=%s", strerror(errno));
+    close(mfd);
+    return -1;
+  }
+
+  DLOGI("native module memfd: staged size=%lld fd=%d",
+        static_cast<long long>(st.st_size), mfd);
+  return mfd;
 }
 
 /* receive one fd via SCM_RIGHTS */
@@ -336,6 +577,111 @@ bool ensure_companion(uint32_t idx) {
   c.has_entry = (ready == 1);
   DLOGI("companion for '%s' pid=%d entry=%d", g_modules[idx].name.c_str(), pid,
         c.has_entry);
+  return c.has_entry;
+}
+
+struct ZygiskNextCompanionModule {
+  int target_api_version;
+  void (*onCompanionLoaded)();
+  void (*onModuleConnected)(int fd);
+};
+
+struct NativeCompanionJob {
+  void (*fn)(int);
+  int client;
+};
+
+void *native_companion_thread(void *p) {
+  auto *job = static_cast<NativeCompanionJob *>(p);
+  job->fn(job->client);
+  delete job;
+  return nullptr;
+}
+
+[[noreturn]] void native_companion_main(const std::string &lib_path, int ctrl) {
+  if (DIR *fdd = opendir("/proc/self/fd")) {
+    int dfd = dirfd(fdd);
+    while (dirent *e = readdir(fdd)) {
+      int fd = atoi(e->d_name);
+      if (fd > 2 && fd != ctrl && fd != dfd)
+        close(fd);
+    }
+    closedir(fdd);
+  }
+
+  void *h = dlopen(lib_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+  auto *mod = h ? reinterpret_cast<ZygiskNextCompanionModule *>(
+                      dlsym(h, "zn_companion_module"))
+                : nullptr;
+  bool valid = mod != nullptr && mod->target_api_version == 3;
+  if (valid && mod->onCompanionLoaded != nullptr)
+    mod->onCompanionLoaded();
+
+  uint8_t ready = valid && mod->onModuleConnected != nullptr ? 1 : 0;
+  if (write(ctrl, &ready, 1) != 1)
+    _exit(0);
+  for (;;) {
+    int client = recv_fd(ctrl);
+    if (client < 0)
+      _exit(0);
+    if (!ready) {
+      close(client);
+      continue;
+    }
+    auto *job = new NativeCompanionJob{mod->onModuleConnected, client};
+    pthread_t t;
+    if (pthread_create(&t, nullptr, native_companion_thread, job) == 0)
+      pthread_detach(t);
+    else {
+      close(client);
+      delete job;
+    }
+  }
+}
+
+std::vector<Companion> g_native_companions;
+
+bool ensure_native_companion(uint32_t idx) {
+  if (idx >= g_native_modules.size() || !g_native_modules[idx].has_companion)
+    return false;
+  if (g_native_companions.size() != g_native_modules.size())
+    g_native_companions.resize(g_native_modules.size());
+  Companion &c = g_native_companions[idx];
+  if (c.pid > 0)
+    return c.has_entry;
+
+  int sv[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) != 0)
+    return false;
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(sv[0]);
+    close(sv[1]);
+    return false;
+  }
+  if (pid == 0) {
+    close(sv[0]);
+    native_companion_main(g_native_modules[idx].lib_path, sv[1]);
+  }
+  close(sv[1]);
+
+  pollfd pfd{sv[0], POLLIN, 0};
+  uint8_t ready = 0;
+  if (poll(&pfd, 1, kCompanionReadyMs) != 1 || !(pfd.revents & POLLIN) ||
+      !read_exact(sv[0], &ready, 1)) {
+    DLOGE("native companion for '%s' pid=%d not ready in %dms; killing",
+          g_native_modules[idx].module_id.c_str(), pid, kCompanionReadyMs);
+    kill(pid, SIGKILL);
+    waitpid(pid, nullptr, 0);
+    close(sv[0]);
+    return false;
+  }
+
+  c.pid = pid;
+  c.ctrl = sv[0];
+  c.has_entry = (ready == 1);
+  DLOGI("native companion for '%s' pid=%d entry=%d",
+        g_native_modules[idx].module_id.c_str(), pid, c.has_entry);
   return c.has_entry;
 }
 
@@ -849,6 +1195,81 @@ void handle_client(int client) {
     write_exact(client, &ok, sizeof(ok));
     break;
   }
+  case zygiskd::Request::GetNativeModuleCount: {
+    uint32_t n = static_cast<uint32_t>(g_native_modules.size());
+    write_exact(client, &n, sizeof(n));
+    break;
+  }
+  case zygiskd::Request::GetNativeModuleInfo: {
+    uint32_t idx = 0;
+    zygiskd::NativeModuleInfo info{};
+    if (read_exact(client, &idx, sizeof(idx)) &&
+        idx < g_native_modules.size()) {
+      const NativeModule &m = g_native_modules[idx];
+      info.target_type = m.target_type;
+      info.has_companion = m.has_companion ? 1 : 0;
+      snprintf(info.module_id, sizeof(info.module_id), "%s",
+               m.module_id.c_str());
+      snprintf(info.target, sizeof(info.target), "%s", m.target.c_str());
+      snprintf(info.lib_path, sizeof(info.lib_path), "%s", m.lib_path.c_str());
+    }
+    write_exact(client, &info, sizeof(info));
+    break;
+  }
+  case zygiskd::Request::GetNativeModuleFd: {
+    uint32_t idx = 0;
+    if (!read_exact(client, &idx, sizeof(idx)) ||
+        idx >= g_native_modules.size()) {
+      send_fd(client, -1);
+      break;
+    }
+    const std::string &path = g_native_modules[idx].lib_path;
+    int fd = copy_file_to_memfd(path);
+    if (fd < 0)
+      fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    send_fd(client, fd);
+    if (fd >= 0)
+      close(fd);
+    break;
+  }
+  case zygiskd::Request::ConnectNativeCompanion: {
+    uint32_t idx = 0;
+    if (!read_exact(client, &idx, sizeof(idx)) ||
+        !ensure_native_companion(idx)) {
+      send_fd(client, -1);
+      break;
+    }
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) != 0) {
+      send_fd(client, -1);
+      break;
+    }
+    if (!send_fd(g_native_companions[idx].ctrl, sv[1])) {
+      close(sv[0]);
+      close(sv[1]);
+      send_fd(client, -1);
+      break;
+    }
+    close(sv[1]);
+    send_fd(client, sv[0]);
+    close(sv[0]);
+    break;
+  }
+  case zygiskd::Request::RestoreNativeLoadPolicy: {
+    struct ucred cr{};
+    socklen_t crlen = sizeof(cr);
+    uint8_t ok = 0;
+    if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
+        cr.pid > 0) {
+      yz_native_load_policy_cmd cmd{};
+      cmd.pid = static_cast<uint32_t>(cr.pid);
+      int ret = ksud::ksuctl(KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY, &cmd);
+      DLOGI("native load policy restore: pid=%d ret=%d", cr.pid, ret);
+      ok = ret == 0 ? 1 : 0;
+    }
+    write_exact(client, &ok, sizeof(ok));
+    break;
+  }
   default:
     break;
   }
@@ -933,8 +1354,13 @@ void nl_drain(int fd) {
       record_injection(
           ev->appid); // telemetry: count + recent, even with 0 mods
       on_specialize(ev->pid, ev->appid);
-    } else if (ev->type == YZ_EV_RELOAD)
-      read_yzconfig(); // manager changed yzconfig.json; re-read it now
+    } else if (ev->type == YZ_EV_RELOAD) {
+      // Manager or CLI requested a live refresh. Native targets live in module
+      // metadata, so re-scan modules before re-reading yzconfig and pushing the
+      // first-stage toggle.
+      rescan_modules();
+      read_yzconfig();
+    }
   }
 }
 
@@ -1043,9 +1469,8 @@ int run_daemon() {
     return 0;
   }
 
-  g_modules = scan_modules();
+  rescan_modules();
   read_yzconfig();
-  DLOGI("found %zu zygisk module(s) for %s", g_modules.size(), kAbi);
   bool offsets_ready = send_dlopen_offset();
 
   int nlfd = nl_listen();
