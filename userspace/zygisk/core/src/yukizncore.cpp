@@ -98,6 +98,7 @@ enum class ZdRequest : uint8_t {
   GetNativeModuleFd = 15,
   ConnectNativeCompanion = 16,
   RestoreNativeLoadPolicy = 17,
+  ReportNativeInjection = 18,
 };
 
 struct ModuleHandle {
@@ -279,6 +280,23 @@ bool request_native_info(uint32_t idx, zygiskd::NativeModuleInfo *info) {
   if (!ok)
     LOGE("native module info: request failed idx=%u", idx);
   return ok;
+}
+
+void report_native_injection(uint32_t idx) {
+  int sock = connect_zygiskd();
+  if (sock < 0) {
+    LOGE("native injection report: zygiskd unavailable idx=%u", idx);
+    return;
+  }
+  uint8_t op = static_cast<uint8_t>(ZdRequest::ReportNativeInjection);
+  uint8_t ok = 0;
+  bool sent = write_all(sock, &op, 1) && write_all(sock, &idx, sizeof(idx)) &&
+              read_all(sock, &ok, sizeof(ok));
+  close(sock);
+  if (!sent)
+    LOGE("native injection report: request failed idx=%u", idx);
+  else
+    LOGI("native injection report: idx=%u ok=%u", idx, ok ? 1U : 0U);
 }
 
 bool map_from_base(void *base_addr, lsplt::MapInfo *out) {
@@ -796,6 +814,7 @@ void load_matching_modules() {
     LOGI("native module onModuleLoaded: %s", info.module_id);
     mod->onModuleLoaded(handle, &g_api);
     LOGI("native module loaded: %s", info.module_id);
+    report_native_injection(i);
   }
 }
 

@@ -39,6 +39,7 @@ enum class Request : uint8_t {
   GetNativeModuleFd = 15,       // arg u32 index -> module lib fd
   ConnectNativeCompanion = 16,  // arg u32 index -> companion socket fd
   RestoreNativeLoadPolicy = 17, // restore temporary native load file allow
+  ReportNativeInjection = 18,   // arg u32 index -> record native load success
 };
 
 inline constexpr uint32_t kNativeModuleNameMax = 64;

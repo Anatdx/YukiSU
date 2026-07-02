@@ -21,6 +21,7 @@ import com.anatdx.yukisu.ui.util.getRootShell
 import com.anatdx.yukisu.ui.util.getFeatureValue
 import com.anatdx.yukisu.ui.util.toggleModule
 import com.anatdx.yukisu.ui.util.ZYGISK_IMPL_MODULE_IDS
+import com.topjohnwu.superuser.io.SuFile
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,6 +37,11 @@ import androidx.core.content.edit
  * @author ShirkNeko
  * @date 2025/5/31.
  */
+enum class ModuleRuntimeKind {
+    Zygisk,
+    Native,
+}
+
 class ModuleViewModel : ViewModel() {
 
     companion object {
@@ -106,6 +112,12 @@ class ModuleViewModel : ViewModel() {
     var loadedZygiskModules by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    var loadedNativeModules by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    var runtimeModuleKinds by mutableStateOf<Map<String, ModuleRuntimeKind>>(emptyMap())
+        private set
+
     var sortEnabledFirst by mutableStateOf(false)
     var sortActionFirst by mutableStateOf(false)
     val moduleList by derivedStateOf {
@@ -160,15 +172,13 @@ class ModuleViewModel : ViewModel() {
                 val yukiZygiskOn = getFeatureValue("yukizygisk")
                 yukiZygiskEnabled = yukiZygiskOn
 
-                // Which zygisk modules the daemon actually loaded (dir names), so
-                // ModuleItem can tag them "Loaded". Null/failure -> none.
-                loadedZygiskModules = runCatching {
-                    Natives.yzQueryStatus()?.let { js ->
-                        JSONObject(js).optJSONArray("modules")?.let { a ->
-                            (0 until a.length()).map { a.getString(it) }.toSet()
-                        }
-                    }
-                }.getOrNull() ?: emptySet()
+                val yzStatus = if (yukiZygiskOn) {
+                    runCatching { Natives.yzQueryStatus()?.let(::JSONObject) }.getOrNull()
+                } else {
+                    null
+                }
+                loadedZygiskModules = parseLoadedZygiskModules(yzStatus)
+                loadedNativeModules = parseLoadedNativeModules(yzStatus)
 
                 val array = JSONArray(result)
                 val moduleInfos = (0 until array.length())
@@ -198,6 +208,7 @@ class ModuleViewModel : ViewModel() {
                     }.toList()
 
                 modules = moduleInfos
+                runtimeModuleKinds = detectModuleRuntimeKinds(moduleInfos)
 
                 // Persist the disable flag so locked impls truly don't load (idempotent).
                 if (yukiZygiskOn) {
@@ -262,6 +273,52 @@ class ModuleViewModel : ViewModel() {
 
             Log.i(TAG, "load cost: ${SystemClock.elapsedRealtime() - start}, modules: $modules")
         }
+    }
+
+    private fun parseLoadedZygiskModules(status: JSONObject?): Set<String> {
+        val modules = status?.optJSONArray("modules") ?: return emptySet()
+        return (0 until modules.length())
+            .mapNotNull { modules.optString(it).takeIf(String::isNotBlank) }
+            .toSet()
+    }
+
+    private fun parseLoadedNativeModules(status: JSONObject?): Set<String> {
+        if (status == null) return emptySet()
+        val loaded = mutableSetOf<String>()
+        status.optJSONArray("native_injections")?.let { injections ->
+            for (i in 0 until injections.length()) {
+                val module = injections.optJSONObject(i)?.optString("module").orEmpty()
+                if (module.isNotBlank()) loaded += module
+            }
+        }
+        status.optJSONArray("native_modules")?.let { modules ->
+            for (i in 0 until modules.length()) {
+                val obj = modules.optJSONObject(i) ?: continue
+                val module = obj.optString("id")
+                if (obj.optString("state") == "injected" && module.isNotBlank()) {
+                    loaded += module
+                }
+            }
+        }
+        return loaded
+    }
+
+    private fun detectModuleRuntimeKinds(moduleInfos: List<ModuleInfo>): Map<String, ModuleRuntimeKind> {
+        val kinds = mutableMapOf<String, ModuleRuntimeKind>()
+        moduleInfos.forEach { module ->
+            val base = "/data/adb/modules/${module.dirId}"
+            val kind = runCatching {
+                when {
+                    SuFile.open("$base/zn_modules.txt").isFile -> ModuleRuntimeKind.Native
+                    SuFile.open("$base/zygisk").isDirectory -> ModuleRuntimeKind.Zygisk
+                    else -> null
+                }
+            }.getOrNull()
+            if (kind != null) {
+                kinds[module.dirId] = kind
+            }
+        }
+        return kinds
     }
 
     private fun sanitizeVersionString(version: String): String {

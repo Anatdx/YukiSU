@@ -37,6 +37,7 @@
 #include <cstring>
 #include <deque>
 #include <fstream>
+#include <limits.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -785,12 +786,12 @@ uint32_t query_flags(uint32_t uid) {
   return flags;
 }
 
-/* Runtime config parsed from yzconfig.json. All-zero = everything off, the safe
- * default when the file is missing or malformed. Re-read on YZ_EV_RELOAD. */
-yz_config g_yz_config{};
+/* Runtime config parsed from yzconfig.json. Missing/malformed config keeps
+ * yukilinker on by default; explicit false in JSON still disables it. */
+yz_config g_yz_config{1, 0, 0, 0};
 
 void read_yzconfig() {
-  yz_config cfg{};
+  yz_config cfg{1, 0, 0, 0};
   int fd = open(ksud::YZCONFIG_PATH, O_RDONLY | O_CLOEXEC);
   if (fd >= 0) {
     std::string buf;
@@ -841,6 +842,26 @@ struct ZygoteRecord {
 std::deque<ZygoteRecord> g_zygotes;
 constexpr size_t kZygoteMax = 8;
 
+struct ZygoteMonitorRecord {
+  uint32_t pid;
+  std::string name;
+  std::string abi;
+  std::string state;
+};
+
+struct NativeInjectionRecord {
+  uint32_t pid;
+  std::string process;
+  std::string module_id;
+  std::string target_type;
+  std::string target;
+  std::string abi;
+  bool has_companion;
+};
+
+std::deque<NativeInjectionRecord> g_native_injections;
+constexpr size_t kNativeInjectionMax = 16;
+
 void record_injection(uint32_t appid) {
   ++g_inject_count;
   for (auto it = g_recent_appids.begin(); it != g_recent_appids.end(); ++it)
@@ -853,7 +874,8 @@ void record_injection(uint32_t appid) {
     g_recent_appids.pop_back();
 }
 
-bool parse_zygote_cmdline(pid_t pid, std::string *socket_name) {
+bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
+                          std::string *abi_list = nullptr) {
   char path[64];
   snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
   int fd = open(path, O_RDONLY | O_CLOEXEC);
@@ -868,6 +890,7 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name) {
 
   bool found = false;
   std::string sock;
+  std::string abi;
   size_t off = 0;
   while (off < static_cast<size_t>(n)) {
     const char *arg = buf + off;
@@ -884,13 +907,89 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name) {
       if (len >= kSocketPrefixLen &&
           strncmp(arg, kSocketPrefix, kSocketPrefixLen) == 0)
         sock.assign(arg + kSocketPrefixLen, len - kSocketPrefixLen);
+      constexpr char kAbiPrefix[] = "--abi-list=";
+      constexpr size_t kAbiPrefixLen = sizeof(kAbiPrefix) - 1;
+      if (len >= kAbiPrefixLen && strncmp(arg, kAbiPrefix, kAbiPrefixLen) == 0)
+        abi.assign(arg + kAbiPrefixLen, len - kAbiPrefixLen);
     }
     off += len + 1;
   }
 
   if (socket_name != nullptr)
     *socket_name = sock.empty() ? "zygote" : sock;
+  if (abi_list != nullptr)
+    *abi_list = std::move(abi);
   return found;
+}
+
+std::string read_proc_exe(pid_t pid) {
+  char path[64];
+  snprintf(path, sizeof(path), "/proc/%d/exe", pid);
+  char buf[PATH_MAX];
+  ssize_t n = readlink(path, buf, sizeof(buf) - 1);
+  if (n <= 0)
+    return {};
+  buf[n] = '\0';
+  return buf;
+}
+
+std::string zygote_abi(pid_t pid, const std::string &abi_list) {
+  if (!abi_list.empty())
+    return abi_list;
+  std::string exe = read_proc_exe(pid);
+  if (exe.find("32") != std::string::npos)
+    return "armeabi-v7a";
+  if (exe.find("64") != std::string::npos)
+    return kAbi;
+  return "unknown";
+}
+
+bool is_32bit_abi(const std::string &abi) {
+  return !abi.empty() && abi.find("64") == std::string::npos;
+}
+
+bool is_zygote_injected(uint32_t pid, const std::string &name,
+                        const std::string &abi) {
+  for (const auto &z : g_zygotes)
+    if (z.pid == pid || (z.name == name && z.abi == abi))
+      return true;
+  return false;
+}
+
+std::vector<ZygoteMonitorRecord> scan_zygote_monitor() {
+  std::vector<ZygoteMonitorRecord> out;
+  DIR *d = opendir("/proc");
+  if (d == nullptr)
+    return out;
+
+  while (dirent *e = readdir(d)) {
+    if (!std::isdigit(static_cast<unsigned char>(e->d_name[0])))
+      continue;
+    char *end = nullptr;
+    long pid_long = strtol(e->d_name, &end, 10);
+    if (end == e->d_name || *end != '\0' || pid_long <= 0 ||
+        pid_long > INT32_MAX)
+      continue;
+    pid_t pid = static_cast<pid_t>(pid_long);
+    std::string name;
+    std::string abi_list;
+    if (!parse_zygote_cmdline(pid, &name, &abi_list))
+      continue;
+    std::string abi = zygote_abi(pid, abi_list);
+    std::string state = "failed";
+    if (is_32bit_abi(abi))
+      state = "unsupported32";
+    else if (is_zygote_injected(static_cast<uint32_t>(pid), name, abi))
+      state = "injected";
+    out.push_back(ZygoteMonitorRecord{
+        static_cast<uint32_t>(pid),
+        std::move(name),
+        std::move(abi),
+        std::move(state),
+    });
+  }
+  closedir(d);
+  return out;
 }
 
 void record_zygote(pid_t pid) {
@@ -911,6 +1010,60 @@ void record_zygote(pid_t pid) {
     g_zygotes.pop_back();
   DLOGI("zygote injected: pid=%d name=%s abi=%s", pid,
         g_zygotes.front().name.c_str(), g_zygotes.front().abi.c_str());
+}
+
+std::string read_proc_comm(pid_t pid) {
+  char path[64];
+  snprintf(path, sizeof(path), "/proc/%d/comm", pid);
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return {};
+
+  char buf[128];
+  ssize_t n = read(fd, buf, sizeof(buf) - 1);
+  close(fd);
+  if (n <= 0)
+    return {};
+  buf[n] = '\0';
+  std::string comm = trim_copy(buf);
+  return comm;
+}
+
+const char *native_target_type_name(uint8_t type) {
+  return type == YZ_NATIVE_TARGET_PATH ? "path" : "name";
+}
+
+void record_native_injection(pid_t pid, uint32_t idx) {
+  if (idx >= g_native_modules.size())
+    return;
+
+  const NativeModule &m = g_native_modules[idx];
+  std::string process = read_proc_comm(pid);
+  if (process.empty())
+    process = m.target;
+  std::string target_type = native_target_type_name(m.target_type);
+
+  for (auto it = g_native_injections.begin(); it != g_native_injections.end();
+       ++it) {
+    if (it->pid == static_cast<uint32_t>(pid) && it->module_id == m.module_id) {
+      g_native_injections.erase(it);
+      break;
+    }
+  }
+  g_native_injections.push_front(NativeInjectionRecord{
+      static_cast<uint32_t>(pid),
+      std::move(process),
+      m.module_id,
+      std::move(target_type),
+      m.target,
+      kAbi,
+      m.has_companion,
+  });
+  if (g_native_injections.size() > kNativeInjectionMax)
+    g_native_injections.pop_back();
+  DLOGI("native injection: pid=%d process=%s module=%s target=%s=%s", pid,
+        g_native_injections.front().process.c_str(), m.module_id.c_str(),
+        native_target_type_name(m.target_type), m.target.c_str());
 }
 
 void json_append_escaped(std::string &out, const std::string &s) {
@@ -978,6 +1131,22 @@ std::string build_status_json() {
     json_append_escaped(s, z.abi);
     s += "\"}";
   }
+  s += "],\"zygote_monitor\":[";
+  first = true;
+  for (const auto &z : scan_zygote_monitor()) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += "{\"pid\":";
+    s += std::to_string(z.pid);
+    s += ",\"name\":\"";
+    json_append_escaped(s, z.name);
+    s += "\",\"abi\":\"";
+    json_append_escaped(s, z.abi);
+    s += "\",\"state\":\"";
+    json_append_escaped(s, z.state);
+    s += "\"}";
+  }
   s += "],\"modules\":[";
   first = true;
   for (const auto &m : g_modules) {
@@ -987,6 +1156,54 @@ std::string build_status_json() {
     s += '"';
     json_append_escaped(s, m.name);
     s += '"';
+  }
+  s += "],\"native_modules\":[";
+  first = true;
+  for (const auto &m : g_native_modules) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += "{\"id\":\"";
+    json_append_escaped(s, m.module_id);
+    s += "\",\"target_type\":\"";
+    json_append_escaped(s, native_target_type_name(m.target_type));
+    s += "\",\"target\":\"";
+    json_append_escaped(s, m.target);
+    s += "\",\"companion\":";
+    s += m.has_companion ? "true" : "false";
+    s += ",\"state\":\"";
+    bool loaded = false;
+    for (const auto &n : g_native_injections)
+      if (n.module_id == m.module_id) {
+        loaded = true;
+        break;
+      }
+    s += loaded ? "injected" : "failed";
+    s += "\"";
+    s += "}";
+  }
+  s += "],\"native_injections\":[";
+  first = true;
+  for (const auto &n : g_native_injections) {
+    if (!first)
+      s += ',';
+    first = false;
+    s += "{\"pid\":";
+    s += std::to_string(n.pid);
+    s += ",\"process\":\"";
+    json_append_escaped(s, n.process);
+    s += "\",\"module\":\"";
+    json_append_escaped(s, n.module_id);
+    s += "\",\"target_type\":\"";
+    json_append_escaped(s, n.target_type);
+    s += "\",\"target\":\"";
+    json_append_escaped(s, n.target);
+    s += "\",\"abi\":\"";
+    json_append_escaped(s, n.abi);
+    s += "\",\"companion\":";
+    s += n.has_companion ? "true" : "false";
+    s += ",\"state\":\"injected\"";
+    s += "}";
   }
   s += "]}";
   return s;
@@ -1266,6 +1483,20 @@ void handle_client(int client) {
       int ret = ksud::ksuctl(KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY, &cmd);
       DLOGI("native load policy restore: pid=%d ret=%d", cr.pid, ret);
       ok = ret == 0 ? 1 : 0;
+    }
+    write_exact(client, &ok, sizeof(ok));
+    break;
+  }
+  case zygiskd::Request::ReportNativeInjection: {
+    struct ucred cr{};
+    socklen_t crlen = sizeof(cr);
+    uint32_t idx = 0;
+    uint8_t ok = 0;
+    if (read_exact(client, &idx, sizeof(idx)) &&
+        getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
+        cr.pid > 0 && idx < g_native_modules.size()) {
+      record_native_injection(static_cast<pid_t>(cr.pid), idx);
+      ok = 1;
     }
     write_exact(client, &ok, sizeof(ok));
     break;

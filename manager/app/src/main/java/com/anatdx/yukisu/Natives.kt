@@ -212,6 +212,13 @@ object Natives {
      * hostile app spoofing our package name can't read it. JSON shape:
      * `{ "count": Int, "recent": [appId...],
      *    "zygotes": [{"pid": Int, "name": String, "abi": String}...],
+     *    "zygote_monitor": [{"pid": Int, "name": String, "abi": String,
+     *      "state": String}...],
+     *    "native_modules": [{"id": String, "target_type": String,
+     *      "target": String, "companion": Bool, "state": String}...],
+     *    "native_injections": [{"pid": Int, "process": String,
+     *      "module": String, "target_type": String, "target": String,
+     *      "abi": String, "companion": Bool, "state": String}...],
      *    "modules": ["name"...], "yukilinker": Bool, "denylist_mode": Int,
      *    "dmesg_log": Bool }`.
      */

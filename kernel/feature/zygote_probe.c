@@ -74,8 +74,8 @@ void ksu_zygote_probe_set_dlopen_off(u64 dlopen_off, u64 dlsym_off)
 }
 
 /* yukilinker first-stage toggle (yzconfig.yukilinker), handed in by zygiskd.
- * ON: the stub dlopens libyukilinker, which anonymously loads the core. OFF
- * (default): the stub dlopens the core directly. Fixed at injection time, so a
+ * ON (default): the stub dlopens libyukilinker, which anonymously loads the
+ * core. OFF: the stub dlopens the core directly. Fixed at injection time, so a
  * change applies to the next zygote (module load mode still hot-reloads). */
 static bool zp_yukilinker_enabled;
 
