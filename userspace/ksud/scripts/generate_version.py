@@ -2,29 +2,36 @@
 import subprocess
 import sys
 import os
+import re
+
+
+def normalize_version_name(describe):
+    describe = describe.strip()
+    match = re.match(r"^v?(\d+\.\d+\.\d+)(?:-\d+-g([0-9a-fA-F]+).*)?$", describe)
+    if match:
+        semver, commit = match.groups()
+        return f"{semver}-{commit[:8]}" if commit else semver
+    return describe.lstrip('v')
 
 def get_git_version():
     try:
-        # Get commit count
         count_output = subprocess.check_output(
             ["git", "rev-list", "--count", "HEAD"],
             stderr=subprocess.DEVNULL,
             text=True
         ).strip()
-        version_code = int(count_output) + 10000  # Base offset
+        version_code = int(count_output) + 10000
         
-        # Get version name from tag
         try:
             tag_output = subprocess.check_output(
-                ["git", "describe", "--tags", "--always"],
+                ["git", "describe", "--tags", "--always", "--abbrev=8"],
                 stderr=subprocess.DEVNULL,
                 text=True
             ).strip()
-            version_name = tag_output.lstrip('v')
+            version_name = normalize_version_name(tag_output)
         except:
-            # Fallback to commit hash
             version_name = subprocess.check_output(
-                ["git", "rev-parse", "--short", "HEAD"],
+                ["git", "rev-parse", "--short=8", "HEAD"],
                 stderr=subprocess.DEVNULL,
                 text=True
             ).strip()

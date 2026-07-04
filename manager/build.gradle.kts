@@ -69,9 +69,14 @@ fun computeManagerVersionName(): String {
  */
 fun computeKsudBundledVersion(): String {
     val describe = providers.exec {
-        commandLine("git", "describe", "--tags", "--always")
+        commandLine("git", "describe", "--tags", "--always", "--abbrev=8")
     }.standardOutput.asText.get().trim()
-    return describe.removePrefix("v")
+    val normalized = if (describe.contains("-g")) {
+        describe.replace(Regex("-\\d+-g"), "-")
+    } else {
+        describe
+    }
+    return normalized.removePrefix("v")
 }
 
 subprojects {

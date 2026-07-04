@@ -120,7 +120,7 @@ object KsuCli {
         BuildConfig.KSUD_BUNDLED_VERSION.takeIf { it.isNotBlank() }
 
     /**
-     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
+     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx.
      * e.g. "1.3.0-1-g56b0efb0" -> "v1.3.0-56b0efb0"
      */
     fun formatKsudVersionForDisplay(raw: String?): String? {
@@ -130,9 +130,14 @@ object KsuCli {
         val semverMatch = Regex("""^(\d+\.\d+\.\d+)""").find(s) ?: return "v$s"
         val semver = semverMatch.value
         val rest = s.drop(semver.length).trimStart('-')
-        val hashPart = Regex("""[a-fA-F0-9]+""").findAll(rest).map { it.value }.joinToString("").takeLast(8)
+        val describeHash = Regex("""(?:^|-)g([a-fA-F0-9]{7,40})""")
+            .find(rest)
+            ?.groupValues
+            ?.get(1)
+        val hashPart = describeHash
+            ?: Regex("""[a-fA-F0-9]{7,40}""").find(rest)?.value
         val suffix = when {
-            hashPart.length >= 8 -> hashPart.take(8)
+            hashPart != null -> hashPart.take(8)
             rest.isNotEmpty() -> rest.filter { it.isLetterOrDigit() }.take(8)
             else -> ""
         }
