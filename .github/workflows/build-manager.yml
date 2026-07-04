@@ -3,15 +3,17 @@ name: Build Manager
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "dev", "feat/kasumi*" ]
+    branches: [ "main", "dev", "feat/kasumi*", "feat/yukizygisk" ]
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
+      - '.github/workflows/ddk-lkm.yml'
       - '.github/workflows/build-kasumi-lkm.yml'
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/su.yml'
+      - '.github/workflows/yukizygisk.yml'
       - 'repack_apk.py'
       - 'manager/**'
       - 'kernel/**'
@@ -21,11 +23,13 @@ on:
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
+      - '.github/workflows/ddk-lkm.yml'
       - '.github/workflows/build-kasumi-lkm.yml'
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/su.yml'
+      - '.github/workflows/yukizygisk.yml'
       - 'repack_apk.py'
       - 'manager/**'
       - 'kernel/**'
@@ -72,6 +76,9 @@ jobs:
   build-lkm:
     uses: ./.github/workflows/build-lkm.yml
     secrets: inherit
+    with:
+      yukizygisk: true
+      yukizygisk_parts: probe,nl,orch,ctl
 
   build-kasumi-lkm:
     uses: ./.github/workflows/build-kasumi-lkm.yml
@@ -96,8 +103,13 @@ jobs:
     with:
       target: ${{ matrix.target }}
 
+  build-yukizygisk:
+    uses: ./.github/workflows/yukizygisk.yml
+    with:
+      target: aarch64-linux-android
+
   build-ksud:
-    needs: [build-lkm, build-kasumi-lkm, build-ksuinit, build-su]
+    needs: [build-lkm, build-kasumi-lkm, build-ksuinit, build-su, build-yukizygisk]
     strategy:
       matrix:
         include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"},{"target":"x86_64-linux-android","os":"ubuntu-latest"},{"target":"armv7-linux-androideabi","os":"ubuntu-latest"}]') || fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"}]') }}
@@ -106,6 +118,7 @@ jobs:
     with:
       target: ${{ matrix.target }}
       os: ${{ matrix.os }}
+      pack_yukizygisk: true
 
   build-manager:
     needs: [generate-key]
