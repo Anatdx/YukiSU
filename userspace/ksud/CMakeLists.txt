@@ -271,6 +271,7 @@ set(KSUD_OUR_SOURCES
     src/sepolicy/sepolicy.cpp
     src/su.cpp
     src/init_event.cpp
+    src/yukizygisk_snapshot.cpp
     src/late_load.cpp
     src/umount.cpp
     src/debug.cpp

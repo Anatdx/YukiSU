@@ -25,6 +25,7 @@
 #include "uapi/yukizygisk.h"
 #include "umount.hpp"
 #include "utils.hpp"
+#include "yukizygisk_snapshot.hpp"
 
 #include <unistd.h>
 #include <algorithm>
@@ -239,17 +240,28 @@ int cmd_initrc(const std::vector<std::string>& args) {
 }
 
 int cmd_yukizygisk(const std::vector<std::string>& args) {
-    if (args.empty() || args[0] != "reload") {
-        printf("Usage: ksud yukizygisk reload\n");
+    if (args.empty()) {
+        printf("Usage: ksud yukizygisk <reload|refresh-snapshot>\n");
         return 1;
     }
-    // Fires KSU_IOCTL_YZ_RELOAD -> kernel multicasts YZ_EV_RELOAD -> zygiskd
-    // re-reads yzconfig.json. Applies on the next specialize, no reboot.
-    // (Injection-status reporting goes manager -> core -> zygiskd in-process,
-    // not through any standalone monitor -- see YukiZygiskScreen.)
-    const int rc = ksud::ksuctl(KSU_IOCTL_YZ_RELOAD, nullptr);
-    printf(rc == 0 ? "yzconfig reload signalled\n" : "yzconfig reload failed\n");
-    return rc == 0 ? 0 : 1;
+
+    const std::string& subcmd = args[0];
+    if (subcmd == "reload") {
+        // Fires KSU_IOCTL_YZ_RELOAD -> kernel multicasts YZ_EV_RELOAD -> zygiskd
+        // re-reads yzconfig.json. Applies on the next specialize, no reboot.
+        const int rc = ksud::ksuctl(KSU_IOCTL_YZ_RELOAD, nullptr);
+        printf(rc == 0 ? "yzconfig reload signalled\n" : "yzconfig reload failed\n");
+        return rc == 0 ? 0 : 1;
+    }
+
+    if (subcmd == "refresh-snapshot") {
+        const int rc = refresh_yukizygisk_early_snapshot();
+        printf(rc == 0 ? "early snapshot refreshed\n" : "early snapshot refresh failed\n");
+        return rc;
+    }
+
+    printf("Unknown yukizygisk subcommand: %s\n", subcmd.c_str());
+    return 1;
 }
 
 int cmd_feature(const std::vector<std::string>& args) {

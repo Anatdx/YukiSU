@@ -64,6 +64,17 @@ struct SoHandle {
   // system dependency handles.
   void **dep_handles = nullptr;
   size_t dep_count = 0;
+
+  // Local __cxa_atexit table for modules loaded by yukilinker.
+  struct AtexitEntry {
+    void (*fn)(void *) = nullptr;
+    void *arg = nullptr;
+    void *dso = nullptr;
+  };
+  AtexitEntry *atexit_entries = nullptr;
+  size_t atexit_count = 0;
+  size_t atexit_capacity = 0;
+  uint64_t atexit_appends = 0;
 };
 
 /* Load a .so from memfd; caller keeps fd ownership. */

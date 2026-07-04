@@ -20,6 +20,7 @@
 #include <elf.h>
 #include <fcntl.h>
 #include <link.h>
+#include <pthread.h>
 #include <sys/auxv.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -105,7 +106,11 @@ struct ModuleHandle {
   uint32_t magic = kHandleMagic;
   uint32_t index = 0;
   void *so = nullptr;
+  std::string module_id;
   bool yuki_loaded = false;
+  bool early = false;
+  bool has_companion = false;
+  bool reported = false;
 };
 
 struct InlineHookRecord {
@@ -132,6 +137,7 @@ uintptr_t g_loader_base = 0;
 uintptr_t g_self_base = 0;
 size_t g_self_size = 0;
 bool g_loader_unmap_safe = false;
+int g_early_packet_fd = -1;
 
 bool read_all(int fd, void *buf, size_t n) {
   auto *p = static_cast<uint8_t *>(buf);
@@ -282,11 +288,11 @@ bool request_native_info(uint32_t idx, zygiskd::NativeModuleInfo *info) {
   return ok;
 }
 
-void report_native_injection(uint32_t idx) {
+bool report_native_injection(uint32_t idx) {
   int sock = connect_zygiskd();
   if (sock < 0) {
     LOGE("native injection report: zygiskd unavailable idx=%u", idx);
-    return;
+    return false;
   }
   uint8_t op = static_cast<uint8_t>(ZdRequest::ReportNativeInjection);
   uint8_t ok = 0;
@@ -297,6 +303,23 @@ void report_native_injection(uint32_t idx) {
     LOGE("native injection report: request failed idx=%u", idx);
   else
     LOGI("native injection report: idx=%u ok=%u", idx, ok ? 1U : 0U);
+  return sent && ok != 0;
+}
+
+ModuleHandle *find_loaded_module(std::string_view module_id) {
+  for (auto *h : g_loaded_modules) {
+    if (h != nullptr && h->module_id == module_id)
+      return h;
+  }
+  return nullptr;
+}
+
+bool has_pending_early_report() {
+  for (auto *h : g_loaded_modules) {
+    if (h != nullptr && h->early && !h->reported)
+      return true;
+  }
+  return false;
 }
 
 bool map_from_base(void *base_addr, lsplt::MapInfo *out) {
@@ -692,6 +715,11 @@ int api_connect_companion(void *handle) {
     LOGE("connect companion: invalid handle=%p", handle);
     return -1;
   }
+  if (h->early && !h->has_companion) {
+    LOGE("connect companion: unavailable for early module id=%s",
+         h->module_id.c_str());
+    return -1;
+  }
   int fd = request_fd(ZdRequest::ConnectNativeCompanion, h->index);
   LOGI("connect companion: idx=%u fd=%d", h->index, fd);
   return fd;
@@ -709,24 +737,203 @@ const ZygiskNextAPI g_api = {
     .connectCompanion = api_connect_companion,
 };
 
+bool request_native_module_count(uint32_t *count, bool quiet) {
+  int sock = connect_zygiskd();
+  if (sock < 0) {
+    if (!quiet)
+      LOGE("native core: zygiskd unavailable");
+    return false;
+  }
+  uint8_t op = static_cast<uint8_t>(ZdRequest::GetNativeModuleCount);
+  uint32_t value = 0;
+  if (!write_all(sock, &op, 1) || !read_all(sock, &value, sizeof(value))) {
+    close(sock);
+    if (!quiet)
+      LOGE("native core: module count request failed");
+    return false;
+  }
+  close(sock);
+  *count = value;
+  return true;
+}
+
+std::string bounded_cstr(const char *s, size_t max) {
+  size_t n = 0;
+  while (n < max && s[n] != '\0')
+    n++;
+  return std::string(s, n);
+}
+
+std::string module_id_of(const zygiskd::NativeModuleInfo &info) {
+  return bounded_cstr(info.module_id, sizeof(info.module_id));
+}
+
+bool load_native_module_from_fd(const zygiskd::NativeModuleInfo &info,
+                                uint32_t idx, int lib_fd, bool early) {
+  std::string module_id = module_id_of(info);
+  std::string lib_path = bounded_cstr(info.lib_path, sizeof(info.lib_path));
+  if (module_id.empty() || lib_path.empty()) {
+    if (lib_fd >= 0)
+      close(lib_fd);
+    LOGE("native core: invalid module info idx=%u early=%u", idx,
+         early ? 1U : 0U);
+    return false;
+  }
+
+  std::string lib_name = basename_of(lib_path);
+  bool yuki_loaded = false;
+  void *so = yukilinker::dlopen_memfd(lib_fd, lib_path.c_str(),
+                                      /*file_backed=*/true);
+  if (so != nullptr) {
+    yuki_loaded = true;
+    LOGI("native core: yukilinker loaded id=%s idx=%u path=%s early=%u",
+         module_id.c_str(), idx, lib_path.c_str(), early ? 1U : 0U);
+  } else {
+    android_dlextinfo ext{};
+    ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_FORCE_LOAD;
+    ext.library_fd = lib_fd;
+    dlerror();
+    so = android_dlopen_ext(lib_name.c_str(), RTLD_NOW | RTLD_LOCAL, &ext);
+    const char *name_err = dlerror();
+    std::string name_error = name_err != nullptr ? name_err : "";
+    if (so == nullptr) {
+      dlerror();
+      so = android_dlopen_ext(lib_path.c_str(), RTLD_NOW | RTLD_LOCAL, &ext);
+    }
+    const char *path_err = dlerror();
+    std::string path_error = path_err != nullptr ? path_err : "";
+    if (so == nullptr) {
+      LOGE("native core: dlopen failed id=%s idx=%u name=%s path=%s early=%u",
+           module_id.c_str(), idx, lib_name.c_str(), lib_path.c_str(),
+           early ? 1U : 0U);
+      LOGE("native core: dlopen name err=%s",
+           name_error.empty() ? "(null)" : name_error.c_str());
+      LOGE("native core: dlopen path err=%s",
+           path_error.empty() ? "(null)" : path_error.c_str());
+    }
+  }
+  close(lib_fd);
+  if (so == nullptr)
+    return false;
+
+  auto *mod = reinterpret_cast<ZygiskNextModule *>(
+      yuki_loaded ? yukilinker::dlsym(static_cast<yukilinker::SoHandle *>(so),
+                                      "zn_module")
+                  : dlsym(so, "zn_module"));
+  if (mod == nullptr) {
+    LOGE("native core: zn_module missing id=%s idx=%u", module_id.c_str(), idx);
+    if (yuki_loaded)
+      yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(so));
+    else
+      dlclose(so);
+    return false;
+  }
+  if (mod->target_api_version != kApiVersion1 ||
+      mod->onModuleLoaded == nullptr) {
+    LOGE("native core: unsupported module id=%s idx=%u api=%d entry=%p",
+         module_id.c_str(), idx, mod->target_api_version, mod->onModuleLoaded);
+    if (yuki_loaded)
+      yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(so));
+    else
+      dlclose(so);
+    return false;
+  }
+
+  auto *handle = new ModuleHandle();
+  handle->index = idx;
+  handle->so = so;
+  handle->module_id = module_id;
+  handle->yuki_loaded = yuki_loaded;
+  handle->early = early;
+  handle->has_companion = info.has_companion != 0;
+  g_loaded_modules.push_back(handle);
+  LOGI("native module onModuleLoaded: %s early=%u", module_id.c_str(),
+       early ? 1U : 0U);
+  mod->onModuleLoaded(handle, &g_api);
+  LOGI("native module loaded: %s early=%u", module_id.c_str(), early ? 1U : 0U);
+  if (!early)
+    handle->reported = report_native_injection(idx);
+  return true;
+}
+
+bool early_packet_entry_to_info(const yz_early_native_packet_entry &entry,
+                                zygiskd::NativeModuleInfo *info) {
+  yz_early_native_entry module = entry.module;
+  module.module_id[YZ_NATIVE_MODULE_ID_MAX - 1] = '\0';
+  module.target[YZ_NATIVE_TARGET_VALUE_MAX - 1] = '\0';
+  module.lib_path[YZ_NATIVE_MODULE_PATH_MAX - 1] = '\0';
+  if (entry.fd < 0)
+    return false;
+  if (module.target_type != YZ_NATIVE_TARGET_NAME &&
+      module.target_type != YZ_NATIVE_TARGET_PATH)
+    return false;
+  if (module.module_id[0] == '\0' || module.target[0] == '\0' ||
+      module.lib_path[0] == '\0')
+    return false;
+
+  *info = {};
+  info->target_type = module.target_type;
+  info->has_companion = 0;
+  snprintf(info->module_id, sizeof(info->module_id), "%s", module.module_id);
+  snprintf(info->target, sizeof(info->target), "%s", module.target);
+  snprintf(info->lib_path, sizeof(info->lib_path), "%s", module.lib_path);
+  return true;
+}
+
+void load_early_modules() {
+  int packet_fd = g_early_packet_fd;
+  if (packet_fd < 0)
+    return;
+  g_early_packet_fd = -1;
+
+  yz_early_native_packet_header hdr{};
+  if (lseek(packet_fd, 0, SEEK_SET) != 0 ||
+      !read_all(packet_fd, &hdr, sizeof(hdr)) ||
+      hdr.magic != YZ_EARLY_NATIVE_PACKET_MAGIC ||
+      hdr.version != YZ_EARLY_NATIVE_VERSION ||
+      hdr.header_size != sizeof(hdr) ||
+      hdr.entry_size != sizeof(yz_early_native_packet_entry) ||
+      hdr.count > YZ_NATIVE_TARGET_MAX) {
+    LOGE("native core: invalid early packet fd=%d", packet_fd);
+    close(packet_fd);
+    return;
+  }
+
+  LOGI("native core: early packet modules=%u", hdr.count);
+  for (uint32_t i = 0; i < hdr.count; i++) {
+    yz_early_native_packet_entry entry{};
+    if (!read_all(packet_fd, &entry, sizeof(entry))) {
+      LOGE("native core: early packet read failed idx=%u", i);
+      break;
+    }
+
+    zygiskd::NativeModuleInfo info{};
+    if (!early_packet_entry_to_info(entry, &info)) {
+      if (entry.fd >= 0)
+        close(entry.fd);
+      LOGE("native core: early packet invalid module idx=%u", i);
+      continue;
+    }
+    std::string module_id = module_id_of(info);
+    if (find_loaded_module(module_id) != nullptr) {
+      LOGI("native core: early module already loaded id=%s", module_id.c_str());
+      close(entry.fd);
+      continue;
+    }
+    (void)load_native_module_from_fd(info, 0xffffffffu, entry.fd,
+                                     /*early=*/true);
+  }
+  close(packet_fd);
+}
+
 void load_matching_modules() {
   std::string exe = self_exe_path();
   std::string exe_base = basename_of(exe);
   LOGI("native core: exe=%s base=%s", exe.c_str(), exe_base.c_str());
 
-  int sock = connect_zygiskd();
-  if (sock < 0) {
-    LOGE("native core: zygiskd unavailable");
-    return;
-  }
-  uint8_t op = static_cast<uint8_t>(ZdRequest::GetNativeModuleCount);
   uint32_t count = 0;
-  if (!write_all(sock, &op, 1) || !read_all(sock, &count, sizeof(count))) {
-    close(sock);
-    LOGE("native core: module count request failed");
+  if (!request_native_module_count(&count, /*quiet=*/false))
     return;
-  }
-  close(sock);
   LOGI("native core: module count=%u", count);
 
   for (uint32_t i = 0; i < count; ++i) {
@@ -742,80 +949,87 @@ void load_matching_modules() {
     if (!matched)
       continue;
 
+    std::string module_id = module_id_of(info);
+    if (auto *loaded = find_loaded_module(module_id)) {
+      loaded->index = i;
+      loaded->has_companion = info.has_companion != 0;
+      LOGI("native core: duplicate skipped id=%s idx=%u early=%u",
+           module_id.c_str(), i, loaded->early ? 1U : 0U);
+      if (loaded->early && !loaded->reported)
+        loaded->reported = report_native_injection(i);
+      continue;
+    }
+
     int lib_fd = request_fd(ZdRequest::GetNativeModuleFd, i);
     if (lib_fd < 0) {
       LOGE("native core: module fd failed id=%s idx=%u", info.module_id, i);
       continue;
     }
-
-    std::string lib_name = basename_of(info.lib_path);
-    bool yuki_loaded = false;
-    void *so = yukilinker::dlopen_memfd(lib_fd, info.lib_path,
-                                        /*file_backed=*/true);
-    if (so != nullptr) {
-      yuki_loaded = true;
-      LOGI("native core: yukilinker loaded id=%s idx=%u path=%s",
-           info.module_id, i, info.lib_path);
-    } else {
-      android_dlextinfo ext{};
-      ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_FORCE_LOAD;
-      ext.library_fd = lib_fd;
-      dlerror();
-      so = android_dlopen_ext(lib_name.c_str(), RTLD_NOW | RTLD_LOCAL, &ext);
-      const char *name_err = dlerror();
-      std::string name_error = name_err != nullptr ? name_err : "";
-      if (so == nullptr) {
-        dlerror();
-        so = android_dlopen_ext(info.lib_path, RTLD_NOW | RTLD_LOCAL, &ext);
-      }
-      const char *path_err = dlerror();
-      std::string path_error = path_err != nullptr ? path_err : "";
-      if (so == nullptr) {
-        LOGE("native core: dlopen failed id=%s idx=%u name=%s path=%s",
-             info.module_id, i, lib_name.c_str(), info.lib_path);
-        LOGE("native core: dlopen name err=%s",
-             name_error.empty() ? "(null)" : name_error.c_str());
-        LOGE("native core: dlopen path err=%s",
-             path_error.empty() ? "(null)" : path_error.c_str());
-      }
-    }
-    close(lib_fd);
-    if (so == nullptr) {
-      continue;
-    }
-    auto *mod = reinterpret_cast<ZygiskNextModule *>(
-        yuki_loaded ? yukilinker::dlsym(static_cast<yukilinker::SoHandle *>(so),
-                                        "zn_module")
-                    : dlsym(so, "zn_module"));
-    if (mod == nullptr) {
-      LOGE("native core: zn_module missing id=%s idx=%u", info.module_id, i);
-      if (yuki_loaded)
-        yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(so));
-      else
-        dlclose(so);
-      continue;
-    }
-    if (mod->target_api_version != kApiVersion1 ||
-        mod->onModuleLoaded == nullptr) {
-      LOGE("native core: unsupported module id=%s idx=%u api=%d entry=%p",
-           info.module_id, i, mod->target_api_version, mod->onModuleLoaded);
-      if (yuki_loaded)
-        yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(so));
-      else
-        dlclose(so);
-      continue;
-    }
-
-    auto *handle = new ModuleHandle();
-    handle->index = i;
-    handle->so = so;
-    handle->yuki_loaded = yuki_loaded;
-    g_loaded_modules.push_back(handle);
-    LOGI("native module onModuleLoaded: %s", info.module_id);
-    mod->onModuleLoaded(handle, &g_api);
-    LOGI("native module loaded: %s", info.module_id);
-    report_native_injection(i);
+    (void)load_native_module_from_fd(info, i, lib_fd, /*early=*/false);
   }
+}
+
+bool sync_early_native_reports_once() {
+  if (!has_pending_early_report())
+    return true;
+
+  uint32_t count = 0;
+  if (!request_native_module_count(&count, /*quiet=*/true))
+    return false;
+
+  bool all_reported = true;
+  for (auto *h : g_loaded_modules) {
+    if (h == nullptr || !h->early || h->reported)
+      continue;
+
+    bool found = false;
+    for (uint32_t i = 0; i < count; i++) {
+      zygiskd::NativeModuleInfo info{};
+      if (!request_native_info(i, &info))
+        continue;
+      if (module_id_of(info) != h->module_id)
+        continue;
+      h->index = i;
+      h->has_companion = info.has_companion != 0;
+      h->reported = report_native_injection(i);
+      found = true;
+      break;
+    }
+    if (!found || !h->reported)
+      all_reported = false;
+  }
+  return all_reported;
+}
+
+void *deferred_native_sync_main(void *) {
+  constexpr int kAttempts = 80;
+  constexpr useconds_t kSleepUs = 100000;
+
+  for (int i = 0; i < kAttempts; i++) {
+    if (sync_early_native_reports_once()) {
+      restore_native_load_policy();
+      LOGI("native core: deferred early sync complete");
+      return nullptr;
+    }
+    usleep(kSleepUs);
+  }
+  LOGE("native core: deferred early sync timed out");
+  return nullptr;
+}
+
+void maybe_start_deferred_native_sync() {
+  if (!has_pending_early_report())
+    return;
+  if (sync_early_native_reports_once())
+    return;
+
+  pthread_t tid{};
+  int rc = pthread_create(&tid, nullptr, deferred_native_sync_main, nullptr);
+  if (rc != 0) {
+    LOGE("native core: deferred early sync thread failed rc=%d", rc);
+    return;
+  }
+  pthread_detach(tid);
 }
 
 extern "C" {
@@ -921,7 +1135,9 @@ bool rebind_self_dl_iterate_slot(uintptr_t load_bias) {
 void core_start() {
   run_ctors_once();
   load_config();
+  load_early_modules();
   load_matching_modules();
+  maybe_start_deferred_native_sync();
   restore_native_load_policy();
 }
 
@@ -976,10 +1192,12 @@ extern "C" bool yz_patch_text(uintptr_t addr, const void *bytes,
 
 extern "C" [[gnu::visibility("default")]] void
 zygisk_core_entry(const char * /*self_path*/, void *loader_self,
-                  void *core_base, void *core_size) {
+                  void *core_base, void *core_size, int early_packet_fd_plus1) {
   g_loader_base = reinterpret_cast<uintptr_t>(loader_self);
   g_self_base = reinterpret_cast<uintptr_t>(core_base);
   g_self_size = reinterpret_cast<size_t>(core_size);
+  g_early_packet_fd =
+      early_packet_fd_plus1 > 0 ? early_packet_fd_plus1 - 1 : -1;
   g_loader_unmap_safe = rebind_self_dl_iterate_slot(g_self_base);
   core_start();
 }
@@ -989,11 +1207,13 @@ zygisk_core_entry_direct(int /*core_fd*/) {
   g_loader_base = 0;
   g_self_base = 0;
   g_self_size = 0;
+  g_early_packet_fd = -1;
   g_loader_unmap_safe = true;
   core_start();
 }
 
-extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int) {
+extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int,
+                                                                      int) {
   int n =
       yuki::solist::drop_lib_containing(g_loader_base, !g_loader_unmap_safe);
   LOGI("native finalize_loader: unloaded %d soinfo(s)", n);

@@ -734,7 +734,7 @@ bool g_loader_unmap_safe = false;
 
 extern "C" [[gnu::visibility("default")]] void
 zygisk_core_entry(const char *self_path, void *loader_self, void *core_base,
-                  void *core_size) {
+                  void *core_size, int /*early_packet_fd_plus1*/) {
   g_loader_base = reinterpret_cast<uintptr_t>(loader_self);
   g_self_base = reinterpret_cast<uintptr_t>(core_base);
   g_self_size = reinterpret_cast<size_t>(core_size);
@@ -750,7 +750,8 @@ zygisk_core_entry_direct(int /*core_fd*/) {
 }
 
 /* Unload the first-stage loader. */
-extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int) {
+extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int,
+                                                                      int) {
   zd_load_config();
   LOGI("finalize_loader: unloading loader at base=%p munmap=%d",
        (void *)g_loader_base, g_loader_unmap_safe);

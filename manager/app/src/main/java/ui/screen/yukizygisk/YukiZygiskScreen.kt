@@ -238,7 +238,8 @@ private fun parseYzStatus(json: String): YzStatus? = runCatching {
             )
         }
     } ?: emptyList()
-    val monitoredZygotes = o.optJSONArray("zygote_monitor")?.let { a ->
+    val monitoredZygoteArray = o.optJSONArray("zygote_monitor")
+    val monitoredZygotes = monitoredZygoteArray?.let { a ->
         (0 until a.length()).map { i ->
             val z = a.getJSONObject(i)
             ZygoteMonitorEntry(
@@ -249,7 +250,9 @@ private fun parseYzStatus(json: String): YzStatus? = runCatching {
             )
         }
     } ?: emptyList()
-    val zygotes = mergeZygoteMonitorEntries(legacyZygotes, monitoredZygotes)
+    val zygotes =
+        if (monitoredZygoteArray != null && monitoredZygotes.isNotEmpty()) monitoredZygotes
+        else mergeZygoteMonitorEntries(legacyZygotes, monitoredZygotes)
     val nativeModules = o.optJSONArray("native_modules")?.let { a ->
         (0 until a.length()).map { i ->
             val n = a.getJSONObject(i)

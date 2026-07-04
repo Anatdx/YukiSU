@@ -102,6 +102,7 @@ object KsuCli {
                 installOrUpdateKsudDaemon()
             } else {
                 Log.d(TAG, "ksud is up-to-date: $installedKsudVersion")
+                refreshYukiZygiskSnapshotForNextBoot()
             }
         } catch (e: Exception) {
             Log.e(TAG, "checkAndInstallKsud failed, falling back to install", e)
@@ -288,12 +289,30 @@ object KsuCli {
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
             "restorecon ${KsuPaths.KSUD_BIN} || true",
-            "restorecon -R ${KsuPaths.KSU_ROOT} || true"
+            "restorecon -R ${KsuPaths.KSU_ROOT} || true",
+            // Precompute YukiZygisk's early native snapshot before reboot. If the
+            // feature is off, ksud clears the snapshot and returns success.
+            "${KsuPaths.KSUD_BIN} yukizygisk refresh-snapshot || true"
         )
 
         Log.i(TAG, "installOrUpdateKsudDaemon: syncing ${ksudSo.absolutePath} -> /data/adb/ksud")
         val result = shell.newJob().add(*cmds).exec()
         Log.i(TAG, "installOrUpdateKsudDaemon: result code=${result.code}, isSuccess=${result.isSuccess}")
+    }
+
+    private fun refreshYukiZygiskSnapshotForNextBoot() {
+        val shell = getRootShell()
+        if (!shell.isRoot) {
+            Log.w(TAG, "refreshYukiZygiskSnapshotForNextBoot: shell is not root, skip")
+            return
+        }
+        val result = shell.newJob()
+            .add("${KsuPaths.KSUD_BIN} yukizygisk refresh-snapshot || true")
+            .exec()
+        Log.i(
+            TAG,
+            "refreshYukiZygiskSnapshotForNextBoot: result code=${result.code}, isSuccess=${result.isSuccess}"
+        )
     }
 }
 

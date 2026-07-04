@@ -16,6 +16,7 @@
 #include "sulog.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
+#include "yukizygisk_snapshot.hpp"
 
 // Kasumi integration
 #include "hymo/conf/config.hpp"
@@ -348,6 +349,9 @@ int on_post_data_fs() {
     // Load feature config (with init_features handling managed features)
     init_features();
     ensure_yukizygisk_payload_if_enabled();
+    if (refresh_yukizygisk_early_snapshot() != 0) {
+        LOGW("refresh YukiZygisk early snapshot failed");
+    }
     ensure_sulogd_running_if_enabled();
     ensure_zygiskd_running_if_enabled();
 

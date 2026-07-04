@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include "log.hpp"
+#include "uapi/yukizygisk.h"
 
 #if YUKILINKER_FULL
 #include <cstdlib>
@@ -125,6 +126,9 @@ SoHandle *g_images[kMaxImages];
 size_t g_image_count = 0;
 
 #if YUKILINKER_FULL
+pthread_mutex_t g_atexit_lock = PTHREAD_MUTEX_INITIALIZER;
+SoHandle *g_current_init_handle = nullptr;
+
 constexpr size_t kMaxTlsModules = 64;
 
 struct TlsIndex {
@@ -325,6 +329,149 @@ extern "C" int yz_module_thread_atexit_noop(void (* /*dtor*/)(void *),
                                             void * /*dso_handle*/) {
   return 0;
 }
+
+bool image_contains_addr(const SoHandle *h, void *addr) {
+  if (h == nullptr || addr == nullptr || h->load_bias == nullptr ||
+      h->map_size == 0)
+    return false;
+  uintptr_t p = reinterpret_cast<uintptr_t>(addr);
+  uintptr_t lo = reinterpret_cast<uintptr_t>(h->load_bias);
+  uintptr_t hi = lo + h->map_size;
+  return p >= lo && p < hi;
+}
+
+SoHandle *find_atexit_owner_locked(void *dso) {
+  if (dso != nullptr) {
+    for (size_t i = 0; i < g_image_count; i++)
+      if (image_contains_addr(g_images[i], dso))
+        return g_images[i];
+
+    for (size_t i = 0; i < g_image_count; i++) {
+      SoHandle *h = g_images[i];
+      if (h == nullptr)
+        continue;
+      for (size_t j = 0; j < h->atexit_count; j++)
+        if (h->atexit_entries[j].dso == dso)
+          return h;
+    }
+  }
+  return g_current_init_handle;
+}
+
+bool append_atexit_entry_locked(SoHandle *h, void (*fn)(void *), void *arg,
+                                void *dso) {
+  if (h == nullptr || fn == nullptr)
+    return false;
+  if (h->atexit_count == h->atexit_capacity) {
+    size_t next = h->atexit_capacity == 0 ? 8 : h->atexit_capacity * 2;
+    if (next < h->atexit_capacity ||
+        next > SIZE_MAX / sizeof(SoHandle::AtexitEntry))
+      return false;
+    void *mem =
+        realloc(h->atexit_entries, next * sizeof(SoHandle::AtexitEntry));
+    if (mem == nullptr)
+      return false;
+    h->atexit_entries = static_cast<SoHandle::AtexitEntry *>(mem);
+    h->atexit_capacity = next;
+  }
+  h->atexit_entries[h->atexit_count++] = {fn, arg, dso};
+  h->atexit_appends++;
+  return true;
+}
+
+void trim_atexit_table_locked(SoHandle *h) {
+  if (h == nullptr)
+    return;
+  while (h->atexit_count > 0 &&
+         h->atexit_entries[h->atexit_count - 1].fn == nullptr)
+    h->atexit_count--;
+}
+
+void drain_atexit_locked(SoHandle *h, void *dso) {
+  if (h == nullptr || h->atexit_entries == nullptr)
+    return;
+
+restart:
+  uint64_t appends = h->atexit_appends;
+  for (size_t i = h->atexit_count; i > 0; i--) {
+    size_t idx = i - 1;
+    SoHandle::AtexitEntry entry = h->atexit_entries[idx];
+    if (entry.fn == nullptr || (dso != nullptr && entry.dso != dso))
+      continue;
+
+    h->atexit_entries[idx] = {};
+    pthread_mutex_unlock(&g_atexit_lock);
+    entry.fn(entry.arg);
+    pthread_mutex_lock(&g_atexit_lock);
+    if (h->atexit_appends != appends)
+      goto restart;
+  }
+  trim_atexit_table_locked(h);
+}
+
+void drain_atexit_for_handle(SoHandle *h, void *dso) {
+  pthread_mutex_lock(&g_atexit_lock);
+  drain_atexit_locked(h, dso);
+  pthread_mutex_unlock(&g_atexit_lock);
+}
+
+void free_atexit_table(SoHandle *h) {
+  if (h == nullptr)
+    return;
+  pthread_mutex_lock(&g_atexit_lock);
+  if (g_current_init_handle == h)
+    g_current_init_handle = nullptr;
+  free(h->atexit_entries);
+  h->atexit_entries = nullptr;
+  h->atexit_count = 0;
+  h->atexit_capacity = 0;
+  h->atexit_appends = 0;
+  pthread_mutex_unlock(&g_atexit_lock);
+}
+
+void set_current_init_handle(SoHandle *h) {
+  pthread_mutex_lock(&g_atexit_lock);
+  g_current_init_handle = h;
+  pthread_mutex_unlock(&g_atexit_lock);
+}
+
+void clear_current_init_handle(SoHandle *h) {
+  pthread_mutex_lock(&g_atexit_lock);
+  if (g_current_init_handle == h)
+    g_current_init_handle = nullptr;
+  pthread_mutex_unlock(&g_atexit_lock);
+}
+
+int module_cxa_atexit(void (*fn)(void *), void *arg, void *dso) {
+  if (fn == nullptr)
+    return -1;
+  pthread_mutex_lock(&g_atexit_lock);
+  SoHandle *owner = find_atexit_owner_locked(dso);
+  bool ok = append_atexit_entry_locked(owner, fn, arg, dso);
+  pthread_mutex_unlock(&g_atexit_lock);
+  if (!ok) {
+    ZLOGE("yukilinker: local __cxa_atexit dropped registration");
+    return -1;
+  }
+  return 0;
+}
+
+void module_cxa_finalize(void *dso) {
+  pthread_mutex_lock(&g_atexit_lock);
+  if (dso != nullptr) {
+    drain_atexit_locked(find_atexit_owner_locked(dso), dso);
+  } else {
+    for (size_t i = 0; i < g_image_count; i++)
+      drain_atexit_locked(g_images[i], nullptr);
+  }
+  pthread_mutex_unlock(&g_atexit_lock);
+}
+#else
+int module_cxa_atexit(void (* /*fn*/)(void *), void * /*arg*/, void * /*dso*/) {
+  return 0;
+}
+
+void module_cxa_finalize(void * /*dso*/) {}
 #endif // #if YUKILINKER_FULL
 
 int prot_of(uint32_t p_flags) {
@@ -404,12 +551,6 @@ const ElfW(Sym) * sysv_lookup(const SoHandle *h, const char *name) {
   return nullptr;
 }
 
-/* Swallow module atexit registrations. */
-extern "C" int yz_module_atexit_noop(void (* /*dtor*/)(void *), void * /*obj*/,
-                                     void * /*dso_handle*/) {
-  return 0;
-}
-
 /* Resolve one imported symbol. */
 void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
   *ok = true;
@@ -420,14 +561,20 @@ void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
   if (strcmp(name, "dl_iterate_phdr") == 0)
     return (void *)&dl_iterate_phdr_hook;
 
-  if (strcmp(name, "__cxa_atexit") == 0)
-    return (void *)&yz_module_atexit_noop;
+  if (s.st_shndx == SHN_UNDEF) {
+    if (strcmp(name, "__cxa_atexit") == 0)
+      return (void *)&module_cxa_atexit;
+#if YUKILINKER_FULL
+    if (strcmp(name, "__cxa_finalize") == 0)
+      return (void *)&module_cxa_finalize;
+#endif // #if YUKILINKER_FULL
+  }
 
 #if YUKILINKER_FULL
   if (strcmp(name, "__tls_get_addr") == 0)
     return (void *)&custom_tls_get_addr;
 
-  if (strcmp(name, "__cxa_thread_atexit_impl") == 0)
+  if (s.st_shndx == SHN_UNDEF && strcmp(name, "__cxa_thread_atexit_impl") == 0)
     return (void *)&yz_module_thread_atexit_noop;
 #endif // #if YUKILINKER_FULL
 
@@ -636,6 +783,7 @@ void call_finalizers(SoHandle *h) {
       h->fini_array[i - 1]();
   if (h->fini_func)
     h->fini_func();
+  drain_atexit_for_handle(h, nullptr);
   h->did_init = false;
 #else
   (void)h;
@@ -938,11 +1086,17 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
     g_images[g_image_count++] = h;
 
   /* Run initializers. */
+#if YUKILINKER_FULL
+  set_current_init_handle(h);
+#endif // #if YUKILINKER_FULL
   if (h->init_func)
     h->init_func();
   for (size_t i = 0; i < h->init_array_count; i++)
     if (h->init_array[i])
       h->init_array[i]();
+#if YUKILINKER_FULL
+  clear_current_init_handle(h);
+#endif // #if YUKILINKER_FULL
   h->did_init = true;
 
   return h;
@@ -967,6 +1121,7 @@ void dlclose(SoHandle *h) {
     return;
   call_finalizers(h);
 #if YUKILINKER_FULL
+  free_atexit_table(h);
   unregister_tls_module(h);
 #endif // #if YUKILINKER_FULL
   for (size_t i = 0; i < g_image_count; i++)
@@ -1052,6 +1207,41 @@ static inline void yuki_raw_close(int fd) {
 #endif // #if defined(__aarch64__)
 }
 
+static bool yuki_read_all(int fd, void *buf, size_t n) {
+  auto *p = static_cast<uint8_t *>(buf);
+  while (n > 0) {
+    ssize_t r = read(fd, p, n);
+    if (r <= 0)
+      return false;
+    p += r;
+    n -= static_cast<size_t>(r);
+  }
+  return true;
+}
+
+static void yuki_close_early_packet(int packet_fd) {
+  if (packet_fd < 0)
+    return;
+
+  yz_early_native_packet_header hdr{};
+  if (lseek(packet_fd, 0, SEEK_SET) == 0 &&
+      yuki_read_all(packet_fd, &hdr, sizeof(hdr)) &&
+      hdr.magic == YZ_EARLY_NATIVE_PACKET_MAGIC &&
+      hdr.version == YZ_EARLY_NATIVE_VERSION &&
+      hdr.header_size == sizeof(hdr) &&
+      hdr.entry_size == sizeof(yz_early_native_packet_entry) &&
+      hdr.count <= YZ_NATIVE_TARGET_MAX) {
+    for (uint32_t i = 0; i < hdr.count; i++) {
+      yz_early_native_packet_entry entry{};
+      if (!yuki_read_all(packet_fd, &entry, sizeof(entry)))
+        break;
+      if (entry.fd >= 0)
+        yuki_raw_close(entry.fd);
+    }
+  }
+  yuki_raw_close(packet_fd);
+}
+
 static constexpr char kCorePath[] = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
 
 extern "C" {
@@ -1070,30 +1260,39 @@ extern "C" {
 }
 
 /* First-stage entry. */
-[[gnu::visibility("default")]] void yuki_bootstrap(int core_fd) {
-  if (core_fd < 0)
+[[gnu::visibility("default")]] void yuki_bootstrap(int core_fd,
+                                                   int early_packet_fd_plus1) {
+  int early_packet_fd =
+      early_packet_fd_plus1 > 0 ? early_packet_fd_plus1 - 1 : -1;
+  if (core_fd < 0) {
+    yuki_close_early_packet(early_packet_fd);
     return;
+  }
   yukilinker::SoHandle *core =
       yukilinker::dlopen_memfd(core_fd, "data-code-cache",
                                /*file_backed=*/true);
   yuki_raw_close(core_fd); // before the zygote's pre-fork fd allowlist check
-  if (core == nullptr)
+  if (core == nullptr) {
+    yuki_close_early_packet(early_packet_fd);
     return;
-  using core_entry_fn = void (*)(const char *, void *, void *, void *);
+  }
+  using core_entry_fn = void (*)(const char *, void *, void *, void *, int);
   auto entry = reinterpret_cast<core_entry_fn>(
       yukilinker::dlsym(core, "zygisk_core_entry"));
-  if (entry == nullptr)
+  if (entry == nullptr) {
+    yuki_close_early_packet(early_packet_fd);
     return;
+  }
   // Pass loader address plus core range to the core.
   entry(kCorePath, reinterpret_cast<void *>(&yuki_bootstrap),
         reinterpret_cast<void *>(core->load_bias),
-        reinterpret_cast<void *>(core->map_size));
+        reinterpret_cast<void *>(core->map_size), early_packet_fd_plus1);
   yukilinker::finalize_self_dso();
-  using fin_fn = void (*)(int);
+  using fin_fn = void (*)(int, int);
   auto fin = reinterpret_cast<fin_fn>(
       yukilinker::dlsym(core, "zygisk_finalize_loader"));
   if (fin != nullptr) [[clang::musttail]]
-    return fin(0);
+    return fin(0, 0);
 }
 
 } // extern "C"

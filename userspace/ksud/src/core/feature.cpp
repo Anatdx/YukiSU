@@ -5,6 +5,7 @@
 #include "../module/module.hpp"
 #include "../sulog.hpp"
 #include "../utils.hpp"
+#include "../yukizygisk_snapshot.hpp"
 #include "ksucalls.hpp"
 
 #include <cinttypes>
@@ -161,6 +162,10 @@ int feature_set(const std::string& id, uint64_t value) {
 
     if (feature_id == KSU_FEATURE_MAGISK_COMPAT && value != 0 && ensure_msud_running() != 0) {
         LOGW("Failed to ensure msud is running after enabling magisk_compat");
+    }
+
+    if (feature_id == KSU_FEATURE_YUKIZYGISK && refresh_yukizygisk_early_snapshot() != 0) {
+        LOGW("Failed to refresh YukiZygisk early snapshot after feature change");
     }
 
     printf("Feature '%s' set to %" PRIu64 " (%s)\n", feature_id_to_name(feature_id), value,

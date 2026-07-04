@@ -6,6 +6,7 @@
  */
 
 #include "zygiskd.hpp"
+#include "native_modules.hpp"
 #include "uapi/yukizygisk.h"
 
 #include "core/json.hpp"
@@ -104,13 +105,7 @@ struct Module {
 
 std::vector<Module> g_modules;
 
-struct NativeModule {
-  std::string module_id;
-  uint8_t target_type = 0;
-  std::string target;
-  std::string lib_path;
-  bool has_companion = false;
-};
+using NativeModule = yukizygisk::native::NativeModule;
 
 std::vector<NativeModule> g_native_modules;
 
@@ -159,82 +154,6 @@ std::vector<Module> scan_modules() {
   return mods;
 }
 
-std::string trim_copy(const std::string &s) {
-  size_t first = 0;
-  while (first < s.size() &&
-         std::isspace(static_cast<unsigned char>(s[first])) != 0)
-    ++first;
-  size_t last = s.size();
-  while (last > first &&
-         std::isspace(static_cast<unsigned char>(s[last - 1])) != 0)
-    --last;
-  return s.substr(first, last - first);
-}
-
-void replace_all(std::string &s, const std::string &from,
-                 const std::string &to) {
-  if (from.empty())
-    return;
-  size_t pos = 0;
-  while ((pos = s.find(from, pos)) != std::string::npos) {
-    s.replace(pos, from.size(), to);
-    pos += to.size();
-  }
-}
-
-bool parse_native_module_line(const std::string &module_id,
-                              const std::string &base, const std::string &line,
-                              NativeModule *out) {
-  std::string text = trim_copy(line);
-  if (text.empty() || text[0] == '#')
-    return false;
-
-  std::istringstream iss(text);
-  std::string head;
-  if (!(iss >> head))
-    return false;
-
-  NativeModule m{};
-  m.module_id = module_id;
-  constexpr char kNamePrefix[] = "name=";
-  constexpr char kPathPrefix[] = "path=";
-  if (head.rfind(kNamePrefix, 0) == 0) {
-    m.target_type = YZ_NATIVE_TARGET_NAME;
-    m.target = head.substr(sizeof(kNamePrefix) - 1);
-  } else if (head.rfind(kPathPrefix, 0) == 0) {
-    m.target_type = YZ_NATIVE_TARGET_PATH;
-    m.target = head.substr(sizeof(kPathPrefix) - 1);
-  } else {
-    return false;
-  }
-  if (m.target.empty() || m.target.size() >= YZ_NATIVE_TARGET_VALUE_MAX)
-    return false;
-
-  std::string token;
-  std::string lib_rel;
-  while (iss >> token) {
-    if (token == "companion") {
-      m.has_companion = true;
-    } else if (lib_rel.empty()) {
-      lib_rel = token;
-    }
-  }
-  if (lib_rel.empty())
-    return false;
-
-  replace_all(lib_rel, "${moduleId}", module_id);
-  replace_all(lib_rel, "$moduleId", module_id);
-  if (!lib_rel.empty() && lib_rel[0] == '/')
-    m.lib_path = lib_rel;
-  else
-    m.lib_path = base + "/" + lib_rel;
-
-  if (access(m.lib_path.c_str(), F_OK) != 0)
-    return false;
-  *out = std::move(m);
-  return true;
-}
-
 std::vector<NativeModule> scan_native_modules() {
   std::vector<NativeModule> mods;
   DIR *d = opendir(kModulesDir);
@@ -255,7 +174,8 @@ std::vector<NativeModule> scan_native_modules() {
     std::string line;
     while (std::getline(f, line)) {
       NativeModule m{};
-      if (parse_native_module_line(module_id, base, line, &m)) {
+      if (yukizygisk::native::parse_native_module_line(module_id, base, line,
+                                                       &m)) {
         if (!ksud::lsetfilecon(m.lib_path, ksud::SYSTEM_LIB_CON))
           DLOGE("native module: failed to label lib=%s", m.lib_path.c_str());
         DLOGI("native module: id=%s target=%s%s lib=%s companion=%u",
@@ -263,9 +183,10 @@ std::vector<NativeModule> scan_native_modules() {
               m.target_type == YZ_NATIVE_TARGET_PATH ? "path=" : "name=",
               m.target.c_str(), m.lib_path.c_str(), m.has_companion ? 1 : 0);
         mods.push_back(std::move(m));
-      } else if (!trim_copy(line).empty() && trim_copy(line)[0] != '#') {
+      } else if (!yukizygisk::native::trim_copy(line).empty() &&
+                 yukizygisk::native::trim_copy(line)[0] != '#') {
         DLOGI("native module: ignored invalid line in %s: %s",
-              module_id.c_str(), trim_copy(line).c_str());
+              module_id.c_str(), yukizygisk::native::trim_copy(line).c_str());
       }
     }
   }
@@ -790,6 +711,7 @@ struct ZygoteMonitorRecord {
 
 struct NativeInjectionRecord {
   uint32_t pid;
+  uint64_t start_time;
   std::string process;
   std::string module_id;
   std::string target_type;
@@ -813,6 +735,10 @@ void record_injection(uint32_t appid) {
     g_recent_appids.pop_back();
 }
 
+bool is_zygote_process_name(const std::string &name) {
+  return name == "zygote" || name == "zygote32" || name == "zygote64";
+}
+
 bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
                           std::string *abi_list = nullptr) {
   char path[64];
@@ -828,6 +754,7 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
     return false;
 
   bool found = false;
+  std::string first_arg;
   std::string sock;
   std::string abi;
   size_t off = 0;
@@ -838,6 +765,8 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
       ++off;
       continue;
     }
+    if (first_arg.empty())
+      first_arg.assign(arg, len);
     if (strcmp(arg, "-Xzygote") == 0) {
       found = true;
     } else {
@@ -852,6 +781,12 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
         abi.assign(arg + kAbiPrefixLen, len - kAbiPrefixLen);
     }
     off += len + 1;
+  }
+
+  if (!found && is_zygote_process_name(first_arg)) {
+    found = true;
+    if (sock.empty())
+      sock = first_arg;
   }
 
   if (socket_name != nullptr)
@@ -964,8 +899,68 @@ std::string read_proc_comm(pid_t pid) {
   if (n <= 0)
     return {};
   buf[n] = '\0';
-  std::string comm = trim_copy(buf);
+  std::string comm = yukizygisk::native::trim_copy(buf);
   return comm;
+}
+
+uint64_t read_proc_start_time(pid_t pid) {
+  char path[64];
+  snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return 0;
+
+  char buf[4096];
+  ssize_t n = read(fd, buf, sizeof(buf) - 1);
+  close(fd);
+  if (n <= 0)
+    return 0;
+  buf[n] = '\0';
+
+  char *rparen = strrchr(buf, ')');
+  if (rparen == nullptr)
+    return 0;
+
+  char *p = rparen + 1;
+  for (int field = 3; field <= 22; ++field) {
+    while (*p == ' ')
+      ++p;
+    if (*p == '\0')
+      return 0;
+    char *end = p;
+    while (*end != '\0' && *end != ' ')
+      ++end;
+    if (field == 22)
+      return strtoull(p, nullptr, 10);
+    p = end;
+  }
+  return 0;
+}
+
+bool native_injection_alive(const NativeInjectionRecord &record) {
+  if (record.pid == 0)
+    return false;
+  uint64_t start_time = read_proc_start_time(static_cast<pid_t>(record.pid));
+  if (start_time == 0)
+    return false;
+  if (record.start_time != 0)
+    return start_time == record.start_time;
+
+  std::string process = read_proc_comm(static_cast<pid_t>(record.pid));
+  return !process.empty() && process == record.process;
+}
+
+void prune_dead_native_injections() {
+  for (auto it = g_native_injections.begin();
+       it != g_native_injections.end();) {
+    if (native_injection_alive(*it)) {
+      ++it;
+    } else {
+      DLOGI("native injection monitor: prune dead pid=%u process=%s module=%s",
+            it->pid, it->process.c_str(), it->module_id.c_str());
+      it = g_native_injections.erase(it);
+    }
+  }
 }
 
 const char *native_target_type_name(uint8_t type) {
@@ -991,6 +986,7 @@ void record_native_injection(pid_t pid, uint32_t idx) {
   }
   g_native_injections.push_front(NativeInjectionRecord{
       static_cast<uint32_t>(pid),
+      read_proc_start_time(pid),
       std::move(process),
       m.module_id,
       std::move(target_type),
@@ -1037,6 +1033,8 @@ void json_append_escaped(std::string &out, const std::string &s) {
 
 /* Compact status JSON for the manager. */
 std::string build_status_json() {
+  prune_dead_native_injections();
+
   std::string s = "{\"count\":";
   s += std::to_string(g_inject_count);
   s += ",\"yukilinker\":";

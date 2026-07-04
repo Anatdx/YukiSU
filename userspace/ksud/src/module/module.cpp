@@ -6,6 +6,7 @@
 #include "../log.hpp"
 #include "../sepolicy/sepolicy.hpp"
 #include "../utils.hpp"
+#include "../yukizygisk_snapshot.hpp"
 #include "metamodule.hpp"
 
 #include <dirent.h>
@@ -160,6 +161,13 @@ void collect_rc_files(const std::filesystem::path& dir, const std::string* modul
 void warn_regenerate_preinit_rc_failed(int ret) {
     if (ret != 0) {
         LOGW("regenerate preinit rc failed: %d", ret);
+    }
+}
+
+void warn_refresh_yukizygisk_early_snapshot_failed() {
+    const int ret = refresh_yukizygisk_early_snapshot();
+    if (ret != 0) {
+        LOGW("refresh YukiZygisk early snapshot failed: %d", ret);
     }
 }
 
@@ -727,6 +735,7 @@ int module_install(const std::string& zip_path) {
 
     LOGI("Module installed successfully");
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -754,6 +763,7 @@ int module_uninstall(const std::string& id) {
 
     printf("Module %s marked for removal\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -778,6 +788,7 @@ int module_undo_uninstall(const std::string& id) {
 
     printf("Undid uninstall for module %s\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -804,6 +815,7 @@ int module_enable(const std::string& id) {
 
     printf("Module %s enabled\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -830,6 +842,7 @@ int module_disable(const std::string& id) {
 
     printf("Module %s disabled\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 

@@ -93,6 +93,8 @@ struct yz_patch_text_cmd {
 
 #define YZ_NATIVE_TARGET_MAX 64
 #define YZ_NATIVE_TARGET_VALUE_MAX 256
+#define YZ_NATIVE_MODULE_ID_MAX 64
+#define YZ_NATIVE_MODULE_PATH_MAX 512
 
 enum yz_native_target_type {
   YZ_NATIVE_TARGET_NAME = 1,
@@ -108,6 +110,48 @@ struct yz_native_target {
 struct yz_native_targets_cmd {
   __u32 count;
   struct yz_native_target targets[YZ_NATIVE_TARGET_MAX];
+};
+
+#define YZ_EARLY_NATIVE_MAGIC 0x59454e5a /* YENZ */
+#define YZ_EARLY_NATIVE_VERSION 1
+#define YZ_EARLY_NATIVE_FLAG_ENABLED (1U << 0)
+
+struct yz_early_native_snapshot_header {
+  __u32 magic;
+  __u16 version;
+  __u16 header_size;
+  __u16 entry_size;
+  __u16 reserved;
+  __u32 flags;
+  __u32 count;
+  __u64 dlopen_offset;
+  __u64 dlsym_offset;
+  __u64 linker_size;
+};
+
+struct yz_early_native_entry {
+  __u8 target_type;
+  __u8 flags;
+  __u16 reserved;
+  char module_id[YZ_NATIVE_MODULE_ID_MAX];
+  char target[YZ_NATIVE_TARGET_VALUE_MAX];
+  char lib_path[YZ_NATIVE_MODULE_PATH_MAX];
+};
+
+#define YZ_EARLY_NATIVE_PACKET_MAGIC 0x59504e5a /* YPNZ */
+
+struct yz_early_native_packet_header {
+  __u32 magic;
+  __u16 version;
+  __u16 header_size;
+  __u16 entry_size;
+  __u32 count;
+};
+
+struct yz_early_native_packet_entry {
+  struct yz_early_native_entry module;
+  __s32 fd;
+  __u32 reserved;
 };
 
 #define KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY _IOC(_IOC_WRITE, 'K', 59, 0)

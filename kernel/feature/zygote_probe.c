@@ -27,6 +27,7 @@
 #include <linux/err.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
+#include <linux/jiffies.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
@@ -73,7 +74,20 @@ static DEFINE_MUTEX(zp_native_targets_lock);
 static struct yz_native_target zp_native_targets[YZ_NATIVE_TARGET_MAX];
 static u32 zp_native_target_count;
 
+static DEFINE_MUTEX(zp_early_native_lock);
+static struct yz_early_native_entry
+    zp_early_native_entries[YZ_NATIVE_TARGET_MAX];
+static u32 zp_early_native_count;
+static bool zp_early_native_loaded;
+static bool zp_early_native_enabled;
+static bool zp_early_native_watchdog;
+static u64 zp_early_dlopen_off;
+static u64 zp_early_dlsym_off;
+static unsigned long zp_early_native_retry_deadline;
+static bool zp_early_native_missing_logged;
+
 #define ZP_NATIVE_POLICY_TIMEOUT (10 * HZ)
+#define ZP_EARLY_NATIVE_RETRY_WINDOW (15 * HZ)
 
 struct zp_native_policy_pending {
 	struct list_head list;
@@ -89,7 +103,8 @@ static LIST_HEAD(zp_native_policy_pending);
 static bool
 zp_native_policy_has_additions(const struct ksu_file_load_policy *state)
 {
-	return state && (state->added_av || state->tmpfs_added_av);
+	return state && (state->added_av || state->tmpfs_added_av ||
+			 state->process_added_av);
 }
 
 void ksu_zygote_probe_set_yukilinker(bool enabled)
@@ -158,9 +173,9 @@ static void zp_native_policy_timeout(struct work_struct *work)
 		return;
 
 	pr_info("zygote_probe: native policy timeout pid=%d added=0x%x "
-		"tmpfs=0x%x\n",
-		entry->tgid, entry->state.added_av,
-		entry->state.tmpfs_added_av);
+		"tmpfs=0x%x process=0x%x\n",
+		entry->tgid, entry->state.added_av, entry->state.tmpfs_added_av,
+		entry->state.process_added_av);
 	zp_restore_native_policy_state(&entry->state);
 	kfree(entry);
 }
@@ -210,8 +225,9 @@ static void zp_publish_native_policy_state(pid_t tgid,
 		kfree(cur);
 	}
 	pr_info("zygote_probe: native policy pid=%d pending added=0x%x "
-		"tmpfs=0x%x\n",
-		tgid, entry->state.added_av, entry->state.tmpfs_added_av);
+		"tmpfs=0x%x process=0x%x\n",
+		tgid, entry->state.added_av, entry->state.tmpfs_added_av,
+		entry->state.process_added_av);
 }
 
 int ksu_zygote_probe_restore_native_policy(pid_t tgid)
@@ -339,13 +355,21 @@ static void zp_copy_name(char *dst, size_t dst_len, const char *src)
 	dst[i] = '\0';
 }
 
+static bool zp_match_early_native_target(const char *filename, char *label,
+					 size_t label_len, u8 *target_type);
+
 static bool zp_match_native_target(const char *filename, char *label,
-				   size_t label_len)
+				   size_t label_len, u8 *target_type,
+				   bool *early)
 {
 	const char *base = zp_basename(filename);
 	bool matched = false;
 	u32 i;
 
+	if (target_type)
+		*target_type = 0;
+	if (early)
+		*early = false;
 	if (!filename || !base)
 		return false;
 
@@ -363,10 +387,19 @@ static bool zp_match_native_target(const char *filename, char *label,
 			continue;
 		}
 		zp_copy_name(label, label_len, t->value);
+		if (target_type)
+			*target_type = t->type;
 		matched = true;
 		break;
 	}
 	mutex_unlock(&zp_native_targets_lock);
+	if (matched)
+		return true;
+
+	matched = zp_match_early_native_target(filename, label, label_len,
+					       target_type);
+	if (matched && early)
+		*early = true;
 	return matched;
 }
 
@@ -438,6 +471,16 @@ static bool zp_parse_zygote_args(struct mm_struct *mm, char *socket_name,
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
 #define ZP_NATIVE_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libyukizncore.so"
+#define ZP_SYSTEM_LINKER64 "/system/bin/linker64"
+#define ZP_EARLY_MANIFEST_WATCHDOG                                             \
+	"/metadata/watchdog/ksu/yukizygisk/native_snapshot.bin"
+#define ZP_EARLY_MANIFEST_DEFAULT "/metadata/ksu/yukizygisk/native_snapshot.bin"
+#define ZP_EARLY_LOADER_WATCHDOG                                               \
+	"/metadata/watchdog/ksu/yukizygisk/libyukilinker.so"
+#define ZP_EARLY_LOADER_DEFAULT "/metadata/ksu/yukizygisk/libyukilinker.so"
+#define ZP_EARLY_NATIVE_CORE_WATCHDOG                                          \
+	"/metadata/watchdog/ksu/yukizygisk/libyukizncore.so"
+#define ZP_EARLY_NATIVE_CORE_DEFAULT "/metadata/ksu/yukizygisk/libyukizncore.so"
 #define ZP_VMA_NAME "memfd:data-code-cache"
 #define ZP_VMA_NAME_LEN sizeof(ZP_VMA_NAME)
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
@@ -454,6 +497,254 @@ struct zp_dlextinfo {
 	__s64 library_fd_offset;
 	__u64 library_namespace;
 };
+
+static struct file *zp_open_first(const char *primary, const char *fallback,
+				  const char **chosen_path)
+{
+	struct file *file;
+	const struct cred *old_cred;
+
+	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
+	file = filp_open(primary, O_RDONLY, 0);
+	if (IS_ERR(file)) {
+		file = filp_open(fallback, O_RDONLY, 0);
+		if (!IS_ERR(file) && chosen_path)
+			*chosen_path = fallback;
+	} else if (chosen_path) {
+		*chosen_path = primary;
+	}
+	if (old_cred)
+		revert_creds(old_cred);
+	return file;
+}
+
+static bool zp_read_exact_file(struct file *file, void *buf, size_t size,
+			       loff_t *pos)
+{
+	ssize_t got = kernel_read(file, buf, size, pos);
+
+	return got == (ssize_t)size;
+}
+
+enum zp_file_size_check {
+	ZP_FILE_SIZE_MATCH = 0,
+	ZP_FILE_SIZE_MISMATCH,
+	ZP_FILE_SIZE_UNAVAILABLE,
+};
+
+static enum zp_file_size_check
+zp_check_file_size(const char *path, u64 want_size, u64 *actual, long *open_err)
+{
+	const struct cred *old_cred;
+	struct file *file;
+	u64 size;
+
+	if (actual)
+		*actual = 0;
+	if (open_err)
+		*open_err = 0;
+	if (!want_size)
+		return ZP_FILE_SIZE_MISMATCH;
+
+	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
+	file = filp_open(path, O_RDONLY, 0);
+	if (old_cred)
+		revert_creds(old_cred);
+	if (IS_ERR(file)) {
+		if (open_err)
+			*open_err = PTR_ERR(file);
+		return ZP_FILE_SIZE_UNAVAILABLE;
+	}
+
+	size = i_size_read(file_inode(file));
+	filp_close(file, NULL);
+	if (actual)
+		*actual = size;
+	return size == want_size ? ZP_FILE_SIZE_MATCH : ZP_FILE_SIZE_MISMATCH;
+}
+
+static bool zp_early_entry_valid(struct yz_early_native_entry *entry)
+{
+	entry->module_id[YZ_NATIVE_MODULE_ID_MAX - 1] = '\0';
+	entry->target[YZ_NATIVE_TARGET_VALUE_MAX - 1] = '\0';
+	entry->lib_path[YZ_NATIVE_MODULE_PATH_MAX - 1] = '\0';
+	if (entry->target_type != YZ_NATIVE_TARGET_NAME &&
+	    entry->target_type != YZ_NATIVE_TARGET_PATH)
+		return false;
+	if (entry->module_id[0] == '\0' || entry->target[0] == '\0' ||
+	    entry->lib_path[0] == '\0')
+		return false;
+	return true;
+}
+
+static void zp_load_early_native_locked(void)
+{
+	struct yz_early_native_snapshot_header hdr;
+	struct file *file;
+	const char *path = NULL;
+	loff_t pos = 0;
+	enum zp_file_size_check linker_size_check = ZP_FILE_SIZE_MISMATCH;
+	u64 linker_actual_size = 0;
+	long linker_open_err = 0;
+	bool invalid;
+	u32 i;
+
+	if (zp_early_native_loaded)
+		return;
+	zp_early_native_enabled = false;
+	zp_early_native_watchdog = false;
+	zp_early_native_count = 0;
+	zp_early_dlopen_off = 0;
+	zp_early_dlsym_off = 0;
+
+	file = zp_open_first(ZP_EARLY_MANIFEST_WATCHDOG,
+			     ZP_EARLY_MANIFEST_DEFAULT, &path);
+	if (IS_ERR(file)) {
+		if (!zp_early_native_retry_deadline)
+			zp_early_native_retry_deadline =
+			    jiffies + ZP_EARLY_NATIVE_RETRY_WINDOW;
+		if (time_after(jiffies, zp_early_native_retry_deadline)) {
+			zp_early_native_loaded = true;
+			if (!zp_early_native_missing_logged) {
+				zp_early_native_missing_logged = true;
+				pr_info(
+				    "zygote_probe: early native snapshot not "
+				    "found within retry window, disabled for "
+				    "this boot\n");
+			}
+		}
+		return;
+	}
+
+	zp_early_native_loaded = true;
+
+	if (!zp_read_exact_file(file, &hdr, sizeof(hdr), &pos)) {
+		pr_info(
+		    "zygote_probe: early native snapshot header read failed "
+		    "from %s\n",
+		    path ?: "(unknown)");
+		goto out;
+	}
+	invalid = hdr.magic != YZ_EARLY_NATIVE_MAGIC ||
+		  hdr.version != YZ_EARLY_NATIVE_VERSION ||
+		  hdr.header_size != sizeof(hdr) ||
+		  hdr.entry_size != sizeof(struct yz_early_native_entry) ||
+		  hdr.count > YZ_NATIVE_TARGET_MAX ||
+		  !(hdr.flags & YZ_EARLY_NATIVE_FLAG_ENABLED) ||
+		  !hdr.dlopen_offset || !hdr.dlsym_offset;
+	if (!invalid) {
+		linker_size_check =
+		    zp_check_file_size(ZP_SYSTEM_LINKER64, hdr.linker_size,
+				       &linker_actual_size, &linker_open_err);
+		invalid = linker_size_check == ZP_FILE_SIZE_MISMATCH;
+	}
+	if (invalid) {
+		pr_info("zygote_probe: early native snapshot invalid %s "
+			"magic=0x%x ver=%u h=%u/%zu e=%u/%zu flags=0x%x "
+			"count=%u dlopen=0x%llx dlsym=0x%llx "
+			"linker_size=%llu actual=%llu err=%ld\n",
+			path ?: "(unknown)", hdr.magic, hdr.version,
+			hdr.header_size, sizeof(hdr), hdr.entry_size,
+			sizeof(struct yz_early_native_entry), hdr.flags,
+			hdr.count, hdr.dlopen_offset, hdr.dlsym_offset,
+			hdr.linker_size, linker_actual_size, linker_open_err);
+		goto out;
+	}
+	if (linker_size_check == ZP_FILE_SIZE_UNAVAILABLE)
+		pr_info("zygote_probe: early native linker size unavailable "
+			"%s want=%llu err=%ld, using snapshot\n",
+			ZP_SYSTEM_LINKER64, hdr.linker_size, linker_open_err);
+
+	for (i = 0; i < hdr.count; i++) {
+		struct yz_early_native_entry entry;
+
+		if (!zp_read_exact_file(file, &entry, sizeof(entry), &pos))
+			break;
+		if (!zp_early_entry_valid(&entry))
+			continue;
+		zp_early_native_entries[zp_early_native_count++] = entry;
+	}
+
+	zp_early_dlopen_off = hdr.dlopen_offset;
+	zp_early_dlsym_off = hdr.dlsym_offset;
+	zp_early_native_watchdog =
+	    path && !strcmp(path, ZP_EARLY_MANIFEST_WATCHDOG);
+	zp_early_native_enabled = zp_early_native_count > 0;
+	if (zp_early_native_enabled)
+		pr_info("zygote_probe: early native snapshot %s count=%u "
+			"dlopen=0x%llx dlsym=0x%llx\n",
+			path ?: "(unknown)", zp_early_native_count,
+			zp_early_dlopen_off, zp_early_dlsym_off);
+out:
+	filp_close(file, NULL);
+}
+
+static bool zp_early_native_active(void)
+{
+	bool active;
+
+	mutex_lock(&zp_early_native_lock);
+	zp_load_early_native_locked();
+	active = zp_early_native_enabled;
+	mutex_unlock(&zp_early_native_lock);
+	return active;
+}
+
+static bool zp_match_early_native_target(const char *filename, char *label,
+					 size_t label_len, u8 *target_type)
+{
+	const char *base = zp_basename(filename);
+	bool matched = false;
+	u32 i;
+
+	if (!filename || !base)
+		return false;
+
+	mutex_lock(&zp_early_native_lock);
+	zp_load_early_native_locked();
+	if (!zp_early_native_enabled)
+		goto out;
+
+	for (i = 0; i < zp_early_native_count; i++) {
+		struct yz_early_native_entry *entry =
+		    &zp_early_native_entries[i];
+
+		if (entry->target_type == YZ_NATIVE_TARGET_NAME) {
+			if (strcmp(base, entry->target))
+				continue;
+		} else if (entry->target_type == YZ_NATIVE_TARGET_PATH) {
+			if (strcmp(filename, entry->target))
+				continue;
+		} else {
+			continue;
+		}
+
+		if (!zp_dlopen_off)
+			zp_dlopen_off = zp_early_dlopen_off;
+		if (!zp_dlsym_off)
+			zp_dlsym_off = zp_early_dlsym_off;
+		zp_copy_name(label, label_len, entry->target);
+		if (target_type)
+			*target_type = entry->target_type;
+		matched = true;
+		break;
+	}
+out:
+	mutex_unlock(&zp_early_native_lock);
+	return matched;
+}
+
+static const char *zp_early_loader_path(void)
+{
+	return zp_early_native_watchdog ? ZP_EARLY_LOADER_WATCHDOG
+					: ZP_EARLY_LOADER_DEFAULT;
+}
+
+static const char *zp_early_native_core_path(void)
+{
+	return zp_early_native_watchdog ? ZP_EARLY_NATIVE_CORE_WATCHDOG
+					: ZP_EARLY_NATIVE_CORE_DEFAULT;
+}
 
 static void zp_close_current_fd(int fd)
 {
@@ -636,6 +927,165 @@ static int zp_stage_file_fd(const char *path,
 	return fd;
 }
 
+struct zp_early_packet_state {
+	int packet_fd;
+	int module_fds[YZ_NATIVE_TARGET_MAX];
+	u32 module_fd_count;
+};
+
+static void zp_early_packet_state_init(struct zp_early_packet_state *state)
+{
+	u32 i;
+
+	state->packet_fd = -1;
+	state->module_fd_count = 0;
+	for (i = 0; i < YZ_NATIVE_TARGET_MAX; i++)
+		state->module_fds[i] = -1;
+}
+
+static void zp_close_early_packet_state(struct zp_early_packet_state *state)
+{
+	u32 i;
+
+	if (!state)
+		return;
+	if (state->packet_fd >= 0) {
+		zp_close_current_fd(state->packet_fd);
+		state->packet_fd = -1;
+	}
+	for (i = 0; i < state->module_fd_count; i++) {
+		if (state->module_fds[i] >= 0)
+			zp_close_current_fd(state->module_fds[i]);
+		state->module_fds[i] = -1;
+	}
+	state->module_fd_count = 0;
+}
+
+static int zp_install_packet_fd(const void *buf, size_t size)
+{
+	struct file *mfd;
+	loff_t pos = 0;
+	ssize_t w;
+	int fd;
+
+	mfd = shmem_file_setup(ZP_VMA_NAME, size, 0);
+	if (IS_ERR(mfd))
+		return PTR_ERR(mfd);
+	mfd->f_mode |= FMODE_PREAD | FMODE_PWRITE | FMODE_LSEEK;
+	w = kernel_write(mfd, buf, size, &pos);
+	if (w != (ssize_t)size) {
+		fput(mfd);
+		return w < 0 ? (int)w : -EIO;
+	}
+
+	fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		fput(mfd);
+		return fd;
+	}
+	fd_install(fd, mfd);
+	return fd;
+}
+
+static int
+zp_stage_early_native_packet(u8 target_type, const char *target,
+			     struct ksu_file_load_policy *policy_state,
+			     struct zp_early_packet_state *state)
+{
+	struct yz_early_native_entry *matches;
+	struct yz_early_native_packet_header *hdr;
+	struct yz_early_native_packet_entry *entries;
+	void *packet;
+	size_t packet_size;
+	u32 match_count = 0;
+	u32 i;
+	int ret = 0;
+
+	if (!target || !state)
+		return -EINVAL;
+
+	matches = kcalloc(YZ_NATIVE_TARGET_MAX, sizeof(*matches), GFP_KERNEL);
+	if (!matches)
+		return -ENOMEM;
+
+	mutex_lock(&zp_early_native_lock);
+	zp_load_early_native_locked();
+	if (!zp_early_native_enabled) {
+		mutex_unlock(&zp_early_native_lock);
+		ret = -ENOENT;
+		goto out_free_matches;
+	}
+	for (i = 0; i < zp_early_native_count; i++) {
+		struct yz_early_native_entry *entry =
+		    &zp_early_native_entries[i];
+
+		if (entry->target_type != target_type)
+			continue;
+		if (strcmp(entry->target, target))
+			continue;
+		matches[match_count++] = *entry;
+	}
+	mutex_unlock(&zp_early_native_lock);
+	if (!match_count) {
+		ret = -ENOENT;
+		goto out_free_matches;
+	}
+
+	packet_size = sizeof(*hdr) + match_count * sizeof(*entries);
+	packet = kvzalloc(packet_size, GFP_KERNEL);
+	if (!packet) {
+		ret = -ENOMEM;
+		goto out_free_matches;
+	}
+
+	hdr = packet;
+	entries = (struct yz_early_native_packet_entry *)(hdr + 1);
+	hdr->magic = YZ_EARLY_NATIVE_PACKET_MAGIC;
+	hdr->version = YZ_EARLY_NATIVE_VERSION;
+	hdr->header_size = sizeof(*hdr);
+	hdr->entry_size = sizeof(*entries);
+
+	for (i = 0; i < match_count; i++) {
+		int fd =
+		    zp_stage_fd(matches[i].lib_path, ZP_VMA_NAME, policy_state);
+
+		if (fd < 0) {
+			pr_info(
+			    "zygote_probe: early native stage %s failed: %d\n",
+			    matches[i].lib_path, fd);
+			continue;
+		}
+		state->module_fds[state->module_fd_count++] = fd;
+		entries[hdr->count].module = matches[i];
+		entries[hdr->count].fd = fd;
+		hdr->count++;
+	}
+	if (!hdr->count) {
+		kvfree(packet);
+		zp_close_early_packet_state(state);
+		ret = -ENOENT;
+		goto out_free_matches;
+	}
+
+	packet_size = sizeof(*hdr) + hdr->count * sizeof(*entries);
+	match_count = hdr->count;
+	ret = zp_install_packet_fd(packet, packet_size);
+	kvfree(packet);
+	if (ret < 0) {
+		zp_close_early_packet_state(state);
+		goto out_free_matches;
+	}
+	state->packet_fd = ret;
+	pr_info(
+	    "zygote_probe: early native packet target=%s modules=%u fd=%d\n",
+	    target, match_count, state->packet_fd);
+	ret = 0;
+
+out_free_matches:
+	kfree(matches);
+	return ret;
+}
+
 enum zp_inject_kind {
 	ZP_INJECT_ZYGOTE = 1,
 	ZP_INJECT_NATIVE = 2,
@@ -644,6 +1094,8 @@ enum zp_inject_kind {
 struct zp_inject_tw {
 	struct callback_head cb;
 	enum zp_inject_kind kind;
+	u8 native_target_type;
+	bool early_native;
 	char label[64];
 };
 
@@ -756,8 +1208,8 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	}
 
 	/* Redirect only after the stub is staged. */
-	if (yukizygisk_enabled && at_entry_uaddr && at_entry_uval == saved &&
-	    saved) {
+	if ((yukizygisk_enabled || (native && tw->early_native)) &&
+	    at_entry_uaddr && at_entry_uval == saved && saved) {
 #ifdef CONFIG_ARM64
 		/* AArch64 AT_ENTRY stub. */
 		static const u32 tmpl[] = {
@@ -769,25 +1221,27 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		    0xd63f02a0, 0xf94003f3, 0xf9040660, 0xf90013e0, 0xb94a1e60,
 		    0xd2800728, 0xd4000001, 0xf94003f3, 0xf94013e0, 0xb40000c0,
 		    0x91340261, 0xf94007e2, 0xf9400bf7, 0xd63f02e0, 0xb50000a0,
-		    0xd2800000, 0xd2800728, 0xd4000001, 0x14000004, 0xaa0003f9,
-		    0xd2800000, 0xd63f0320, 0xf9400fe0, 0xf94007f4, 0x910103ff,
-		    0xaa1403f0, 0xd61f0200,
+		    0xd2800000, 0xd2800728, 0xd4000001, 0x14000005, 0xaa0003f9,
+		    0xd2800000, 0xd2800001, 0xd63f0320, 0xf9400fe0, 0xf94007f4,
+		    0x910103ff, 0xaa1403f0, 0xd61f0200,
 		};
 		u32 code[ARRAY_SIZE(tmpl)];
 		struct zp_dlextinfo extinfo;
 		struct ksu_file_load_policy native_policy = {};
+		struct zp_early_packet_state early_packet;
 		unsigned long stub, dlopen_addr, dlsym_addr;
-		int loader_fd, core_fd, stub_core_fd, werr;
+		int loader_fd, core_fd, stub_core_fd;
+		int early_packet_arg, werr;
 		bool yuki;
 		const char *lib_str, *entry_str;
-		const char *core_path;
+		const char *loader_path, *core_path;
 		size_t lib_len, entry_len;
 		char loader_name[ZP_VMA_NAME_LEN], core_name[ZP_VMA_NAME_LEN];
 
+		zp_early_packet_state_init(&early_packet);
 		if (!at_base || !zp_dlopen_off || !zp_dlsym_off) {
 			pr_info("zygote_probe: [2c-3b] pid=%d socket=%s no "
-				"dlopen/dlsym "
-				"addr yet, skipping\n",
+				"dlopen/dlsym addr yet, skipping\n",
 				current->pid, socket_name);
 			goto out;
 		}
@@ -796,11 +1250,17 @@ static void zp_inject_tw_func(struct callback_head *cb)
 
 		/* Stage loader/core fds in the target. */
 		yuki = native || zp_yukilinker_enabled;
-		core_path = native ? ZP_NATIVE_CORE_PATH : ZP_CORE_PATH;
+		loader_path = native && tw->early_native
+				  ? zp_early_loader_path()
+				  : ZP_LOADER_PATH;
+		core_path =
+		    native ? (tw->early_native ? zp_early_native_core_path()
+					       : ZP_NATIVE_CORE_PATH)
+			   : ZP_CORE_PATH;
 		zp_cache_name(loader_name, sizeof(loader_name));
 		zp_cache_name(core_name, sizeof(core_name));
 		if (yuki)
-			loader_fd = zp_stage_fd(ZP_LOADER_PATH, loader_name,
+			loader_fd = zp_stage_fd(loader_path, loader_name,
 						native ? &native_policy : NULL);
 		else if (native)
 			loader_fd = zp_stage_file_fd(core_path, &native_policy);
@@ -819,13 +1279,50 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			core_fd = loader_fd; /* dlopen the core directly */
 		}
 		if (yuki && core_fd < 0) {
-			pr_info(
-			    "zygote_probe: [2c-3b] pid=%d socket=%s stage core "
-			    "failed: %d, skipping\n",
-			    current->pid, socket_name, core_fd);
+			pr_info("zygote_probe: [2c-3b] pid=%d socket=%s stage "
+				"core failed: %d, skipping\n",
+				current->pid, socket_name, core_fd);
 			zp_close_current_fd(loader_fd);
 			zp_restore_native_policy_state(&native_policy);
 			goto out;
+		}
+
+		early_packet_arg = 0;
+		if (native && tw->early_native) {
+			int ret = zp_stage_early_native_packet(
+			    tw->native_target_type, tw->label, &native_policy,
+			    &early_packet);
+
+			if (ret < 0 || early_packet.packet_fd < 0 ||
+			    early_packet.packet_fd >= 0xffff) {
+				pr_info(
+				    "zygote_probe: [2c-3b] pid=%d socket=%s "
+				    "early packet failed: %d\n",
+				    current->pid, socket_name, ret);
+				zp_close_early_packet_state(&early_packet);
+				zp_close_current_fd(loader_fd);
+				if (yuki)
+					zp_close_current_fd(core_fd);
+				zp_restore_native_policy_state(&native_policy);
+				goto out;
+			}
+			early_packet_arg = early_packet.packet_fd + 1;
+		}
+		if (native) {
+			int ret = ksu_file_load_policy_allow_execmem_current(
+			    &native_policy);
+
+			if (ret < 0) {
+				pr_info("zygote_probe: [2c-3b] pid=%d "
+					"socket=%s execmem policy failed: %d\n",
+					current->pid, socket_name, ret);
+				zp_close_current_fd(loader_fd);
+				if (yuki)
+					zp_close_current_fd(core_fd);
+				zp_close_early_packet_state(&early_packet);
+				zp_restore_native_policy_state(&native_policy);
+				goto out;
+			}
 		}
 
 		stub = vm_mmap(NULL, 0, PAGE_SIZE,
@@ -833,12 +1330,12 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			       MAP_PRIVATE | MAP_ANONYMOUS, 0);
 		if (IS_ERR_VALUE(stub)) {
 			pr_info("zygote_probe: [2c-3b] pid=%d socket=%s "
-				"vm_mmap failed: "
-				"%ld\n",
+				"vm_mmap failed: %ld\n",
 				current->pid, socket_name, (long)stub);
 			zp_close_current_fd(loader_fd);
 			if (yuki)
 				zp_close_current_fd(core_fd);
+			zp_close_early_packet_state(&early_packet);
 			zp_restore_native_policy_state(&native_policy);
 			goto out;
 		}
@@ -851,6 +1348,8 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		stub_core_fd = yuki ? core_fd : -1;
 		code[40] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
 		code[45] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
+		code[46] =
+		    0xd2800001u | (((u32)early_packet_arg & 0xffff) << 5);
 
 		/* Choose first-stage entry. */
 		if (yuki) {
@@ -886,6 +1385,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			zp_close_current_fd(loader_fd);
 			if (yuki)
 				zp_close_current_fd(core_fd);
+			zp_close_early_packet_state(&early_packet);
 			zp_restore_native_policy_state(&native_policy);
 			goto out;
 		}
@@ -905,6 +1405,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			zp_close_current_fd(loader_fd);
 			if (yuki)
 				zp_close_current_fd(core_fd);
+			zp_close_early_packet_state(&early_packet);
 			zp_restore_native_policy_state(&native_policy);
 		} else if (native) {
 			zp_publish_native_policy_state(current->tgid,
@@ -924,24 +1425,33 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 {
 	const char *filename = bprm ? bprm->filename : NULL;
 	char native_label[64] = {};
+	u8 native_target_type = 0;
+	bool early_native = false;
+	bool live_enabled;
+	bool early_enabled;
 	bool by_sid;
 	bool by_path;
 	bool by_native;
 
 	((bprm_committed_creds_fn)zygote_probe_hook.original)(bprm);
-	if (unlikely(!READ_ONCE(yukizygisk_enabled)))
+	live_enabled = READ_ONCE(yukizygisk_enabled);
+	early_enabled = zp_early_native_active();
+	if (unlikely(!live_enabled && !early_enabled))
 		return;
 
-	by_sid = is_zygote(current_cred());
-	by_path = zp_is_app_process_path(filename);
-	by_native = !by_path && zp_match_native_target(filename, native_label,
-						       sizeof(native_label));
+	by_sid = live_enabled && is_zygote(current_cred());
+	by_path = live_enabled && zp_is_app_process_path(filename);
+	by_native =
+	    !by_path &&
+	    zp_match_native_target(filename, native_label, sizeof(native_label),
+				   &native_target_type, &early_native);
 	if (unlikely(by_sid || by_path || by_native)) {
 		if (by_native)
 			pr_info("zygote_probe: native exec pid=%d tgid=%d "
-				"comm=%s file=%s target=%s\n",
+				"comm=%s file=%s target=%s early=%d\n",
 				current->pid, current->tgid, current->comm,
-				filename ?: "(null)", native_label);
+				filename ?: "(null)", native_label,
+				early_native ? 1 : 0);
 
 		pr_debug("zygote_probe: exec pid=%d tgid=%d comm=%s "
 			 "file=%s [sid=%d path=%d native=%d]\n",
@@ -956,10 +1466,14 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 			if (tw) {
 				tw->kind = by_native ? ZP_INJECT_NATIVE
 						     : ZP_INJECT_ZYGOTE;
-				if (by_native)
+				if (by_native) {
+					tw->native_target_type =
+					    native_target_type;
+					tw->early_native = early_native;
 					zp_copy_name(tw->label,
 						     sizeof(tw->label),
 						     native_label);
+				}
 				init_task_work(&tw->cb, zp_inject_tw_func);
 				if (task_work_add(current, &tw->cb, TWA_RESUME))
 					kfree(tw);
