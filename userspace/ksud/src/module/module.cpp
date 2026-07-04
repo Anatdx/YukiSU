@@ -483,6 +483,8 @@ CommonScriptEnv build_common_script_env() {
     CommonScriptEnv env;
     env.kernel_ver_code = std::to_string(get_version());
     env.late_load = (get_flags() & KSU_GET_INFO_FLAG_LATE_LOAD) != 0;
+    const auto [zygisk_value, zygisk_supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
+    env.zygisk_enabled = zygisk_supported && zygisk_value != 0;
 
     std::string binary_dir = std::string(BINARY_DIR);
     if (!binary_dir.empty() && binary_dir.back() == '/') {
@@ -508,6 +510,12 @@ void apply_common_script_env(const CommonScriptEnv& env, const char* module_id,
     setenv("KSU_VER_CODE", VERSION_CODE, 1);
     setenv("KSU_VER", VERSION_NAME, 1);
     setenv("PATH", env.path.c_str(), 1);
+
+    if (env.zygisk_enabled) {
+        setenv("ZYGISK_ENABLED", "1", 1);
+    } else {
+        unsetenv("ZYGISK_ENABLED");
+    }
 
     if (env.late_load) {
         setenv("KSU_LATE_LOAD", "1", 1);
