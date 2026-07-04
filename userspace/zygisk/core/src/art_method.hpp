@@ -1,15 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - recover a RegisterNatives'd method's JNI function pointer.
- *
- * ART never hands back the JNI entry of a registered native, and the ArtMethod
- * layout drifts between Android releases -- so instead of hardcoding offsets we
- * measure them from the live runtime: two constructors of one class produce
- * back-to-back ArtMethods, so their address delta is sizeof(ArtMethod), and the
- * JNI "data" pointer sits one machine word below the entrypoint at the tail of
- * the struct. To turn a reflected Method into an ArtMethod* we prefer the
- * Executable.artMethod field (present on modern ART) and fall back to JNI's
- * FromReflectedMethod.
+ * YukiZygisk ArtMethod helper.
  *
  * Author: Anatdx
  */
@@ -34,16 +25,13 @@ inline void *art_method_of(JNIEnv *env, jobject reflected) {
   return reinterpret_cast<void *>(env->FromReflectedMethod(reflected));
 }
 
-/* The method's JNI native function pointer (its "data" slot). Only valid after
- * a successful probe(). */
+/* JNI native function pointer. */
 inline void *native_entry(void *art_method) {
   return *reinterpret_cast<void **>(reinterpret_cast<uintptr_t>(art_method) +
                                     g_data_off);
 }
 
-/* Measure the ArtMethod layout once the VM is up. Idempotent; returns false if
- * the layout looks implausible (we then leave natives alone rather than corrupt
- * the runtime). */
+/* Measure the ArtMethod layout once the VM is up. */
 inline bool probe(JNIEnv *env) {
   if (g_ready)
     return true;
@@ -57,8 +45,7 @@ inline bool probe(JNIEnv *env) {
     env->ExceptionClear();
   }
 
-  // Two adjacent ArtMethods give us sizeof(ArtMethod). Throwable reliably has
-  // >= 2 declared constructors across versions.
+  // Two adjacent ArtMethods give sizeof(ArtMethod).
   jclass thr = env->FindClass("java/lang/Throwable");
   jclass cls = env->FindClass("java/lang/Class");
   if (thr == nullptr || cls == nullptr)

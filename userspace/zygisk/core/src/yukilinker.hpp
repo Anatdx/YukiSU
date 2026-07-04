@@ -1,13 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk yukilinker: load a Zygisk module from an app-owned memfd, so the
- * module leaves no /data/adb/modules fd or path. The full loader can either
- * keep the memfd as a closed file-backed code-cache mapping or copy segments
- * into anonymous memory, depending on the caller's detection surface.
- *
- * arm64 (aarch64) only. The bootstrap build keeps the early-entry constraints;
- * the core/full build also handles module finalizers, RELRO, and dynamic TLS.
- * See YUKILINKER_DESIGN.md.
+ * YukiZygisk in-memory ELF loader.
  *
  * Author: Anatdx
  */
@@ -23,7 +16,7 @@ struct SoHandle {
   uint8_t *load_bias = nullptr; // mapping base - min_vaddr
   size_t map_size = 0;          // total reserved span (for munmap)
 
-  // saved for the dl_iterate_phdr hook so the module can enumerate itself
+  // phdr view for dl_iterate_phdr.
   const ElfW(Phdr) *phdr = nullptr;
   size_t phnum = 0;
   const char *soname =
@@ -68,36 +61,25 @@ struct SoHandle {
   size_t tls_align = 0;
   size_t tls_mod_id = 0;
 
-  // dependency dlopen handles (system libs) for symbol resolution; kept so
-  // dlclose can release them. Arena-backed array (no STL -- early boot has no
-  // malloc); dep_count valid entries.
+  // system dependency handles.
   void **dep_handles = nullptr;
   size_t dep_count = 0;
 };
 
-/* Load a .so from `memfd`, naming file-backed VMAs after `vma_name` (e.g.
- * "data-code-cache") when requested. Runs the module's INIT_ARRAY before
- * returning. Returns nullptr on ANY failure (caller falls back to
- * android_dlopen_ext); never aborts. Does not take ownership of `memfd` --
- * caller closes it. */
+/* Load a .so from memfd; caller keeps fd ownership. */
 SoHandle *dlopen_memfd(int memfd, const char *vma_name,
                        bool file_backed = false);
 
 /* Resolve an exported symbol via GNU hash. nullptr if absent. */
 void *dlsym(SoHandle *h, const char *name);
 
-/* Unmap the image and release dependency handles. (Modules are usually
- * resident, so this is rarely called.) */
+/* Unmap image and dependencies. */
 void dlclose(SoHandle *h);
 
-/* Drop process-wide loader state that may hold libc callbacks into this DSO.
- * Call before the core self-unmaps. */
+/* Drop process-wide loader state. */
 void shutdown();
 
-/* Replacement for libc dl_iterate_phdr that ALSO reports yukilinker-loaded
- * modules. resolve() binds a module's `dl_iterate_phdr` import to this, so the
- * module can find itself (libc++ init, self-inspection) while staying anonymous
- * in maps. Real modules all import dl_iterate_phdr, so this is mandatory. */
+/* dl_iterate_phdr with yukilinker-loaded modules. */
 int dl_iterate_phdr_hook(int (*cb)(struct dl_phdr_info *, size_t, void *),
                          void *data);
 

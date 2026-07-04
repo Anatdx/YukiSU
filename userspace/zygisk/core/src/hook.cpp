@@ -1,13 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - libzygisk.so: Zygote lifecycle bootstrap + specialize takeover.
- *
- * strdup("ZygoteInit") (fired from AndroidRuntime::start, VM up, JNI safe) is
- * our timing signal; from there we grab the JNIEnv, recover the original JNI
- * entries of com.android.internal.os.Zygote's fork/specialize natives, and
- * RegisterNatives our own wrappers in their place. Each wrapper calls the
- * original (real fork+specialize) and -- in the forked child -- is where module
- * code will run.  [step 1: log-only wrappers to prove the takeover.]
+ * YukiZygisk zygote lifecycle hooks.
  *
  * Author: Anatdx
  */
@@ -46,9 +39,7 @@ bool g_jni_hooked = false;
 
 void hook_zygote_jni();
 
-/* strdup("...ZygoteInit") is AndroidRuntime::start's signal that the VM is up
- * and JNI is safe. Verified on-device: fires in the real zygote right before
- * ZygoteInit#main. We take over the Zygote natives here, once. */
+/* ZygoteInit means JNI is ready. */
 char *new_strdup(const char *str) {
   if (!g_jni_hooked && str != nullptr && std::strcmp(str, kZygoteInit) == 0) {
     g_jni_hooked = true;
@@ -69,15 +60,6 @@ bool find_libandroid_runtime(dev_t &dev, ino_t &inode) {
   return false;
 }
 
-/* ---- fork-time context -------------------------------------------------- *
- * Module pre/post and fd sanitization MUST run in the forked child, not in the
- * zygote body: otherwise module-opened fds (dir/companion) leak into every
- * fork and Android's FileDescriptorTable aborts the child, and module PLT/JNI
- * hooks pollute every app. We hook libc fork(): the wrapper forks itself first
- * (ctx_fork_pre), runs pre+sanitize in the child, then calls the original
- * native whose own fork() we turn into a no-op returning the already-forked
- * pid -- so the native specializes inside our child. */
-
 struct ZygiskContext {
   JNIEnv *env = nullptr;
   pid_t pid = -1; // <0 not forked; ==0 child; >0 zygote (parent)
@@ -89,25 +71,11 @@ struct ZygiskContext {
 ZygiskContext *g_ctx = nullptr;
 int (*g_orig_fork)() = nullptr;
 
-/* Isolated processes (regular isolated appId 99000-99999 e.g. webview/chrome
- * sandboxes, plus app-zygote isolated 90000-98999) run under a very tight
- * SELinux domain -- they can't reach zygiskd and module onLoad code tends to
- * crash there. We skip loading modules in them (they still fork+specialize
- * normally). */
 bool is_isolated(int uid) {
   int app_id = uid % 100000;
   return app_id >= 90000 && app_id <= 99999;
 }
 
-/* Per-fork verdict for a specialize. An isolated child self-destructs (2): it
- * never ran the AT_ENTRY bootstrap (that only fires on exec, not the fork that
- * spawns it), so the core + hook trampolines it inherited from the zygote are
- * dead code nobody there calls -- yet an "unknown/anonymous exec" scan inside
- * the isolated process flags those anon mappings. Tearing them down reuses
- * denylist mode 1's path (unhook + tail-call munmap of the core), which needs
- * no zygiskd (isolated can't reach it; the munmap is synchronous and
- * in-process). Non- isolated children take the denylist decision; the zygote
- * parent never self-destructs (is_child=false -> 0). */
 int forked_decision(bool is_child, int uid) {
   if (!is_child)
     return 0;
@@ -124,8 +92,7 @@ void finish_restore_only_child(JNIEnv *env, bool is_child_zygote) {
   yz_drop_runtime_header_pages();
 }
 
-/* the fork() the native specialize code calls: once we've forked in
- * ctx_fork_pre, it's a no-op returning the already-forked pid. */
+/* The native specialize fork becomes a no-op after ctx_fork_pre. */
 int new_fork() {
   return (g_ctx != nullptr && g_ctx->pid >= 0)
              ? g_ctx->pid
@@ -142,8 +109,7 @@ void mark_allowed(ZygiskContext *ctx, int fd) {
     ctx->allowed_fds[fd] = true;
 }
 
-/* Real fork now; in the child snapshot the open fds as the zygote-native
- * allow-list. */
+/* Real fork; child snapshots native fds. */
 void ctx_fork_pre(ZygiskContext *ctx) {
   ctx->pid = g_orig_fork != nullptr ? g_orig_fork() : fork();
   if (ctx->pid != 0)
@@ -159,11 +125,7 @@ void ctx_fork_pre(ZygiskContext *ctx) {
   }
 }
 
-/* child_zygote / isolated: we don't load modules there, but the process can
- * inherit module .so fds from its parent app (e.g. magica's app_zygote). The
- * native FileDescriptorTable check (forkRepeatedly / specialize) aborts on any
- * fd under /data/adb/modules, so drop them. Safe -- these children never use
- * the module fds. */
+/* Drop inherited module fds. */
 int close_inherited_module_fds() {
   DIR *d = opendir("/proc/self/fd");
   if (d == nullptr)
@@ -188,10 +150,7 @@ int close_inherited_module_fds() {
   return closed;
 }
 
-/* In the child, before the native fd check: push exempted fds into the
- * fds_to_ignore arg (the native skips those), then close every fd that is not
- * a zygote-native fd -- clearing the module-opened dir/companion fds that
- * would otherwise abort the fork. */
+/* Apply exemptFd and close non-native fds in the child. */
 void ctx_sanitize_fds(ZygiskContext *ctx) {
   if (ctx->pid != 0)
     return;
@@ -239,13 +198,7 @@ void ctx_sanitize_fds(ZygiskContext *ctx) {
   }
 }
 
-/* ---- Zygote native takeover --------------------------------------------- */
-
-/* Our replacement natives. hook_jni_methods() overwrites each .fnPtr below with
- * the ORIGINAL JNI entry once installed, so the wrappers call back through
- * g_zygote_methods[i].fnPtr. fork returns 0 in the child (the new app/server)
- * and the child pid in the zygote -- we log from the child where liblog is
- * reliable. Two signatures cover Android 14 (...ZZ) and 15/16 (...ZZZ). */
+/* Replacement zygote natives. */
 std::array<JNINativeMethod, 5> g_zygote_methods = {{
     {"nativeForkAndSpecialize",
      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;"
@@ -274,13 +227,6 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           // A child zygote (webview_zygote / app_zygote) inherits our JNI
-           // hooks and, when it serves a module scope, carries module .so fds.
-           // We run the full load + sanitize for it too, so a
-           // module's exemptFd lands in fds_to_ignore and sanitize_fds drops
-           // the rest -- otherwise the child zygote's own later forkRepeatedly
-           // pre-fork fd scan aborts on a /data/adb/modules fd ('Not
-           // allowlisted').
            bool run_modules = ctx.pid == 0 && !is_isolated(uid);
            int decision = forked_decision(ctx.pid == 0, uid);
            if (decision == 2) // denylist + force mode: do not inject
@@ -290,8 +236,6 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
              zygisk_run_app_pre(&args);
              ctx_sanitize_fds(&ctx);
            } else if (ctx.pid == 0) {
-             // isolated: not injected, but drop any inherited /data/adb/modules
-             // fd so the native fd check doesn't abort.
              close_inherited_module_fds();
            }
            auto orig = reinterpret_cast<jint (*)(
@@ -299,8 +243,6 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                jint, jstring, jstring, jintArray, jintArray, jboolean, jstring,
                jstring, jboolean, jobjectArray, jobjectArray, jboolean,
                jboolean)>(g_zygote_methods[0].fnPtr);
-           // the native's own fork() is now a no-op returning ctx.pid, so it
-           // specializes inside our child and returns 0 there / child-pid here
            jint pid =
                orig(env, clazz, uid, gid, gids, runtime_flags, rlimits,
                     mount_external, se_info, nice_name, fds_to_close,
@@ -309,23 +251,10 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                     allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (run_modules)
              zygisk_run_app_post(&args);
-           // A child zygote (app_zygote / webview_zygote) keeps the core
-           // resident like the main zygote: self-destructing it makes a
-           // denylist app's app_zygote asymmetric with the system zygote (which
-           // stays injected), so the two flavours of isolated child it spawns
-           // -- one forked from the resident-core system zygote, one from a
-           // torn-down app_zygote -- end up in observably different states.
-           // Keep the core here; the per-fork verdict still tears it down in
-           // the CHILDREN.
            if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              finish_restore_only_child(env, is_child_zygote); // mode 2
-           // A child zygote keeps forking apps via forkRepeatedly, whose native
-           // FileDescriptorTable::Restat aborts on any /data/adb/modules fd.
-           // The modules' hooks are already mapped in memory, so the leftover
-           // .so fds are dead weight here -- drop them now that specialize
-           // finished, before the child zygote enters its fork loop.
            if (is_child_zygote && ctx.pid == 0)
              close_inherited_module_fds();
            g_ctx = nullptr;
@@ -360,9 +289,6 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
            ctx.fds_to_ignore = &fds_to_ignore;
            g_ctx = &ctx;
            ctx_fork_pre(&ctx); // real fork; child snapshots fds
-           // See above: child zygotes run the full pipeline too, so module fds
-           // are sanitized / exempted instead of aborting a later
-           // forkRepeatedly.
            bool run_modules = ctx.pid == 0 && !is_isolated(uid);
            int decision = forked_decision(ctx.pid == 0, uid);
            if (decision == 2) // denylist + force mode: do not inject
@@ -387,30 +313,16 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                            mount_storage_dirs, mount_sysprop_overrides);
            if (run_modules)
              zygisk_run_app_post(&args);
-           // A child zygote (app_zygote / webview_zygote) keeps the core
-           // resident like the main zygote: self-destructing it makes a
-           // denylist app's app_zygote asymmetric with the system zygote (which
-           // stays injected), so the two flavours of isolated child it spawns
-           // -- one forked from the resident-core system zygote, one from a
-           // torn-down app_zygote -- end up in observably different states.
-           // Keep the core here; the per-fork verdict still tears it down in
-           // the CHILDREN.
            if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              finish_restore_only_child(env, is_child_zygote); // mode 2
-           // A child zygote keeps forking apps via forkRepeatedly, whose native
-           // FileDescriptorTable::Restat aborts on any /data/adb/modules fd.
-           // The modules' hooks are already mapped in memory, so the leftover
-           // .so fds are dead weight here -- drop them now that specialize
-           // finished, before the child zygote enters its fork loop.
            if (is_child_zygote && ctx.pid == 0)
              close_inherited_module_fds();
            g_ctx = nullptr;
            return pid;
          })},
-    /* USAP path: process is already forked; specialize happens in-place, so
-     * pre and post both run in this (the target app) process. No fds args. */
+    /* USAP specialize path. */
     {"nativeSpecializeAppProcess",
      "(II[II[[IILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;"
      "Ljava/lang/String;Z[Ljava/lang/String;[Ljava/lang/String;ZZ)V",
@@ -450,14 +362,6 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                allowlisted_data_info, mount_data_dirs, mount_storage_dirs);
            if (run_modules)
              zygisk_run_app_post(&args);
-           // A child zygote (app_zygote / webview_zygote) keeps the core
-           // resident like the main zygote: self-destructing it makes a
-           // denylist app's app_zygote asymmetric with the system zygote (which
-           // stays injected), so the two flavours of isolated child it spawns
-           // -- one forked from the resident-core system zygote, one from a
-           // torn-down app_zygote -- end up in observably different states.
-           // Keep the core here; the per-fork verdict still tears it down in
-           // the CHILDREN.
            if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
@@ -505,21 +409,12 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
                mount_sysprop_overrides);
            if (run_modules)
              zygisk_run_app_post(&args);
-           // A child zygote (app_zygote / webview_zygote) keeps the core
-           // resident like the main zygote: self-destructing it makes a
-           // denylist app's app_zygote asymmetric with the system zygote (which
-           // stays injected), so the two flavours of isolated child it spawns
-           // -- one forked from the resident-core system zygote, one from a
-           // torn-down app_zygote -- end up in observably different states.
-           // Keep the core here; the per-fork verdict still tears it down in
-           // the CHILDREN.
            if (decision == 2 && !is_child_zygote)
              zygisk_self_destruct(env, is_isolated(uid)); // mode 1 / isolated
            else if (decision == 1)
              finish_restore_only_child(env, is_child_zygote); // mode 2
          })},
-    /* system_server fork: ServerSpecializeArgs; like fork-app, post runs in
-     * the forked child (pid==0). */
+    /* system_server fork. */
     {"nativeForkSystemServer", "(II[II[[IJJ)I",
      reinterpret_cast<void *>(+[](JNIEnv *env, jclass clazz, jint uid, jint gid,
                                   jintArray gids, jint runtime_flags,
@@ -552,14 +447,7 @@ std::array<JNINativeMethod, 5> g_zygote_methods = {{
      })},
 }};
 
-/* Recover each method's original JNI entry via its ArtMethod, then swap in our
- * wrapper. The original pointer is stashed back into methods[i].fnPtr so the
- * wrapper can call through. A signature that doesn't exist on this Android is
- * skipped (GetStaticMethodID fails) and zeroed out. */
-/* Inline-hook records for restore. We do NOT RegisterNatives the specialize
- * wrappers -- that writes our (in-core) address into the ArtMethod entry, which
- * dangles when denylist mode-1 munmaps the core (USAP crash; avoided by never
- * touching the native table). Instead we patch the native body. */
+/* Hook records for restore. */
 std::vector<yuki::ihook::Hook> g_ihooks;
 struct RnFallback {
   const char *clz;
@@ -605,10 +493,7 @@ void hook_jni_methods(JNIEnv *env, const char *clz, JNINativeMethod *methods,
       continue;
     }
 
-    // Patch the original native body to jump to our wrapper; the wrapper
-    // reaches the real native through the returned trampoline. ART's ArtMethod
-    // entry is never modified -> nothing in ART points into the core -> munmap
-    // is safe.
+    // Patch native body; keep ART entries untouched.
     yuki::ihook::Hook h;
     void *tramp = yuki::ihook::install(orig, m.fnPtr, &h);
     if (tramp != nullptr) {
@@ -616,8 +501,7 @@ void hook_jni_methods(JNIEnv *env, const char *clz, JNINativeMethod *methods,
       m.fnPtr = tramp; // wrapper calls the original via the trampoline
       ZLOGI("inline-hooked %s @orig=%p tramp=%p", m.name, orig, tramp);
     } else {
-      // Un-relocatable prologue (rare): fall back to RegisterNatives. Records
-      // the original entry so self-unhook can restore it.
+      // Rare fallback for unrelocatable prologues.
       JNINativeMethod restore{m.name, m.signature, orig};
       g_rn_fallback.push_back({clz, restore});
       to_register.push_back(m); // install our wrapper via the native table
@@ -631,16 +515,7 @@ void hook_jni_methods(JNIEnv *env, const char *clz, JNINativeMethod *methods,
                          static_cast<jint>(to_register.size()));
 }
 
-/* The kernel AT_ENTRY injector mmap'd a 1-page rwx stub (it dlopen'd the
- * loader, closed its fd, then tail-called the real entry -- never unmapping
- * itself), stamping a magic 0x52414e21 ("RAN!") at +0x800. That
- * writable+executable anonymous page lingers in the zygote and is inherited by
- * EVERY forked app -- exactly what duck's maps_anomaly flags ("Anonymous
- * executable code" + "Writable executable region"). We've taken the zygote over
- * now and the stub finished long ago (it ran before __libc_init), so unmap it
- * here, once, in the zygote body; every app then forks without it. (An
- * init-time inline-hook injector would leave no such rwx page; the kernel
- * AT_ENTRY stub does.) */
+/* Drop the spent AT_ENTRY stub. */
 void yz_unmap_injection_stub() {
   for (auto &m : lsplt::MapInfo::Scan()) {
     if ((m.perms & (PROT_READ | PROT_WRITE | PROT_EXEC)) !=
@@ -679,9 +554,7 @@ void hook_zygote_jni() {
     ZLOGE("ArtMethod layout probe failed; not hooking natives");
     return;
   }
-  // Hook libandroid_runtime's fork() so the specialize wrappers fork early
-  // (module pre + fd sanitize run in the child) and the native's own fork
-  // becomes a no-op returning our pid. Must be armed before any specialize.
+  // Fork early; specialize then runs in our child.
   dev_t rt_dev = 0;
   ino_t rt_inode = 0;
   if (find_libandroid_runtime(rt_dev, rt_inode)) {
@@ -695,34 +568,13 @@ void hook_zygote_jni() {
   }
   hook_jni_methods(env, kZygote, g_zygote_methods.data(),
                    static_cast<int>(g_zygote_methods.size()));
-  // Now that we've taken over, drop the kernel injection stub: a rwx page every
-  // app would otherwise inherit (duck's maps_anomaly flags it as anonymous +
-  // writable executable). The stub already ran (pre-__libc_init), so this is
-  // safe.
   yz_unmap_injection_stub();
-  // Modules are loaded per-specialize in the CHILD (see the fork wrappers),
-  // NOT here in the zygote body: a module's onLoad may call getModuleDir,
-  // whose DIR fd would linger in the zygote and abort the next fork
-  // ("Unsupported st_mode for FD: DIR"), and its hooks would pollute every app.
   ZLOGI("zygote JNI takeover done");
 }
 
 } // namespace
 
-/* Drop the libandroid_runtime header pages that PLT-hooking faulted resident.
- * lsplt resolves "strdup"/"fork" by parsing the library's .dynsym/.dynstr from
- * the LOADED segment (elf_util reads base_addr_), a linear symbol scan that
- * faults ~320 KB of its r--p header (offset 0) into residency. That occurs in
- * the zygote (inherited COW by every fork) and again when we re-hook to unhook
- * at self-destruct, so libandroid_runtime's header carries a much higher
- * Rss/Pss than a pristine process -- its pages end up shared only across the
- * injected zygote lineage (Pss ~60 vs a system-wide ~2), an smaps anomaly. (A
- * first stage that parsed a separate file mmap would never fault the loaded
- * segment; we drop the pages after the fact instead.) MADV_DONTNEED frees them;
- * the kernel reloads them clean from the file on any later access. Call
- * post-specialize, in the child, single-threaded -- no concurrent .dynsym
- * reader. kAndroidRuntime / lsplt are the anonymous-namespace members above,
- * visible throughout this TU. */
+/* Drop libandroid_runtime header pages faulted by symbol scans. */
 void yz_drop_runtime_header_pages() {
   for (const auto &m : lsplt::MapInfo::Scan()) {
     if (m.offset == 0 && m.perms == PROT_READ &&
@@ -733,8 +585,7 @@ void yz_drop_runtime_header_pages() {
   }
 }
 
-/* PLT-hooks libandroid_runtime's strdup; Zygote's startup drives us from there.
- * No JNI here -- safe as early as the program entry. */
+/* Install the early strdup hook. */
 void zygisk_hook_bootstrap(const char *self_path) {
   ZLOGI("hook bootstrap, self=%s", self_path ? self_path : "(null)");
 
@@ -760,8 +611,6 @@ void zygisk_hook_bootstrap(const char *self_path) {
         major(dev), minor(dev), static_cast<unsigned long>(inode));
 }
 
-/* ---- module-facing hook helpers (Api glue) ------------------------------ */
-
 void zygisk_hook_jni_methods(JNIEnv *env, const char *cls,
                              JNINativeMethod *methods, int n) {
   hook_jni_methods(env, cls, methods, n);
@@ -774,10 +623,6 @@ bool zygisk_plt_hook_register(dev_t dev, ino_t inode, const char *symbol,
 
 bool zygisk_plt_hook_commit() { return lsplt::CommitHook(); }
 
-/* Api::exemptFd glue: record an fd the current module wants to keep across the
- * app fork. sanitize_fds() pushes these into fds_to_ignore so the native fd
- * check skips them. Only meaningful during an app fork (others lack the
- * fds_to_ignore channel and return false). */
 bool zygisk_exempt_fd(int fd) {
   if (g_ctx == nullptr || g_ctx->fds_to_ignore == nullptr || fd < 0)
     return false;
@@ -785,31 +630,15 @@ bool zygisk_exempt_fd(int fd) {
   return true;
 }
 
-/* True iff every specialize native was inline-hooked (none fell back to
- * RegisterNatives). Only then was each wrapper entered through its capture
- * stub, so g_yz_ret_ctx holds THIS specialize's ART entry frame and the
- * tail-call munmap (yz_self_unmap_tail) is safe. Must be queried BEFORE
- * zygisk_self_unhook clears the records. If any method fell back, g_yz_ret_ctx
- * may be stale/zero -> the caller must NOT tail-call munmap (disguise instead).
- */
 bool zygisk_specialize_fully_inline_hooked() {
   return !g_ihooks.empty() && g_rn_fallback.empty();
 }
 
-/* Undo every hook so the core/loader can be safely munmap'd (denylist mode 1):
- *  - JNI: g_zygote_methods[i].fnPtr holds the ORIGINAL native entry (stashed by
- *    hook_jni_methods); re-RegisterNatives those to drop our wrappers.
- *  - PLT: re-point strdup/fork back at their originals.
- * After this nothing in the app references our segments. */
+/* Restore hooks before self-unmap. */
 void zygisk_self_unhook(JNIEnv *env) {
-  // 1) inline hooks: write the original native bytes back + free trampolines.
-  //    ART's ArtMethod entries were NEVER modified, so this leaves nothing in
-  //    ART pointing into the core -- the prerequisite for munmap'ing it safely.
   for (auto &h : g_ihooks)
     yuki::ihook::uninstall(&h);
   g_ihooks.clear();
-  // 2) RegisterNatives fallbacks (rare PC-relative prologues): restore each to
-  //    its original native entry.
   if (env != nullptr)
     for (auto &fb : g_rn_fallback) {
       jclass c = env->FindClass(fb.clz);
@@ -819,7 +648,6 @@ void zygisk_self_unhook(JNIEnv *env) {
         env->ExceptionClear();
     }
   g_rn_fallback.clear();
-  // 3) lsplt PLT hooks (strdup/fork): restore the GOT entries.
   dev_t dev = 0;
   ino_t inode = 0;
   if (find_libandroid_runtime(dev, inode)) {
@@ -831,21 +659,12 @@ void zygisk_self_unhook(JNIEnv *env) {
                           reinterpret_cast<void *>(g_orig_fork), nullptr);
     lsplt::CommitHook();
   }
-  // Drop any leaked /data/adb/modules fd before the core is munmap'd. The USAP
-  // specialize path has no fork-time fd snapshot to sanitize, so a module .so
-  // fd can survive into the denylist app -- duck's fd_probe flags it. Logs the
-  // count so we can confirm whether the fd is present at this point
-  // (specialize-time) versus appearing later.
   int nc = close_inherited_module_fds();
   if (nc != 0)
     ZLOGI("self-destruct: closed %d leaked module fd", nc);
 }
 
-/* Collect every segment whose maps path contains `substr` (a file-backed
- * staged code-cache name). EXACT per-segment -- never coalesced
- * with anon neighbours. The previous "contiguous private" walk mis-merged a
- * single 10KB loader segment with ~630KB of adjacent app heap and munmap'd it,
- * crashing the app. Path match avoids that entirely. */
+/* Collect matching maps segments. */
 int zygisk_collect_path_segs(const char *substr, uint64_t *addr, uint64_t *size,
                              int max) {
   auto maps = lsplt::MapInfo::Scan();

@@ -1,13 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - yukilinker: anonymous in-memory module loader implementation.
- * See yukilinker.hpp + design doc. Every failure path returns nullptr/false --
- * this code NEVER aborts the host.
- *
- * The bootstrap build must run at the AT_ENTRY injection point, before the
- * process's __libc_init, where malloc is not yet initialized. Shared loader
- * metadata still uses a small mmap-backed arena; the core/full build may use
- * libc allocation only for per-thread TLS blocks after the process is live.
+ * YukiZygisk in-memory ELF loader.
  *
  * Author: Anatdx
  */
@@ -46,7 +39,6 @@
 #ifndef PR_SET_VMA_ANON_NAME
 #define PR_SET_VMA_ANON_NAME 0
 #endif // #ifndef PR_SET_VMA_ANON_NAME
-/* aarch64 relocation types (the four real modules actually use). */
 #ifndef R_AARCH64_ABS64
 #define R_AARCH64_ABS64 257
 #endif // #ifndef R_AARCH64_ABS64
@@ -71,10 +63,6 @@
 #ifndef R_AARCH64_TLSDESC
 #define R_AARCH64_TLSDESC 1031
 #endif // #ifndef R_AARCH64_TLSDESC
-/* IFUNC: addend (IRELATIVE) or symbol value (STT_GNU_IFUNC) is a *resolver* to
- * CALL for the real address, not the address itself. Compilers emit IRELATIVE
- * for local ifuncs (common via libc++/string ops); a module-defined ifunc
- * reached through GLOB_DAT/JUMP_SLOT carries STT_GNU_IFUNC. */
 #ifndef R_AARCH64_IRELATIVE
 #define R_AARCH64_IRELATIVE 1032
 #endif // #ifndef R_AARCH64_IRELATIVE
@@ -85,7 +73,6 @@
 #define STT_GNU_IFUNC 10
 #endif // #ifndef STT_GNU_IFUNC
 
-/* DT_RELR packed relative relocations (Android). */
 #ifndef DT_RELR
 #define DT_RELR 0x6fffe000
 #endif // #ifndef DT_RELR
@@ -106,12 +93,7 @@ inline uintptr_t page_up(uintptr_t a) { return (a + kPage - 1) & ~(kPage - 1); }
 template <class T> inline T mn(T a, T b) { return a < b ? a : b; }
 template <class T> inline T mx(T a, T b) { return a > b ? a : b; }
 
-/* early-boot allocator: at AT_ENTRY the process libc's malloc isn't initialized
- * yet (it inits in __libc_init, which runs AFTER the injected loader), so new /
- * std::vector would crash. We bump-allocate from our own anonymous mmap -- mmap
- * is a raw syscall, always available. Loader allocations are permanent (handles
- * live for the whole process), so there is no free path; dlclose just unmaps
- * the image. Single-threaded at load time, so no lock. */
+/* Early-boot bump allocator. */
 struct Arena {
   uint8_t *base;
   size_t used;
@@ -137,8 +119,7 @@ void *arena_alloc(size_t n, size_t align = 16) {
   return g_arena.base + off;
 }
 
-/* Every image we've loaded -- enumerated by dl_iterate_phdr_hook. Append-only
- * fixed array (no STL at early boot). */
+/* Loaded images for dl_iterate_phdr_hook. */
 constexpr size_t kMaxImages = 64;
 SoHandle *g_images[kMaxImages];
 size_t g_image_count = 0;
@@ -358,11 +339,7 @@ int prot_of(uint32_t p_flags) {
 }
 
 void name_vma(void *addr, size_t len, uint32_t p_flags, const char *base) {
-  /* Leave injected segments as bare anonymous VMAs -- do not label them. A
-   * fixed "dalvik-jit-code-cache" name is what detectors target: they whitelist
-   * it but then verify the content is real fragmented JIT, which a contiguous
-   * ELF fails. Bare anon r-x can't be flagged without drowning in the app's own
-   * legit anonymous regions. */
+  /* Keep injected anonymous VMAs unlabeled. */
   (void)addr;
   (void)len;
   (void)p_flags;
@@ -388,8 +365,7 @@ uint32_t sysv_hash(const char *s) {
   return h;
 }
 
-/* Look up `name` in the image's own dynamic symbol table via GNU hash. Returns
- * the Sym* if defined (st_shndx != UNDEF), else nullptr. */
+/* GNU hash lookup. */
 const ElfW(Sym) * gnu_lookup(const SoHandle *h, const char *name) {
   if (h->gnu_buckets == nullptr || h->gnu_nbucket == 0)
     return nullptr;
@@ -428,45 +404,22 @@ const ElfW(Sym) * sysv_lookup(const SoHandle *h, const char *name) {
   return nullptr;
 }
 
-/* Pretend-success stub for the module's __cxa_atexit imports. Each C++ static
- * global a module declares produces a ctor that calls
- *   __cxa_atexit(dtor, obj, &module_dso_handle)
- * to register its destructor with libc's atexit table. After
- * drop_module_from_solist unlinks the module's soinfo (so dl_iterate_phdr /
- * dladdr can no longer see it), each of those callback addresses still sits
- * in libc's table pointing into module code -- but a detector that walks the
- * atexit list and calls dladdr on every callback now gets a null back and
- * reports "found_injection" (the dangling-callback fingerprint
- * __cxa_finalize already fixes for our own dso on the unmap path). Modules
- * are third-party so we can't recompile them with
- * -fno-c++-static-destructors; intercept their __cxa_atexit import here at
- * link time and never let the entry enter libc's table in the first place.
- * The cost is module static destructors never run, which is fine -- modules
- * live for the app process lifetime and the OS reclaims the whole address
- * space at exit. */
+/* Swallow module atexit registrations. */
 extern "C" int yz_module_atexit_noop(void (* /*dtor*/)(void *), void * /*obj*/,
                                      void * /*dso_handle*/) {
   return 0;
 }
 
-/* Resolve symbol number `symidx` for image `h`:
- *   1. dl_iterate_phdr  -> our hook (so module enumerates itself)
- *   1b. __cxa_atexit    -> no-op (don't pollute libc's atexit table)
- *   2. module's own defined symbol
- *   3. dependency dlopen handles, then RTLD_DEFAULT
- * Returns the address, or nullptr for a weak-undefined (caller leaves 0). */
+/* Resolve one imported symbol. */
 void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
   *ok = true;
   const ElfW(Sym) &s = h->symtab[symidx];
   const char *name = h->strtab + s.st_name;
 
-  /* 1. redirect dl_iterate_phdr so the module can find itself while staying
-   *    anonymous in maps (every real module imports this). */
+  /* Let modules enumerate themselves. */
   if (strcmp(name, "dl_iterate_phdr") == 0)
     return (void *)&dl_iterate_phdr_hook;
 
-  /* 1b. swallow __cxa_atexit so the module's C++ static-destructor registry
-   *     never enters libc's atexit table (see yz_module_atexit_noop above). */
   if (strcmp(name, "__cxa_atexit") == 0)
     return (void *)&yz_module_atexit_noop;
 
@@ -478,8 +431,7 @@ void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
     return (void *)&yz_module_thread_atexit_noop;
 #endif // #if YUKILINKER_FULL
 
-  /* 2. module's own definition (an ifunc symbol's st_value is a resolver to
-   *    CALL, passing hwcap as the aarch64 resolver's first arg). */
+  /* Module-local definition. */
   if (s.st_shndx != SHN_UNDEF) {
     void *addr = h->load_bias + s.st_value;
     if (ELF64_ST_TYPE(s.st_info) == STT_GNU_IFUNC)
@@ -487,7 +439,7 @@ void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
     return addr;
   }
 
-  /* 3. dependencies + global */
+  /* Dependencies + global. */
   for (size_t i = 0; i < h->dep_count; i++)
     if (h->dep_handles[i] != nullptr)
       if (void *a = ::dlsym(h->dep_handles[i], name))
@@ -712,7 +664,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   }
   size_t file_size = (size_t)st.st_size;
 
-  /* Temporary read-only view of the file just to parse headers + copy from. */
+  /* Temporary source view. */
   void *src = mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, memfd, 0);
   if (src == MAP_FAILED) {
     ZLOGE("yukilinker: mmap source: %s", strerror(errno));
@@ -733,7 +685,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   auto *phdr = (const ElfW(Phdr) *)((const uint8_t *)src + eh->e_phoff);
   size_t phnum = eh->e_phnum;
 
-  /* Compute load span + find PT_DYNAMIC. */
+  /* Load span + PT_DYNAMIC. */
   uintptr_t min_v = UINTPTR_MAX, max_v = 0;
   const ElfW(Phdr) *dyn_ph = nullptr;
   for (size_t i = 0; i < phnum; i++) {
@@ -751,8 +703,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   }
   size_t map_size = max_v - min_v;
 
-  /* Reserve the whole span anonymously (PROT_NONE), then drop each segment in
-   * with MAP_FIXED. Anonymous == no file-backed maps entry, no fd. */
+  /* Reserve the whole image span. */
   void *reserve =
       mmap(nullptr, map_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (reserve == MAP_FAILED) {
@@ -769,21 +720,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
     size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
     size_t len = page_up(pre + phdr[i].p_memsz);
     if (file_backed) {
-      /* Map the file-backed pages straight from the memfd so the segment
-       * carries a "/memfd:<name> (deleted)" path + inode in /proc/maps. An
-       * "unknown exec" / anonymous-executable scan (a detector inside an
-       * isolated process that inherited this mapping, where our injected code
-       * never runs to clean up) ignores file-backed mappings but flags
-       * pure-anonymous (inode 0, no path) ones.
-       *
-       * Map each segment at its FINAL protection. We must NOT map writable then
-       * mprotect-to-exec: making a *modified* MAP_PRIVATE file mapping
-       * executable is SELinux "execmod", which the zygote domain is denied on
-       * memfd/tmpfs (boot loop). A PIC text segment is never written (no text
-       * relocations), so mapping it r-x straight from the file needs only
-       * "execute" -- allowed, exactly how the system linker maps a .so.
-       * Writable data segments are mapped r-w so relocations can write them;
-       * they aren't executable. */
+      /* File-backed path: map segments at final protection. */
       int seg_prot = prot_of(phdr[i].p_flags);
       size_t file_len = page_up(pre + phdr[i].p_filesz);
       off_t file_off = (off_t)(phdr[i].p_offset - pre); // page-aligned (ELF)
@@ -795,8 +732,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
         cleanup_src();
         return nullptr;
       }
-      // Zero the BSS bytes sharing the last file page (writable segments only
-      // -- an r-x/r-- segment has no BSS to zero and can't be written anyway).
+      // Zero BSS tail on writable file pages.
       size_t file_end = pre + phdr[i].p_filesz;
       if ((seg_prot & PROT_WRITE) && file_len > file_end)
         memset((void *)(seg + file_end), 0, file_len - file_end);
@@ -809,9 +745,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
         return nullptr;
       }
     } else {
-      /* Modules: writable anonymous + copy. They never reach an isolated
-       * process, so pure-anon is fine and avoids leaving a per-module backing
-       * around. */
+      /* Anonymous copy path. */
       if (mmap((void *)seg, len, PROT_READ | PROT_WRITE,
                MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
         ZLOGE("yukilinker: map seg: %s", strerror(errno));
@@ -825,8 +759,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
     name_vma((void *)seg, len, phdr[i].p_flags, vma_name);
   }
 
-  /* SoHandle is arena-allocated (no libc malloc at early boot); placement-new
-   * so the in-class member initializers run. Not individually freed. */
+  /* Arena-backed handle. */
   void *hmem = arena_alloc(sizeof(SoHandle));
   if (hmem == nullptr) {
     ZLOGE("yukilinker: arena exhausted");
@@ -860,7 +793,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   }
 #endif // #if YUKILINKER_FULL
 
-  /* Parse PT_DYNAMIC (now in the loaded image). */
+  /* Parse PT_DYNAMIC. */
   auto *dyn = (const ElfW(Dyn) *)(bias + dyn_ph->p_vaddr);
   const ElfW(Rela) *rela = nullptr, *jmprel = nullptr;
   size_t relasz = 0, pltrelsz = 0;
@@ -949,9 +882,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
     return nullptr; // h is arena-backed; not individually freed
   }
 
-  /* Resolve dependencies (system libs already mapped in the process).
-   * dep_handles is an arena array sized to the DT_NEEDED count (+1 so a zero
-   * count is ok). */
+  /* Resolve dependencies. */
   h->dep_handles =
       static_cast<void **>(arena_alloc((n_needed + 1) * sizeof(void *)));
   for (size_t i = 0; i < n_needed && h->dep_handles != nullptr; i++) {
@@ -971,7 +902,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
   }
 #endif // #if YUKILINKER_FULL
 
-  /* Relocate: RELR, then RELA, then JMPREL (all eager, BIND_NOW). */
+  /* Relocate eagerly. */
   bool ok = true;
   if (relr != nullptr)
     ok = apply_relr(h, relr, relrsz / sizeof(ElfW(Addr)));
@@ -989,11 +920,7 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
     return nullptr; // h is arena-backed; not individually freed
   }
 
-  /* Final segment protections (drop the temporary write permission). Only the
-   * anonymous path needs this -- file_backed segments were already mapped at
-   * their final protection (mapping them writable-then-mprotect-exec would be
-   * the "execmod" the zygote is denied on memfd; the text segment is also never
-   * written, so re-mprotect'ing it to exec must be avoided). */
+  /* Final protections for anonymous mappings. */
   if (!file_backed)
     for (size_t i = 0; i < phnum; i++) {
       if (phdr[i].p_type != PT_LOAD)
@@ -1006,11 +933,11 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
 
   protect_gnu_relro(h);
 
-  cleanup_src(); // done copying; drop the file-backed view
+  cleanup_src();
   if (g_image_count < kMaxImages)
     g_images[g_image_count++] = h;
 
-  /* Run initializers (DT_INIT then INIT_ARRAY). */
+  /* Run initializers. */
   if (h->init_func)
     h->init_func();
   for (size_t i = 0; i < h->init_array_count; i++)
@@ -1054,7 +981,7 @@ void dlclose(SoHandle *h) {
       ::dlclose(h->dep_handles[i]);
   if (h->load_bias && h->map_size)
     munmap(h->load_bias, h->map_size); // bias+min_v == reserve start
-  // h is arena-backed; not individually freed (dlclose is a rare path).
+  // h is arena-backed.
 }
 
 void shutdown() {
@@ -1073,28 +1000,12 @@ void shutdown() {
 #endif // #if YUKILINKER_FULL
 }
 
-/* Run + unregister every atexit handler libc has registered against THIS dso
- * (libyukilinker as a standalone .so; in the core build this is the libzygisk
- * dso, but the standalone yuki_bootstrap entry below is only present in the
- * standalone .so). Each C++ static-global ctor and each fini_array entry
- * registers via __cxa_atexit(handler, obj, &__dso_handle); if those handlers
- * stay registered after we unmap libyukilinker, a detector that walks libc's
- * atexit table sees dangling callbacks that fail dladdr and reports an
- * injection. Drain the list with our own dso handle. */
 extern "C" void __cxa_finalize(void *);
-// crtbegin_so.o defines `__dso_handle` per-DSO with hidden visibility, so a
-// non-weak extern here always resolves to OUR libyukilinker's dso handle. A
-// weak ref could resolve to nullptr, and __cxa_finalize(nullptr) means
-// "finalize EVERYTHING" -- it would drain libc's entire atexit table inside the
-// zygote pre-fork, which kills boot.
+// Non-weak so __cxa_finalize targets only this DSO.
 extern "C" __attribute__((visibility("hidden"))) void *__dso_handle;
 inline void finalize_self_dso() { __cxa_finalize(&__dso_handle); }
 
-/* Resolved once via dlsym (NOT a static import): if the core imported
- * dl_iterate_phdr, the loader that mapped the core would bind that GOT slot to
- * THIS hook, and unmapping the spent loader would dangle it. Going through
- * dlsym keeps the slot out of our dynsym entirely, so the spent loader can be
- * fully munmap'd with no lingering trace. */
+/* Resolve system dl_iterate_phdr without a static import. */
 using sys_iter_fn = int (*)(int (*)(struct dl_phdr_info *, size_t, void *),
                             void *);
 static sys_iter_fn g_sys_dl_iterate = nullptr;
@@ -1102,12 +1013,7 @@ static sys_iter_fn g_sys_dl_iterate = nullptr;
 int dl_iterate_phdr_hook(int (*cb)(struct dl_phdr_info *, size_t, void *),
                          void *data) {
   if (g_sys_dl_iterate == nullptr) {
-    // Defeat clang's "dlsym(RTLD_DEFAULT, constant)" folding: it would rewrite
-    // this into a direct dl_iterate_phdr reference, re-creating the import
-    // whose GOT slot the loader binds to ITS in-mapping hook -> dangles when we
-    // unmap the loader. A volatile-sourced name forces a genuine runtime
-    // lookup, so the core ends up with NO dl_iterate_phdr import at all and the
-    // loader is fully munmap'able.
+    // Avoid constant-folded direct imports.
     volatile char vn[] = "dl_iterate_phdr";
     char nm[sizeof(vn)];
     for (size_t i = 0; i < sizeof(vn); i++)
@@ -1135,8 +1041,7 @@ int dl_iterate_phdr_hook(int (*cb)(struct dl_phdr_info *, size_t, void *),
 
 } // namespace yukilinker
 
-/* close(2) via raw svc: yuki_bootstrap runs at the AT_ENTRY injection point,
- * before __libc_init -- most of libc is unusable but a syscall always works. */
+/* Raw close for AT_ENTRY. */
 static inline void yuki_raw_close(int fd) {
 #if defined(__aarch64__)
   register long x8 asm("x8") = 57; // __NR_close
@@ -1147,16 +1052,8 @@ static inline void yuki_raw_close(int fd) {
 #endif // #if defined(__aarch64__)
 }
 
-/* core's on-disk identity (matches the kernel-staged path), handed to the core
- * entry as self_path; the core is loaded anonymously from the fd, not by path.
- */
 static constexpr char kCorePath[] = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
 
-/* ---- C ABI exported from libyukilinker.so ------------------------------- *
- * core dlopen()s libyukilinker.so and dlsym()s these. The handle is an opaque
- * SoHandle*; core treats it as void* and only hands it back to the two calls
- * below. extern "C" + default visibility so the names survive
- * -fvisibility=hidden and aren't C++-mangled. */
 extern "C" {
 
 [[gnu::visibility("default")]] void *yuki_dlopen_memfd(int memfd,
@@ -1172,19 +1069,10 @@ extern "C" {
   yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(h));
 }
 
-/* First-stage entry: the kernel stub dlopens libyukilinker and calls this with
- * the core's staged memfd. We anonymously load the core via our own loader (no
- * /memfd, maps read as ART JIT), then hand the core our dlopen/dlsym fns so it
- * loads its modules the same anonymous way. Self-hide from the solist still
- * happens in the core's hide_injection path after handoff. */
+/* First-stage entry. */
 [[gnu::visibility("default")]] void yuki_bootstrap(int core_fd) {
   if (core_fd < 0)
     return;
-  // file_backed: map the core from the memfd so its segments show a "/memfd:"
-  // path + inode (not pure-anon). Isolated processes inherit this mapping and
-  // our injected code never runs in them to hide it, so it must look innocuous
-  // as mapped: an anonymous-executable / "unknown exec" scan skips file-backed
-  // maps.
   yukilinker::SoHandle *core =
       yukilinker::dlopen_memfd(core_fd, "data-code-cache",
                                /*file_backed=*/true);
@@ -1196,27 +1084,11 @@ extern "C" {
       yukilinker::dlsym(core, "zygisk_core_entry"));
   if (entry == nullptr)
     return;
-  // The core carries its own compiled-in copy of this loader, so the dlopen/
-  // dlsym/dlclose pointers are vestigial. We repurpose the slots to hand the
-  // core: (1) an address inside our mapping (&yuki_bootstrap) so it can unload
-  // us by address; (2,3) the core's own loaded base+span so it never needs
-  // dl_iterate_phdr to find itself (which would re-introduce the import we are
-  // dropping so the loader can be fully munmap'd).
+  // Pass loader address plus core range to the core.
   entry(kCorePath, reinterpret_cast<void *>(&yuki_bootstrap),
         reinterpret_cast<void *>(core->load_bias),
         reinterpret_cast<void *>(core->map_size));
-  // Clear our own atexit list entries from libc BEFORE the core munmaps our
-  // mapping. The compiler/linker registers a __cxa_atexit handler per dso for
-  // its fini_array; once we're unmapped those handlers point to nothing, and a
-  // detector that snapshots libc's atexit table and resolves registered
-  // callbacks sees dangling pointers that fail dladdr and reports an injection.
-  // __cxa_finalize(&__dso_handle) drains them.
   yukilinker::finalize_self_dso();
-  // Hand control to the core to unload US. A *guaranteed* tail call: this frame
-  // is destroyed before the core munmaps the page this code lives on, so it's
-  // safe. zygisk_finalize_loader frees our soinfo + munmaps our mapping, then
-  // returns to our caller (the injection stub), which jumps to the real zygote
-  // entry. After this, no app the zygote forks inherits a trace of the loader.
   using fin_fn = void (*)(int);
   auto fin = reinterpret_cast<fin_fn>(
       yukilinker::dlsym(core, "zygisk_finalize_loader"));

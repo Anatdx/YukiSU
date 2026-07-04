@@ -436,8 +436,7 @@ void apply_kernelsu_rules(void)
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
-	// YukiZygisk: zygisk modules inline-hook system_server (LSPosed etc.)
-	// and need execmem for their trampolines; stock policy denies it.
+	// YukiZygisk system_server trampolines.
 	ksu_allow(db, "system_server", "system_server", "process", "execmem");
 	// https://android-review.googlesource.com/c/platform/system/logging/+/3725346
 	ksu_dontaudit(db, "untrusted_app", KERNEL_SU_DOMAIN, "dir", "getattr");

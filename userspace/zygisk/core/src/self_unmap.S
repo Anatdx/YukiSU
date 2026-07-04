@@ -1,20 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - synchronous self-unmap for denylist mode-1 (AArch64).
- *
- * After cleanup, restore the specialize hook's entry frame (x30 = ART return
- * addr, sp, x19..x29) and tail-call munmap: munmap runs in libc, drops the whole
- * core image, and its `ret` lands straight in ART. The core call stack is
- * discarded atomically -- no core instruction runs after the unmap, so there is
- * no dangling-PC crash (an async munmap firing while core was still mid-libc-call
- * did exactly that).
- *
- *  - yz_cap_tmpl: capture-stub template; the inline hook copies it per trampoline
- *    page and patches its two literals (&g_yz_ret_ctx, wrapper). The patched
- *    native jumps here first, saving the wrapper's pristine entry frame
- *    (x19..x30 + sp; only x16/x17 clobbered) into g_yz_ret_ctx, then jumps to the
- *    real wrapper (x30 unchanged, so a normal return still lands in ART).
- *  - yz_self_unmap_tail(base, size): restore that frame and `b munmap`.
+ * YukiZygisk self-unmap helpers.
  *
  * Author: Anatdx
  */
@@ -28,8 +14,7 @@ g_yz_ret_ctx:
 
   .text
 
-/* capture stub template -- copied + literal-patched per hook by the inline hook.
- * ldr-literal loads are PC-relative and survive the memcpy unchanged. */
+/* Capture-stub template. */
   .globl yz_cap_tmpl
   .hidden yz_cap_tmpl
   .globl yz_cap_tmpl_ctx
@@ -58,9 +43,7 @@ yz_cap_tmpl_wrap:
   .quad 0                        /* inline hook patches -> wrapper */
 yz_cap_tmpl_end:
 
-/* [[noreturn]] void yz_self_unmap_tail(void *base, size_t size)
- * x0=base, x1=size already set for munmap. Restore the captured entry frame and
- * tail-call munmap; munmap's ret lands at the saved x30 (ART). */
+/* [[noreturn]] void yz_self_unmap_tail(void *base, size_t size) */
   .globl yz_self_unmap_tail
   .hidden yz_self_unmap_tail
   .type  yz_self_unmap_tail, %function

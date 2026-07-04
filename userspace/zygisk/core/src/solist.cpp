@@ -1,15 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - hide injected code from solist/maps scanners.
- *
- * Approach (implemented from scratch):
- *  - hide_from_solist re-links our own injected libs out of the solist (they're
- *    never queried, so a pointer splice under ProtectedDataGuard suffices);
- *  - drop_module_from_solist unloads modules (which ARE queried) via the
- *    linker's own soinfo_unload, keeping solist + namespace + handle map in
- *    sync, with setSize(0) so the module code stays mapped;
- *  - spoof_virtual_maps / name_anonymous_exec anonymise module segments and
- *    label leftover anon executable VMAs as ART JIT.
+ * YukiZygisk solist/maps helpers.
  *
  * Author: Anatdx
  */
@@ -38,8 +29,6 @@
 namespace yuki::solist {
 namespace {
 
-/* Logs go to dmesg via zygiskd, never logcat. yz_klog is weak (strong def in
- * core.cpp); helper-only users can link it as null and these become no-ops. */
 extern "C" __attribute__((weak, format(printf, 1, 2))) void
 yz_klog(const char *fmt, ...);
 #define SLOGE(...)                                                             \
@@ -49,13 +38,9 @@ yz_klog(const char *fmt, ...);
   } while (0)
 #define SLOGI(...) SLOGE(__VA_ARGS__)
 
-/* soinfo::next sits right after phdr/phnum/base/size/dynamic on LP64 -- a
- * stable prefix of the struct across Android versions. */
 constexpr size_t kSoinfoNextOff = 40;
 constexpr int kMaxWalk = 2000; /* guard against a wrong offset / cyclic list */
-/* Android bionic CFI shadow format:
- * https://android.googlesource.com/platform/bionic/+/master/libc/private/CFIShadow.h
- */
+/* Android bionic CFI shadow format. */
 constexpr uintptr_t kCfiShadowGranularity = 18;
 constexpr uintptr_t kCfiShadowEntrySize = sizeof(uint16_t);
 
@@ -74,8 +59,6 @@ inline uintptr_t page_up(uintptr_t addr, size_t pg) {
   return (addr + pg - 1) & ~(static_cast<uintptr_t>(pg) - 1);
 }
 
-/* ---- linker64 .symtab resolver ------------------------------------------ */
-
 class LinkerSyms {
 public:
   bool init() {
@@ -91,7 +74,6 @@ public:
       munmap(map_, map_sz_);
   }
 
-  /* runtime address of the first symbol whose name starts with prefix, or 0 */
   uintptr_t find(const char *prefix) const {
     const size_t plen = strlen(prefix);
     for (size_t i = 0; i < sym_cnt_; ++i) {
@@ -119,7 +101,6 @@ private:
       unsigned long start = 0;
       if (sscanf(line, "%lx-", &start) != 1)
         continue;
-      /* maps are address-ordered: first linker64 row == load base (PIE) */
       base_ = start;
       const char *slash = strchr(line, '/');
       if (slash != nullptr) {
@@ -191,13 +172,7 @@ inline void soinfo_set_next(void *si, void *next) {
       next;
 }
 
-/* ---- proper module unload --------------------------------
- * The simple re-link above is only safe for OUR injected libs (never queried
- * via dlsym/dlopen-handle/dl_iterate_phdr). Dropping a *module* (LSPosed etc.,
- * which IS queried) requires the linker's own soinfo_unload so the global
- * solist, the namespace soinfo list AND g_soinfo_handles_map are updated
- * together -- a plain re-link leaves the latter two dangling and crashes the
- * app. setSize(0) makes unload skip munmap, so module code keeps running. */
+/* Runtime soinfo unload glue. */
 size_t g_size_off = 0, g_next_off = 0, g_ctor_off = 0;
 void (*g_soinfo_unload)(void *) = nullptr;
 uint64_t *g_load_counter = nullptr;
@@ -228,11 +203,7 @@ inline void u_set_ctor(void *si, bool v) {
       v ? 1 : 0;
 }
 
-/* Probe soinfo field offsets at runtime (robust across versions): size = a
- * sane-range field of somain; next = a solinker field pointing at somain/vdso;
- * constructor_called = the bool right after the embedded link_map whose l_name
- * is the linker. somain/solinker/vdso are soinfo*; linker_path = linker
- * realpath. Returns true only if all three offsets were found. */
+/* Probe soinfo field offsets. */
 bool u_probe_offsets(void *somain, void *solinker, void *vdso,
                      const char *linker_path) {
   bool size_ok = false, next_ok = false, ctor_ok = false;
@@ -276,7 +247,7 @@ bool u_probe_offsets(void *somain, void *solinker, void *vdso,
   return size_ok && next_ok && ctor_ok;
 }
 
-/* Resolve linker symbols + probe offsets, once per process. */
+/* Resolve linker symbols and offsets. */
 bool u_init() {
   if (g_unload_done)
     return g_unload_ok;
@@ -299,10 +270,6 @@ bool u_init() {
       syms.find("__dl__ZL23g_module_unload_counter"));
   g_realpath_u = reinterpret_cast<realpath_fn>(
       syms.find("__dl__ZNK6soinfo12get_realpathEv"));
-  // get_soname: a library loaded via android_dlopen_ext(USE_LIBRARY_FD) (our
-  // first-stage loader) gets a realpath of the random memfd path, not its name,
-  // so we ALSO match on the stable DT_SONAME. Optional -- realpath-only still
-  // works for the path-named module case.
   g_soname_u = reinterpret_cast<realpath_fn>(
       syms.find("__dl__ZNK6soinfo10get_sonameEv"));
   g_pdg_ctor_u =
@@ -362,8 +329,6 @@ int hide_from_solist(const char *path_substr) {
     return 0;
   }
 
-  /* solist head: Android 16 (SDK 36)+ exports it as 'solinker', older as
-   * 'solist'. The symbol is a `soinfo*` variable -> deref to get the head. */
   uintptr_t head_var = syms.find("__dl__ZL8solinker");
   if (head_var == 0)
     head_var = syms.find("__dl__ZL6solist");
@@ -393,10 +358,7 @@ int hide_from_solist(const char *path_substr) {
   if (head == nullptr)
     return 0;
 
-  /* Sanity-gate the whole walk: the solist head is the linker itself, so its
-   * realpath must look like the linker. If not, our symbol/offset guesses are
-   * wrong -- bail without touching anything, rather than walk a bogus list and
-   * crash the zygote. */
+  /* Sanity-check the solist head. */
   const char *head_path = realpath(head);
   if (head_path == nullptr || strstr(head_path, "linker") == nullptr) {
     SLOGE("solist: head realpath '%s' not linker-like; skip hiding",
@@ -446,12 +408,9 @@ int drop_module_from_solist(const char *path_substr, bool dry_run,
     void *next = u_next(cur); /* save before soinfo_unload mutates the list */
     const char *p = g_realpath_u(cur);
     const char *sn = g_soname_u != nullptr ? g_soname_u(cur) : nullptr;
-    /* Match realpath OR soname: a USE_LIBRARY_FD load (the first-stage loader)
-     * carries a random memfd realpath but the stable DT_SONAME we passed. */
+    /* Match realpath or soname. */
     bool match = (p != nullptr && strstr(p, path_substr) != nullptr) ||
                  (sn != nullptr && strstr(sn, path_substr) != nullptr);
-    /* Diagnostic (loader-unload pass only, zygote, low volume): surface every
-     * non-system soinfo so its realpath/soname are visible even if no match. */
     if (!keep_mapped && !dry_run && p != nullptr && strncmp(p, "/system", 7) &&
         strncmp(p, "/apex", 5) && strncmp(p, "/vendor", 7) &&
         strncmp(p, "/product", 8) && strncmp(p, "/system_ext", 11))
@@ -469,15 +428,8 @@ int drop_module_from_solist(const char *path_substr, bool dry_run,
         if (keep_mapped)
           u_set_size(cur, 0);   /* skip munmap -> module code survives */
         u_set_ctor(cur, false); /* don't run its DT_FINI */
-        g_soinfo_unload(cur);   /* linker removes it from solist+ns+handle map
-                                 * (and munmaps the mapping when size was kept) */
+        g_soinfo_unload(cur);
         u_set_ctor(cur, true);
-        /* soinfo_unload already bumped g_module_unload_counter, so (load -
-         * unload) still equals the solist length -- the balance an untouched
-         * linker always keeps. Erase OUR load AND unload from the pair together
-         * (all-or-nothing) so the counters read as if this lib had never been
-         * mapped; dropping load alone would leave the pair one short of the
-         * solist length, a desync a clean process never shows. */
         if (g_load_counter != nullptr && g_unload_counter != nullptr &&
             *g_load_counter > 0 && *g_unload_counter > 0) {
           --(*g_load_counter);
@@ -497,8 +449,6 @@ int drop_module_from_solist(const char *path_substr, bool dry_run,
 int drop_lib_containing(uintptr_t addr, bool keep_mapped) {
   if (!u_init() || addr == 0)
     return 0;
-  /* soinfo (LP64): phdr, phnum, base, size -- base is the pointer field right
-   * before the size field u_probe_offsets located. */
   if (g_size_off < sizeof(void *))
     return 0;
   const size_t base_off = g_size_off - sizeof(void *);
@@ -518,32 +468,10 @@ int drop_lib_containing(uintptr_t addr, bool keep_mapped) {
             "munmap=%d",
             p != nullptr ? p : "(null)", reinterpret_cast<void *>(base), size,
             !keep_mapped);
-      /* Default: full unload, mapping included. The core severed its only
-       * pointer into this loader before calling us -- its lone dl_iterate_phdr
-       * GOT slot was re-pointed at libc (rebind_self_dl_iterate_slot), every
-       * other import already resolved to a system library, the loader
-       * registered no atexit handlers (no init_array), and the injection stub
-       * stashed but never re-touches the loader handle. We run from the
-       * core/linker/libc here, never from the loader, so keeping the recorded
-       * size lets soinfo_unload munmap the loader's VMA: no soinfo AND no maps
-       * entry are left for a detector, the clean state every forked app
-       * inherits.
-       *
-       * keep_mapped is the safety fallback the core requests when it could NOT
-       * prove the GOT slot was severed (rebind failed): free the soinfo but
-       * setSize(0) so unload skips munmap, leaving the mapping resident. Less
-       * stealthy, but it can never dangle the slot into freed memory -> no boot
-       * hang. */
       if (keep_mapped)
         u_set_size(cur, 0);   /* unload skips munmap; mapping survives */
       u_set_ctor(cur, false); /* skip the spent loader's DT_FINI (a no-op) */
-      g_soinfo_unload(
-          cur); /* off solist/ns/handle map (+ munmaps if size kept);
-                 * do NOT touch cur after: the soinfo is freed */
-      /* Erase our load AND unload from BOTH counters together (all-or-nothing):
-       * the original dlopen bumped load, soinfo_unload just bumped unload, so
-       * dropping one without the other would leave (load - unload) one short of
-       * the solist length -- a mismatch an untouched linker never has. */
+      g_soinfo_unload(cur);
       if (g_load_counter != nullptr && g_unload_counter != nullptr &&
           *g_load_counter > 0 && *g_unload_counter > 0) {
         --(*g_load_counter);
@@ -636,15 +564,7 @@ bool sync_cfi_shadow(uintptr_t old_start, uintptr_t new_start, size_t size) {
   return true;
 }
 
-/* ---- maps anonymization --------------------------------------------------
- * Detectors read /proc/self/maps and flag the module's real path
- * (/data/adb/modules/.../so). soinfo_unload hides modules from dl_iterate_phdr
- * but NOT from maps (a kernel VMA it never touches). Here we copy each module
- * segment to an anonymous mapping and mremap it back FIXED, so the VMA loses
- * its file backing -- no path, indistinguishable from a JIT/anon region.
- * mremap over executing code can race, so this MUST be called single-threaded
- * (run_app_post: post-specialize, before the app starts business threads --
- * module code is not running). */
+/* Maps anonymization. */
 int spoof_virtual_maps(const char *path_substr, bool private_only) {
   struct Range {
     uintptr_t start, end;
@@ -690,21 +610,11 @@ int spoof_virtual_maps(const char *path_substr, bool private_only) {
       continue;
     }
     mprotect(addr, size, ranges[i].prot);
-    // mremap swapped the physical pages under this VA. For an executable
-    // segment the i-cache may still hold stale lines from the old pages, so
-    // sync it before anything executes from the new mapping -- the standard
-    // dsb/ic-ivau/dsb/isb sequence that lets us spoof a code segment we keep
-    // running from without a SIGILL/SEGV.
     if (ranges[i].prot & PROT_EXEC) {
       sync_cfi_shadow(ranges[i].start, ranges[i].start, size);
       __builtin___clear_cache(reinterpret_cast<char *>(addr),
                               reinterpret_cast<char *>(ranges[i].start + size));
     }
-    // leave the mremap'd segment as a BARE anonymous VMA. Do NOT
-    // re-label it "dalvik-jit-code-cache" -- that fixed name is the detector's
-    // target (it verifies the content is real JIT, and our contiguous ELF
-    // fails). Pure anon ("00:00 0") is the safe choice; detectors can't flag it
-    // without false-positiving on the app's own anon regions.
     ++done;
   }
   SLOGI("maps-spoof: anonymized %d/%d segment(s) matching '%s'", done, nr,
@@ -732,7 +642,6 @@ int name_anonymous_exec() {
       ++path;
     if (*path != '\0' && *path != '\n')
       continue; // already named or file-backed -> leave alone
-    // Bare anonymous executable (hook trampoline etc.) -> label it as ART JIT.
     prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, reinterpret_cast<void *>(start),
           end - start, "dalvik-jit-code-cache");
     ++n;

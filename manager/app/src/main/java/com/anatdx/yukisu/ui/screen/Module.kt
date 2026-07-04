@@ -1531,7 +1531,6 @@ fun ModuleItem(
         var localEnabled by remember(module.enabled) { mutableStateOf(module.enabled) }
         val scope = rememberCoroutineScope()
 
-        // When built-in YukiZygisk is on, conflicting third-party zygisk impls are locked off.
         val conflictDisabled = viewModel.yukiZygiskEnabled && module.dirId in ZYGISK_IMPL_MODULE_IDS
 
         val sizeStr = remember(module.dirId) {
@@ -1686,7 +1685,6 @@ fun ModuleItem(
                         module.dirId in viewModel.loadedNativeModules
                 val runtimeKind = viewModel.runtimeModuleKinds[module.dirId]
                 Spacer(modifier = Modifier.height(12.dp))
-                // 文件夹名称和大小标签
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

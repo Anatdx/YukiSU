@@ -634,7 +634,7 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 				sizeof(mnt));
 	if (ret < 0) {
 		pr_err("nuke ext4 copy mnt failed: %ld\\n", ret);
-		return -EFAULT; // 或者 return ret;
+		return -EFAULT;
 	}
 
 	if (ret == sizeof(mnt)) {
@@ -1070,12 +1070,7 @@ static int do_yz_restore_native_load_policy(void __user *arg)
 	return ksu_zygote_probe_restore_native_policy((pid_t)cmd.pid);
 }
 
-/* zygiskd (root) -> kernel: schedule a mount-revert on TARGET app task, run in
- * that task's own (already unshare'd) namespace. core asks zygiskd over the
- * daemon socket after loading modules (denylist_mode==2); zygiskd resolves the
- * caller pid via SO_PEERCRED and issues this. Routed through zygiskd, not the
- * app, so the ksu driver fd never enters an app fd table (a "[ksu_driver]" link
- * there is exactly what detectors scan for). */
+/* Schedule app mount revert. */
 static int do_yz_umount_pid(void __user *arg)
 {
 	struct yz_umount_pid_cmd cmd;
@@ -1091,7 +1086,7 @@ static int do_yz_umount_pid(void __user *arg)
 	if (!task)
 		return -ESRCH;
 
-	/* only revert for app processes; never a system/global-ns task */
+	/* app processes only */
 	if (!is_appuid(task_uid(task).val)) {
 		pr_info("yz_umount_pid: reject non-app pid=%u uid=%u\n",
 			cmd.pid, task_uid(task).val);
@@ -1113,11 +1108,7 @@ struct yz_unmap_tw {
 	unsigned int retry;
 };
 
-/* Runs in the TARGET app's context (task_work) as it returns to userspace.
- * core has unhooked, so nothing references its segments -- BUT if the app is
- * about to resume with its PC still inside a segment we're dropping, it hasn't
- * left core yet (e.g. mid-return through self_destruct). munmap'ing under its
- * PC would SIGSEGV/boot-loop, so re-queue until the PC is in JVM/app code. */
+/* task_work unmap; retry while PC is inside the target range. */
 static void yz_unmap_tw_func(struct callback_head *cb)
 {
 	struct yz_unmap_tw *tw = container_of(cb, struct yz_unmap_tw, cb);
@@ -1149,8 +1140,7 @@ static void yz_unmap_tw_func(struct callback_head *cb)
 	kfree(tw);
 }
 
-/* zygiskd (root) -> kernel: schedule vm_munmap of the reported core segments on
- * TARGET pid (denylist_mode==1, after core unhooked itself). */
+/* Schedule vm_munmap of reported segments. */
 static int do_yz_unmap_pid(void __user *arg)
 {
 	struct yz_unmap_pid_cmd cmd;
@@ -1198,10 +1188,7 @@ static int do_yz_unmap_pid(void __user *arg)
 	return 0;
 }
 
-/* core (app) -> kernel, DIRECT: unmap-self for denylist_mode==1. See
- * KSU_IOCTL_YZ_UNMAP_SELF in uapi/yukizygisk.h. Reuses yz_unmap_tw_func (PC
- * guard + retry + munmap); the caller IS the target, so it arms on current. On
- * failure core falls back to its spoof path, so returning an error is safe. */
+/* Current-task unmap. */
 static int do_yz_unmap_self(void __user *arg)
 {
 	struct yz_unmap_self_cmd cmd;
@@ -1214,8 +1201,7 @@ static int do_yz_unmap_self(void __user *arg)
 		return -EFAULT;
 	if (cmd.n_segs == 0 || cmd.n_segs > YZ_MAX_UNMAP_SEGS)
 		return -EINVAL;
-	/* every segment must be a non-empty userspace range (defense in depth;
-	 * an app can munmap its own memory anyway -- this rejects garbage). */
+	/* validate userspace ranges */
 	for (i = 0; i < cmd.n_segs; i++) {
 		unsigned long a = (unsigned long)cmd.addr[i];
 		unsigned long s = (unsigned long)cmd.size[i];
@@ -1247,15 +1233,7 @@ static int do_yz_unmap_self(void __user *arg)
 	return 0;
 }
 
-/* zygiskd (root) -> kernel: write cmd.len bytes at cmd.addr in TARGET pid's mm
- * via access_process_vm(FOLL_FORCE|FOLL_WRITE) -- see KSU_IOCTL_YZ_PATCH_TEXT
- * in uapi/yukizygisk.h. FOLL_FORCE COWs the read-only, file-backed code page
- * and writes through it WITHOUT mprotect, so the executable mapping is not
- * split (the specialize inline-hook needs this; an mprotect patch fragments the
- * VMA, which detectors flag). copy_to_user_page on the write path flushes the
- * I-cache for the exec range. zygiskd pins the target to the SO_PEERCRED
- * caller, so this only writes the caller's own memory -- no cross-process
- * power. */
+/* COW-patch target text via access_process_vm(FOLL_FORCE|FOLL_WRITE). */
 static int do_yz_patch_text(void __user *arg)
 {
 	struct yz_patch_text_cmd cmd;
@@ -1276,9 +1254,7 @@ static int do_yz_patch_text(void __user *arg)
 	if (!task)
 		return -ESRCH;
 
-	/* zygiskd resolves cmd.pid from SO_PEERCRED before issuing this ioctl,
-	 * so the target is the caller's own mm. Native service processes need
-	 * the same read-only text COW path as app processes. */
+	/* cmd.pid is checked by zygiskd via SO_PEERCRED. */
 
 	n = access_process_vm(task, (unsigned long)cmd.addr, cmd.bytes, cmd.len,
 			      FOLL_FORCE | FOLL_WRITE);

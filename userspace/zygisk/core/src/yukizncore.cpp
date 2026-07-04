@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - native-process compatibility core.
+ * YukiZygisk native core.
  *
  * Author: Anatdx
  */

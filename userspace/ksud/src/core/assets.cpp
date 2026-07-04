@@ -11,16 +11,8 @@
 
 namespace ksud {
 
-// ensure_binaries(), get_asset(), copy_asset_to_file() etc. are implemented in
-// generated/assets_data.cpp (scripts/embed_assets.py at build time). This file
-// holds hand-written asset helpers.
-
-// Stage the YukiZygisk payload into /data/adb/ksu/lib/yukizygisk/. Zygote
-// injection still republishes anonymous staged images, while native
-// compatibility injection can hand real file fds to service processes. Label
-// the payload files like system libraries so executable fd mappings are
-// accepted by those service domains. No-op for builds that don't embed the
-// payload.
+// Hand-written asset helpers.
+// Stage YukiZygisk payloads when embedded.
 int ensure_yukizygisk(bool ignore_if_exist) {
     struct Payload {
         const char* asset;
@@ -32,7 +24,6 @@ int ensure_yukizygisk(bool ignore_if_exist) {
         {"libyukilinker.so", ZYUKILINKER_PATH},
     };
 
-    // Only touch the dir if at least one lib is actually embedded in this ksud.
     bool embedded = false;
     for (const auto& p : payload) {
         const uint8_t* data = nullptr;
@@ -46,7 +37,6 @@ int ensure_yukizygisk(bool ignore_if_exist) {
         return 0;
     }
 
-    // copy_asset_to_file() won't create parent dirs, so do it first.
     if (!ensure_dir_exists(YUKIZYGISK_DIR)) {
         LOGE("yukizygisk: failed to create %s", YUKIZYGISK_DIR);
         return 1;
@@ -59,9 +49,6 @@ int ensure_yukizygisk(bool ignore_if_exist) {
             continue;
         }
 
-        // Unconditionally overwrite: always re-stage the embedded lib so a
-        // stale copy from an older build is never left in place (no size check,
-        // no skip-if-exists). copy_asset_to_file removes the dest first.
         (void)ignore_if_exist;
         if (!copy_asset_to_file(p.asset, p.dest)) {
             LOGE("yukizygisk: failed to stage %s", p.dest);

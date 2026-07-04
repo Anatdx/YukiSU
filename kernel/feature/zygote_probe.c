@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * YukiZygisk - kernel-side zygote detection and AT_ENTRY injection.
+ * YukiZygisk AT_ENTRY injector.
  *
  * Author: Anatdx
  */
@@ -47,21 +47,15 @@
 
 static const char app_process[] = "app_process";
 
-/* Gated by KSU_FEATURE_YUKIZYGISK (ksud's manager toggles it via set_feature).
- * Off by default; the AT_ENTRY redirect below only fires when this is on. */
 static bool yukizygisk_enabled;
 
 #define ZP_ENABLE_LSM_INJECTOR 1
 
 #define ZP_STUB_EXTINFO_OFF 0xa00
 #define ZP_STUB_STR_OFF 0xc00
-#define ZP_STUB_ENTRY_STR_OFF                                                  \
-	0xd00 /* "zygisk_loader_main" string for dlsym                         \
-	       */
+#define ZP_STUB_ENTRY_STR_OFF 0xd00
 
-/* offsets of the linker's dlopen/dlsym within linker64, handed in by zygiskd.
- * The injected stub dlopens the loader, then dlsym+calls its entry (bionic
- * won't run a dlopen'd lib's constructor this early). */
+/* linker64 symbol offsets. */
 static u64 zp_dlopen_off;
 static u64 zp_dlsym_off;
 
@@ -73,10 +67,6 @@ void ksu_zygote_probe_set_dlopen_off(u64 dlopen_off, u64 dlsym_off)
 		dlsym_off);
 }
 
-/* yukilinker first-stage toggle (yzconfig.yukilinker), handed in by zygiskd.
- * ON (default): the stub dlopens libyukilinker, which anonymously loads the
- * core. OFF: the stub dlopens the core directly. Fixed at injection time, so a
- * change applies to the next zygote (module load mode still hot-reloads). */
 static bool zp_yukilinker_enabled;
 
 static DEFINE_MUTEX(zp_native_targets_lock);
@@ -255,7 +245,7 @@ int ksu_zygote_probe_restore_native_policy(pid_t tgid)
 	return 0;
 }
 
-/* patch a movz/movk x<d> sequence (4 insns, hw 0..3) with a 64-bit immediate */
+/* Patch a movz/movk x<d> sequence. */
 static void __maybe_unused zp_patch_imm64(u32 *insn, u64 val)
 {
 	int i;
@@ -267,22 +257,7 @@ static void __maybe_unused zp_patch_imm64(u32 *insn, u64 val)
 	}
 }
 
-/*
- * Keep hook ABI drift local, like the KSU SELinux compat shims.
- *
- * The replacement prototype must match include/linux/lsm_hook_defs.h exactly:
- * 5.10/5.15 use clang CFI and 6.1+ uses KCFI, so a near-match is still a hard
- * runtime trap when security_bprm_committed_creds() indirect-calls us.
- *
- * Android GKI 5.10, 5.15, 6.1 and 6.6:
- *   LSM_HOOK(..., bprm_committed_creds, struct linux_binprm *bprm)
- * Android GKI 6.12:
- *   LSM_HOOK(..., bprm_committed_creds, const struct linux_binprm *bprm)
- *
- * Do not duplicate the old-CFI .cfi_jt selection here; KSU's symbol_resolver
- * already resolves target symbols through .cfi_jt on < 6.1 and through the real
- * KCFI symbol on >= 6.1.
- */
+/* 6.12 made bprm_committed_creds const. */
 #define ZP_BPRM_HOOK_TARGET "selinux_bprm_committed_creds"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
@@ -460,30 +435,16 @@ static bool zp_parse_zygote_args(struct mm_struct *mm, char *socket_name,
 	return found;
 }
 
-/*
- * [2c-3b] YukiZygisk may either dlopen libyukilinker first or dlopen the core
- * directly. Zygote yukilinker mode republishes payload bytes as anonymous shmem
- * so app processes do not inherit /data/adb paths. Native-service injection
- * always uses the first-stage loader for the core: vendor linker namespaces can
- * reject a direct core dlopen even with USE_LIBRARY_FD. The native modules
- * themselves are still opened by the native core from their real module paths.
- */
 #define ZP_LOADER_PATH "/data/adb/ksu/lib/yukizygisk/libyukilinker.so"
 #define ZP_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libzygisk.so"
 #define ZP_NATIVE_CORE_PATH "/data/adb/ksu/lib/yukizygisk/libyukizncore.so"
-/* The staged shmem images use an ART data-code-cache marker. They are mapped
- * file-backed by android_dlopen_ext(USE_LIBRARY_FD), so the name is visible in
- * /proc/pid/maps while the core remains resident. Avoid the primary JIT cache
- * marker: multiple executable mappings with distinct inodes are easy to
- * separate from a normal single app runtime cache. */
 #define ZP_VMA_NAME "memfd:data-code-cache"
 #define ZP_VMA_NAME_LEN sizeof(ZP_VMA_NAME)
 #define ZP_LOADER_MAX_SZ (8u << 20) /* sanity cap on a payload image */
 #define ZP_DLEXT_USE_LIBRARY_FD 0x10 /* android_dlextinfo.flags bit */
 #define ZP_DLEXT_FORCE_LOAD 0x40
 
-/* Mirrors bionic's android_dlextinfo (LP64 layout). Only .flags and
- * .library_fd are populated; everything else stays zero. */
+/* bionic android_dlextinfo, LP64 subset. */
 struct zp_dlextinfo {
 	__u64 flags;
 	__u64 reserved_addr;
@@ -503,8 +464,6 @@ static void zp_close_current_fd(int fd)
 #endif // #if LINUX_VERSION_CODE < KERNEL_VERSION...
 }
 
-/* shmem_file_setup() shows the name verbatim in /proc/pid/maps, unlike
- * memfd_create() which prepends "memfd:" itself. */
 static void zp_cache_name(char *buf, size_t len)
 {
 	size_t i;
@@ -516,12 +475,7 @@ static void zp_cache_name(char *buf, size_t len)
 	buf[i] = '\0';
 }
 
-/*
- * Read a payload file (loader or core) and republish it as an O_CLOEXEC fd in
- * current pointing at a private shmem copy. Returns the installed fd (>= 0) or
- * a negative errno. Runs in the target task's context (task_work), where
- * sleeping file IO is safe.
- */
+/* Stage a private shmem payload fd in current. */
 static int zp_stage_fd(const char *path, const char *name,
 		       struct ksu_file_load_policy *policy_state)
 {
@@ -532,13 +486,7 @@ static int zp_stage_fd(const char *path, const char *name,
 	ssize_t r;
 	int fd;
 
-	/*
-	 * Read as ksu_cred all the way through kernel_read -- the target can't
-	 * read /data/adb, and reverting before the read leaves kernel_read in
-	 * the target's context, where rw_verify_area's SELinux check can deny
-	 * the adb_data_file read. Revert once the bytes are in hand so the
-	 * shmem file and write path stay in the target domain.
-	 */
+	/* Read payload as ksu. */
 	old_cred = ksu_cred ? override_creds(ksu_cred) : NULL;
 
 	src = filp_open(path, O_RDONLY, 0);
@@ -607,16 +555,7 @@ static int zp_stage_fd(const char *path, const char *name,
 		kvfree(buf);
 		return err;
 	}
-	/*
-	 * shmem_file_setup() goes through alloc_file_pseudo, not
-	 * do_dentry_open, so the file is left WITHOUT FMODE_PREAD/FMODE_PWRITE
-	 * -- only memfd_create() explicitly ORs those in. bionic's ElfReader
-	 * reads the ELF header/program-headers/segments with pread64(), which
-	 * the VFS rejects with -ESPIPE on a file lacking FMODE_PREAD. The net
-	 * effect is the zygote's android_dlopen_ext() returning NULL with no
-	 * SELinux denial (it never reaches an mmap). Grant pread/pwrite/lseek
-	 * exactly like memfd_create() does so the linker can read the image.
-	 */
+	/* shmem_file_setup lacks FMODE_PREAD/PWRITE by default. */
 	mfd->f_mode |= FMODE_PREAD | FMODE_PWRITE | FMODE_LSEEK;
 	pos = 0;
 	r = kernel_write(mfd, buf, sz, &pos);
@@ -645,11 +584,7 @@ static int zp_stage_fd(const char *path, const char *name,
 	return fd;
 }
 
-/*
- * Open a payload file as ksu and install the real file into current. This keeps
- * native-service core/module compatibility mappings file-backed while avoiding
- * target directory traversal under /data/adb.
- */
+/* Stage a real file-backed payload fd in current. */
 static int zp_stage_file_fd(const char *path,
 			    struct ksu_file_load_policy *policy_state)
 {
@@ -712,10 +647,7 @@ struct zp_inject_tw {
 	char label[64];
 };
 
-/*
- * Runs on the return-to-userspace path after load_elf_binary() wrote the
- * stack/auxv, in process context (user access is safe). 64-bit only.
- */
+/* AT_ENTRY rewrite task_work. */
 static void zp_inject_tw_func(struct callback_head *cb)
 {
 	struct zp_inject_tw *tw = container_of(cb, struct zp_inject_tw, cb);
@@ -739,12 +671,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	}
 
 #ifdef CONFIG_COMPAT
-	/*
-	 * A 32-bit secondary zygote (app_process32 -Xzygote) reaches here too,
-	 * but the auxv walk below uses 64-bit words and the injected stub is
-	 * AArch64 -- both wrong for a compat task. Until a 32-bit loader/stub
-	 * exists, leave 32-bit zygotes uninjected rather than corrupt them.
-	 */
+	/* 32-bit targets need a separate stub. */
 	if (is_compat_task()) {
 		pr_info("zygote_probe: pid=%d socket=%s 32-bit target, "
 			"skipping injection\n",
@@ -812,7 +739,6 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			current->pid, socket_name, at_base, zp_dlopen_off,
 			(u64)at_base + zp_dlopen_off);
 
-	/* [1b] inert same-value write -- proves the store path is safe. */
 	if (at_entry_uaddr && at_entry_uval == saved) {
 		unsigned long check = ~saved;
 		int werr =
@@ -829,26 +755,11 @@ static void zp_inject_tw_func(struct callback_head *cb)
 							   : "WRITE-FAIL");
 	}
 
-	/* [1c] real redirect, gated. Fail-safe: rewrite AT_ENTRY only once the
-	 * stub is fully staged. The stub (below) dlopens the first-stage loader
-	 * from a kernel-provided fd, then chains to the saved entry. */
+	/* Redirect only after the stub is staged. */
 	if (yukizygisk_enabled && at_entry_uaddr && at_entry_uval == saved &&
 	    saved) {
 #ifdef CONFIG_ARM64
-		/*
-		 * [2c-3b] offline-assembled stub. It dlopens the first-stage
-		 * loader from the kernel-staged fd, closes that fd, dlsym's and
-		 * calls the loader entry with the core fd, then tail-calls the
-		 * real entry. A libc call does not reliably preserve
-		 * callee-saved registers this early, so the stub keeps all
-		 * state in its own stack frame and reloads after each call.
-		 *
-		 * Patched slots: idx2 real entry, idx6 android_dlopen_ext,
-		 * idx10 __loader_dlsym, idx24 caller_addr, idx40/idx45 core fd.
-		 * The failure path closes core_fd before jumping to the real
-		 * entry, which prevents a leaked staged fd from reaching
-		 * zygote's fork-time fd allowlist.
-		 */
+		/* AArch64 AT_ENTRY stub. */
 		static const u32 tmpl[] = {
 		    0x10000013, 0xd10103ff, 0xd2800014, 0xf2a00014, 0xf2c00014,
 		    0xf2e00014, 0xd2800015, 0xf2a00015, 0xf2c00015, 0xf2e00015,
@@ -883,11 +794,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		dlopen_addr = at_base + zp_dlopen_off;
 		dlsym_addr = at_base + zp_dlsym_off;
 
-		/* Stage payload fds in the target. Native and zygote
-		 * yukilinker mode dlopen the first-stage loader, then pass the
-		 * selected core fd to it. Direct zygote mode makes loader_fd
-		 * the core fd and calls zygisk_core_entry_direct after linker64
-		 * maps the core. */
+		/* Stage loader/core fds in the target. */
 		yuki = native || zp_yukilinker_enabled;
 		core_path = native ? ZP_NATIVE_CORE_PATH : ZP_CORE_PATH;
 		zp_cache_name(loader_name, sizeof(loader_name));
@@ -930,8 +837,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 				"%ld\n",
 				current->pid, socket_name, (long)stub);
 			zp_close_current_fd(loader_fd);
-			if (yuki) /* OFF: core_fd == loader_fd, already closed
-				   */
+			if (yuki)
 				zp_close_current_fd(core_fd);
 			zp_restore_native_policy_state(&native_policy);
 			goto out;
@@ -941,16 +847,12 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		zp_patch_imm64(&code[2], saved); /* x20 = real entry */
 		zp_patch_imm64(&code[6], dlopen_addr); /* x21 = dlopen */
 		zp_patch_imm64(&code[10], dlsym_addr); /* x23 = dlsym */
-		/* movz x0,#core_fd: close on failure and arg to the entry. ON:
-		 * yuki_bootstrap(core_fd). OFF: zygisk_core_entry_direct
-		 * ignores it (core already mapped). */
+		/* core fd argument */
 		stub_core_fd = yuki ? core_fd : -1;
 		code[40] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
 		code[45] = 0xd2800000u | (((u32)stub_core_fd & 0xffff) << 5);
 
-		/* ON: stub dlopens libyukilinker + calls yuki_bootstrap. OFF:
-		 * stub dlopens the selected core itself + calls
-		 * zygisk_core_entry_direct. */
+		/* Choose first-stage entry. */
 		if (yuki) {
 			lib_str = "libyukilinker.so";
 			lib_len = sizeof("libyukilinker.so");
@@ -982,8 +884,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 				current->pid, socket_name);
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
-			if (yuki) /* OFF: core_fd == loader_fd, already closed
-				   */
+			if (yuki)
 				zp_close_current_fd(core_fd);
 			zp_restore_native_policy_state(&native_policy);
 			goto out;
@@ -1002,8 +903,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		if (werr) {
 			vm_munmap(stub, PAGE_SIZE);
 			zp_close_current_fd(loader_fd);
-			if (yuki) /* OFF: core_fd == loader_fd, already closed
-				   */
+			if (yuki)
 				zp_close_current_fd(core_fd);
 			zp_restore_native_policy_state(&native_policy);
 		} else if (native) {
@@ -1043,21 +943,12 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 				current->pid, current->tgid, current->comm,
 				filename ?: "(null)", native_label);
 
-		/* every app_process invocation (cmd, am, dumpsys, ...) hits
-		 * by_path, so keep this at debug to avoid drowning dmesg -- the
-		 * real signal is the [1a]/[2c-3b] lines, emitted only for the
-		 * actual -Xzygote process. */
 		pr_debug("zygote_probe: exec pid=%d tgid=%d comm=%s "
 			 "file=%s [sid=%d path=%d native=%d]\n",
 			 current->pid, current->tgid, current->comm,
 			 filename ?: "(null)", by_sid, by_path, by_native);
 
-		/* app_process only (by_path excludes idmap2): defer AT_ENTRY
-		 * work to task_work, where auxv exists and user access is safe.
-		 * The task_work scans the original exec argv and exits unless
-		 * this is a real -Xzygote launch; it also records
-		 * --socket-name= so vendor zygote variants show up in dmesg.
-		 */
+		/* Defer auxv rewrite to task_work. */
 		if (by_path || by_native) {
 			struct zp_inject_tw *tw =
 			    kzalloc(sizeof(*tw), GFP_ATOMIC);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - zygiskd: the Zygisk daemon (compiled into ksud).
+ * YukiZygisk daemon.
  *
  * Author: Anatdx
  */
@@ -47,21 +47,15 @@
 #include <cstdio>
 #include <cstdlib>
 
-// ksuctl() lives in the ksud core (same binary): it reaches the [ksu_driver] fd
-// and issues an ioctl. We use it for the kernel reverse channel.
 namespace ksud {
 int ksuctl(int request, void *arg);
 bool uid_granted_root(uint32_t uid);
 bool uid_should_umount(uint32_t uid);
-// Kernel-authenticated manager uid (preset/superkey full uid, dynamic managers
-// excluded); -1 if none. The trust anchor for SO_PEERCRED on GetStatus.
 int get_manager_uid();
 } // namespace ksud
 
 namespace {
 
-// Log to /dev/kmsg (root-only kernel ring buffer; visible via dmesg), never
-// logcat -- app-side detectors can read logcat and would see the framework.
 [[gnu::format(printf, 1, 2)]] void dlog(const char *fmt, ...) {
   static int kmsg = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
   if (kmsg < 0)
@@ -143,7 +137,7 @@ void notify_ready(int fd, bool ok) {
   close(fd);
 }
 
-/* enabled module = not disabled + ships a zygisk lib for our ABI */
+/* Enabled zygisk modules for this ABI. */
 std::vector<Module> scan_modules() {
   std::vector<Module> mods;
   DIR *d = opendir(kModulesDir);
@@ -329,7 +323,7 @@ bool write_exact(int fd, const void *buf, size_t n) {
   return true;
 }
 
-/* pass one fd via SCM_RIGHTS, alongside a dummy byte */
+/* Send one fd via SCM_RIGHTS. */
 bool send_fd(int sock, int fd) {
   msghdr msg{};
   iovec io{};
@@ -437,7 +431,7 @@ int copy_file_to_memfd(const std::string &path) {
   return mfd;
 }
 
-/* receive one fd via SCM_RIGHTS */
+/* Receive one fd via SCM_RIGHTS. */
 int recv_fd(int sock) {
   char data = 0;
   char cbuf[CMSG_SPACE(sizeof(int))] = {};
@@ -458,13 +452,6 @@ int recv_fd(int sock) {
   return -1;
 }
 
-/* ---- module companions -------------------------------------------------- */
-/* A companion is a long-lived root process forked from the daemon, one per
- * module that defines zygisk_companion_entry. The daemon keeps a control
- * socket to it; for every Api::connectCompanion() we socketpair() and hand one
- * end to the companion (which services it on a fresh thread) and the other back
- * to the calling app process. */
-
 using companion_entry_fn = void (*)(int);
 
 struct CompanionJob {
@@ -480,14 +467,8 @@ void *companion_thread(void *p) {
   return nullptr;
 }
 
-/* Runs in the forked companion process; never returns. Writes a readiness byte
- * (1 = module has a companion entry) then serves client fds off ctrl. */
 [[noreturn]] void companion_main(const std::string &lib_path, int ctrl) {
-  // Drop every fd inherited from the daemon except ctrl + stdio. Critically
-  // this releases the [ksu_driver] fd, the netlink socket and the @zygiskd
-  // listen socket: a forked process must not keep the KSU driver fd alive
-  // (it disturbs kernel-side manager/driver bookkeeping) nor silently hold a
-  // netlink socket the kernel keeps multicasting specialize events into.
+  // Drop daemon fds.
   if (DIR *fdd = opendir("/proc/self/fd")) {
     int dfd = dirfd(fdd);
     while (dirent *e = readdir(fdd)) {
@@ -531,8 +512,6 @@ struct Companion {
 std::vector<Companion> g_companions; // indexed like g_modules, spawned lazily
 constexpr int kCompanionReadyMs = 5000; // bound on a companion's startup
 
-/* Ensure module idx has a live companion; return whether it exposes an entry.
- */
 bool ensure_companion(uint32_t idx) {
   if (idx >= g_modules.size())
     return false;
@@ -557,10 +536,6 @@ bool ensure_companion(uint32_t idx) {
   }
   close(sv[1]);
 
-  // Bounded wait for the readiness byte. A module whose dlopen wedges -- or a
-  // companion that dies before announcing -- must not block the single-threaded
-  // daemon, which would starve every app of module fds. On timeout or error,
-  // kill and reap it; c stays default {pid=-1} so a later request re-spawns.
   pollfd pfd{sv[0], POLLIN, 0};
   uint8_t ready = 0;
   if (poll(&pfd, 1, kCompanionReadyMs) != 1 || !(pfd.revents & POLLIN) ||
@@ -686,17 +661,6 @@ bool ensure_native_companion(uint32_t idx) {
   return c.has_entry;
 }
 
-/* ── mount revert ─────────────────────────────────────────────────────────
- * Enter app_pid's mount namespace and unmount every module mount by scanning
- * its mountinfo -- not just KSU's tagged mount_list, so non-standard mounts
- * (other modules / manual binds / storage tmpfs) get cleaned too. A mount is
- * reverted if its source is KSU/magisk/APatch, its target is under /data/adb,
- * OR its mountinfo root field is under /adb/modules -- every magic-mount bound
- * out of /data/adb/modules carries that root wherever its target lands. Kept in
- * sync with the kernel-side predicate (ksu_mount_is_module). NOTE: the kernel
- * task_work path now covers main + isolated processes robustly; this userspace
- * path is the redundant belt-and-suspenders for the core-driven revert.
- */
 static bool yz_mi_parse(const std::string &line, std::string &root,
                         std::string &target, std::string &source) {
   std::istringstream iss(line);
@@ -706,8 +670,6 @@ static bool yz_mi_parse(const std::string &line, std::string &root,
     tok.push_back(t);
   if (tok.size() < 7)
     return false;
-  /* mountinfo: id parent maj:min ROOT TARGET opts [optional...] - type SRC sup
-   */
   size_t dash = 0;
   bool found = false;
   for (size_t i = 5; i < tok.size(); ++i)
@@ -724,9 +686,6 @@ static bool yz_mi_parse(const std::string &line, std::string &root,
   return true;
 }
 
-/* Caller is already inside the target app's mount namespace, so /proc/self
- * mountinfo is the app's. Collect matching mounts, umount in reverse (children
- * / later mounts first to dodge EBUSY) with MNT_DETACH (lazy). */
 static void yz_umount_root_in_ns() {
   std::ifstream f("/proc/self/mountinfo");
   if (!f.is_open())
@@ -747,11 +706,6 @@ static void yz_umount_root_in_ns() {
     umount2(it->c_str(), MNT_DETACH);
 }
 
-/* Short-lived fork: the child setns()'s into app_pid's mount namespace and
- * unmounts there. NO unshare -- the umounts must land in the app's own ns so it
- * loses sight of them; unshare would detach into a copy and leave them intact.
- * umount2 needs CAP_SYS_ADMIN, which this root daemon has; the app
- * (untrusted_app) never receives the ksu driver fd. */
 static bool yz_revert_app_mounts(pid_t app_pid) {
   if (app_pid <= 0)
     return false;
@@ -775,8 +729,6 @@ static bool yz_revert_app_mounts(pid_t app_pid) {
   return WIFEXITED(st) && WEXITSTATUS(st) == 0;
 }
 
-/* Root-grant + denylist StateFlag bits for a uid, from the KSU kernel
- * (zygisk::StateFlag: PROCESS_GRANTED_ROOT=1<<0, PROCESS_ON_DENYLIST=1<<1). */
 uint32_t query_flags(uint32_t uid) {
   uint32_t flags = 0;
   if (ksud::uid_granted_root(uid))
@@ -786,8 +738,6 @@ uint32_t query_flags(uint32_t uid) {
   return flags;
 }
 
-/* Runtime config parsed from yzconfig.json. Missing/malformed config keeps
- * yukilinker on by default; explicit false in JSON still disables it. */
 yz_config g_yz_config{1, 0, 0, 0};
 
 void read_yzconfig() {
@@ -811,10 +761,6 @@ void read_yzconfig() {
     }
   }
   g_yz_config = cfg;
-  // Hand the kernel the yukilinker first-stage toggle: zygote_probe stages
-  // libyukilinker (on) or the core directly (off). Re-sent on every reload;
-  // it applies to the next zygote (module load mode itself hot-reloads in
-  // core).
   yz_yukilinker_cmd yc{};
   yc.enabled = cfg.yukilinker;
   ksud::ksuctl(KSU_IOCTL_YZ_SET_YUKILINKER, &yc);
@@ -822,13 +768,6 @@ void read_yzconfig() {
         cfg.denylist_mode, cfg.dmesg_log);
 }
 
-/* ---- injection telemetry (manager status panel) ------------------------- *
- * Maintained from the netlink specialize stream. The daemon is single-threaded
- * (one poll loop drains netlink and serves clients), so no locking is needed.
- * count = total specialize events seen; recent = distinct appids, most-recent
- * first, capped -- enough for "what just got injected" without unbounded
- * growth.
- */
 uint64_t g_inject_count = 0;
 std::deque<uint32_t> g_recent_appids;
 constexpr size_t kRecentMax = 16;
@@ -1096,10 +1035,7 @@ void json_append_escaped(std::string &out, const std::string &s) {
   }
 }
 
-/* Compact status JSON the manager parses (org.json). appids only -- the manager
- * resolves them to package names via PackageManager; config is echoed so the
- * panel can show what zygiskd actually loaded after a reload, not just the
- * file. */
+/* Compact status JSON for the manager. */
 std::string build_status_json() {
   std::string s = "{\"count\":";
   s += std::to_string(g_inject_count);
@@ -1281,11 +1217,7 @@ void handle_client(int client) {
     break;
   }
   case zygiskd::Request::GetStatus: {
-    // SO_PEERCRED: the kernel stamps the connecting process's real uid onto the
-    // socket -- a caller cannot forge it (unlike a package name or class). Only
-    // the kernel-authenticated manager (preset/superkey full uid) may read the
-    // telemetry; anyone else gets an empty reply (len 0). The manager itself
-    // connects, so the peer uid is its own app uid.
+    // Manager-only telemetry.
     std::string js;
     struct ucred cr{};
     socklen_t crlen = sizeof(cr);
@@ -1305,10 +1237,6 @@ void handle_client(int client) {
     break;
   }
   case zygiskd::Request::RevertMount: {
-    // core (denylist mode 1/2) asks us to revert its module mounts. SO_PEERCRED
-    // gives the caller's real pid (kernel-stamped, unforgeable). We enter its
-    // mount ns and unmount every module mount by scanning mountinfo, catching
-    // non-standard mounts the KSU mount_list never recorded.
     struct ucred cr{};
     socklen_t crlen = sizeof(cr);
     uint8_t ok = 0;
@@ -1319,10 +1247,6 @@ void handle_client(int client) {
     break;
   }
   case zygiskd::Request::SelfDestruct: {
-    // core (denylist_mode==1) unhooked itself and reports its segments. Resolve
-    // its pid via SO_PEERCRED, then have the kernel revert its mounts AND
-    // munmap the core segments (task_work, after it returns to the JVM). The
-    // driver fd never enters the app.
     uint8_t n = 0;
     if (!read_exact(client, &n, sizeof(n)) || n == 0 || n > YZ_MAX_UNMAP_SEGS)
       break;
@@ -1342,12 +1266,6 @@ void handle_client(int client) {
           break;
         }
       if (good) {
-        // Revert the app's module mounts only. The core munmaps its OWN
-        // segments synchronously (tail-call munmap in zygisk_self_destruct); we
-        // must NOT kernel-munmap them here -- the async task_work raced the
-        // core's own execution and crashed it (libc returned into the
-        // just-unmapped core). ucmd.addr/size are read for ABI compat but no
-        // longer unmapped.
         yz_umount_pid_cmd mcmd{};
         mcmd.pid = ucmd.pid;
         ok = ksud::ksuctl(KSU_IOCTL_YZ_UMOUNT_PID, &mcmd) == 0 ? 1 : 0;
@@ -1357,12 +1275,6 @@ void handle_client(int client) {
     break;
   }
   case zygiskd::Request::PatchText: {
-    // core asks us to write `len` bytes at `addr` in ITS OWN memory (the
-    // specialize inline-hook patching libandroid_runtime's code). SO_PEERCRED
-    // pins the target to the caller (unforgeable), so this only writes the
-    // caller's process. The kernel uses access_process_vm(FOLL_FORCE): a COW
-    // write that patches the read-only, file-backed code page WITHOUT mprotect,
-    // so the executable VMA is never split (defeats the exec-VMA-count check).
     uint64_t addr = 0;
     uint32_t len = 0;
     if (!read_exact(client, &addr, sizeof(addr)) ||
@@ -1388,8 +1300,6 @@ void handle_client(int client) {
     break;
   }
   case zygiskd::Request::Log: {
-    // core forwards its log lines here -- it can't write /dev/kmsg from the
-    // zygote/app domain, and must never touch logcat. We emit to dmesg only.
     uint16_t len = 0;
     if (!read_exact(client, &len, sizeof(len)) || len == 0 || len > 256)
       break;
@@ -1515,7 +1425,7 @@ int bind_listen() {
 
   sockaddr_un addr{};
   addr.sun_family = AF_UNIX;
-  /* abstract namespace: leading NUL, then the name */
+  /* abstract namespace */
   const size_t name_len = strlen(zygiskd::kSocketName);
   memcpy(addr.sun_path + 1, zygiskd::kSocketName, name_len);
   socklen_t len =
@@ -1534,7 +1444,6 @@ int bind_listen() {
   return srv;
 }
 
-/* join the kernel's lifecycle-event multicast group */
 int nl_listen() {
   int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, YZ_NETLINK_PROTO);
   if (fd < 0) {
@@ -1552,19 +1461,7 @@ int nl_listen() {
   return fd;
 }
 
-// A just-specialized app: previously we eagerly opened each module's .so here
-// and handed the fds to the kernel, which task_work'd them into the target's
-// own fd table -- the brokered fds outlived the load and surfaced as
-// /data/adb/modules/.../arm64-v8a.so entries in /proc/<app>/fd. The core never
-// knew the fd numbers so it could not close them. The core's regular request
-// path (zygiskd::Request::GetModuleFd over the daemon socket) already brokers
-// every module fd on demand and closes it immediately after loading, so the
-// kernel push channel is pure overhead that leaves an observable fingerprint.
-// Drop it. The kernel side (ksu_zygote_ctl_handoff / yz_deliver_cb) remains
-// compiled in but is now dead code that no caller reaches.
-void on_specialize(uint32_t /*pid*/, uint32_t /*appid*/) {
-  // intentionally empty -- see comment above.
-}
+void on_specialize(uint32_t /*pid*/, uint32_t /*appid*/) {}
 
 void nl_drain(int fd) {
   char buf[4096];
@@ -1582,21 +1479,15 @@ void nl_drain(int fd) {
     auto *ev = static_cast<yz_event *>(NLMSG_DATA(nlh));
     DLOGI("event type=%u pid=%u appid=%u", ev->type, ev->pid, ev->appid);
     if (ev->type == YZ_EV_SPECIALIZE) {
-      record_injection(
-          ev->appid); // telemetry: count + recent, even with 0 mods
+      record_injection(ev->appid);
       on_specialize(ev->pid, ev->appid);
     } else if (ev->type == YZ_EV_RELOAD) {
-      // Manager or CLI requested a live refresh. Native targets live in module
-      // metadata, so re-scan modules before re-reading yzconfig and pushing the
-      // first-stage toggle.
       rescan_modules();
       read_yzconfig();
     }
   }
 }
 
-// Resolve the offset of a symbol in linker64's dynamic symbol table, so the
-// kernel can compute its absolute address per-zygote as AT_BASE + offset.
 uint64_t resolve_linker_sym(const char *path, const char *want) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
@@ -1681,17 +1572,8 @@ bool send_dlopen_offset() {
 int run_daemon() {
   int ready_fd = consume_ready_fd();
 
-  // A client (zygote/app) can disconnect mid-reply; without this a write to
-  // the dead socket raises SIGPIPE and kills the daemon (it then lingers as a
-  // zombie holding @zygiskd64, so new processes connect but are never served).
   signal(SIGPIPE, SIG_IGN);
 
-  // Bind FIRST so exactly one daemon owns @zygiskd64. post-fs-data can fire
-  // more than once (the kernel injects the exec at multiple init triggers), so
-  // ksud may launch us again while a live daemon already holds the socket. If
-  // the abstract name is taken, bail cleanly here -- before scanning modules or
-  // re-pushing the dlopen offset to the kernel -- instead of racing and then
-  // lingering as an idle process that never serves anyone.
   int srv = bind_listen();
   if (srv < 0) {
     DLOGI("@%s already owned by another zygiskd; exiting",

@@ -1,9 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - manager control & monitoring panel: injection status card,
- * module loader / denylist / dmesg toggles, and loaded-module count. Reads
- * zygiskd telemetry via Natives.yzQueryStatus(), writes yzconfig.json and fires
- * a netlink reload.
+ * YukiZygisk manager panel.
  *
  * Author: Anatdx
  */
@@ -93,10 +90,9 @@ import ui.screen.moreSettings.component.SwitchSettingItem
 private const val YZCONFIG_DIR = "/data/adb/ksu/yukizygisk"
 private const val YZCONFIG_PATH = "$YZCONFIG_DIR/yzconfig.json"
 
-/** Mirrors uapi/yukizygisk.h yz_config + the yzconfig.json schema. */
 data class YzConfig(
     val yukilinker: Boolean = true,
-    val denylistMode: Int = 0, // 0=off, 1=force-umount+no-inject, 2=inject+umount
+    val denylistMode: Int = 0,
     val dmesgLog: Boolean = false,
 )
 
@@ -115,12 +111,7 @@ private suspend fun readYzConfig(): YzConfig = withContext(Dispatchers.IO) {
     }
 }
 
-/** Write yzconfig.json then fire a netlink reload so it applies immediately. */
 private suspend fun writeYzConfig(cfg: YzConfig) = withContext(Dispatchers.IO) {
-    // Compact single-line JSON written via a single-quoted echo. A heredoc
-    // through libsu's job runner is unreliable (sentinel injection / multi-line
-    // stdin) and was silently dropping the write -- so the toggle never stuck.
-    // Our keys/values never contain a single quote, so '...' is safe.
     val json = JSONObject().apply {
         put("yukilinker", cfg.yukilinker)
         put("denylist_mode", cfg.denylistMode)
@@ -130,8 +121,6 @@ private suspend fun writeYzConfig(cfg: YzConfig) = withContext(Dispatchers.IO) {
         newJob().add("mkdir -p $YZCONFIG_DIR").exec()
         newJob().add("echo '$json' > $YZCONFIG_PATH").exec()
     }
-    // Fires KSU_IOCTL_YZ_RELOAD -> kernel multicasts YZ_EV_RELOAD -> zygiskd
-    // re-reads the file; takes effect on the next specialize, no reboot.
     execKsud("yukizygisk reload")
 }
 
@@ -182,7 +171,6 @@ private fun mergeZygoteMonitorEntries(
     return merged
 }
 
-/** One zygote process visible to zygiskd's monitor scan. */
 private data class ZygoteMonitorEntry(
     val pid: Int,
     val name: String,
@@ -190,7 +178,6 @@ private data class ZygoteMonitorEntry(
     val state: MonitorState,
 )
 
-/** One configured native-service module entry reported by zygiskd. */
 private data class NativeModuleEntry(
     val id: String,
     val targetType: String,
@@ -199,7 +186,6 @@ private data class NativeModuleEntry(
     val state: MonitorState,
 )
 
-/** One native service process where a native module finished loading. */
 private data class NativeInjection(
     val pid: Int,
     val process: String,
@@ -228,7 +214,6 @@ private data class NativeModuleMonitorEntry(
     val state: MonitorState,
 )
 
-/** Parsed view of zygiskd's status JSON (Natives.yzQueryStatus). */
 private data class YzStatus(
     val count: Int,
     val zygotes: List<ZygoteMonitorEntry>,
@@ -337,11 +322,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 ?.contains("enabled", ignoreCase = true) == true
     }
 
-    // Injection telemetry: poll the running zygiskd in-process via Natives
-    // (jni.c connects to the daemon socket; zygiskd SO_PEERCRED-gates the reply
-    // to the kernel-authenticated manager uid). A non-null reply means injection
-    // is live; null means the daemon is down or we are not the manager, so the
-    // last-known values just stand.
     LaunchedEffect(Unit) {
         while (true) {
             val snapshot = withContext(Dispatchers.IO) {
@@ -423,7 +403,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 .padding(horizontal = 16.dp)
                 .padding(top = 8.dp),
         ) {
-            // --- Injection status ---
             SettingsCard(title = stringResource(R.string.yukizygisk_injection_status)) {
                 StatusRow(
                     stringResource(R.string.yukizygisk_kernel_injection),
@@ -449,7 +428,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 )
             }
 
-            // --- Zygote monitor ---
             SettingsCard(title = stringResource(R.string.yukizygisk_injected_zygotes)) {
                 if (monitoredZygotes.isEmpty()) {
                     Text(
@@ -468,7 +446,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            // --- Native service injections ---
             MonitorCard(
                 title = stringResource(R.string.yukizygisk_native_injections),
                 trailing = {
@@ -583,7 +560,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            // --- Module loading ---
             SettingsCard(title = stringResource(R.string.yukizygisk_module_loading)) {
                 SwitchSettingItem(
                     icon = Icons.Filled.Memory,
@@ -603,7 +579,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 )
             }
 
-            // --- Denylist behaviour ---
             SettingsCard(title = stringResource(R.string.yukizygisk_denylist_behaviour)) {
                 Text(
                     stringResource(R.string.yukizygisk_denylist_desc),
@@ -621,7 +596,6 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 ) { save(config.copy(denylistMode = it)) }
             }
 
-            // --- Logging ---
             SettingsCard(title = stringResource(R.string.yukizygisk_log_dmesg_title)) {
                 SwitchSettingItem(
                     icon = Icons.AutoMirrored.Filled.Article,

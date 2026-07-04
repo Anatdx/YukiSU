@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - zygiskd <-> core wire protocol + multi-call entry.
+ * YukiZygisk daemon protocol.
  *
  * Author: Anatdx
  */
@@ -10,36 +10,26 @@
 
 namespace zygiskd {
 
-/* core sends a one-byte Request (+ args); daemon replies with data and/or
- * passes fds via SCM_RIGHTS. */
+/* One-byte request protocol. */
 enum class Request : uint8_t {
-  GetProcessFlags = 1,  // arg u32 uid -> u32 StateFlag bits
-  GetModuleCount = 2,   // -> u32 count
-  GetModuleFd = 3,      // arg u32 index -> module lib fd
-  ConnectCompanion = 4, // arg u32 index -> companion socket fd
-  GetModuleDir = 5,     // arg u32 index -> module root dir fd
+  GetProcessFlags = 1,
+  GetModuleCount = 2,
+  GetModuleFd = 3,
+  ConnectCompanion = 4,
+  GetModuleDir = 5,
   GetConfig = 6, // -> struct yz_config (runtime config from yzconfig.json)
-  GetStatus = 7, // -> u32 len + len bytes of status JSON (manager only;
-                 //    SO_PEERCRED-gated to the authenticated manager uid)
-  RevertMount =
-      8, // (denylist_mode==2) revert caller's module mounts: zygiskd
-         //   resolves caller pid via SO_PEERCRED, drives kernel umount
-  SelfDestruct =
-      9,    // (denylist_mode==1) core unhooked; umount + munmap its segs
-  Log = 10, // u16 len + len bytes -> daemon writes them to /dev/kmsg (dmesg)
-  PatchText =
-      11, // u64 addr + u32 len + len bytes -> kernel writes them into the
-          //   caller's mm via access_process_vm(FOLL_FORCE) (no mprotect, no
-          //   VMA split); used by the specialize inline-hook to patch code
-  ReportZygote =
-      12, // core -> daemon, no args: daemon records peer pid + zygote socket
-          //   name parsed from /proc/<pid>/cmdline for manager status
-  GetNativeModuleCount = 13,    // -> u32 count
-  GetNativeModuleInfo = 14,     // arg u32 index -> NativeModuleInfo
-  GetNativeModuleFd = 15,       // arg u32 index -> module lib fd
-  ConnectNativeCompanion = 16,  // arg u32 index -> companion socket fd
-  RestoreNativeLoadPolicy = 17, // restore temporary native load file allow
-  ReportNativeInjection = 18,   // arg u32 index -> record native load success
+  GetStatus = 7,
+  RevertMount = 8,
+  SelfDestruct = 9,
+  Log = 10,
+  PatchText = 11,
+  ReportZygote = 12,
+  GetNativeModuleCount = 13,
+  GetNativeModuleInfo = 14,
+  GetNativeModuleFd = 15,
+  ConnectNativeCompanion = 16,
+  RestoreNativeLoadPolicy = 17,
+  ReportNativeInjection = 18,
 };
 
 inline constexpr uint32_t kNativeModuleNameMax = 64;
@@ -55,7 +45,6 @@ struct NativeModuleInfo {
   char lib_path[kNativeModulePathMax];
 };
 
-/* abstract socket name (callers prepend the NUL); ABI-specific */
 #if defined(__LP64__)
 inline constexpr char kSocketName[] = "zygiskd64";
 #else
@@ -64,5 +53,4 @@ inline constexpr char kSocketName[] = "zygiskd32";
 
 } // namespace zygiskd
 
-/* ksud dispatches here when invoked as `zygiskd` or `ksud zygiskd`. */
 extern "C" int zygiskd_main(int argc, char **argv);

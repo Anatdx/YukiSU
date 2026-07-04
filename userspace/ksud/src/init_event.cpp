@@ -150,10 +150,7 @@ void run_stage(const std::string& stage, bool block) {
     exec_stage_script(stage, block);
 }
 
-// Launch the zygisk daemon (ksud's zygiskd multi-call applet) detached.
-// Mirrors spawn_sulogd: own pgrp, stdio to /dev/null, double-fork, exec. The
-// ready pipe closes the race between arming the kernel hook and zygote exec:
-// zygiskd reports ready only after it has pushed linker offsets to the kernel.
+// Launch zygiskd detached.
 int spawn_zygiskd() {
     int ready_pipe[2] = {-1, -1};
     if (pipe(ready_pipe) != 0) {
@@ -257,9 +254,6 @@ bool yukizygisk_feature_enabled() {
     return supported && value != 0;
 }
 
-// Stage the YukiZygisk payload only after init_features() has applied the
-// persisted feature gate. If the feature is off, leave the payload absent so a
-// reboot cannot accidentally re-arm zygote/native injection.
 void ensure_yukizygisk_payload_if_enabled() {
     if (!yukizygisk_feature_enabled()) {
         return;
@@ -267,10 +261,6 @@ void ensure_yukizygisk_payload_if_enabled() {
     ensure_yukizygisk(true);
 }
 
-// YukiZygisk gate: only when the feature is on and we're NOT in safe mode.
-// Bring zygiskd up at post-fs-data so it has resolved the linker dlopen
-// offsets and is listening before zygote starts; the kernel then injects
-// zygote on the KSU_FEATURE_YUKIZYGISK gate. Feature off / safe mode: no-op.
 void ensure_zygiskd_running_if_enabled() {
     if (!yukizygisk_feature_enabled())
         return;

@@ -102,13 +102,9 @@ class ModuleViewModel : ViewModel() {
         private set
     var search by mutableStateOf("")
 
-    /** True when built-in YukiZygisk is on; the UI then force-disables and locks
-     *  conflicting third-party zygisk implementations (see ZYGISK_IMPL_MODULE_IDS). */
     var yukiZygiskEnabled by mutableStateOf(false)
         private set
 
-    /** dirIds of zygisk modules the running zygiskd has actually loaded, from
-     *  Natives.yzQueryStatus(). ModuleItem tags these with a green "Loaded". */
     var loadedZygiskModules by mutableStateOf<Set<String>>(emptySet())
         private set
 
@@ -168,7 +164,6 @@ class ModuleViewModel : ViewModel() {
 
                 Log.i(TAG, "result: $result")
 
-                // Built-in YukiZygisk excludes third-party zygisk impls; show them disabled when on.
                 val yukiZygiskOn = getFeatureValue("yukizygisk")
                 yukiZygiskEnabled = yukiZygiskOn
 
@@ -210,7 +205,6 @@ class ModuleViewModel : ViewModel() {
                 modules = moduleInfos
                 runtimeModuleKinds = detectModuleRuntimeKinds(moduleInfos)
 
-                // Persist the disable flag so locked impls truly don't load (idempotent).
                 if (yukiZygiskOn) {
                     moduleInfos.forEach { m ->
                         if (m.dirId in ZYGISK_IMPL_MODULE_IDS) {

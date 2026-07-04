@@ -1,16 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - logging.
- *
- * NEVER logcat: app-side detectors read logcat and would see our tags. Logs go
- * to dmesg (/dev/kmsg) -- but only via zygiskd (the root daemon), since the
- * zygote/app domain can't write the kernel ring buffer (an avc denial would
- * itself be a tell). Gated on yzconfig's dmesg_log; the default is a silent
- * no-op with zero cost.
- *
- * yz_klog's strong definition is in core.cpp (formats + forwards to zygiskd).
- * It is declared weak so helper-only users without a zygiskd channel can link
- * it as null; the macros then skip the call.
+ * YukiZygisk logging.
  *
  * Author: Anatdx
  */
