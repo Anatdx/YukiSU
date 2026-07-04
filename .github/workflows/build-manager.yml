@@ -217,8 +217,9 @@ jobs:
         id: need_upload
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CAN_UPLOAD: ${{ github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) }}
         run: |
-          if [ -n "$BOT_TOKEN" ]; then
+          if [ "$CAN_UPLOAD" = "true" ] && [ -n "$BOT_TOKEN" ]; then
             echo "UPLOAD=true" >> "$GITHUB_OUTPUT"
           else
             echo "UPLOAD=false" >> "$GITHUB_OUTPUT"
@@ -342,7 +343,7 @@ jobs:
           path: dist/
 
       - name: Upload to telegram
-        if: matrix.abi == 'arm64-v8a' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
+        if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) && matrix.abi == 'arm64-v8a' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
         env:
           CHAT_ID: ${{ vars.CHAT_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
