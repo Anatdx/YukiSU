@@ -12,4 +12,4 @@
 	url = https://github.com/Anatdx/ndk-busybox.git
 [submodule "userspace/zygisk/third_party/lsplt"]
 	path = userspace/zygisk/third_party/lsplt
-	url = https://github.com/Anatdx/lsplt.git
+	url = https://github.com/Anatdx/LSPlt.git
