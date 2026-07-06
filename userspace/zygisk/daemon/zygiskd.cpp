@@ -109,6 +109,14 @@ using NativeModule = yukizygisk::native::NativeModule;
 
 std::vector<NativeModule> g_native_modules;
 
+struct SafemodeStatus {
+  bool active = false;
+  uint32_t zygote_crashes = 0;
+  std::string zygote;
+};
+
+SafemodeStatus g_safemode;
+
 int consume_ready_fd() {
   const char *env = getenv("YUKIZYGISK_READY_FD");
   if (env == nullptr || *env == '\0')
@@ -689,6 +697,28 @@ void read_yzconfig() {
         cfg.denylist_mode, cfg.dmesg_log);
 }
 
+void refresh_safemode_status() {
+  yz_safemode_status_cmd cmd{};
+  if (ksud::ksuctl(KSU_IOCTL_YZ_GET_SAFEMODE, &cmd) != 0)
+    return;
+
+  cmd.zygote[sizeof(cmd.zygote) - 1] = '\0';
+  g_safemode.active = cmd.active != 0;
+  g_safemode.zygote_crashes = cmd.zygote_crashes;
+  g_safemode.zygote = cmd.zygote;
+}
+
+void note_safemode_event(uint32_t pid, uint32_t crashes) {
+  refresh_safemode_status();
+  if (!g_safemode.active) {
+    g_safemode.active = true;
+    g_safemode.zygote_crashes = crashes;
+  }
+  DLOGI("safemode: zygote crash threshold reached pid=%u crashes=%u name=%s",
+        pid, g_safemode.zygote_crashes,
+        g_safemode.zygote.empty() ? "zygote" : g_safemode.zygote.c_str());
+}
+
 uint64_t g_inject_count = 0;
 std::deque<uint32_t> g_recent_appids;
 constexpr size_t kRecentMax = 16;
@@ -853,6 +883,8 @@ std::vector<ZygoteMonitorRecord> scan_zygote_monitor() {
     std::string state = "failed";
     if (is_32bit_abi(abi))
       state = "unsupported32";
+    else if (g_safemode.active)
+      state = "crashed";
     else if (is_zygote_injected(static_cast<uint32_t>(pid), name, abi))
       state = "injected";
     out.push_back(ZygoteMonitorRecord{
@@ -1033,10 +1065,19 @@ void json_append_escaped(std::string &out, const std::string &s) {
 
 /* Compact status JSON for the manager. */
 std::string build_status_json() {
+  refresh_safemode_status();
   prune_dead_native_injections();
 
   std::string s = "{\"count\":";
   s += std::to_string(g_inject_count);
+  s += ",\"safe_mode\":";
+  s += g_safemode.active ? "true" : "false";
+  s += ",\"zygote_crashes\":";
+  s += std::to_string(g_safemode.zygote_crashes);
+  s += ",\"safe_mode_zygote\":\"";
+  json_append_escaped(s,
+                      g_safemode.zygote.empty() ? "zygote" : g_safemode.zygote);
+  s += "\"";
   s += ",\"yukilinker\":";
   s += g_yz_config.yukilinker ? "true" : "false";
   s += ",\"denylist_mode\":";
@@ -1112,7 +1153,7 @@ std::string build_status_json() {
         loaded = true;
         break;
       }
-    s += loaded ? "injected" : "failed";
+    s += (loaded && !g_safemode.active) ? "injected" : "failed";
     s += "\"";
     s += "}";
   }
@@ -1477,11 +1518,15 @@ void nl_drain(int fd) {
     auto *ev = static_cast<yz_event *>(NLMSG_DATA(nlh));
     DLOGI("event type=%u pid=%u appid=%u", ev->type, ev->pid, ev->appid);
     if (ev->type == YZ_EV_SPECIALIZE) {
+      if (g_safemode.active)
+        continue;
       record_injection(ev->appid);
       on_specialize(ev->pid, ev->appid);
     } else if (ev->type == YZ_EV_RELOAD) {
       rescan_modules();
       read_yzconfig();
+    } else if (ev->type == YZ_EV_SAFEMODE) {
+      note_safemode_event(ev->pid, ev->appid);
     }
   }
 }
@@ -1582,6 +1627,7 @@ int run_daemon() {
 
   rescan_modules();
   read_yzconfig();
+  refresh_safemode_status();
   bool offsets_ready = send_dlopen_offset();
 
   int nlfd = nl_listen();

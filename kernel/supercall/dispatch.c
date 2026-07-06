@@ -1070,6 +1070,19 @@ static int do_yz_restore_native_load_policy(void __user *arg)
 	return ksu_zygote_probe_restore_native_policy((pid_t)cmd.pid);
 }
 
+static int do_yz_get_safemode(void __user *arg)
+{
+	struct yz_safemode_status_cmd cmd;
+	int ret;
+
+	ret = ksu_zygote_probe_get_safemode(&cmd);
+	if (ret)
+		return ret;
+	if (copy_to_user(arg, &cmd, sizeof(cmd)))
+		return -EFAULT;
+	return 0;
+}
+
 /* Schedule app mount revert. */
 static int do_yz_umount_pid(void __user *arg)
 {
@@ -1426,6 +1439,10 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY,
      .name = "YZ_RESTORE_NATIVE_LOAD_POLICY",
      .handler = do_yz_restore_native_load_policy,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_GET_SAFEMODE,
+     .name = "YZ_GET_SAFEMODE",
+     .handler = do_yz_get_safemode,
      .perm_check = only_root},
     {.cmd = KSU_IOCTL_YZ_UMOUNT_PID,
      .name = "YZ_UMOUNT_PID",

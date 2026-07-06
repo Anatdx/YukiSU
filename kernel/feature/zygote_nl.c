@@ -17,7 +17,7 @@
 
 static struct sock *yz_sock;
 
-void ksu_zygote_nl_emit_specialize(u32 pid, u32 appid)
+static void ksu_zygote_nl_emit_event(u32 type, u32 pid, u32 appid)
 {
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
@@ -37,7 +37,7 @@ void ksu_zygote_nl_emit_specialize(u32 pid, u32 appid)
 	}
 
 	ev = nlmsg_data(nlh);
-	ev->type = YZ_EV_SPECIALIZE;
+	ev->type = type;
 	ev->pid = pid;
 	ev->appid = appid;
 
@@ -45,32 +45,20 @@ void ksu_zygote_nl_emit_specialize(u32 pid, u32 appid)
 	nlmsg_multicast(yz_sock, skb, 0, YZ_NL_GROUP_EVENTS, GFP_ATOMIC);
 }
 
+void ksu_zygote_nl_emit_specialize(u32 pid, u32 appid)
+{
+	ksu_zygote_nl_emit_event(YZ_EV_SPECIALIZE, pid, appid);
+}
+
 /* Ask every listening zygiskd to re-read yzconfig.json (manager changed it). */
 void ksu_zygote_nl_emit_reload(void)
 {
-	struct sk_buff *skb;
-	struct nlmsghdr *nlh;
-	struct yz_event *ev;
+	ksu_zygote_nl_emit_event(YZ_EV_RELOAD, 0, 0);
+}
 
-	if (!yz_sock)
-		return;
-
-	skb = nlmsg_new(sizeof(*ev), GFP_ATOMIC);
-	if (!skb)
-		return;
-
-	nlh = nlmsg_put(skb, 0, 0, YZ_NL_MSG_EVENT, sizeof(*ev), 0);
-	if (!nlh) {
-		nlmsg_free(skb);
-		return;
-	}
-
-	ev = nlmsg_data(nlh);
-	ev->type = YZ_EV_RELOAD;
-	ev->pid = 0;
-	ev->appid = 0;
-
-	nlmsg_multicast(yz_sock, skb, 0, YZ_NL_GROUP_EVENTS, GFP_ATOMIC);
+void ksu_zygote_nl_emit_safemode(u32 pid, u32 crashes)
+{
+	ksu_zygote_nl_emit_event(YZ_EV_SAFEMODE, pid, crashes);
 }
 
 void ksu_zygote_nl_init(void)

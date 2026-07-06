@@ -750,6 +750,7 @@
     <string name="yukizygisk_kernel_injection">内核注入</string>
     <string name="yukizygisk_status_active">已激活</string>
     <string name="yukizygisk_status_off">未启用</string>
+    <string name="yukizygisk_status_safe_mode">安全模式</string>
     <string name="yukizygisk_module_loader">模块加载器</string>
     <string name="yukizygisk_loader_anon">yukilinker（匿名）</string>
     <string name="yukizygisk_loader_system">系统 dlopen</string>
@@ -757,6 +758,7 @@
     <string name="yukizygisk_denylist_force_long">强制卸载 + 不注入</string>
     <string name="yukizygisk_denylist_restore_long">注入 + 仅卸载</string>
     <string name="yukizygisk_injections_session">本次会话注入数</string>
+    <string name="yukizygisk_zygote_crashes">Zygote 崩溃次数</string>
     <string name="yukizygisk_injected_zygotes">Zygote 监视器</string>
     <string name="yukizygisk_no_zygotes">无 Zygote</string>
     <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
@@ -773,6 +775,7 @@
     <string name="yukizygisk_native_process_detail">%1$s · pid %2$d</string>
     <string name="yukizygisk_zygote_injected_message">Zygisk 已注入。</string>
     <string name="yukizygisk_zygote_unsupported_message">暂不支持 32 位 Zygote。</string>
+    <string name="yukizygisk_zygote_crashed_message">Zygote 连续崩溃，安全模式已在本次开机停止注入。</string>
     <string name="yukizygisk_zygote_failed_message">安全模式已启用，当前未注入。</string>
     <string name="yukizygisk_native_process_injected_message">已注入 Native 模块。</string>
     <string name="yukizygisk_native_process_unsupported_message">暂不支持 32 位 Native 进程。</string>

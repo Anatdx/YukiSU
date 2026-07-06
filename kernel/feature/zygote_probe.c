@@ -40,6 +40,7 @@
 
 #include "policy/feature.h"
 #include "zygote_probe.h"
+#include "zygote_nl.h"
 #include "hook/lsm_hook.h"
 #include "selinux/selinux.h"
 #include "ksu.h"
@@ -49,6 +50,19 @@
 static const char app_process[] = "app_process";
 
 static bool yukizygisk_enabled;
+
+struct zp_zygote_guard {
+	char name[YZ_ZYGOTE_NAME_MAX];
+	pid_t last_pid;
+	u32 zygote_crashes;
+};
+
+#define ZP_ZYGOTE_GUARD_MAX 4
+static DEFINE_SPINLOCK(zp_safemode_lock);
+static struct zp_zygote_guard zp_zygote_guards[ZP_ZYGOTE_GUARD_MAX];
+static bool zp_safemode_active;
+static u32 zp_safemode_zygote_crashes;
+static char zp_safemode_zygote[YZ_ZYGOTE_NAME_MAX];
 
 #define ZP_ENABLE_LSM_INJECTOR 1
 
@@ -353,6 +367,108 @@ static void zp_copy_name(char *dst, size_t dst_len, const char *src)
 	for (i = 0; i + 1 < dst_len && src[i]; i++)
 		dst[i] = src[i];
 	dst[i] = '\0';
+}
+
+static bool zp_safemode_is_active(void)
+{
+	return READ_ONCE(zp_safemode_active);
+}
+
+static int zp_zygote_guard_slot_locked(const char *name, int *free_slot)
+{
+	int i;
+
+	if (free_slot)
+		*free_slot = -1;
+
+	for (i = 0; i < ZP_ZYGOTE_GUARD_MAX; i++) {
+		if (zp_zygote_guards[i].name[0] == '\0') {
+			if (free_slot && *free_slot < 0)
+				*free_slot = i;
+			continue;
+		}
+		if (!strcmp(zp_zygote_guards[i].name, name))
+			return i;
+	}
+	return -1;
+}
+
+static bool zp_zygote_safemode_should_skip(const char *name)
+{
+	unsigned long flags;
+	char zygote[YZ_ZYGOTE_NAME_MAX];
+	pid_t pid = current->tgid;
+	u32 crashes = 0;
+	bool activate = false;
+	bool skip = false;
+	int free_slot;
+	int slot;
+
+	zp_copy_name(zygote, sizeof(zygote),
+		     (name && name[0]) ? name : "zygote");
+
+	spin_lock_irqsave(&zp_safemode_lock, flags);
+	if (zp_safemode_active) {
+		skip = true;
+		crashes = zp_safemode_zygote_crashes;
+	} else {
+		slot = zp_zygote_guard_slot_locked(zygote, &free_slot);
+		if (slot < 0 && free_slot >= 0) {
+			slot = free_slot;
+			zp_copy_name(zp_zygote_guards[slot].name,
+				     sizeof(zp_zygote_guards[slot].name),
+				     zygote);
+		}
+		if (slot >= 0) {
+			struct zp_zygote_guard *guard = &zp_zygote_guards[slot];
+
+			if (guard->last_pid == 0) {
+				guard->last_pid = pid;
+			} else if (guard->last_pid != pid) {
+				guard->last_pid = pid;
+				guard->zygote_crashes++;
+				crashes = guard->zygote_crashes;
+				if (crashes >= YZ_ZYGOTE_CRASH_THRESHOLD) {
+					WRITE_ONCE(zp_safemode_active, true);
+					zp_safemode_zygote_crashes = crashes;
+					zp_copy_name(zp_safemode_zygote,
+						     sizeof(zp_safemode_zygote),
+						     zygote);
+					activate = true;
+					skip = true;
+				}
+			}
+		}
+	}
+	spin_unlock_irqrestore(&zp_safemode_lock, flags);
+
+	if (activate) {
+		pr_warn("zygote_probe: safemode enabled after %u %s "
+			"restart(s); skip pid=%d\n",
+			crashes, zygote, pid);
+		ksu_zygote_nl_emit_safemode((u32)pid, crashes);
+	} else if (skip) {
+		pr_info("zygote_probe: safemode active, skip zygote pid=%d "
+			"name=%s crashes=%u\n",
+			pid, zygote, crashes);
+	}
+	return skip;
+}
+
+int ksu_zygote_probe_get_safemode(struct yz_safemode_status_cmd *cmd)
+{
+	unsigned long flags;
+
+	if (!cmd)
+		return -EINVAL;
+
+	memset(cmd, 0, sizeof(*cmd));
+	spin_lock_irqsave(&zp_safemode_lock, flags);
+	cmd->active = zp_safemode_active ? 1 : 0;
+	cmd->zygote_crashes = zp_safemode_zygote_crashes;
+	zp_copy_name(cmd->zygote, sizeof(cmd->zygote), zp_safemode_zygote);
+	spin_unlock_irqrestore(&zp_safemode_lock, flags);
+	return 0;
 }
 
 static bool zp_match_early_native_target(const char *filename, char *label,
@@ -1117,6 +1233,12 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	if (native) {
 		zp_copy_name(socket_name, sizeof(socket_name),
 			     tw->label[0] ? tw->label : "native");
+		if (zp_safemode_is_active()) {
+			pr_info("zygote_probe: safemode active, skip native "
+				"pid=%d target=%s\n",
+				current->pid, socket_name);
+			goto out;
+		}
 	} else {
 		if (!zp_parse_zygote_args(mm, socket_name, sizeof(socket_name)))
 			goto out;
@@ -1131,6 +1253,9 @@ static void zp_inject_tw_func(struct callback_head *cb)
 		goto out;
 	}
 #endif // #ifdef CONFIG_COMPAT
+
+	if (!native && zp_zygote_safemode_should_skip(socket_name))
+		goto out;
 
 	for (k = 0; k < AT_VECTOR_SIZE - 1; k += 2) {
 		/* AT_ENTRY + AT_BASE (linker load base) from the saved copy */
@@ -1437,6 +1562,8 @@ static void __nocfi my_bprm_committed_creds(zp_bprm_arg_t *bprm)
 	live_enabled = READ_ONCE(yukizygisk_enabled);
 	early_enabled = zp_early_native_active();
 	if (unlikely(!live_enabled && !early_enabled))
+		return;
+	if (unlikely(zp_safemode_is_active()))
 		return;
 
 	by_sid = live_enabled && is_zygote(current_cred());

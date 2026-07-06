@@ -127,6 +127,7 @@ private suspend fun writeYzConfig(cfg: YzConfig) = withContext(Dispatchers.IO) {
 private enum class MonitorState {
     Injected,
     Unsupported32,
+    Crashed,
     Failed,
 }
 
@@ -142,6 +143,7 @@ private data class MonitorDialogState(
 
 private fun parseMonitorState(value: String): MonitorState = when (value) {
     "unsupported32" -> MonitorState.Unsupported32
+    "crashed" -> MonitorState.Crashed
     "failed" -> MonitorState.Failed
     else -> MonitorState.Injected
 }
@@ -158,7 +160,10 @@ private fun mergeZygoteMonitorEntries(
         }
         if (idx < 0) {
             merged += injected
-        } else if (merged[idx].state != MonitorState.Unsupported32) {
+        } else if (
+            merged[idx].state != MonitorState.Unsupported32 &&
+            merged[idx].state != MonitorState.Crashed
+        ) {
             val current = merged[idx]
             merged[idx] = current.copy(
                 pid = current.pid.takeIf { it != 0 } ?: injected.pid,
@@ -216,6 +221,8 @@ private data class NativeModuleMonitorEntry(
 
 private data class YzStatus(
     val count: Int,
+    val safeMode: Boolean,
+    val zygoteCrashes: Int,
     val zygotes: List<ZygoteMonitorEntry>,
     val modules: List<String>,
     val nativeModules: List<NativeModuleEntry>,
@@ -282,6 +289,8 @@ private fun parseYzStatus(json: String): YzStatus? = runCatching {
     } ?: emptyList()
     YzStatus(
         o.optInt("count", 0),
+        o.optBoolean("safe_mode", false),
+        o.optInt("zygote_crashes", 0),
         zygotes,
         modules,
         nativeModules,
@@ -291,6 +300,8 @@ private fun parseYzStatus(json: String): YzStatus? = runCatching {
 
 private data class YzSnapshot(
     val count: Int,
+    val safeMode: Boolean,
+    val zygoteCrashes: Int,
     val zygotes: List<ZygoteMonitorEntry>,
     val modulesLoadedCount: Int,
     val nativeModules: List<NativeModuleEntry>,
@@ -310,7 +321,9 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
 
     var config by remember { mutableStateOf(YzConfig()) }
     var injectionActive by remember { mutableStateOf(false) }
+    var safeMode by remember { mutableStateOf(false) }
     var injectionCount by remember { mutableIntStateOf(0) }
+    var zygoteCrashes by remember { mutableIntStateOf(0) }
     var monitoredZygotes by remember { mutableStateOf<List<ZygoteMonitorEntry>>(emptyList()) }
     var modulesLoadedCount by remember { mutableIntStateOf(0) }
     var nativeModules by remember { mutableStateOf<List<NativeModuleEntry>>(emptyList()) }
@@ -333,6 +346,8 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 val st = parseYzStatus(json) ?: return@withContext null
                 YzSnapshot(
                     count = st.count,
+                    safeMode = st.safeMode,
+                    zygoteCrashes = st.zygoteCrashes,
                     zygotes = st.zygotes,
                     modulesLoadedCount = st.modules.size,
                     nativeModules = st.nativeModules,
@@ -340,8 +355,10 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                 )
             }
             if (snapshot != null) {
-                injectionActive = true
+                safeMode = snapshot.safeMode
+                injectionActive = !snapshot.safeMode
                 injectionCount = snapshot.count
+                zygoteCrashes = snapshot.zygoteCrashes
                 monitoredZygotes = snapshot.zygotes
                 modulesLoadedCount = snapshot.modulesLoadedCount
                 nativeModules = snapshot.nativeModules
@@ -409,9 +426,18 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
             SettingsCard(title = stringResource(R.string.yukizygisk_injection_status)) {
                 StatusRow(
                     stringResource(R.string.yukizygisk_kernel_injection),
-                    if (injectionActive) stringResource(R.string.yukizygisk_status_active)
-                    else stringResource(R.string.yukizygisk_status_off),
+                    when {
+                        safeMode -> stringResource(R.string.yukizygisk_status_safe_mode)
+                        injectionActive -> stringResource(R.string.yukizygisk_status_active)
+                        else -> stringResource(R.string.yukizygisk_status_off)
+                    },
                 )
+                if (safeMode) {
+                    StatusRow(
+                        stringResource(R.string.yukizygisk_zygote_crashes),
+                        zygoteCrashes.toString(),
+                    )
+                }
                 StatusRow(
                     stringResource(R.string.yukizygisk_module_loader),
                     if (config.yukilinker) stringResource(R.string.yukizygisk_loader_anon)
@@ -494,6 +520,7 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                     nativeModules.map { module ->
                         val targets = nativeInjections.filter { it.module == module.id }
                         val state = when {
+                            targets.any { it.state == MonitorState.Crashed } -> MonitorState.Crashed
                             targets.any { it.state == MonitorState.Failed } -> MonitorState.Failed
                             targets.any { it.state == MonitorState.Unsupported32 } ->
                                 MonitorState.Unsupported32
@@ -516,6 +543,7 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
                         .map { (_, rows) ->
                             val first = rows.first()
                             val state = when {
+                                rows.any { it.state == MonitorState.Crashed } -> MonitorState.Crashed
                                 rows.any { it.state == MonitorState.Failed } -> MonitorState.Failed
                                 rows.any { it.state == MonitorState.Unsupported32 } ->
                                     MonitorState.Unsupported32
@@ -741,6 +769,10 @@ private fun MonitorStateButton(state: MonitorState, onClick: () -> Unit) {
             icon = Icons.Outlined.Warning
             tint = MaterialTheme.colorScheme.tertiary
         }
+        MonitorState.Crashed -> {
+            icon = Icons.Outlined.Warning
+            tint = MaterialTheme.colorScheme.error
+        }
         MonitorState.Failed -> {
             icon = Icons.Outlined.Cancel
             tint = MaterialTheme.colorScheme.error
@@ -800,6 +832,7 @@ private fun zygoteDialog(zygote: ZygoteMonitorEntry): MonitorDialogState {
     val message = when (zygote.state) {
         MonitorState.Injected -> stringResource(R.string.yukizygisk_zygote_injected_message)
         MonitorState.Unsupported32 -> stringResource(R.string.yukizygisk_zygote_unsupported_message)
+        MonitorState.Crashed -> stringResource(R.string.yukizygisk_zygote_crashed_message)
         MonitorState.Failed -> stringResource(R.string.yukizygisk_zygote_failed_message)
     }
     return MonitorDialogState(zygote.name, message)
@@ -815,6 +848,7 @@ private fun nativeProcessDialog(process: NativeProcessEntry): MonitorDialogState
         MonitorState.Injected -> stringResource(R.string.yukizygisk_native_process_injected_message)
         MonitorState.Unsupported32 ->
             stringResource(R.string.yukizygisk_native_process_unsupported_message)
+        MonitorState.Crashed -> stringResource(R.string.yukizygisk_native_process_failed_message)
         MonitorState.Failed -> stringResource(R.string.yukizygisk_native_process_failed_message)
     }
     return MonitorDialogState(process.process, appendDetail(base, modules))
@@ -835,6 +869,7 @@ private fun nativeModuleDialog(module: NativeModuleMonitorEntry): MonitorDialogS
         MonitorState.Injected -> stringResource(R.string.yukizygisk_native_module_injected_message)
         MonitorState.Unsupported32 ->
             stringResource(R.string.yukizygisk_native_module_unsupported_message)
+        MonitorState.Crashed -> stringResource(R.string.yukizygisk_native_module_failed_message)
         MonitorState.Failed -> stringResource(R.string.yukizygisk_native_module_failed_message)
     }
     return MonitorDialogState(module.id, appendDetail(base, targets))

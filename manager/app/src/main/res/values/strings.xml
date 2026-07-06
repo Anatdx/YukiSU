@@ -751,6 +751,7 @@
     <string name="yukizygisk_kernel_injection">Kernel injection</string>
     <string name="yukizygisk_status_active">Active</string>
     <string name="yukizygisk_status_off">Off</string>
+    <string name="yukizygisk_status_safe_mode">Safe mode</string>
     <string name="yukizygisk_module_loader">Module loader</string>
     <string name="yukizygisk_loader_anon">yukilinker (anonymous)</string>
     <string name="yukizygisk_loader_system">System dlopen</string>
@@ -758,6 +759,7 @@
     <string name="yukizygisk_denylist_force_long">Force unmount + no inject</string>
     <string name="yukizygisk_denylist_restore_long">Inject + unmount only</string>
     <string name="yukizygisk_injections_session">Injections this session</string>
+    <string name="yukizygisk_zygote_crashes">Zygote crashes</string>
     <string name="yukizygisk_injected_zygotes">Zygote monitor</string>
     <string name="yukizygisk_no_zygotes">No Zygote</string>
     <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
@@ -774,6 +776,7 @@
     <string name="yukizygisk_native_process_detail">%1$s · pid %2$d</string>
     <string name="yukizygisk_zygote_injected_message">Zygisk injected.</string>
     <string name="yukizygisk_zygote_unsupported_message">32-bit Zygote is not supported.</string>
+    <string name="yukizygisk_zygote_crashed_message">Zygote crashed repeatedly; safe mode stopped injection for this boot.</string>
     <string name="yukizygisk_zygote_failed_message">Safe mode enabled; not injected.</string>
     <string name="yukizygisk_native_process_injected_message">Native modules injected.</string>
     <string name="yukizygisk_native_process_unsupported_message">32-bit Native process is not supported.</string>
