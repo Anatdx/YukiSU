@@ -83,6 +83,15 @@
 #ifndef DT_RELRENT
 #define DT_RELRENT 0x6fffe003
 #endif // #ifndef DT_RELRENT
+#ifndef DT_ANDROID_RELR
+#define DT_ANDROID_RELR 0x6fffe000
+#endif // #ifndef DT_ANDROID_RELR
+#ifndef DT_ANDROID_RELRSZ
+#define DT_ANDROID_RELRSZ 0x6fffe001
+#endif // #ifndef DT_ANDROID_RELRSZ
+#ifndef DT_ANDROID_RELRENT
+#define DT_ANDROID_RELRENT 0x6fffe003
+#endif // #ifndef DT_ANDROID_RELRENT
 
 namespace yukilinker {
 namespace {
@@ -124,6 +133,29 @@ void *arena_alloc(size_t n, size_t align = 16) {
 constexpr size_t kMaxImages = 64;
 SoHandle *g_images[kMaxImages];
 size_t g_image_count = 0;
+
+/* Some early memfd images still expose init/fini entries as image offsets. */
+bool image_contains_addr(const SoHandle *h, void *addr) {
+  if (h == nullptr || addr == nullptr || h->load_bias == nullptr ||
+      h->map_size == 0)
+    return false;
+  uintptr_t p = reinterpret_cast<uintptr_t>(addr);
+  uintptr_t lo = reinterpret_cast<uintptr_t>(h->load_bias);
+  uintptr_t hi = lo + h->map_size;
+  return p >= lo && p < hi;
+}
+
+SoHandle::init_fn normalize_lifecycle_fn(SoHandle *h, SoHandle::init_fn fn) {
+  uintptr_t raw = reinterpret_cast<uintptr_t>(fn);
+  if (raw == 0 || h == nullptr || h->load_bias == nullptr || h->map_size == 0)
+    return fn;
+  if (image_contains_addr(h, reinterpret_cast<void *>(raw)))
+    return fn;
+  if (raw < h->map_size)
+    return reinterpret_cast<SoHandle::init_fn>(
+        reinterpret_cast<uintptr_t>(h->load_bias) + raw);
+  return fn;
+}
 
 #if YUKILINKER_FULL
 pthread_mutex_t g_atexit_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -328,16 +360,6 @@ extern "C" int yz_module_thread_atexit_noop(void (* /*dtor*/)(void *),
                                             void * /*obj*/,
                                             void * /*dso_handle*/) {
   return 0;
-}
-
-bool image_contains_addr(const SoHandle *h, void *addr) {
-  if (h == nullptr || addr == nullptr || h->load_bias == nullptr ||
-      h->map_size == 0)
-    return false;
-  uintptr_t p = reinterpret_cast<uintptr_t>(addr);
-  uintptr_t lo = reinterpret_cast<uintptr_t>(h->load_bias);
-  uintptr_t hi = lo + h->map_size;
-  return p >= lo && p < hi;
 }
 
 SoHandle *find_atexit_owner_locked(void *dso) {
@@ -765,10 +787,11 @@ bool apply_relr(SoHandle *h, const ElfW(Addr) * relr, size_t count) {
       cur = (uint64_t *)(h->load_bias + e);
       *cur++ += (uint64_t)h->load_bias;
     } else {
-      for (uint64_t bits = e >> 1; bits != 0; bits >>= 1, cur++)
+      uint64_t bits = e >> 1;
+      for (size_t bit = 0; bit < sizeof(ElfW(Addr)) * 8 - 1;
+           bit++, bits >>= 1, cur++)
         if (bits & 1)
           *cur += (uint64_t)h->load_bias;
-      cur += (sizeof(ElfW(Addr)) * 8) - 1;
     }
   }
   return true;
@@ -778,11 +801,14 @@ void call_finalizers(SoHandle *h) {
 #if YUKILINKER_FULL
   if (h == nullptr || !h->did_init)
     return;
-  for (size_t i = h->fini_array_count; i > 0; i--)
-    if (h->fini_array[i - 1])
-      h->fini_array[i - 1]();
-  if (h->fini_func)
-    h->fini_func();
+  for (size_t i = h->fini_array_count; i > 0; i--) {
+    SoHandle::init_fn fini = normalize_lifecycle_fn(h, h->fini_array[i - 1]);
+    if (fini)
+      fini();
+  }
+  SoHandle::init_fn fini_func = normalize_lifecycle_fn(h, h->fini_func);
+  if (fini_func)
+    fini_func();
   drain_atexit_for_handle(h, nullptr);
   h->did_init = false;
 #else
@@ -971,9 +997,15 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
       pltrelsz = dyn->d_un.d_val;
       break;
     case DT_RELR:
+#if DT_ANDROID_RELR != DT_RELR
+    case DT_ANDROID_RELR:
+#endif // #if DT_ANDROID_RELR != DT_RELR
       relr = (const ElfW(Addr) *)(bias + dyn->d_un.d_ptr);
       break;
     case DT_RELRSZ:
+#if DT_ANDROID_RELRSZ != DT_RELRSZ
+    case DT_ANDROID_RELRSZ:
+#endif // #if DT_ANDROID_RELRSZ != DT_RELRSZ
       relrsz = dyn->d_un.d_val;
       break;
     case DT_INIT:
@@ -1089,11 +1121,14 @@ SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
 #if YUKILINKER_FULL
   set_current_init_handle(h);
 #endif // #if YUKILINKER_FULL
-  if (h->init_func)
-    h->init_func();
-  for (size_t i = 0; i < h->init_array_count; i++)
-    if (h->init_array[i])
-      h->init_array[i]();
+  SoHandle::init_fn init_func = normalize_lifecycle_fn(h, h->init_func);
+  if (init_func)
+    init_func();
+  for (size_t i = 0; i < h->init_array_count; i++) {
+    SoHandle::init_fn init = normalize_lifecycle_fn(h, h->init_array[i]);
+    if (init)
+      init();
+  }
 #if YUKILINKER_FULL
   clear_current_init_handle(h);
 #endif // #if YUKILINKER_FULL

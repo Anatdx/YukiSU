@@ -654,6 +654,13 @@ uintptr_t g_loader_base = 0;
 
 extern "C" const ElfW(Dyn) _DYNAMIC[];
 
+static const ElfW(Dyn) * self_dynamic_table(uintptr_t load_bias) {
+  uintptr_t dyn = reinterpret_cast<uintptr_t>(_DYNAMIC);
+  if (load_bias != 0 && g_self_size != 0 && dyn < g_self_size)
+    dyn += load_bias;
+  return reinterpret_cast<const ElfW(Dyn) *>(dyn);
+}
+
 /* Resolve libc's real dl_iterate_phdr. */
 static void *resolve_system_dl_iterate_phdr() {
   volatile char vn[] = "dl_iterate_phdr";
@@ -673,7 +680,8 @@ static bool rebind_self_dl_iterate_slot(uintptr_t load_bias) {
   const char *strtab = nullptr;
   const ElfW(Rela) *jmprel = nullptr, *rela = nullptr;
   size_t pltrelsz = 0, relasz = 0;
-  for (const ElfW(Dyn) *d = _DYNAMIC; d->d_tag != DT_NULL; ++d) {
+  for (const ElfW(Dyn) *d = self_dynamic_table(load_bias); d->d_tag != DT_NULL;
+       ++d) {
     switch (d->d_tag) {
     case DT_SYMTAB:
       symtab = reinterpret_cast<const ElfW(Sym) *>(load_bias + d->d_un.d_ptr);

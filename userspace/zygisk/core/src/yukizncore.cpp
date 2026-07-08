@@ -1057,6 +1057,13 @@ void run_ctors_once() {
 
 extern "C" const ElfW(Dyn) _DYNAMIC[];
 
+const ElfW(Dyn) * self_dynamic_table(uintptr_t load_bias) {
+  uintptr_t dyn = reinterpret_cast<uintptr_t>(_DYNAMIC);
+  if (load_bias != 0 && g_self_size != 0 && dyn < g_self_size)
+    dyn += load_bias;
+  return reinterpret_cast<const ElfW(Dyn) *>(dyn);
+}
+
 void *resolve_system_dl_iterate_phdr() {
   volatile char vn[] = "dl_iterate_phdr";
   char nm[sizeof(vn)];
@@ -1076,7 +1083,8 @@ bool rebind_self_dl_iterate_slot(uintptr_t load_bias) {
   const ElfW(Rela) *rela = nullptr;
   size_t pltrelsz = 0;
   size_t relasz = 0;
-  for (const ElfW(Dyn) *d = _DYNAMIC; d->d_tag != DT_NULL; ++d) {
+  for (const ElfW(Dyn) *d = self_dynamic_table(load_bias); d->d_tag != DT_NULL;
+       ++d) {
     switch (d->d_tag) {
     case DT_SYMTAB:
       symtab = reinterpret_cast<const ElfW(Sym) *>(load_bias + d->d_un.d_ptr);
