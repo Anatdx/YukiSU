@@ -188,6 +188,7 @@ enum class ZdRequest : uint8_t {
   Log = 10,
   PatchText = 11,
   ReportZygote = 12,
+  RestoreLoadPolicy = 17,
 };
 #if defined(__LP64__)
 constexpr char kZygiskdSocket[] = "zygiskd64";
@@ -287,7 +288,7 @@ uint32_t zd_get_flags(int uid) {
 using module_entry_fn = void (*)(api_table *, JNIEnv *);
 constexpr char kExecMemfdName[] = "data-code-cache";
 
-/* Copy a module fd into an app-domain memfd. */
+/* Copy a daemon-staged image into a zygote-owned executable memfd. */
 int make_app_memfd(int src_fd) {
   struct stat st{};
   if (fstat(src_fd, &st) != 0 || st.st_size <= 0)
@@ -340,6 +341,19 @@ void zd_report_zygote() {
   uint8_t ack = 0;
   if (write(s, &req, 1) == 1)
     (void)read_all(s, &ack, sizeof(ack));
+  close(s);
+}
+
+void zd_restore_load_policy() {
+  int s = connect_zygiskd();
+  if (s < 0)
+    return;
+  uint8_t req = static_cast<uint8_t>(ZdRequest::RestoreLoadPolicy);
+  uint8_t ack = 0;
+  if (write(s, &req, 1) == 1 && read_all(s, &ack, sizeof(ack)))
+    LOGI("zygote load policy restore: ok=%u", ack ? 1U : 0U);
+  else
+    LOGE("zygote load policy restore request failed");
   close(s);
 }
 
@@ -419,7 +433,8 @@ void load_modules_impl(JNIEnv *env) {
     void *handle = nullptr;
     module_entry_fn entry = nullptr;
     if (g_yuki_dlopen != nullptr && g_yuki_dlsym != nullptr) {
-      // Close the real module fd before onLoad runs.
+      // zygiskd sends a sealed anonymous image. Copy it once more into a
+      // zygote-owned memfd so executable mappings use the local tmpfs label.
       int mfd = make_app_memfd(lib_fd);
       close(lib_fd);
       void *h = mfd >= 0 ? g_yuki_dlopen(mfd, kExecMemfdName) : nullptr;
@@ -431,17 +446,16 @@ void load_modules_impl(JNIEnv *env) {
             g_yuki_dlsym(h, "zygisk_module_entry"));
       }
     } else {
-      // System-linker fallback.
       int mfd = make_app_memfd(lib_fd);
-      int load_fd = mfd >= 0 ? mfd : lib_fd;
-      android_dlextinfo ext{};
-      ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
-      ext.library_fd = load_fd;
-      handle =
-          android_dlopen_ext("libzygiskmodule.so", RTLD_NOW | RTLD_LOCAL, &ext);
-      if (mfd >= 0)
-        close(mfd);
       close(lib_fd);
+      if (mfd >= 0) {
+        android_dlextinfo ext{};
+        ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
+        ext.library_fd = mfd;
+        handle = android_dlopen_ext("libzygiskmodule.so", RTLD_NOW | RTLD_LOCAL,
+                                    &ext);
+        close(mfd);
+      }
       if (handle != nullptr)
         entry = reinterpret_cast<module_entry_fn>(
             dlsym(handle, "zygisk_module_entry"));
@@ -506,6 +520,21 @@ void *app_args_for(const Module &m, zygisk::AppSpecializeArgs *v5,
   return m.version <= 2 ? static_cast<void *>(v1) : static_cast<void *>(v5);
 }
 
+void unload_requested_modules() {
+  for (auto &m : g_modules) {
+    if (m.handle == nullptr ||
+        !(m.option & (1u << zygisk::DLCLOSE_MODULE_LIBRARY)))
+      continue;
+    if (g_yuki_dlclose != nullptr)
+      g_yuki_dlclose(m.handle); // yukilinker-loaded: munmap its segments
+    else
+      dlclose(m.handle); // android_dlopen_ext path
+    m.handle = nullptr;
+    m.abi = nullptr;
+    LOGI("module %d DLCLOSE'd after post-specialize", m.id);
+  }
+}
+
 void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
   g_app_uid = args->uid;
   AppSpecializeArgs_v1 v1args(args);
@@ -517,19 +546,6 @@ void run_app_pre_impl(zygisk::AppSpecializeArgs *args) {
                                   app_args_for(m, args, &v1args)));
     }
   g_cur = nullptr;
-  // Honor DLCLOSE_MODULE_LIBRARY after pre.
-  for (auto &m : g_modules) {
-    if (m.handle == nullptr ||
-        !(m.option & (1u << zygisk::DLCLOSE_MODULE_LIBRARY)))
-      continue;
-    if (g_yuki_dlclose != nullptr)
-      g_yuki_dlclose(m.handle); // yukilinker-loaded: munmap its segments
-    else
-      dlclose(m.handle); // android_dlopen_ext path
-    m.handle = nullptr;
-    m.abi = nullptr; // makes run_app_post skip its postAppSpecialize
-    LOGI("module %d DLCLOSE'd: not in scope for this app", m.id);
-  }
 }
 
 /* Hide injected linker entries. */
@@ -564,6 +580,7 @@ void run_app_post_impl(const zygisk::AppSpecializeArgs *args) {
                            app_args_for(m, mut, &v1args)));
     }
   g_cur = nullptr;
+  unload_requested_modules();
   hide_injection();
   yuki::solist::spoof_virtual_maps("/dev/zero (deleted)", false);
   yz_drop_runtime_header_pages();
@@ -594,6 +611,7 @@ void run_server_post_impl(const zygisk::ServerSpecializeArgs *args) {
       m.abi->postServerSpecialize(m.abi->impl, args);
     }
   g_cur = nullptr;
+  unload_requested_modules();
   hide_injection();
 }
 
@@ -637,6 +655,7 @@ static void core_start(const char *self_path, void *yuki_dlopen,
   g_yuki_dlopen = reinterpret_cast<yuki_dlopen_fn>(yuki_dlopen);
   g_yuki_dlsym = reinterpret_cast<yuki_dlsym_fn>(yuki_dlsym);
   zd_report_zygote();
+  zd_restore_load_policy();
   LOGI("core start, self=%s yuki=%p", self_path ? self_path : "(null)",
        yuki_dlopen);
   zygisk_hook_bootstrap(self_path);

@@ -83,6 +83,9 @@ namespace {
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
 #endif // #ifndef MFD_CLOEXEC
+#ifndef MFD_ALLOW_SEALING
+#define MFD_ALLOW_SEALING 0x0002U
+#endif // #ifndef MFD_ALLOW_SEALING
 
 #if defined(__aarch64__)
 constexpr char kAbi[] = "arm64-v8a";
@@ -279,30 +282,30 @@ bool send_fd(int sock, int fd) {
 int copy_file_to_memfd(const std::string &path) {
   int src = open(path.c_str(), O_RDONLY | O_CLOEXEC);
   if (src < 0) {
-    DLOGE("native module memfd: open failed path=%s err=%s", path.c_str(),
+    DLOGE("module memfd: open failed path=%s err=%s", path.c_str(),
           strerror(errno));
     return -1;
   }
 
   struct stat st{};
   if (fstat(src, &st) != 0 || st.st_size <= 0 || !S_ISREG(st.st_mode)) {
-    DLOGE("native module memfd: invalid source path=%s err=%s", path.c_str(),
+    DLOGE("module memfd: invalid source path=%s err=%s", path.c_str(),
           strerror(errno));
     close(src);
     return -1;
   }
 
-  int mfd = static_cast<int>(
-      syscall(__NR_memfd_create, "data-code-cache", MFD_CLOEXEC));
+  int mfd = static_cast<int>(syscall(__NR_memfd_create, "data-code-cache",
+                                     MFD_CLOEXEC | MFD_ALLOW_SEALING));
   if (mfd < 0) {
-    DLOGE("native module memfd: memfd_create failed path=%s err=%s",
-          path.c_str(), strerror(errno));
+    DLOGE("module memfd: memfd_create failed path=%s err=%s", path.c_str(),
+          strerror(errno));
     close(src);
     return -1;
   }
 
   if (ftruncate(mfd, st.st_size) != 0) {
-    DLOGE("native module memfd: ftruncate failed size=%lld err=%s",
+    DLOGE("module memfd: ftruncate failed size=%lld err=%s",
           static_cast<long long>(st.st_size), strerror(errno));
     close(mfd);
     close(src);
@@ -317,7 +320,7 @@ int copy_file_to_memfd(const std::string &path) {
     if (r < 0) {
       if (errno == EINTR)
         continue;
-      DLOGE("native module memfd: read failed path=%s err=%s", path.c_str(),
+      DLOGE("module memfd: read failed path=%s err=%s", path.c_str(),
             strerror(errno));
       close(mfd);
       close(src);
@@ -331,14 +334,14 @@ int copy_file_to_memfd(const std::string &path) {
       if (w < 0) {
         if (errno == EINTR)
           continue;
-        DLOGE("native module memfd: write failed path=%s err=%s", path.c_str(),
+        DLOGE("module memfd: write failed path=%s err=%s", path.c_str(),
               strerror(errno));
         close(mfd);
         close(src);
         return -1;
       }
       if (w == 0) {
-        DLOGE("native module memfd: short write path=%s", path.c_str());
+        DLOGE("module memfd: short write path=%s", path.c_str());
         close(mfd);
         close(src);
         return -1;
@@ -350,14 +353,38 @@ int copy_file_to_memfd(const std::string &path) {
 
   close(src);
   if (lseek(mfd, 0, SEEK_SET) < 0) {
-    DLOGE("native module memfd: rewind failed err=%s", strerror(errno));
+    DLOGE("module memfd: rewind failed err=%s", strerror(errno));
     close(mfd);
     return -1;
   }
 
-  DLOGI("native module memfd: staged size=%lld fd=%d",
-        static_cast<long long>(st.st_size), mfd);
-  return mfd;
+  constexpr int kModuleSeals =
+      F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_WRITE | F_SEAL_SEAL;
+  if (fcntl(mfd, F_ADD_SEALS, kModuleSeals) != 0) {
+    DLOGE("module memfd: seal failed path=%s err=%s", path.c_str(),
+          strerror(errno));
+    close(mfd);
+    return -1;
+  }
+
+  // memfd_create() always returns an O_RDWR file description. SCM_RIGHTS
+  // checks permissions from that description when the zygote receives it,
+  // so even a sealed image would unnecessarily require tmpfs:file write.
+  // Reopen the sealed inode read-only and expose only that description.
+  char proc_fd[64];
+  snprintf(proc_fd, sizeof(proc_fd), "/proc/self/fd/%d", mfd);
+  int ro_fd = open(proc_fd, O_RDONLY | O_CLOEXEC);
+  if (ro_fd < 0) {
+    DLOGE("module memfd: reopen read-only failed path=%s err=%s", path.c_str(),
+          strerror(errno));
+    close(mfd);
+    return -1;
+  }
+  close(mfd);
+
+  DLOGI("module memfd: staged size=%lld fd=%d",
+        static_cast<long long>(st.st_size), ro_fd);
+  return ro_fd;
 }
 
 /* Receive one fd via SCM_RIGHTS. */
@@ -1201,7 +1228,10 @@ void handle_client(int client) {
       send_fd(client, -1);
       break;
     }
-    int fd = open(g_modules[idx].lib_path.c_str(), O_RDONLY | O_CLOEXEC);
+    // Never expose the source module inode to zygote. Besides preserving
+    // anonymous loading, this avoids an SCM_RIGHTS SELinux check against a
+    // module that was installed with adb_data_file context.
+    int fd = copy_file_to_memfd(g_modules[idx].lib_path);
     send_fd(client, fd);
     if (fd >= 0)
       close(fd);
@@ -1391,8 +1421,6 @@ void handle_client(int client) {
     }
     const std::string &path = g_native_modules[idx].lib_path;
     int fd = copy_file_to_memfd(path);
-    if (fd < 0)
-      fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
     send_fd(client, fd);
     if (fd >= 0)
       close(fd);
@@ -1430,7 +1458,7 @@ void handle_client(int client) {
       yz_native_load_policy_cmd cmd{};
       cmd.pid = static_cast<uint32_t>(cr.pid);
       int ret = ksud::ksuctl(KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY, &cmd);
-      DLOGI("native load policy restore: pid=%d ret=%d", cr.pid, ret);
+      DLOGI("load policy restore: pid=%d ret=%d", cr.pid, ret);
       ok = ret == 0 ? 1 : 0;
     }
     write_exact(client, &ok, sizeof(ok));
