@@ -1048,16 +1048,14 @@ private fun InfoCard(
                     icon = Icons.Default.Adb,
                     trailing = if (isYukiZygisk) {
                         {
-                            IconButton(
-                                onClick = onYukiZygiskClick,
-                                modifier = Modifier.size(36.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Build,
-                                    contentDescription = stringResource(R.string.settings_yukizygisk),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Filled.Build,
+                                contentDescription = stringResource(R.string.settings_yukizygisk),
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clickable(onClick = onYukiZygiskClick)
+                                    .padding(vertical = 4.dp),
+                            )
                         }
                     } else null,
                 )
