@@ -61,6 +61,7 @@ struct Module {
   int id = -1; // zygiskd module index
   long version = 0;
   void *handle = nullptr;
+  bool yuki_loaded = false;
   uint32_t option = 0; // zygisk::Option bits set via setOption
   CoreApiTable api{};  // per-module, filled by RegisterModuleImpl
 };
@@ -432,33 +433,34 @@ void load_modules_impl(JNIEnv *env) {
 
     void *handle = nullptr;
     module_entry_fn entry = nullptr;
-    if (g_yuki_dlopen != nullptr && g_yuki_dlsym != nullptr) {
-      // zygiskd sends a sealed anonymous image. Copy it once more into a
-      // zygote-owned memfd so executable mappings use the local tmpfs label.
-      int mfd = make_app_memfd(lib_fd);
-      close(lib_fd);
-      void *h = mfd >= 0 ? g_yuki_dlopen(mfd, kExecMemfdName) : nullptr;
-      if (mfd >= 0)
-        close(mfd);
-      if (h != nullptr) {
-        handle = h;
-        entry = reinterpret_cast<module_entry_fn>(
-            g_yuki_dlsym(h, "zygisk_module_entry"));
+    bool yuki_loaded = false;
+    // zygiskd sends a sealed anonymous image. Copy it once more into a
+    // zygote-owned memfd so executable mappings use the local tmpfs label.
+    int mfd = make_app_memfd(lib_fd);
+    close(lib_fd);
+    if (mfd >= 0) {
+      if (g_yuki_dlopen != nullptr && g_yuki_dlsym != nullptr &&
+          g_yuki_dlclose != nullptr) {
+        handle = g_yuki_dlopen(mfd, kExecMemfdName);
+        if (handle != nullptr) {
+          yuki_loaded = true;
+          entry = reinterpret_cast<module_entry_fn>(
+              g_yuki_dlsym(handle, "zygisk_module_entry"));
+        }
       }
-    } else {
-      int mfd = make_app_memfd(lib_fd);
-      close(lib_fd);
-      if (mfd >= 0) {
+      if (handle == nullptr) {
         android_dlextinfo ext{};
-        ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD;
+        ext.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_FORCE_LOAD;
         ext.library_fd = mfd;
         handle = android_dlopen_ext("libzygiskmodule.so", RTLD_NOW | RTLD_LOCAL,
                                     &ext);
-        close(mfd);
+        if (handle != nullptr) {
+          LOGI("module %u using system linker fallback", i);
+          entry = reinterpret_cast<module_entry_fn>(
+              dlsym(handle, "zygisk_module_entry"));
+        }
       }
-      if (handle != nullptr)
-        entry = reinterpret_cast<module_entry_fn>(
-            dlsym(handle, "zygisk_module_entry"));
+      close(mfd);
     }
     if (handle == nullptr) {
       LOGE("dlopen module %u failed", i);
@@ -466,11 +468,16 @@ void load_modules_impl(JNIEnv *env) {
     }
     if (entry == nullptr) {
       LOGE("module %u has no zygisk_module_entry", i);
+      if (yuki_loaded)
+        g_yuki_dlclose(handle);
+      else
+        dlclose(handle);
       continue;
     }
     Module &m = g_modules.emplace_back();
     m.id = static_cast<int>(i);
     m.handle = handle;
+    m.yuki_loaded = yuki_loaded;
     m.api.impl = nullptr; // api callbacks resolve the module via g_cur
     m.api.registerModule = RegisterModuleImpl;
     g_loading = &m;
@@ -525,7 +532,7 @@ void unload_requested_modules() {
     if (m.handle == nullptr ||
         !(m.option & (1u << zygisk::DLCLOSE_MODULE_LIBRARY)))
       continue;
-    if (g_yuki_dlclose != nullptr)
+    if (m.yuki_loaded)
       g_yuki_dlclose(m.handle); // yukilinker-loaded: munmap its segments
     else
       dlclose(m.handle); // android_dlopen_ext path
@@ -876,6 +883,10 @@ void zygisk_self_destruct(JNIEnv *env, bool isolated) {
     yuki::solist::hide_from_solist("libyukilinker");
     if (!reverted)
       yz_revert_self_mounts();
+  }
+  if (can_unmap && yukilinker::has_active_tls()) {
+    LOGI("self-unmap disabled: a yukilinker TLS resolver is still active");
+    can_unmap = false;
   }
   if (have_range && can_unmap) {
     yukilinker::shutdown();

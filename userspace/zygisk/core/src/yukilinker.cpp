@@ -1,20 +1,20 @@
-/* SPDX-License-Identifier: GPL-3.0 */
 /*
  * YukiZygisk in-memory ELF loader.
  *
- * Author: Anatdx
+ * The implementation is organized around the ELF image model: address space,
+ * dynamic metadata, relocations, and per-image runtime services are independent
+ * components. The public handle deliberately exposes no loader bookkeeping.
  */
 
 #ifndef YUKILINKER_FULL
 #define YUKILINKER_FULL 0
 #endif // #ifndef YUKILINKER_FULL
-#ifndef YUKILINKER_BOOTSTRAP
-#define YUKILINKER_BOOTSTRAP 0
-#endif // #ifndef YUKILINKER_BOOTSTRAP
 
 #include "yukilinker.hpp"
 
 #include <cerrno>
+#include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <elf.h>
@@ -22,7 +22,6 @@
 #include <new>
 #include <sys/auxv.h>
 #include <sys/mman.h>
-#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -30,16 +29,28 @@
 #include "uapi/yukizygisk.h"
 
 #if YUKILINKER_FULL
-#include <cstdlib>
 #include <pthread.h>
 #endif // #if YUKILINKER_FULL
 
-#ifndef PR_SET_VMA
-#define PR_SET_VMA 0x53564d41
-#endif // #ifndef PR_SET_VMA
-#ifndef PR_SET_VMA_ANON_NAME
-#define PR_SET_VMA_ANON_NAME 0
-#endif // #ifndef PR_SET_VMA_ANON_NAME
+#if YUKILINKER_FULL && defined(__aarch64__)
+struct YukiTlsFastConfig {
+  uintptr_t enabled;
+  uintptr_t key_index;
+  uintptr_t key_sequence;
+};
+
+static_assert(offsetof(YukiTlsFastConfig, enabled) == 0);
+static_assert(offsetof(YukiTlsFastConfig, key_index) == 8);
+static_assert(offsetof(YukiTlsFastConfig, key_sequence) == 16);
+
+extern "C" {
+__attribute__((visibility("hidden"))) YukiTlsFastConfig yuki_tls_fast_config{};
+}
+#endif // #if YUKILINKER_FULL && defined(__aarch6...
+
+#ifndef R_AARCH64_NONE
+#define R_AARCH64_NONE 0
+#endif // #ifndef R_AARCH64_NONE
 #ifndef R_AARCH64_ABS64
 #define R_AARCH64_ABS64 257
 #endif // #ifndef R_AARCH64_ABS64
@@ -73,7 +84,6 @@
 #ifndef STT_GNU_IFUNC
 #define STT_GNU_IFUNC 10
 #endif // #ifndef STT_GNU_IFUNC
-
 #ifndef DT_RELR
 #define DT_RELR 0x6fffe000
 #endif // #ifndef DT_RELR
@@ -96,1238 +106,2168 @@
 namespace yukilinker {
 namespace {
 
-constexpr size_t kPage = 4096;
-inline uintptr_t page_down(uintptr_t a) { return a & ~(kPage - 1); }
-inline uintptr_t page_up(uintptr_t a) { return (a + kPage - 1) & ~(kPage - 1); }
+constexpr size_t kMetadataPageSize = 64 * 1024;
+constexpr char kDisplayName[] = "libdata-code-cache.so";
+size_t g_page_size = 0;
 
-template <class T> inline T mn(T a, T b) { return a < b ? a : b; }
-template <class T> inline T mx(T a, T b) { return a > b ? a : b; }
+bool is_power_of_two(size_t value);
 
-/* Early-boot bump allocator. */
-struct Arena {
-  uint8_t *base;
-  size_t used;
-  size_t cap;
-};
-Arena g_arena;
-
-void *arena_alloc(size_t n, size_t align = 16) {
-  if (g_arena.base == nullptr) {
-    constexpr size_t kArenaSz = 1u << 20; // 1 MiB: ample for handles + deps
-    void *m = mmap(nullptr, kArenaSz, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (m == MAP_FAILED)
-      return nullptr;
-    g_arena.base = static_cast<uint8_t *>(m);
-    g_arena.cap = kArenaSz;
-    g_arena.used = 0;
+size_t loader_page_size() {
+  if (g_page_size == 0) {
+    unsigned long aux_page_size = getauxval(AT_PAGESZ);
+    g_page_size = aux_page_size >= 4096 && is_power_of_two(aux_page_size)
+                      ? static_cast<size_t>(aux_page_size)
+                      : 4096;
   }
-  size_t off = (g_arena.used + (align - 1)) & ~(align - 1);
-  if (off + n > g_arena.cap)
-    return nullptr;
-  g_arena.used = off + n;
-  return g_arena.base + off;
+  return g_page_size;
 }
 
-/* Loaded images for dl_iterate_phdr_hook. */
-constexpr size_t kMaxImages = 64;
-SoHandle *g_images[kMaxImages];
-size_t g_image_count = 0;
-
-/* Some early memfd images still expose init/fini entries as image offsets. */
-bool image_contains_addr(const SoHandle *h, void *addr) {
-  if (h == nullptr || addr == nullptr || h->load_bias == nullptr ||
-      h->map_size == 0)
-    return false;
-  uintptr_t p = reinterpret_cast<uintptr_t>(addr);
-  uintptr_t lo = reinterpret_cast<uintptr_t>(h->load_bias);
-  uintptr_t hi = lo + h->map_size;
-  return p >= lo && p < hi;
-}
-
-SoHandle::init_fn normalize_lifecycle_fn(SoHandle *h, SoHandle::init_fn fn) {
-  uintptr_t raw = reinterpret_cast<uintptr_t>(fn);
-  if (raw == 0 || h == nullptr || h->load_bias == nullptr || h->map_size == 0)
-    return fn;
-  if (image_contains_addr(h, reinterpret_cast<void *>(raw)))
-    return fn;
-  if (raw < h->map_size)
-    return reinterpret_cast<SoHandle::init_fn>(
-        reinterpret_cast<uintptr_t>(h->load_bias) + raw);
-  return fn;
-}
-
-#if YUKILINKER_FULL
-pthread_mutex_t g_atexit_lock = PTHREAD_MUTEX_INITIALIZER;
-SoHandle *g_current_init_handle = nullptr;
-
-constexpr size_t kMaxTlsModules = 64;
-
-struct TlsIndex {
-  uintptr_t module;
-  uintptr_t offset;
-};
-
-struct TlsModule {
-  SoHandle *owner = nullptr;
-  size_t align = 1;
-  size_t memsz = 0;
-  size_t filesz = 0;
-  const void *init_image = nullptr;
-  bool unloading = false;
-};
-
-struct ThreadTls {
-  void *blocks[kMaxTlsModules] = {};
-};
-
-TlsModule g_tls_modules[kMaxTlsModules];
-size_t g_next_tls_mod_id = 1;
-pthread_mutex_t g_tls_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_key_t g_tls_key;
-pthread_once_t g_tls_key_once = PTHREAD_ONCE_INIT;
-bool g_tls_key_ready = false;
-bool g_tls_shutdown = false;
-
-bool is_power_of_two(size_t v) { return v != 0 && (v & (v - 1)) == 0; }
-
-uintptr_t get_tpidr_el0() {
-#if defined(__aarch64__)
-  uintptr_t tpidr;
-  asm volatile("mrs %0, tpidr_el0" : "=r"(tpidr));
-  return tpidr;
-#else
-  return 0;
-#endif // #if defined(__aarch64__)
-}
-
-void destroy_thread_tls(void *arg) {
-  auto *ttls = static_cast<ThreadTls *>(arg);
-  if (ttls == nullptr)
-    return;
-  for (size_t i = 1; i < kMaxTlsModules; i++)
-    if (ttls->blocks[i] != nullptr)
-      free(ttls->blocks[i]);
-  free(ttls);
-}
-
-void create_tls_key_once() {
-  if (pthread_key_create(&g_tls_key, destroy_thread_tls) == 0)
-    g_tls_key_ready = true;
-  else
-    ZLOGE("yukilinker: failed to create TLS key");
-}
-
-ThreadTls *get_thread_tls() {
-  if (g_tls_shutdown)
-    return nullptr;
-  pthread_once(&g_tls_key_once, create_tls_key_once);
-  if (!g_tls_key_ready)
-    return nullptr;
-  auto *ttls = static_cast<ThreadTls *>(pthread_getspecific(g_tls_key));
-  if (ttls != nullptr)
-    return ttls;
-  ttls = static_cast<ThreadTls *>(calloc(1, sizeof(ThreadTls)));
-  if (ttls == nullptr) {
-    ZLOGE("yukilinker: failed to allocate thread TLS state");
-    return nullptr;
-  }
-  if (pthread_setspecific(g_tls_key, ttls) != 0) {
-    free(ttls);
-    ZLOGE("yukilinker: failed to bind thread TLS state");
-    return nullptr;
-  }
-  return ttls;
-}
-
-void *allocate_tls_block_locked(TlsModule *mod) {
-  size_t align = mod->align;
-  if (align < sizeof(void *))
-    align = sizeof(void *);
-  void *block = nullptr;
-  if (posix_memalign(&block, align, mod->memsz) != 0) {
-    ZLOGE("yukilinker: failed to allocate TLS block");
-    return nullptr;
-  }
-  memset(block, 0, mod->memsz);
-  if (mod->init_image != nullptr && mod->filesz != 0)
-    memcpy(block, mod->init_image, mod->filesz);
-  return block;
-}
-
-bool register_tls_module(SoHandle *h) {
-  if (h == nullptr || h->tls_memsz == 0)
+bool add_overflow(size_t a, size_t b, size_t *out) {
+  if (a > SIZE_MAX - b)
     return true;
-  if (h->tls_filesz > h->tls_memsz) {
-    ZLOGE("yukilinker: TLS filesz exceeds memsz");
-    return false;
-  }
-  if (h->tls_align == 0)
-    h->tls_align = 1;
-  if (!is_power_of_two(h->tls_align)) {
-    ZLOGE("yukilinker: TLS segment alignment %zu is not a power of 2",
-          h->tls_align);
-    return false;
-  }
-
-  pthread_mutex_lock(&g_tls_lock);
-  if (g_tls_shutdown) {
-    pthread_mutex_unlock(&g_tls_lock);
-    ZLOGE("yukilinker: refusing TLS registration after shutdown");
-    return false;
-  }
-  size_t mod_id = g_next_tls_mod_id++;
-  if (mod_id >= kMaxTlsModules) {
-    pthread_mutex_unlock(&g_tls_lock);
-    ZLOGE("yukilinker: TLS module table is full");
-    return false;
-  }
-  TlsModule &mod = g_tls_modules[mod_id];
-  mod.owner = h;
-  mod.align = h->tls_align;
-  mod.memsz = h->tls_memsz;
-  mod.filesz = h->tls_filesz;
-  mod.init_image = reinterpret_cast<const void *>(h->tls_vaddr);
-  mod.unloading = false;
-  h->tls_mod_id = mod_id;
-  pthread_mutex_unlock(&g_tls_lock);
-  return true;
+  *out = a + b;
+  return false;
 }
 
-void unregister_tls_module(SoHandle *h) {
-  if (h == nullptr || h->tls_mod_id == 0)
-    return;
-  pthread_mutex_lock(&g_tls_lock);
-  size_t mod_id = h->tls_mod_id;
-  if (mod_id < kMaxTlsModules && g_tls_modules[mod_id].owner == h) {
-    g_tls_modules[mod_id].unloading = true;
-    g_tls_modules[mod_id].owner = nullptr;
-  }
-  h->tls_mod_id = 0;
-  pthread_mutex_unlock(&g_tls_lock);
+bool multiply_overflow(size_t a, size_t b, size_t *out) {
+  if (a != 0 && b > SIZE_MAX / a)
+    return true;
+  *out = a * b;
+  return false;
 }
 
-void *custom_tls_get_addr(TlsIndex *ti) {
-  if (ti == nullptr)
-    return nullptr;
-  size_t mod_id = static_cast<size_t>(ti->module);
-  if (mod_id == 0 || mod_id >= kMaxTlsModules) {
-    ZLOGE("yukilinker: invalid TLS module %zu", mod_id);
-    return nullptr;
-  }
-
-  ThreadTls *ttls = get_thread_tls();
-  if (ttls == nullptr)
-    return nullptr;
-
-  pthread_mutex_lock(&g_tls_lock);
-  TlsModule *mod = &g_tls_modules[mod_id];
-  if (mod->owner == nullptr || mod->unloading) {
-    pthread_mutex_unlock(&g_tls_lock);
-    ZLOGE("yukilinker: TLS module %zu is not registered", mod_id);
-    return nullptr;
-  }
-  if (ti->offset >= mod->memsz) {
-    pthread_mutex_unlock(&g_tls_lock);
-    ZLOGE("yukilinker: TLS offset out of range");
-    return nullptr;
-  }
-  if (ttls->blocks[mod_id] == nullptr) {
-    ttls->blocks[mod_id] = allocate_tls_block_locked(mod);
-    if (ttls->blocks[mod_id] == nullptr) {
-      pthread_mutex_unlock(&g_tls_lock);
-      return nullptr;
-    }
-  }
-  void *addr = static_cast<uint8_t *>(ttls->blocks[mod_id]) + ti->offset;
-  pthread_mutex_unlock(&g_tls_lock);
-  return addr;
-}
-
-uintptr_t tlsdesc_resolver(uintptr_t *desc) {
-  auto *ti = reinterpret_cast<TlsIndex *>(desc[1]);
-  void *addr = custom_tls_get_addr(ti);
-  if (addr == nullptr)
-    return 0;
-  return reinterpret_cast<uintptr_t>(addr) - get_tpidr_el0();
-}
-
-uintptr_t tlsdesc_resolver_weak(uintptr_t *desc) {
-  return desc[1] - get_tpidr_el0();
-}
-
-extern "C" int yz_module_thread_atexit_noop(void (* /*dtor*/)(void *),
-                                            void * /*obj*/,
-                                            void * /*dso_handle*/) {
-  return 0;
-}
-
-SoHandle *find_atexit_owner_locked(void *dso) {
-  if (dso != nullptr) {
-    for (size_t i = 0; i < g_image_count; i++)
-      if (image_contains_addr(g_images[i], dso))
-        return g_images[i];
-
-    for (size_t i = 0; i < g_image_count; i++) {
-      SoHandle *h = g_images[i];
-      if (h == nullptr)
-        continue;
-      for (size_t j = 0; j < h->atexit_count; j++)
-        if (h->atexit_entries[j].dso == dso)
-          return h;
-    }
-  }
-  return g_current_init_handle;
-}
-
-bool append_atexit_entry_locked(SoHandle *h, void (*fn)(void *), void *arg,
-                                void *dso) {
-  if (h == nullptr || fn == nullptr)
-    return false;
-  if (h->atexit_count == h->atexit_capacity) {
-    size_t next = h->atexit_capacity == 0 ? 8 : h->atexit_capacity * 2;
-    if (next < h->atexit_capacity ||
-        next > SIZE_MAX / sizeof(SoHandle::AtexitEntry))
+bool add_signed_offset(uintptr_t base, ElfW(Sxword) offset, uintptr_t *out) {
+  if (offset >= 0) {
+    uintptr_t positive = static_cast<uintptr_t>(offset);
+    if (positive > UINTPTR_MAX - base)
       return false;
-    void *mem =
-        realloc(h->atexit_entries, next * sizeof(SoHandle::AtexitEntry));
-    if (mem == nullptr)
-      return false;
-    h->atexit_entries = static_cast<SoHandle::AtexitEntry *>(mem);
-    h->atexit_capacity = next;
-  }
-  h->atexit_entries[h->atexit_count++] = {fn, arg, dso};
-  h->atexit_appends++;
-  return true;
-}
-
-void trim_atexit_table_locked(SoHandle *h) {
-  if (h == nullptr)
-    return;
-  while (h->atexit_count > 0 &&
-         h->atexit_entries[h->atexit_count - 1].fn == nullptr)
-    h->atexit_count--;
-}
-
-void drain_atexit_locked(SoHandle *h, void *dso) {
-  if (h == nullptr || h->atexit_entries == nullptr)
-    return;
-
-restart:
-  uint64_t appends = h->atexit_appends;
-  for (size_t i = h->atexit_count; i > 0; i--) {
-    size_t idx = i - 1;
-    SoHandle::AtexitEntry entry = h->atexit_entries[idx];
-    if (entry.fn == nullptr || (dso != nullptr && entry.dso != dso))
-      continue;
-
-    h->atexit_entries[idx] = {};
-    pthread_mutex_unlock(&g_atexit_lock);
-    entry.fn(entry.arg);
-    pthread_mutex_lock(&g_atexit_lock);
-    if (h->atexit_appends != appends)
-      goto restart;
-  }
-  trim_atexit_table_locked(h);
-}
-
-void drain_atexit_for_handle(SoHandle *h, void *dso) {
-  pthread_mutex_lock(&g_atexit_lock);
-  drain_atexit_locked(h, dso);
-  pthread_mutex_unlock(&g_atexit_lock);
-}
-
-void free_atexit_table(SoHandle *h) {
-  if (h == nullptr)
-    return;
-  pthread_mutex_lock(&g_atexit_lock);
-  if (g_current_init_handle == h)
-    g_current_init_handle = nullptr;
-  free(h->atexit_entries);
-  h->atexit_entries = nullptr;
-  h->atexit_count = 0;
-  h->atexit_capacity = 0;
-  h->atexit_appends = 0;
-  pthread_mutex_unlock(&g_atexit_lock);
-}
-
-void set_current_init_handle(SoHandle *h) {
-  pthread_mutex_lock(&g_atexit_lock);
-  g_current_init_handle = h;
-  pthread_mutex_unlock(&g_atexit_lock);
-}
-
-void clear_current_init_handle(SoHandle *h) {
-  pthread_mutex_lock(&g_atexit_lock);
-  if (g_current_init_handle == h)
-    g_current_init_handle = nullptr;
-  pthread_mutex_unlock(&g_atexit_lock);
-}
-
-int module_cxa_atexit(void (*fn)(void *), void *arg, void *dso) {
-  if (fn == nullptr)
-    return -1;
-  pthread_mutex_lock(&g_atexit_lock);
-  SoHandle *owner = find_atexit_owner_locked(dso);
-  bool ok = append_atexit_entry_locked(owner, fn, arg, dso);
-  pthread_mutex_unlock(&g_atexit_lock);
-  if (!ok) {
-    ZLOGE("yukilinker: local __cxa_atexit dropped registration");
-    return -1;
-  }
-  return 0;
-}
-
-void module_cxa_finalize(void *dso) {
-  pthread_mutex_lock(&g_atexit_lock);
-  if (dso != nullptr) {
-    drain_atexit_locked(find_atexit_owner_locked(dso), dso);
-  } else {
-    for (size_t i = 0; i < g_image_count; i++)
-      drain_atexit_locked(g_images[i], nullptr);
-  }
-  pthread_mutex_unlock(&g_atexit_lock);
-}
-#else
-int module_cxa_atexit(void (* /*fn*/)(void *), void * /*arg*/, void * /*dso*/) {
-  return 0;
-}
-
-void module_cxa_finalize(void * /*dso*/) {}
-#endif // #if YUKILINKER_FULL
-
-int prot_of(uint32_t p_flags) {
-  int p = 0;
-  if (p_flags & PF_R)
-    p |= PROT_READ;
-  if (p_flags & PF_W)
-    p |= PROT_WRITE;
-  if (p_flags & PF_X)
-    p |= PROT_EXEC;
-  return p;
-}
-
-void name_vma(void *addr, size_t len, uint32_t p_flags, const char *base) {
-  /* Keep injected anonymous VMAs unlabeled. */
-  (void)addr;
-  (void)len;
-  (void)p_flags;
-  (void)base;
-}
-
-uint32_t gnu_hash(const char *s) {
-  uint32_t h = 5381;
-  for (const uint8_t *p = (const uint8_t *)s; *p; p++)
-    h = (h << 5) + h + *p;
-  return h;
-}
-
-uint32_t sysv_hash(const char *s) {
-  uint32_t h = 0;
-  for (const uint8_t *p = (const uint8_t *)s; *p; p++) {
-    h = (h << 4) + *p;
-    uint32_t g = h & 0xf0000000u;
-    if (g != 0)
-      h ^= g >> 24;
-    h &= ~g;
-  }
-  return h;
-}
-
-/* GNU hash lookup. */
-const ElfW(Sym) * gnu_lookup(const SoHandle *h, const char *name) {
-  if (h->gnu_buckets == nullptr || h->gnu_nbucket == 0)
-    return nullptr;
-  uint32_t hash = gnu_hash(name);
-  /* Bloom filter (lets us skip absent symbols fast). */
-  constexpr uint32_t kBits = sizeof(ElfW(Addr)) * 8;
-  ElfW(Addr) word = h->gnu_bloom[(hash / kBits) % h->gnu_maskwords];
-  ElfW(Addr) mask = (ElfW(Addr))1 << (hash % kBits) |
-                    (ElfW(Addr))1 << ((hash >> h->gnu_shift2) % kBits);
-  if ((word & mask) != mask)
-    return nullptr;
-
-  uint32_t idx = h->gnu_buckets[hash % h->gnu_nbucket];
-  if (idx < h->gnu_symndx)
-    return nullptr;
-  for (;; idx++) {
-    const char *sym_name = h->strtab + h->symtab[idx].st_name;
-    uint32_t chain = h->gnu_chain[idx - h->gnu_symndx];
-    if ((chain | 1) == (hash | 1) && strcmp(sym_name, name) == 0)
-      return &h->symtab[idx];
-    if (chain & 1) // end of chain
-      break;
-  }
-  return nullptr;
-}
-
-const ElfW(Sym) * sysv_lookup(const SoHandle *h, const char *name) {
-  if (h->sysv_buckets == nullptr || h->sysv_nbucket == 0)
-    return nullptr;
-  for (uint32_t idx = h->sysv_buckets[sysv_hash(name) % h->sysv_nbucket];
-       idx != STN_UNDEF; idx = h->sysv_chain[idx]) {
-    const char *sym_name = h->strtab + h->symtab[idx].st_name;
-    if (strcmp(sym_name, name) == 0)
-      return &h->symtab[idx];
-  }
-  return nullptr;
-}
-
-/* Resolve one imported symbol. */
-void *resolve(const SoHandle *h, uint32_t symidx, bool *ok) {
-  *ok = true;
-  const ElfW(Sym) &s = h->symtab[symidx];
-  const char *name = h->strtab + s.st_name;
-
-  /* Let modules enumerate themselves. */
-  if (strcmp(name, "dl_iterate_phdr") == 0)
-    return (void *)&dl_iterate_phdr_hook;
-
-  if (s.st_shndx == SHN_UNDEF) {
-    if (strcmp(name, "__cxa_atexit") == 0)
-      return (void *)&module_cxa_atexit;
-#if YUKILINKER_FULL
-    if (strcmp(name, "__cxa_finalize") == 0)
-      return (void *)&module_cxa_finalize;
-#endif // #if YUKILINKER_FULL
-  }
-
-#if YUKILINKER_FULL
-  if (strcmp(name, "__tls_get_addr") == 0)
-    return (void *)&custom_tls_get_addr;
-
-  if (s.st_shndx == SHN_UNDEF && strcmp(name, "__cxa_thread_atexit_impl") == 0)
-    return (void *)&yz_module_thread_atexit_noop;
-#endif // #if YUKILINKER_FULL
-
-  /* Module-local definition. */
-  if (s.st_shndx != SHN_UNDEF) {
-    void *addr = h->load_bias + s.st_value;
-    if (ELF64_ST_TYPE(s.st_info) == STT_GNU_IFUNC)
-      addr = (void *)((ElfW(Addr) (*)(uint64_t))addr)(getauxval(AT_HWCAP));
-    return addr;
-  }
-
-  /* Dependencies + global. */
-  for (size_t i = 0; i < h->dep_count; i++)
-    if (h->dep_handles[i] != nullptr)
-      if (void *a = ::dlsym(h->dep_handles[i], name))
-        return a;
-  if (void *a = ::dlsym(RTLD_DEFAULT, name))
-    return a;
-
-  if (ELF64_ST_BIND(s.st_info) == STB_WEAK)
-    return nullptr; // weak undefined is allowed -> 0
-  ZLOGE("yukilinker: unresolved symbol '%s'", name);
-  *ok = false;
-  return nullptr;
-}
-
-#if YUKILINKER_FULL
-struct TlsRef {
-  size_t module = 0;
-  uintptr_t offset = 0;
-  bool weak_undef = false;
-};
-
-bool resolve_tls_reference(const SoHandle *h, uint32_t symidx,
-                           ElfW(Sxword) addend, TlsRef *out) {
-  if (h == nullptr || out == nullptr)
-    return false;
-  *out = {};
-
-  if (symidx == 0) {
-    if (h->tls_mod_id == 0) {
-      ZLOGE(
-          "yukilinker: TLS relocation refers to an image with no TLS segment");
-      return false;
-    }
-    if (addend < 0) {
-      ZLOGE("yukilinker: negative TLS relocation addend");
-      return false;
-    }
-    out->module = h->tls_mod_id;
-    out->offset = static_cast<uintptr_t>(addend);
+    *out = base + positive;
     return true;
   }
-
-  const ElfW(Sym) &s = h->symtab[symidx];
-  const char *name = h->strtab + s.st_name;
-  if (s.st_shndx == SHN_UNDEF) {
-    if (ELF64_ST_BIND(s.st_info) == STB_WEAK) {
-      out->weak_undef = true;
-      out->offset = addend > 0 ? static_cast<uintptr_t>(addend) : 0;
-      return true;
-    }
-    ZLOGE("yukilinker: unresolved TLS symbol '%s'", name);
+  uintptr_t magnitude = static_cast<uintptr_t>(-(offset + 1)) + 1;
+  if (magnitude > base)
     return false;
-  }
-
-  if (ELF64_ST_TYPE(s.st_info) != STT_TLS) {
-    ZLOGE("yukilinker: TLS relocation refers to non-TLS symbol '%s'", name);
-    return false;
-  }
-  if (h->tls_mod_id == 0) {
-    ZLOGE("yukilinker: TLS symbol '%s' has no TLS segment", name);
-    return false;
-  }
-
-  auto off = static_cast<int64_t>(s.st_value) + addend;
-  if (off < 0) {
-    ZLOGE("yukilinker: negative TLS symbol offset for '%s'", name);
-    return false;
-  }
-  out->module = h->tls_mod_id;
-  out->offset = static_cast<uintptr_t>(off);
-  return true;
-}
-#endif // #if YUKILINKER_FULL
-
-bool apply_rela(SoHandle *h, const ElfW(Rela) * rela, size_t count) {
-  for (size_t i = 0; i < count; i++) {
-    const ElfW(Rela) &r = rela[i];
-    uint32_t type = ELF64_R_TYPE(r.r_info);
-    uint32_t sym = ELF64_R_SYM(r.r_info);
-    auto *where = (uint64_t *)(h->load_bias + r.r_offset);
-    switch (type) {
-    case R_AARCH64_RELATIVE:
-      *where = (uint64_t)(h->load_bias + r.r_addend);
-      break;
-    case R_AARCH64_GLOB_DAT:
-    case R_AARCH64_JUMP_SLOT: {
-      bool ok;
-      void *v = resolve(h, sym, &ok);
-      if (!ok)
-        return false;
-      *where = (uint64_t)v;
-      break;
-    }
-    case R_AARCH64_ABS64: {
-      bool ok;
-      void *v = resolve(h, sym, &ok);
-      if (!ok)
-        return false;
-      *where = (uint64_t)v + r.r_addend;
-      break;
-    }
-    case R_AARCH64_IRELATIVE:
-      // addend is the relative address of an ifunc resolver; call it (passing
-      // hwcap, the aarch64 resolver's first arg) for the real target -- no
-      // symbol involved. Compilers emit this for local ifuncs.
-      *where = (uint64_t)((ElfW(Addr) (*)(uint64_t))(
-          h->load_bias + r.r_addend))(getauxval(AT_HWCAP));
-      break;
-#if YUKILINKER_FULL
-    case R_AARCH64_TLS_DTPMOD64: {
-      TlsRef ref;
-      if (!resolve_tls_reference(h, sym, r.r_addend, &ref))
-        return false;
-      *where = ref.weak_undef ? 0 : ref.module;
-      break;
-    }
-    case R_AARCH64_TLS_DTPREL64: {
-      TlsRef ref;
-      if (!resolve_tls_reference(h, sym, r.r_addend, &ref))
-        return false;
-      *where = ref.offset;
-      break;
-    }
-    case R_AARCH64_TLSDESC: {
-      auto *desc = reinterpret_cast<uintptr_t *>(where);
-      TlsRef ref;
-      if (!resolve_tls_reference(h, sym, r.r_addend, &ref))
-        return false;
-      if (ref.weak_undef) {
-        desc[0] = reinterpret_cast<uintptr_t>(&tlsdesc_resolver_weak);
-        desc[1] = ref.offset;
-        break;
-      }
-      auto *ti = static_cast<TlsIndex *>(
-          arena_alloc(sizeof(TlsIndex), alignof(TlsIndex)));
-      if (ti == nullptr) {
-        ZLOGE("yukilinker: failed to allocate TLSDESC index");
-        return false;
-      }
-      ti->module = ref.module;
-      ti->offset = ref.offset;
-      desc[0] = reinterpret_cast<uintptr_t>(&tlsdesc_resolver);
-      desc[1] = reinterpret_cast<uintptr_t>(ti);
-      break;
-    }
-    case R_AARCH64_TLS_TPREL64: {
-      TlsRef ref;
-      if (!resolve_tls_reference(h, sym, r.r_addend, &ref))
-        return false;
-      if (ref.weak_undef) {
-        *where = 0;
-        break;
-      }
-      const ElfW(Sym) &s = h->symtab[sym];
-      const char *name = h->strtab + s.st_name;
-      ZLOGE("yukilinker: TLS symbol '%s' uses unsupported IE access model",
-            name);
-      return false;
-    }
-#endif // #if YUKILINKER_FULL
-    default:
-      ZLOGE("yukilinker: unhandled reloc type %u (need TLS?)", type);
-      return false;
-    }
-  }
+  *out = base - magnitude;
   return true;
 }
 
-/* DT_RELR: packed relative relocations. Even entries are addresses, odd entries
- * are bitmaps of the 63 words following the last address. */
-bool apply_relr(SoHandle *h, const ElfW(Addr) * relr, size_t count) {
-  uint64_t *cur = nullptr;
-  for (size_t i = 0; i < count; i++) {
-    ElfW(Addr) e = relr[i];
-    if ((e & 1) == 0) {
-      cur = (uint64_t *)(h->load_bias + e);
-      *cur++ += (uint64_t)h->load_bias;
-    } else {
-      uint64_t bits = e >> 1;
-      for (size_t bit = 0; bit < sizeof(ElfW(Addr)) * 8 - 1;
-           bit++, bits >>= 1, cur++)
-        if (bits & 1)
-          *cur += (uint64_t)h->load_bias;
-    }
-  }
+bool is_power_of_two(size_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
+uintptr_t page_floor(uintptr_t value) {
+  return value & ~(static_cast<uintptr_t>(loader_page_size()) - 1);
+}
+
+bool page_ceil(uintptr_t value, uintptr_t *out) {
+  size_t page_size = loader_page_size();
+  if (value > UINTPTR_MAX - (page_size - 1))
+    return false;
+  *out = page_floor(value + page_size - 1);
   return true;
 }
 
-void call_finalizers(SoHandle *h) {
+size_t smaller(size_t a, size_t b) { return a < b ? a : b; }
+
+struct MetadataPage {
+  MetadataPage *next;
+  size_t mapped_size;
+  size_t cursor;
+};
+
+MetadataPage *g_metadata_pages = nullptr;
+
 #if YUKILINKER_FULL
-  if (h == nullptr || !h->did_init)
-    return;
-  for (size_t i = h->fini_array_count; i > 0; i--) {
-    SoHandle::init_fn fini = normalize_lifecycle_fn(h, h->fini_array[i - 1]);
-    if (fini)
-      fini();
-  }
-  SoHandle::init_fn fini_func = normalize_lifecycle_fn(h, h->fini_func);
-  if (fini_func)
-    fini_func();
-  drain_atexit_for_handle(h, nullptr);
-  h->did_init = false;
-#else
-  (void)h;
+pthread_mutex_t g_metadata_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif // #if YUKILINKER_FULL
+
+void *metadata_allocate(size_t bytes, size_t alignment) {
+  if (bytes == 0 || !is_power_of_two(alignment))
+    return nullptr;
+
+#if YUKILINKER_FULL
+  pthread_mutex_lock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+
+  size_t header = sizeof(MetadataPage);
+  size_t header_aligned =
+      (header + alignof(max_align_t) - 1) & ~(alignof(max_align_t) - 1);
+  MetadataPage *page = g_metadata_pages;
+  while (page != nullptr) {
+    size_t offset = (page->cursor + alignment - 1) & ~(alignment - 1);
+    if (offset <= page->mapped_size && bytes <= page->mapped_size - offset) {
+      page->cursor = offset + bytes;
+      void *result = reinterpret_cast<uint8_t *>(page) + offset;
+      memset(result, 0, bytes);
+#if YUKILINKER_FULL
+      pthread_mutex_unlock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+      return result;
+    }
+    page = page->next;
+  }
+
+  size_t required;
+  if (add_overflow(header_aligned, alignment - 1, &required) ||
+      add_overflow(required, bytes, &required)) {
+#if YUKILINKER_FULL
+    pthread_mutex_unlock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+    return nullptr;
+  }
+  uintptr_t rounded;
+  if (!page_ceil(required, &rounded)) {
+#if YUKILINKER_FULL
+    pthread_mutex_unlock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+    return nullptr;
+  }
+  size_t mapping_size =
+      rounded < kMetadataPageSize ? kMetadataPageSize : rounded;
+  void *mapping = mmap(nullptr, mapping_size, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (mapping == MAP_FAILED) {
+#if YUKILINKER_FULL
+    pthread_mutex_unlock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+    return nullptr;
+  }
+
+  page = static_cast<MetadataPage *>(mapping);
+  page->next = g_metadata_pages;
+  page->mapped_size = mapping_size;
+  page->cursor = header_aligned;
+  g_metadata_pages = page;
+
+  size_t offset = (page->cursor + alignment - 1) & ~(alignment - 1);
+  page->cursor = offset + bytes;
+  void *result = reinterpret_cast<uint8_t *>(page) + offset;
+  memset(result, 0, bytes);
+
+#if YUKILINKER_FULL
+  pthread_mutex_unlock(&g_metadata_mutex);
+#endif // #if YUKILINKER_FULL
+  return result;
 }
 
-void protect_gnu_relro(SoHandle *h) {
-#if YUKILINKER_FULL
-  if (h == nullptr || h->relro_size == 0)
-    return;
-  if (mprotect(reinterpret_cast<void *>(h->relro_start), h->relro_size,
-               PROT_READ) != 0)
-    ZLOGE("yukilinker: GNU_RELRO mprotect failed: %s", strerror(errno));
-#else
-  (void)h;
-#endif // #if YUKILINKER_FULL
+template <typename T> T *metadata_object() {
+  void *memory = metadata_allocate(sizeof(T), alignof(T));
+  return memory == nullptr ? nullptr : new (memory) T{};
 }
 
-} // namespace
+struct AddressSpace {
+  void *reservation = nullptr;
+  size_t span = 0;
+  uintptr_t lowest_vaddr = 0;
+  uint8_t *bias = nullptr;
+  ElfW(Phdr) *program_headers = nullptr;
+  size_t program_header_count = 0;
+  bool file_backed = false;
+};
 
-SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
-  struct stat st;
-  if (fstat(memfd, &st) != 0 || st.st_size < (off_t)sizeof(ElfW(Ehdr))) {
-    ZLOGE("yukilinker: fstat memfd: %s", strerror(errno));
-    return nullptr;
-  }
-  size_t file_size = (size_t)st.st_size;
+using LifecycleFunction = void (*)();
 
-  /* Temporary source view. */
-  void *src = mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, memfd, 0);
-  if (src == MAP_FAILED) {
-    ZLOGE("yukilinker: mmap source: %s", strerror(errno));
-    return nullptr;
-  }
-  auto cleanup_src = [&] { munmap(src, file_size); };
+struct Lifecycle {
+  LifecycleFunction init = nullptr;
+  LifecycleFunction *init_array = nullptr;
+  size_t init_count = 0;
+  LifecycleFunction fini = nullptr;
+  LifecycleFunction *fini_array = nullptr;
+  size_t fini_count = 0;
+  bool initialized = false;
+};
 
-  auto *eh = (const ElfW(Ehdr) *)src;
-  if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 ||
-      eh->e_ident[EI_CLASS] != ELFCLASS64 ||
-      eh->e_ident[EI_DATA] != ELFDATA2LSB || eh->e_machine != EM_AARCH64 ||
-      eh->e_type != ET_DYN) {
-    ZLOGE("yukilinker: not an aarch64 ET_DYN ELF");
-    cleanup_src();
-    return nullptr;
-  }
+struct DynamicSymbols {
+  const ElfW(Sym) *entries = nullptr;
+  size_t count = 0;
+  const char *strings = nullptr;
+  size_t string_bytes = 0;
+  const uint32_t *index_slots = nullptr;
+  size_t index_capacity = 0;
+};
 
-  auto *phdr = (const ElfW(Phdr) *)((const uint8_t *)src + eh->e_phoff);
-  size_t phnum = eh->e_phnum;
-
-  /* Load span + PT_DYNAMIC. */
-  uintptr_t min_v = UINTPTR_MAX, max_v = 0;
-  const ElfW(Phdr) *dyn_ph = nullptr;
-  for (size_t i = 0; i < phnum; i++) {
-    if (phdr[i].p_type == PT_DYNAMIC)
-      dyn_ph = &phdr[i];
-    if (phdr[i].p_type != PT_LOAD)
-      continue;
-    min_v = mn(min_v, (uintptr_t)page_down(phdr[i].p_vaddr));
-    max_v = mx(max_v, (uintptr_t)page_up(phdr[i].p_vaddr + phdr[i].p_memsz));
-  }
-  if (dyn_ph == nullptr || min_v == UINTPTR_MAX) {
-    ZLOGE("yukilinker: no PT_LOAD/PT_DYNAMIC");
-    cleanup_src();
-    return nullptr;
-  }
-  size_t map_size = max_v - min_v;
-
-  /* Reserve the whole image span. */
-  void *reserve =
-      mmap(nullptr, map_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (reserve == MAP_FAILED) {
-    ZLOGE("yukilinker: reserve: %s", strerror(errno));
-    cleanup_src();
-    return nullptr;
-  }
-  uint8_t *bias = (uint8_t *)reserve - min_v;
-
-  for (size_t i = 0; i < phnum; i++) {
-    if (phdr[i].p_type != PT_LOAD)
-      continue;
-    uintptr_t seg = (uintptr_t)(bias + page_down(phdr[i].p_vaddr));
-    size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
-    size_t len = page_up(pre + phdr[i].p_memsz);
-    if (file_backed) {
-      /* File-backed path: map segments at final protection. */
-      int seg_prot = prot_of(phdr[i].p_flags);
-      size_t file_len = page_up(pre + phdr[i].p_filesz);
-      off_t file_off = (off_t)(phdr[i].p_offset - pre); // page-aligned (ELF)
-      if (file_len > 0 &&
-          mmap((void *)seg, file_len, seg_prot, MAP_FIXED | MAP_PRIVATE, memfd,
-               file_off) == MAP_FAILED) {
-        ZLOGE("yukilinker: map seg from memfd: %s", strerror(errno));
-        munmap(reserve, map_size);
-        cleanup_src();
-        return nullptr;
-      }
-      // Zero BSS tail on writable file pages.
-      size_t file_end = pre + phdr[i].p_filesz;
-      if ((seg_prot & PROT_WRITE) && file_len > file_end)
-        memset((void *)(seg + file_end), 0, file_len - file_end);
-      if (len > file_len &&
-          mmap((void *)(seg + file_len), len - file_len, seg_prot,
-               MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
-        ZLOGE("yukilinker: map bss: %s", strerror(errno));
-        munmap(reserve, map_size);
-        cleanup_src();
-        return nullptr;
-      }
-    } else {
-      /* Anonymous copy path. */
-      if (mmap((void *)seg, len, PROT_READ | PROT_WRITE,
-               MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
-        ZLOGE("yukilinker: map seg: %s", strerror(errno));
-        munmap(reserve, map_size);
-        cleanup_src();
-        return nullptr;
-      }
-      memcpy((void *)(seg + pre), (const uint8_t *)src + phdr[i].p_offset,
-             phdr[i].p_filesz);
-    }
-    name_vma((void *)seg, len, phdr[i].p_flags, vma_name);
-  }
-
-  /* Arena-backed handle. */
-  void *hmem = arena_alloc(sizeof(SoHandle));
-  if (hmem == nullptr) {
-    ZLOGE("yukilinker: arena exhausted");
-    munmap(reserve, map_size);
-    cleanup_src();
-    return nullptr;
-  }
-  auto *h = new (hmem) SoHandle{};
-  h->load_bias = bias;
-  h->map_size = map_size;
-  h->phdr = (const ElfW(Phdr) *)(bias + eh->e_phoff); // phdr lives in a PT_LOAD
-  h->phnum = phnum;
-
-#if YUKILINKER_FULL
-  for (size_t i = 0; i < phnum; i++) {
-    if (phdr[i].p_type == PT_GNU_RELRO) {
-      uintptr_t start =
-          page_down(reinterpret_cast<uintptr_t>(bias + phdr[i].p_vaddr));
-      uintptr_t end = page_up(reinterpret_cast<uintptr_t>(
-          bias + phdr[i].p_vaddr + phdr[i].p_memsz));
-      if (end > start) {
-        h->relro_start = start;
-        h->relro_size = end - start;
-      }
-    } else if (phdr[i].p_type == PT_TLS) {
-      h->tls_vaddr = reinterpret_cast<uintptr_t>(bias + phdr[i].p_vaddr);
-      h->tls_memsz = phdr[i].p_memsz;
-      h->tls_filesz = phdr[i].p_filesz;
-      h->tls_align = phdr[i].p_align;
-    }
-  }
-#endif // #if YUKILINKER_FULL
-
-  /* Parse PT_DYNAMIC. */
-  auto *dyn = (const ElfW(Dyn) *)(bias + dyn_ph->p_vaddr);
-  const ElfW(Rela) *rela = nullptr, *jmprel = nullptr;
-  size_t relasz = 0, pltrelsz = 0;
+struct RelocationSet {
+  const ElfW(Rela) *rela = nullptr;
+  size_t rela_bytes = 0;
+  const ElfW(Rela) *plt = nullptr;
+  size_t plt_bytes = 0;
   const ElfW(Addr) *relr = nullptr;
-  size_t relrsz = 0;
-  constexpr size_t kMaxNeeded = 64;
-  uintptr_t needed_offsets[kMaxNeeded];
-  size_t n_needed = 0;
-  for (; dyn->d_tag != DT_NULL; dyn++) {
-    switch (dyn->d_tag) {
+  size_t relr_bytes = 0;
+};
+
+struct Dependency {
+  void *system_handle = nullptr;
+  Dependency *next = nullptr;
+};
+
+struct ImageState;
+
+struct TlsTemplate {
+  uintptr_t module_id = 0;
+  uintptr_t generation = 0;
+  const void *initial_bytes = nullptr;
+  size_t file_bytes = 0;
+  size_t memory_bytes = 0;
+  size_t alignment = 1;
+  bool active = false;
+  ImageState *image = nullptr;
+  TlsTemplate *next = nullptr;
+};
+
+#if YUKILINKER_FULL
+struct ExitCallback {
+  void (*function)(void *) = nullptr;
+  void *argument = nullptr;
+  void *dso = nullptr;
+  ExitCallback *next = nullptr;
+};
+#endif // #if YUKILINKER_FULL
+
+struct ImageState {
+  SoHandle *public_handle = nullptr;
+  AddressSpace memory;
+  DynamicSymbols symbols;
+  RelocationSet relocations;
+  Lifecycle lifecycle;
+  Dependency *dependencies = nullptr;
+  TlsTemplate tls;
+  const char *display_name = kDisplayName;
+  ImageState *previous = nullptr;
+  ImageState *next = nullptr;
+#if YUKILINKER_FULL
+  ExitCallback *exit_callbacks = nullptr;
+#endif // #if YUKILINKER_FULL
+};
+
+ImageState *g_first_image = nullptr;
+ImageState *g_last_image = nullptr;
+
+#if YUKILINKER_FULL
+pthread_mutex_t g_registry_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif // #if YUKILINKER_FULL
+
+void registry_lock() {
+#if YUKILINKER_FULL
+  pthread_mutex_lock(&g_registry_mutex);
+#endif // #if YUKILINKER_FULL
+}
+
+void registry_unlock() {
+#if YUKILINKER_FULL
+  pthread_mutex_unlock(&g_registry_mutex);
+#endif // #if YUKILINKER_FULL
+}
+
+void register_image(ImageState *image) {
+  registry_lock();
+  image->previous = g_last_image;
+  image->next = nullptr;
+  if (g_last_image != nullptr)
+    g_last_image->next = image;
+  else
+    g_first_image = image;
+  g_last_image = image;
+  registry_unlock();
+}
+
+void unregister_image(ImageState *image) {
+  registry_lock();
+  if (image->previous != nullptr)
+    image->previous->next = image->next;
+  else if (g_first_image == image)
+    g_first_image = image->next;
+  if (image->next != nullptr)
+    image->next->previous = image->previous;
+  else if (g_last_image == image)
+    g_last_image = image->previous;
+  image->previous = nullptr;
+  image->next = nullptr;
+  registry_unlock();
+}
+
+ImageState *state_of(SoHandle *handle) {
+  return handle == nullptr ? nullptr
+                           : static_cast<ImageState *>(handle->private_state);
+}
+
+bool address_space_contains(const AddressSpace &memory, const void *pointer,
+                            size_t bytes) {
+  if (memory.reservation == nullptr || pointer == nullptr)
+    return false;
+  uintptr_t begin = reinterpret_cast<uintptr_t>(memory.reservation);
+  uintptr_t point = reinterpret_cast<uintptr_t>(pointer);
+  if (point < begin || point - begin > memory.span)
+    return false;
+  return bytes <= memory.span - (point - begin);
+}
+
+bool image_contains(const ImageState *image, const void *pointer) {
+  return image != nullptr && address_space_contains(image->memory, pointer, 1);
+}
+
+template <typename T>
+T *runtime_pointer(ImageState *image, ElfW(Addr) virtual_address,
+                   size_t count = 1) {
+  size_t bytes;
+  if (multiply_overflow(sizeof(T), count, &bytes))
+    return nullptr;
+  uintptr_t bias = reinterpret_cast<uintptr_t>(image->memory.bias);
+  if (virtual_address > UINTPTR_MAX - bias)
+    return nullptr;
+  auto *pointer = reinterpret_cast<T *>(bias + virtual_address);
+  return address_space_contains(image->memory, pointer, bytes) ? pointer
+                                                               : nullptr;
+}
+
+int protection_for(uint32_t flags) {
+  int protection = 0;
+  if ((flags & PF_R) != 0)
+    protection |= PROT_READ;
+  if ((flags & PF_W) != 0)
+    protection |= PROT_WRITE;
+  if ((flags & PF_X) != 0)
+    protection |= PROT_EXEC;
+  return protection;
+}
+
+struct SourceLayout {
+  const ElfW(Ehdr) *header = nullptr;
+  const ElfW(Phdr) *program_headers = nullptr;
+  size_t program_header_count = 0;
+  uintptr_t lowest_vaddr = 0;
+  uintptr_t highest_vaddr = 0;
+  size_t dynamic_index = SIZE_MAX;
+};
+
+bool file_region_valid(size_t file_size, ElfW(Off) offset, ElfW(Xword) bytes) {
+  if (offset > file_size)
+    return false;
+  return bytes <= file_size - static_cast<size_t>(offset);
+}
+
+bool inspect_source(const void *source, size_t file_size,
+                    SourceLayout *layout) {
+  if (file_size < sizeof(ElfW(Ehdr)))
+    return false;
+  auto *header = static_cast<const ElfW(Ehdr) *>(source);
+  if (memcmp(header->e_ident, ELFMAG, SELFMAG) != 0 ||
+      header->e_ident[EI_CLASS] != ELFCLASS64 ||
+      header->e_ident[EI_DATA] != ELFDATA2LSB ||
+      header->e_machine != EM_AARCH64 || header->e_type != ET_DYN ||
+      header->e_phentsize != sizeof(ElfW(Phdr)) || header->e_phnum == 0)
+    return false;
+
+  size_t phdr_bytes;
+  if (multiply_overflow(header->e_phnum, sizeof(ElfW(Phdr)), &phdr_bytes) ||
+      !file_region_valid(file_size, header->e_phoff, phdr_bytes))
+    return false;
+
+  auto *program_headers = reinterpret_cast<const ElfW(Phdr) *>(
+      static_cast<const uint8_t *>(source) + header->e_phoff);
+  uintptr_t low = UINTPTR_MAX;
+  uintptr_t high = 0;
+  size_t dynamic_index = SIZE_MAX;
+
+  for (size_t i = 0; i < header->e_phnum; ++i) {
+    const ElfW(Phdr) &ph = program_headers[i];
+    if (ph.p_type == PT_DYNAMIC) {
+      if (dynamic_index != SIZE_MAX)
+        return false;
+      dynamic_index = i;
+    }
+    if (ph.p_type != PT_LOAD)
+      continue;
+    size_t page_size = loader_page_size();
+    if (ph.p_filesz > ph.p_memsz ||
+        !file_region_valid(file_size, ph.p_offset, ph.p_filesz) ||
+        (ph.p_align > 1 && (!is_power_of_two(ph.p_align) ||
+                            (ph.p_vaddr & (ph.p_align - 1)) !=
+                                (ph.p_offset & (ph.p_align - 1)))) ||
+        (ph.p_offset & (page_size - 1)) != (ph.p_vaddr & (page_size - 1)))
+      return false;
+    uintptr_t segment_end;
+    if (ph.p_vaddr > UINTPTR_MAX - ph.p_memsz ||
+        !page_ceil(ph.p_vaddr + ph.p_memsz, &segment_end))
+      return false;
+    uintptr_t segment_begin = page_floor(ph.p_vaddr);
+    if (segment_begin < low)
+      low = segment_begin;
+    if (segment_end > high)
+      high = segment_end;
+  }
+
+  if (low == UINTPTR_MAX || high <= low || dynamic_index == SIZE_MAX)
+    return false;
+
+  layout->header = header;
+  layout->program_headers = program_headers;
+  layout->program_header_count = header->e_phnum;
+  layout->lowest_vaddr = low;
+  layout->highest_vaddr = high;
+  layout->dynamic_index = dynamic_index;
+  return true;
+}
+
+bool map_one_segment(int fd, const uint8_t *source, size_t file_size,
+                     AddressSpace *memory, const ElfW(Phdr) & ph) {
+  uintptr_t segment_page = page_floor(ph.p_vaddr);
+  size_t page_prefix = static_cast<size_t>(ph.p_vaddr - segment_page);
+  uintptr_t memory_end;
+  if (!page_ceil(page_prefix + ph.p_memsz, &memory_end))
+    return false;
+  size_t mapped_bytes = static_cast<size_t>(memory_end);
+  uintptr_t destination_value =
+      reinterpret_cast<uintptr_t>(memory->bias) + segment_page;
+  void *destination = reinterpret_cast<void *>(destination_value);
+
+  if (!memory->file_backed) {
+    if (mmap(destination, mapped_bytes, PROT_READ | PROT_WRITE,
+             MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED)
+      return false;
+    if (ph.p_filesz != 0) {
+      if (!file_region_valid(file_size, ph.p_offset, ph.p_filesz))
+        return false;
+      memcpy(reinterpret_cast<uint8_t *>(destination) + page_prefix,
+             source + ph.p_offset, ph.p_filesz);
+    }
+    return true;
+  }
+
+  uintptr_t file_end;
+  if (!page_ceil(page_prefix + ph.p_filesz, &file_end))
+    return false;
+  size_t file_mapping_bytes = static_cast<size_t>(file_end);
+  int final_protection = protection_for(ph.p_flags);
+  ElfW(Off) aligned_file_offset = ph.p_offset - page_prefix;
+
+  if (file_mapping_bytes != 0 &&
+      mmap(destination, file_mapping_bytes, final_protection,
+           MAP_FIXED | MAP_PRIVATE, fd, aligned_file_offset) == MAP_FAILED)
+    return false;
+
+  size_t data_end = page_prefix + static_cast<size_t>(ph.p_filesz);
+  size_t zero_available =
+      file_mapping_bytes > data_end ? file_mapping_bytes - data_end : 0;
+  size_t bss_bytes = static_cast<size_t>(ph.p_memsz - ph.p_filesz);
+  size_t zero_bytes = smaller(zero_available, bss_bytes);
+  if (zero_bytes != 0) {
+    if ((final_protection & PROT_WRITE) == 0)
+      return false;
+    memset(reinterpret_cast<uint8_t *>(destination) + data_end, 0, zero_bytes);
+  }
+
+  if (mapped_bytes > file_mapping_bytes) {
+    void *bss = reinterpret_cast<uint8_t *>(destination) + file_mapping_bytes;
+    if (mmap(bss, mapped_bytes - file_mapping_bytes, final_protection,
+             MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED)
+      return false;
+  }
+  return true;
+}
+
+bool create_address_space(int fd, const uint8_t *source, size_t file_size,
+                          const SourceLayout &layout, bool file_backed,
+                          AddressSpace *memory) {
+  size_t span = layout.highest_vaddr - layout.lowest_vaddr;
+  void *reservation =
+      mmap(nullptr, span, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (reservation == MAP_FAILED)
+    return false;
+
+  memory->reservation = reservation;
+  memory->span = span;
+  memory->lowest_vaddr = layout.lowest_vaddr;
+  memory->bias = reinterpret_cast<uint8_t *>(
+      reinterpret_cast<uintptr_t>(reservation) - layout.lowest_vaddr);
+  memory->program_header_count = layout.program_header_count;
+  memory->file_backed = file_backed;
+
+  size_t phdr_bytes;
+  if (multiply_overflow(layout.program_header_count, sizeof(ElfW(Phdr)),
+                        &phdr_bytes)) {
+    munmap(reservation, span);
+    return false;
+  }
+  memory->program_headers = static_cast<ElfW(Phdr) *>(
+      metadata_allocate(phdr_bytes, alignof(ElfW(Phdr))));
+  if (memory->program_headers == nullptr) {
+    munmap(reservation, span);
+    return false;
+  }
+  memcpy(memory->program_headers, layout.program_headers, phdr_bytes);
+
+  for (size_t i = 0; i < layout.program_header_count; ++i) {
+    const ElfW(Phdr) &ph = layout.program_headers[i];
+    if (ph.p_type == PT_LOAD && ph.p_memsz != 0 &&
+        !map_one_segment(fd, source, file_size, memory, ph)) {
+      munmap(reservation, span);
+      memory->reservation = nullptr;
+      memory->span = 0;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool restore_anonymous_protections(ImageState *image) {
+  if (image->memory.file_backed)
+    return true;
+  for (size_t i = 0; i < image->memory.program_header_count; ++i) {
+    const ElfW(Phdr) &ph = image->memory.program_headers[i];
+    if (ph.p_type != PT_LOAD)
+      continue;
+    uintptr_t segment_page = page_floor(ph.p_vaddr);
+    size_t prefix = static_cast<size_t>(ph.p_vaddr - segment_page);
+    uintptr_t rounded;
+    if (!page_ceil(prefix + ph.p_memsz, &rounded))
+      return false;
+    auto *address = runtime_pointer<uint8_t>(image, segment_page, rounded);
+    if (address == nullptr)
+      return false;
+    int protection = protection_for(ph.p_flags);
+    if (mprotect(address, rounded, protection) != 0)
+      return false;
+    if ((protection & PROT_EXEC) != 0)
+      __builtin___clear_cache(reinterpret_cast<char *>(address),
+                              reinterpret_cast<char *>(address + rounded));
+  }
+  return true;
+}
+
+bool protect_relro(ImageState *image) {
+  for (size_t i = 0; i < image->memory.program_header_count; ++i) {
+    const ElfW(Phdr) &ph = image->memory.program_headers[i];
+    if (ph.p_type != PT_GNU_RELRO || ph.p_memsz == 0)
+      continue;
+    uintptr_t bias = reinterpret_cast<uintptr_t>(image->memory.bias);
+    if (ph.p_vaddr > UINTPTR_MAX - bias)
+      return false;
+    uintptr_t unrounded_start = bias + ph.p_vaddr;
+    if (ph.p_memsz > UINTPTR_MAX - unrounded_start)
+      return false;
+    uintptr_t start = page_floor(unrounded_start);
+    uintptr_t unrounded_end = unrounded_start + ph.p_memsz;
+    uintptr_t end;
+    if (!page_ceil(unrounded_end, &end) || end <= start)
+      return false;
+    auto *address = reinterpret_cast<void *>(start);
+    if (!address_space_contains(image->memory, address, end - start) ||
+        mprotect(address, end - start, PROT_READ) != 0)
+      return false;
+  }
+  return true;
+}
+
+struct DynamicParse {
+  const ElfW(Dyn) *entries = nullptr;
+  size_t entry_limit = 0;
+  const uint32_t *sysv_hash = nullptr;
+  const uint32_t *gnu_hash = nullptr;
+  size_t init_array_bytes = 0;
+  size_t fini_array_bytes = 0;
+  size_t symbol_entry_size = sizeof(ElfW(Sym));
+  size_t rela_entry_size = sizeof(ElfW(Rela));
+  size_t relr_entry_size = sizeof(ElfW(Addr));
+  ElfW(Sxword) plt_relocation_kind = DT_RELA;
+  bool terminated = false;
+};
+
+bool mapped_bytes(ImageState *image, const void *pointer, size_t bytes) {
+  return address_space_contains(image->memory, pointer, bytes);
+}
+
+template <typename T>
+const T *dynamic_pointer(ImageState *image, const ElfW(Dyn) & entry) {
+  return runtime_pointer<T>(image, entry.d_un.d_ptr);
+}
+
+bool parse_dynamic_tags(ImageState *image, size_t dynamic_index,
+                        DynamicParse *parse) {
+  const ElfW(Phdr) &dynamic_ph = image->memory.program_headers[dynamic_index];
+  parse->entries = runtime_pointer<ElfW(Dyn)>(image, dynamic_ph.p_vaddr);
+  parse->entry_limit = dynamic_ph.p_memsz / sizeof(ElfW(Dyn));
+  if (parse->entries == nullptr || parse->entry_limit == 0 ||
+      !mapped_bytes(image, parse->entries,
+                    parse->entry_limit * sizeof(ElfW(Dyn))))
+    return false;
+
+  for (size_t i = 0; i < parse->entry_limit; ++i) {
+    const ElfW(Dyn) &entry = parse->entries[i];
+    if (entry.d_tag == DT_NULL) {
+      parse->terminated = true;
+      break;
+    }
+    switch (entry.d_tag) {
     case DT_SYMTAB:
-      h->symtab = (const ElfW(Sym) *)(bias + dyn->d_un.d_ptr);
+      image->symbols.entries = dynamic_pointer<ElfW(Sym)>(image, entry);
       break;
     case DT_STRTAB:
-      h->strtab = (const char *)(bias + dyn->d_un.d_ptr);
+      image->symbols.strings = dynamic_pointer<char>(image, entry);
+      break;
+    case DT_STRSZ:
+      image->symbols.string_bytes = entry.d_un.d_val;
+      break;
+    case DT_SYMENT:
+      parse->symbol_entry_size = entry.d_un.d_val;
+      break;
+    case DT_HASH:
+      parse->sysv_hash = dynamic_pointer<uint32_t>(image, entry);
+      break;
+    case DT_GNU_HASH:
+      parse->gnu_hash = dynamic_pointer<uint32_t>(image, entry);
       break;
     case DT_RELA:
-      rela = (const ElfW(Rela) *)(bias + dyn->d_un.d_ptr);
+      image->relocations.rela = dynamic_pointer<ElfW(Rela)>(image, entry);
       break;
     case DT_RELASZ:
-      relasz = dyn->d_un.d_val;
+      image->relocations.rela_bytes = entry.d_un.d_val;
+      break;
+    case DT_RELAENT:
+      parse->rela_entry_size = entry.d_un.d_val;
       break;
     case DT_JMPREL:
-      jmprel = (const ElfW(Rela) *)(bias + dyn->d_un.d_ptr);
+      image->relocations.plt = dynamic_pointer<ElfW(Rela)>(image, entry);
       break;
     case DT_PLTRELSZ:
-      pltrelsz = dyn->d_un.d_val;
+      image->relocations.plt_bytes = entry.d_un.d_val;
+      break;
+    case DT_PLTREL:
+      parse->plt_relocation_kind = entry.d_un.d_val;
       break;
     case DT_RELR:
 #if DT_ANDROID_RELR != DT_RELR
     case DT_ANDROID_RELR:
 #endif // #if DT_ANDROID_RELR != DT_RELR
-      relr = (const ElfW(Addr) *)(bias + dyn->d_un.d_ptr);
+      image->relocations.relr = dynamic_pointer<ElfW(Addr)>(image, entry);
       break;
     case DT_RELRSZ:
 #if DT_ANDROID_RELRSZ != DT_RELRSZ
     case DT_ANDROID_RELRSZ:
 #endif // #if DT_ANDROID_RELRSZ != DT_RELRSZ
-      relrsz = dyn->d_un.d_val;
+      image->relocations.relr_bytes = entry.d_un.d_val;
       break;
-    case DT_INIT:
-      h->init_func = (SoHandle::init_fn)(bias + dyn->d_un.d_ptr);
+    case DT_RELRENT:
+#if DT_ANDROID_RELRENT != DT_RELRENT
+    case DT_ANDROID_RELRENT:
+#endif // #if DT_ANDROID_RELRENT != DT_RELRENT
+      parse->relr_entry_size = entry.d_un.d_val;
       break;
+    case DT_INIT: {
+      auto *pointer = entry.d_un.d_ptr == 0
+                          ? nullptr
+                          : runtime_pointer<uint8_t>(image, entry.d_un.d_ptr);
+      if (entry.d_un.d_ptr != 0 && pointer == nullptr)
+        return false;
+      image->lifecycle.init = reinterpret_cast<LifecycleFunction>(pointer);
+      break;
+    }
     case DT_INIT_ARRAY:
-      h->init_array = (SoHandle::init_fn *)(bias + dyn->d_un.d_ptr);
+      image->lifecycle.init_array =
+          runtime_pointer<LifecycleFunction>(image, entry.d_un.d_ptr);
+      if (entry.d_un.d_ptr != 0 && image->lifecycle.init_array == nullptr)
+        return false;
       break;
     case DT_INIT_ARRAYSZ:
-      h->init_array_count = dyn->d_un.d_val / sizeof(SoHandle::init_fn);
+      parse->init_array_bytes = entry.d_un.d_val;
       break;
-#if YUKILINKER_FULL
-    case DT_FINI:
-      h->fini_func = (SoHandle::init_fn)(bias + dyn->d_un.d_ptr);
+    case DT_FINI: {
+      auto *pointer = entry.d_un.d_ptr == 0
+                          ? nullptr
+                          : runtime_pointer<uint8_t>(image, entry.d_un.d_ptr);
+      if (entry.d_un.d_ptr != 0 && pointer == nullptr)
+        return false;
+      image->lifecycle.fini = reinterpret_cast<LifecycleFunction>(pointer);
       break;
+    }
     case DT_FINI_ARRAY:
-      h->fini_array = (SoHandle::init_fn *)(bias + dyn->d_un.d_ptr);
+      image->lifecycle.fini_array =
+          runtime_pointer<LifecycleFunction>(image, entry.d_un.d_ptr);
+      if (entry.d_un.d_ptr != 0 && image->lifecycle.fini_array == nullptr)
+        return false;
       break;
     case DT_FINI_ARRAYSZ:
-      h->fini_array_count = dyn->d_un.d_val / sizeof(SoHandle::init_fn);
+      parse->fini_array_bytes = entry.d_un.d_val;
       break;
-#endif // #if YUKILINKER_FULL
-    case DT_NEEDED:
-      if (n_needed < kMaxNeeded)
-        needed_offsets[n_needed++] =
-            dyn->d_un.d_val; // strtab off, resolve below
-      break;
-    case DT_GNU_HASH: {
-      auto *gh = (const uint32_t *)(bias + dyn->d_un.d_ptr);
-      h->gnu_nbucket = gh[0];
-      h->gnu_symndx = gh[1];
-      h->gnu_maskwords = gh[2];
-      h->gnu_shift2 = gh[3];
-      h->gnu_bloom = (const ElfW(Addr) *)&gh[4];
-      h->gnu_buckets = (const uint32_t *)&h->gnu_bloom[h->gnu_maskwords];
-      h->gnu_chain = &h->gnu_buckets[h->gnu_nbucket];
-      break;
-    }
-    case DT_HASH: {
-      auto *sh = (const uint32_t *)(bias + dyn->d_un.d_ptr);
-      h->sysv_nbucket = sh[0];
-      h->sysv_buckets = &sh[2];
-      h->sysv_chain = &h->sysv_buckets[h->sysv_nbucket];
-      break;
-    }
     default:
       break;
     }
   }
-  if (h->symtab == nullptr || h->strtab == nullptr) {
-    ZLOGE("yukilinker: missing symtab/strtab");
-    munmap(reserve, map_size);
-    cleanup_src();
-    return nullptr; // h is arena-backed; not individually freed
-  }
 
-  /* Resolve dependencies. */
-  h->dep_handles =
-      static_cast<void **>(arena_alloc((n_needed + 1) * sizeof(void *)));
-  for (size_t i = 0; i < n_needed && h->dep_handles != nullptr; i++) {
-    const char *nm = h->strtab + needed_offsets[i];
-    void *dep = ::dlopen(nm, RTLD_NOW | RTLD_GLOBAL);
-    if (dep == nullptr)
-      ZLOGE("yukilinker: dep dlopen(%s) failed: %s", nm, dlerror());
-    h->dep_handles[h->dep_count++] = dep; // keep slot even if null
-  }
+  if (!parse->terminated || image->symbols.entries == nullptr ||
+      image->symbols.strings == nullptr || image->symbols.string_bytes == 0 ||
+      parse->symbol_entry_size != sizeof(ElfW(Sym)) ||
+      parse->rela_entry_size != sizeof(ElfW(Rela)) ||
+      parse->relr_entry_size != sizeof(ElfW(Addr)) ||
+      parse->plt_relocation_kind != DT_RELA)
+    return false;
 
-#if YUKILINKER_FULL
-  if (!register_tls_module(h)) {
-    ZLOGE("yukilinker: TLS registration failed");
-    munmap(reserve, map_size);
-    cleanup_src();
-    return nullptr; // h is arena-backed; not individually freed
-  }
-#endif // #if YUKILINKER_FULL
+  if (parse->init_array_bytes % sizeof(LifecycleFunction) != 0 ||
+      parse->fini_array_bytes % sizeof(LifecycleFunction) != 0)
+    return false;
+  image->lifecycle.init_count =
+      parse->init_array_bytes / sizeof(LifecycleFunction);
+  image->lifecycle.fini_count =
+      parse->fini_array_bytes / sizeof(LifecycleFunction);
+  if ((parse->init_array_bytes != 0 &&
+       (image->lifecycle.init_array == nullptr ||
+        !mapped_bytes(image, image->lifecycle.init_array,
+                      parse->init_array_bytes))) ||
+      (parse->fini_array_bytes != 0 &&
+       (image->lifecycle.fini_array == nullptr ||
+        !mapped_bytes(image, image->lifecycle.fini_array,
+                      parse->fini_array_bytes))))
+    return false;
 
-  /* Relocate eagerly. */
-  bool ok = true;
-  if (relr != nullptr)
-    ok = apply_relr(h, relr, relrsz / sizeof(ElfW(Addr)));
-  if (ok && rela != nullptr)
-    ok = apply_rela(h, rela, relasz / sizeof(ElfW(Rela)));
-  if (ok && jmprel != nullptr)
-    ok = apply_rela(h, jmprel, pltrelsz / sizeof(ElfW(Rela)));
-  if (!ok) {
-    ZLOGE("yukilinker: relocation failed");
-#if YUKILINKER_FULL
-    unregister_tls_module(h);
-#endif // #if YUKILINKER_FULL
-    munmap(reserve, map_size);
-    cleanup_src();
-    return nullptr; // h is arena-backed; not individually freed
-  }
+  if (!mapped_bytes(image, image->symbols.strings, image->symbols.string_bytes))
+    return false;
+  if ((image->relocations.rela_bytes != 0 &&
+       (image->relocations.rela == nullptr ||
+        !mapped_bytes(image, image->relocations.rela,
+                      image->relocations.rela_bytes))) ||
+      (image->relocations.plt_bytes != 0 &&
+       (image->relocations.plt == nullptr ||
+        !mapped_bytes(image, image->relocations.plt,
+                      image->relocations.plt_bytes))) ||
+      (image->relocations.relr_bytes != 0 &&
+       (image->relocations.relr == nullptr ||
+        !mapped_bytes(image, image->relocations.relr,
+                      image->relocations.relr_bytes))))
+    return false;
+  return true;
+}
 
-  /* Final protections for anonymous mappings. */
-  if (!file_backed)
-    for (size_t i = 0; i < phnum; i++) {
-      if (phdr[i].p_type != PT_LOAD)
-        continue;
-      uintptr_t seg = (uintptr_t)(bias + page_down(phdr[i].p_vaddr));
-      size_t pre = phdr[i].p_vaddr - page_down(phdr[i].p_vaddr);
-      size_t len = page_up(pre + phdr[i].p_memsz);
-      mprotect((void *)seg, len, prot_of(phdr[i].p_flags));
+size_t symbol_count_from_sysv(ImageState *image, const uint32_t *table) {
+  if (table == nullptr || !mapped_bytes(image, table, 2 * sizeof(uint32_t)))
+    return 0;
+  uint32_t bucket_count = table[0];
+  uint32_t chain_count = table[1];
+  size_t words;
+  if (add_overflow(2, bucket_count, &words) ||
+      add_overflow(words, chain_count, &words) ||
+      multiply_overflow(words, sizeof(uint32_t), &words) ||
+      !mapped_bytes(image, table, words))
+    return 0;
+  return chain_count;
+}
+
+size_t symbol_count_from_gnu(ImageState *image, const uint32_t *table) {
+  if (table == nullptr || !mapped_bytes(image, table, 4 * sizeof(uint32_t)))
+    return 0;
+  uint32_t bucket_count = table[0];
+  uint32_t first_hashed_symbol = table[1];
+  uint32_t bloom_words = table[2];
+  if (bucket_count == 0 || bloom_words == 0)
+    return 0;
+
+  auto *bloom = reinterpret_cast<const ElfW(Addr) *>(table + 4);
+  size_t bloom_bytes;
+  if (multiply_overflow(bloom_words, sizeof(ElfW(Addr)), &bloom_bytes) ||
+      !mapped_bytes(image, bloom, bloom_bytes))
+    return 0;
+  auto *buckets = reinterpret_cast<const uint32_t *>(
+      reinterpret_cast<const uint8_t *>(bloom) + bloom_bytes);
+  size_t bucket_bytes;
+  if (multiply_overflow(bucket_count, sizeof(uint32_t), &bucket_bytes) ||
+      !mapped_bytes(image, buckets, bucket_bytes))
+    return 0;
+  const uint32_t *chains = buckets + bucket_count;
+
+  uint32_t largest_bucket = 0;
+  for (uint32_t i = 0; i < bucket_count; ++i)
+    if (buckets[i] > largest_bucket)
+      largest_bucket = buckets[i];
+  if (largest_bucket < first_hashed_symbol)
+    return first_hashed_symbol;
+
+  size_t symbol_index = largest_bucket;
+  for (;;) {
+    size_t chain_index = symbol_index - first_hashed_symbol;
+    const uint32_t *chain = chains + chain_index;
+    if (!mapped_bytes(image, chain, sizeof(*chain)))
+      return 0;
+    uint32_t value = *chain;
+    ++symbol_index;
+    if ((value & 1U) != 0)
+      return symbol_index;
+  }
+}
+
+bool establish_symbol_count(ImageState *image, const DynamicParse &parse) {
+  size_t sysv_count = symbol_count_from_sysv(image, parse.sysv_hash);
+  size_t gnu_count = symbol_count_from_gnu(image, parse.gnu_hash);
+  image->symbols.count = sysv_count > gnu_count ? sysv_count : gnu_count;
+  size_t symbol_bytes;
+  return image->symbols.count != 0 &&
+         !multiply_overflow(image->symbols.count, sizeof(ElfW(Sym)),
+                            &symbol_bytes) &&
+         mapped_bytes(image, image->symbols.entries, symbol_bytes);
+}
+
+bool symbol_name_valid(const DynamicSymbols &symbols,
+                       const ElfW(Sym) & symbol) {
+  if (symbol.st_name >= symbols.string_bytes)
+    return false;
+  const char *name = symbols.strings + symbol.st_name;
+  return memchr(name, '\0', symbols.string_bytes - symbol.st_name) != nullptr;
+}
+
+bool requires_system_tls_runtime(const ImageState *image) {
+  const DynamicSymbols &symbols = image->symbols;
+  bool uses_thread_atexit = false;
+  bool uses_emulated_tls = false;
+  for (size_t i = 0; i < symbols.count; ++i) {
+    const ElfW(Sym) &symbol = symbols.entries[i];
+    if (!symbol_name_valid(symbols, symbol))
+      continue;
+    const char *name = symbols.strings + symbol.st_name;
+    if (symbol.st_shndx == SHN_UNDEF &&
+        ELF64_ST_TYPE(symbol.st_info) == STT_TLS) {
+      ZLOGW("yukilinker: external TLS symbol requires system linker: %s", name);
+      return true;
     }
-
-  protect_gnu_relro(h);
-
-  cleanup_src();
-  if (g_image_count < kMaxImages)
-    g_images[g_image_count++] = h;
-
-  /* Run initializers. */
-#if YUKILINKER_FULL
-  set_current_init_handle(h);
-#endif // #if YUKILINKER_FULL
-  SoHandle::init_fn init_func = normalize_lifecycle_fn(h, h->init_func);
-  if (init_func)
-    init_func();
-  for (size_t i = 0; i < h->init_array_count; i++) {
-    SoHandle::init_fn init = normalize_lifecycle_fn(h, h->init_array[i]);
-    if (init)
-      init();
+    if (symbol.st_shndx == SHN_UNDEF &&
+        (strcmp(name, "__cxa_thread_atexit") == 0 ||
+         strcmp(name, "__cxa_thread_atexit_impl") == 0))
+      uses_thread_atexit = true;
+    if (strcmp(name, "__emutls_get_address") == 0 ||
+        strncmp(name, "__emutls_v.", sizeof("__emutls_v.") - 1) == 0)
+      uses_emulated_tls = true;
   }
-#if YUKILINKER_FULL
-  clear_current_init_handle(h);
-#endif // #if YUKILINKER_FULL
-  h->did_init = true;
-
-  return h;
+  if (uses_thread_atexit &&
+      (image->tls.memory_bytes != 0 || uses_emulated_tls)) {
+    ZLOGW("yukilinker: TLS destructor runtime requires system linker");
+    return true;
+  }
+  return false;
 }
 
-void *dlsym(SoHandle *h, const char *name) {
-  if (h == nullptr)
-    return nullptr;
-  const ElfW(Sym) *s = gnu_lookup(h, name);
-  if (s == nullptr)
-    s = sysv_lookup(h, name);
-  if (s == nullptr || s->st_shndx == SHN_UNDEF)
-    return nullptr;
-  void *addr = h->load_bias + s->st_value;
-  if (ELF64_ST_TYPE(s->st_info) == STT_GNU_IFUNC)
-    addr = (void *)((ElfW(Addr) (*)(uint64_t))addr)(getauxval(AT_HWCAP));
-  return addr;
+uint32_t symbol_name_hash(const char *name) {
+  uint32_t hash = 2166136261U;
+  for (const auto *cursor = reinterpret_cast<const uint8_t *>(name);
+       *cursor != 0; ++cursor) {
+    hash ^= *cursor;
+    hash *= 16777619U;
+  }
+  return hash;
 }
 
-void dlclose(SoHandle *h) {
-  if (h == nullptr)
+void build_symbol_index(ImageState *image) {
+  DynamicSymbols &symbols = image->symbols;
+  if (symbols.count > UINT32_MAX)
     return;
-  call_finalizers(h);
+
+  size_t defined_count = 0;
+  for (size_t i = 0; i < symbols.count; ++i) {
+    const ElfW(Sym) &candidate = symbols.entries[i];
+    if (candidate.st_shndx != SHN_UNDEF &&
+        symbol_name_valid(symbols, candidate))
+      ++defined_count;
+  }
+  if (defined_count == 0)
+    return;
+
+  size_t target_capacity;
+  if (multiply_overflow(defined_count, 2, &target_capacity))
+    return;
+  size_t capacity = 8;
+  while (capacity < target_capacity) {
+    if (capacity > SIZE_MAX / 2)
+      return;
+    capacity *= 2;
+  }
+
+  size_t index_bytes;
+  if (multiply_overflow(capacity, sizeof(uint32_t), &index_bytes))
+    return;
+  auto *slots = static_cast<uint32_t *>(
+      metadata_allocate(index_bytes, alignof(uint32_t)));
+  if (slots == nullptr)
+    return;
+
+  size_t mask = capacity - 1;
+  for (size_t i = 0; i < symbols.count; ++i) {
+    const ElfW(Sym) &candidate = symbols.entries[i];
+    if (candidate.st_shndx == SHN_UNDEF ||
+        !symbol_name_valid(symbols, candidate))
+      continue;
+    const char *candidate_name = symbols.strings + candidate.st_name;
+    size_t slot = symbol_name_hash(candidate_name) & mask;
+    for (size_t probe = 0; probe < capacity; ++probe) {
+      uint32_t encoded = slots[slot];
+      if (encoded == 0) {
+        slots[slot] = static_cast<uint32_t>(i + 1);
+        break;
+      }
+      const ElfW(Sym) &existing = symbols.entries[encoded - 1];
+      if (strcmp(symbols.strings + existing.st_name, candidate_name) == 0)
+        break;
+      slot = (slot + 1) & mask;
+    }
+  }
+  symbols.index_slots = slots;
+  symbols.index_capacity = capacity;
+}
+
+const ElfW(Sym) *
+    find_defined_symbol(const ImageState *image, const char *name) {
+  if (image == nullptr || name == nullptr)
+    return nullptr;
+  const DynamicSymbols &symbols = image->symbols;
+  if (symbols.index_slots != nullptr && symbols.index_capacity != 0) {
+    size_t mask = symbols.index_capacity - 1;
+    size_t slot = symbol_name_hash(name) & mask;
+    for (size_t probe = 0; probe < symbols.index_capacity; ++probe) {
+      uint32_t encoded = symbols.index_slots[slot];
+      if (encoded == 0)
+        return nullptr;
+      const ElfW(Sym) &candidate = symbols.entries[encoded - 1];
+      if (strcmp(symbols.strings + candidate.st_name, name) == 0)
+        return &candidate;
+      slot = (slot + 1) & mask;
+    }
+    return nullptr;
+  }
+  for (size_t i = 0; i < image->symbols.count; ++i) {
+    const ElfW(Sym) &candidate = image->symbols.entries[i];
+    if (candidate.st_shndx == SHN_UNDEF ||
+        !symbol_name_valid(image->symbols, candidate))
+      continue;
+    if (strcmp(image->symbols.strings + candidate.st_name, name) == 0)
+      return &candidate;
+  }
+  return nullptr;
+}
+
+const ElfW(Sym) * symbol_at(const ImageState *image, uint32_t index) {
+  return image != nullptr && index < image->symbols.count
+             ? &image->symbols.entries[index]
+             : nullptr;
+}
+
+bool open_dependencies(ImageState *image, const DynamicParse &parse) {
+  Dependency **tail = &image->dependencies;
+  for (size_t i = 0; i < parse.entry_limit; ++i) {
+    const ElfW(Dyn) &entry = parse.entries[i];
+    if (entry.d_tag == DT_NULL)
+      break;
+    if (entry.d_tag != DT_NEEDED)
+      continue;
+    if (entry.d_un.d_val >= image->symbols.string_bytes)
+      return false;
+    const char *name = image->symbols.strings + entry.d_un.d_val;
+    if (memchr(name, '\0', image->symbols.string_bytes - entry.d_un.d_val) ==
+        nullptr)
+      return false;
+    Dependency *dependency = metadata_object<Dependency>();
+    if (dependency == nullptr)
+      return false;
+    dependency->system_handle = ::dlopen(name, RTLD_NOW | RTLD_GLOBAL);
+    if (dependency->system_handle == nullptr)
+      ZLOGW("yukilinker: dependency unavailable: %s", name);
+    *tail = dependency;
+    tail = &dependency->next;
+  }
+  return true;
+}
+
+void close_dependencies(ImageState *image) {
+  for (Dependency *dependency = image->dependencies; dependency != nullptr;
+       dependency = dependency->next) {
+    if (dependency->system_handle != nullptr) {
+      ::dlclose(dependency->system_handle);
+      dependency->system_handle = nullptr;
+    }
+  }
+}
+
 #if YUKILINKER_FULL
-  free_atexit_table(h);
-  unregister_tls_module(h);
+pthread_mutex_t g_exit_mutex = PTHREAD_MUTEX_INITIALIZER;
+ImageState *g_initializing_image = nullptr;
+
+ImageState *find_exit_owner(void *dso) {
+  if (dso != nullptr) {
+    registry_lock();
+    for (ImageState *image = g_first_image; image != nullptr;
+         image = image->next) {
+      if (image_contains(image, dso)) {
+        registry_unlock();
+        return image;
+      }
+    }
+    registry_unlock();
+  }
+  return g_initializing_image;
+}
+
+void drain_exit_callbacks(ImageState *image, void *dso) {
+  if (image == nullptr)
+    return;
+  for (;;) {
+    pthread_mutex_lock(&g_exit_mutex);
+    ExitCallback **link = &image->exit_callbacks;
+    while (*link != nullptr && dso != nullptr && (*link)->dso != dso)
+      link = &(*link)->next;
+    ExitCallback *callback = *link;
+    if (callback != nullptr)
+      *link = callback->next;
+    pthread_mutex_unlock(&g_exit_mutex);
+    if (callback == nullptr)
+      break;
+    callback->function(callback->argument);
+    free(callback);
+  }
+}
+
+void discard_exit_callbacks(ImageState *image) {
+  pthread_mutex_lock(&g_exit_mutex);
+  ExitCallback *callback = image->exit_callbacks;
+  image->exit_callbacks = nullptr;
+  pthread_mutex_unlock(&g_exit_mutex);
+  while (callback != nullptr) {
+    ExitCallback *next = callback->next;
+    free(callback);
+    callback = next;
+  }
+}
+
+int module_cxa_atexit(void (*function)(void *), void *argument, void *dso) {
+  if (function == nullptr)
+    return -1;
+  pthread_mutex_lock(&g_exit_mutex);
+  ImageState *owner = find_exit_owner(dso);
+  if (owner == nullptr) {
+    pthread_mutex_unlock(&g_exit_mutex);
+    return -1;
+  }
+  auto *callback = static_cast<ExitCallback *>(malloc(sizeof(ExitCallback)));
+  if (callback == nullptr) {
+    pthread_mutex_unlock(&g_exit_mutex);
+    return -1;
+  }
+  callback->function = function;
+  callback->argument = argument;
+  callback->dso = dso;
+  callback->next = owner->exit_callbacks;
+  owner->exit_callbacks = callback;
+  pthread_mutex_unlock(&g_exit_mutex);
+  return 0;
+}
+
+void module_cxa_finalize(void *dso) {
+  pthread_mutex_lock(&g_exit_mutex);
+  ImageState *owner = find_exit_owner(dso);
+  pthread_mutex_unlock(&g_exit_mutex);
+  drain_exit_callbacks(owner, dso);
+}
+#else
+int module_cxa_atexit(void (*)(void *), void *, void *) { return 0; }
+void module_cxa_finalize(void *) {}
+void discard_exit_callbacks(ImageState *) {}
 #endif // #if YUKILINKER_FULL
-  for (size_t i = 0; i < g_image_count; i++)
-    if (g_images[i] == h) {
-      for (size_t j = i + 1; j < g_image_count; j++)
-        g_images[j - 1] = g_images[j];
-      g_image_count--;
+
+extern "C" int yuki_thread_atexit_noop(void (*)(void *), void *, void *) {
+  return 0;
+}
+
+#if YUKILINKER_FULL
+struct TlsIndex {
+  unsigned long module;
+  unsigned long offset;
+};
+
+struct TlsDescriptorIndex {
+  uintptr_t module;
+  uintptr_t offset;
+  uintptr_t generation;
+};
+
+struct ThreadTlsBlock {
+  uintptr_t generation = 0;
+  void *storage = nullptr;
+  ThreadTlsBlock *next = nullptr;
+  uintptr_t module_id = 0;
+};
+
+struct ThreadTlsState {
+  size_t block_capacity = 0;
+  ThreadTlsBlock **blocks = nullptr;
+  ThreadTlsBlock *first = nullptr;
+};
+
+#if defined(__aarch64__)
+struct BionicPthreadKeyData {
+  uintptr_t sequence;
+  void *data;
+};
+
+static_assert(sizeof(BionicPthreadKeyData) == 16);
+static_assert(offsetof(BionicPthreadKeyData, data) == 8);
+static_assert(offsetof(ThreadTlsState, block_capacity) == 0);
+static_assert(offsetof(ThreadTlsState, blocks) == 8);
+static_assert(offsetof(ThreadTlsBlock, generation) == 0);
+static_assert(offsetof(ThreadTlsBlock, storage) == 8);
+static_assert(offsetof(TlsDescriptorIndex, module) == 0);
+static_assert(offsetof(TlsDescriptorIndex, offset) == 8);
+static_assert(offsetof(TlsDescriptorIndex, generation) == 16);
+#endif // #if defined(__aarch64__)
+
+constexpr size_t kMaxTlsModuleSlots = 1024;
+TlsTemplate *g_tls_templates = nullptr;
+uintptr_t g_tls_module_generations[kMaxTlsModuleSlots + 1]{};
+uintptr_t g_next_tls_generation = 1;
+pthread_mutex_t g_tls_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_key_t g_thread_tls_key;
+pthread_once_t g_thread_tls_once = PTHREAD_ONCE_INIT;
+bool g_thread_tls_key_valid = false;
+bool g_tls_stopped = false;
+
+#if defined(__aarch64__)
+constexpr uint32_t kPthreadKeyValidFlag = 1U << 31;
+
+void configure_tls_fast_path() {
+  uint32_t encoded_key = static_cast<uint32_t>(g_thread_tls_key);
+  if ((encoded_key & kPthreadKeyValidFlag) == 0)
+    return;
+  uintptr_t key_index = encoded_key & ~kPthreadKeyValidFlag;
+
+  static uintptr_t probe_marker;
+  if (pthread_setspecific(g_thread_tls_key, &probe_marker) != 0)
+    return;
+
+  auto **thread_slots = static_cast<void **>(__builtin_thread_pointer());
+  auto *key_data = static_cast<BionicPthreadKeyData *>(thread_slots[-1]);
+  bool valid = key_data != nullptr &&
+               key_data[key_index].data == &probe_marker &&
+               pthread_getspecific(g_thread_tls_key) == &probe_marker;
+  uintptr_t sequence = valid ? key_data[key_index].sequence : 0;
+
+  pthread_setspecific(g_thread_tls_key, nullptr);
+  if (!valid || sequence == 0 || key_data[key_index].data != nullptr ||
+      key_data[key_index].sequence != sequence)
+    return;
+
+  yuki_tls_fast_config.key_index = key_index;
+  yuki_tls_fast_config.key_sequence = sequence;
+  __atomic_store_n(&yuki_tls_fast_config.enabled, uintptr_t{1},
+                   __ATOMIC_RELEASE);
+}
+
+void disable_tls_fast_path() {
+  __atomic_store_n(&yuki_tls_fast_config.enabled, uintptr_t{0},
+                   __ATOMIC_RELEASE);
+}
+
+ThreadTlsState *fast_thread_tls_state() {
+  if (__atomic_load_n(&yuki_tls_fast_config.enabled, __ATOMIC_ACQUIRE) != 1)
+    return nullptr;
+  auto **thread_slots = static_cast<void **>(__builtin_thread_pointer());
+  auto *key_data = static_cast<BionicPthreadKeyData *>(thread_slots[-1]);
+  if (key_data == nullptr)
+    return nullptr;
+  BionicPthreadKeyData &entry = key_data[yuki_tls_fast_config.key_index];
+  if (entry.sequence != yuki_tls_fast_config.key_sequence)
+    return nullptr;
+  return static_cast<ThreadTlsState *>(entry.data);
+}
+#endif // #if defined(__aarch64__)
+
+void destroy_thread_tls_state(void *opaque) {
+  auto *state = static_cast<ThreadTlsState *>(opaque);
+  if (state == nullptr)
+    return;
+  ThreadTlsBlock *block = state->first;
+  while (block != nullptr) {
+    ThreadTlsBlock *next = block->next;
+    free(block->storage);
+    free(block);
+    block = next;
+  }
+  free(state->blocks);
+  free(state);
+}
+
+void initialize_thread_tls_key() {
+  bool valid =
+      pthread_key_create(&g_thread_tls_key, destroy_thread_tls_state) == 0;
+#if defined(__aarch64__)
+  if (valid)
+    configure_tls_fast_path();
+#endif // #if defined(__aarch64__)
+  __atomic_store_n(&g_thread_tls_key_valid, valid, __ATOMIC_RELEASE);
+}
+
+bool ensure_thread_tls_key() {
+  pthread_once(&g_thread_tls_once, initialize_thread_tls_key);
+  return __atomic_load_n(&g_thread_tls_key_valid, __ATOMIC_ACQUIRE);
+}
+
+ThreadTlsState *thread_tls_state() {
+  if (g_tls_stopped)
+    return nullptr;
+  if (!ensure_thread_tls_key())
+    return nullptr;
+  auto *state =
+      static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
+  if (state != nullptr)
+    return state;
+  state = static_cast<ThreadTlsState *>(calloc(1, sizeof(ThreadTlsState)));
+  if (state == nullptr)
+    return nullptr;
+  if (pthread_setspecific(g_thread_tls_key, state) != 0) {
+    free(state);
+    return nullptr;
+  }
+  return state;
+}
+
+TlsTemplate *find_tls_template(uintptr_t module_id) {
+  for (TlsTemplate *candidate = g_tls_templates; candidate != nullptr;
+       candidate = candidate->next)
+    if (candidate->active && candidate->module_id == module_id)
+      return candidate;
+  return nullptr;
+}
+
+ThreadTlsBlock *find_thread_block(ThreadTlsState *thread, uintptr_t module_id) {
+  if (module_id >= thread->block_capacity)
+    return nullptr;
+  return thread->blocks[module_id];
+}
+
+bool ensure_thread_block_capacity(ThreadTlsState *thread, uintptr_t module_id) {
+  if (module_id < thread->block_capacity)
+    return true;
+  if (module_id == UINTPTR_MAX)
+    return false;
+
+  size_t required = static_cast<size_t>(module_id + 1);
+  size_t capacity = thread->block_capacity == 0 ? 8 : thread->block_capacity;
+  while (capacity < required) {
+    if (capacity > SIZE_MAX / 2) {
+      capacity = required;
       break;
     }
-  for (size_t i = 0; i < h->dep_count; i++)
-    if (h->dep_handles[i])
-      ::dlclose(h->dep_handles[i]);
-  if (h->load_bias && h->map_size)
-    munmap(h->load_bias, h->map_size); // bias+min_v == reserve start
-  // h is arena-backed.
+    capacity *= 2;
+  }
+
+  size_t bytes;
+  if (multiply_overflow(capacity, sizeof(ThreadTlsBlock *), &bytes))
+    return false;
+  auto **blocks =
+      static_cast<ThreadTlsBlock **>(realloc(thread->blocks, bytes));
+  if (blocks == nullptr)
+    return false;
+  memset(blocks + thread->block_capacity, 0,
+         (capacity - thread->block_capacity) * sizeof(ThreadTlsBlock *));
+  thread->blocks = blocks;
+  thread->block_capacity = capacity;
+  return true;
+}
+
+void *allocate_thread_storage(const TlsTemplate &tls) {
+  void *storage = nullptr;
+  size_t alignment =
+      tls.alignment < sizeof(void *) ? sizeof(void *) : tls.alignment;
+  if (posix_memalign(&storage, alignment, tls.memory_bytes) != 0)
+    return nullptr;
+  memset(storage, 0, tls.memory_bytes);
+  if (tls.file_bytes != 0)
+    memcpy(storage, tls.initial_bytes, tls.file_bytes);
+  return storage;
+}
+
+ThreadTlsBlock *create_thread_block(const TlsTemplate &tls) {
+  auto *block =
+      static_cast<ThreadTlsBlock *>(calloc(1, sizeof(ThreadTlsBlock)));
+  if (block == nullptr)
+    return nullptr;
+  block->storage = allocate_thread_storage(tls);
+  if (block->storage == nullptr) {
+    free(block);
+    return nullptr;
+  }
+  block->generation = tls.generation;
+  block->module_id = tls.module_id;
+  return block;
+}
+
+bool reset_thread_block(ThreadTlsBlock *block, const TlsTemplate &tls) {
+  void *storage = allocate_thread_storage(tls);
+  if (storage == nullptr)
+    return false;
+  free(block->storage);
+  block->storage = storage;
+  block->generation = tls.generation;
+  block->module_id = tls.module_id;
+  return true;
+}
+
+uintptr_t active_tls_generation(uintptr_t module_id) {
+  if (module_id == 0 || module_id > kMaxTlsModuleSlots)
+    return 0;
+  return __atomic_load_n(&g_tls_module_generations[module_id],
+                         __ATOMIC_ACQUIRE);
+}
+
+bool activate_tls(ImageState *image) {
+  TlsTemplate &tls = image->tls;
+  if (tls.memory_bytes == 0)
+    return true;
+  if (tls.file_bytes > tls.memory_bytes ||
+      !is_power_of_two(tls.alignment == 0 ? 1 : tls.alignment))
+    return false;
+  if (tls.alignment == 0)
+    tls.alignment = 1;
+  if (!ensure_thread_tls_key())
+    return false;
+
+  pthread_mutex_lock(&g_tls_mutex);
+  if (g_tls_stopped) {
+    pthread_mutex_unlock(&g_tls_mutex);
+    return false;
+  }
+  uintptr_t module_id = 1;
+  while (module_id <= kMaxTlsModuleSlots &&
+         __atomic_load_n(&g_tls_module_generations[module_id],
+                         __ATOMIC_RELAXED) != 0)
+    ++module_id;
+  if (module_id > kMaxTlsModuleSlots) {
+    pthread_mutex_unlock(&g_tls_mutex);
+    return false;
+  }
+  uintptr_t generation = g_next_tls_generation++;
+  if (generation == 0)
+    generation = g_next_tls_generation++;
+  tls.module_id = module_id;
+  tls.generation = generation;
+  tls.image = image;
+  tls.active = true;
+  tls.next = g_tls_templates;
+  g_tls_templates = &tls;
+  __atomic_store_n(&g_tls_module_generations[module_id], generation,
+                   __ATOMIC_RELEASE);
+  pthread_mutex_unlock(&g_tls_mutex);
+  return true;
+}
+
+void deactivate_tls(ImageState *image) {
+  if (image == nullptr || !image->tls.active)
+    return;
+  pthread_mutex_lock(&g_tls_mutex);
+  TlsTemplate **link = &g_tls_templates;
+  while (*link != nullptr && *link != &image->tls)
+    link = &(*link)->next;
+  if (*link == &image->tls)
+    *link = image->tls.next;
+  uintptr_t module_id = image->tls.module_id;
+  if (module_id != 0 && module_id <= kMaxTlsModuleSlots)
+    __atomic_store_n(&g_tls_module_generations[module_id], uintptr_t{0},
+                     __ATOMIC_RELEASE);
+  image->tls.active = false;
+  image->tls.next = nullptr;
+  image->tls.module_id = 0;
+  image->tls.generation = 0;
+  pthread_mutex_unlock(&g_tls_mutex);
+}
+
+extern "C" void *yuki_tls_get_addr(TlsIndex *index) {
+  if (index == nullptr)
+    return nullptr;
+  uintptr_t generation = active_tls_generation(index->module);
+  if (generation == 0)
+    return nullptr;
+  ThreadTlsState *thread = nullptr;
+#if defined(__aarch64__)
+  thread = fast_thread_tls_state();
+#else
+  thread = static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
+#endif // #if defined(__aarch64__)
+  if (thread != nullptr) {
+    ThreadTlsBlock *block = find_thread_block(thread, index->module);
+    if (block != nullptr && block->generation == generation)
+      return static_cast<uint8_t *>(block->storage) + index->offset;
+  }
+  if (thread == nullptr)
+    thread = thread_tls_state();
+  if (thread == nullptr)
+    return nullptr;
+
+  // Blocks belong exclusively to the current thread. Once allocated, their
+  // storage and generation are stable until the module ID is reused. A reused
+  // slot takes the slow path once to replace its stale per-thread block.
+
+  pthread_mutex_lock(&g_tls_mutex);
+  TlsTemplate *tls = find_tls_template(index->module);
+  if (tls == nullptr || index->offset >= tls->memory_bytes) {
+    pthread_mutex_unlock(&g_tls_mutex);
+    return nullptr;
+  }
+  ThreadTlsBlock *block = find_thread_block(thread, tls->module_id);
+  if (block == nullptr) {
+    if (!ensure_thread_block_capacity(thread, tls->module_id)) {
+      pthread_mutex_unlock(&g_tls_mutex);
+      return nullptr;
+    }
+    block = create_thread_block(*tls);
+    if (block == nullptr) {
+      pthread_mutex_unlock(&g_tls_mutex);
+      return nullptr;
+    }
+    block->next = thread->first;
+    thread->first = block;
+    thread->blocks[tls->module_id] = block;
+  } else if (block->generation != tls->generation &&
+             !reset_thread_block(block, *tls)) {
+    pthread_mutex_unlock(&g_tls_mutex);
+    return nullptr;
+  }
+  void *address = static_cast<uint8_t *>(block->storage) + index->offset;
+  pthread_mutex_unlock(&g_tls_mutex);
+  return address;
+}
+
+void *current_thread_tls_data(uintptr_t module_id, uintptr_t generation) {
+  if (module_id == 0 || generation == 0 ||
+      active_tls_generation(module_id) != generation)
+    return nullptr;
+  ThreadTlsState *thread = nullptr;
+#if defined(__aarch64__)
+  thread = fast_thread_tls_state();
+  if (thread == nullptr)
+    thread =
+        static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
+#else
+  thread = static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
+#endif // #if defined(__aarch64__)
+  if (thread == nullptr)
+    return nullptr;
+  ThreadTlsBlock *block = find_thread_block(thread, module_id);
+  return block != nullptr && block->generation == generation ? block->storage
+                                                             : nullptr;
+}
+
+uintptr_t current_thread_pointer() {
+#if defined(__aarch64__)
+  return reinterpret_cast<uintptr_t>(__builtin_thread_pointer());
+#else
+  return 0;
+#endif // #if defined(__aarch64__)
+}
+
+extern "C" uintptr_t yuki_tlsdesc_dynamic_entry(uintptr_t *descriptor);
+extern "C" uintptr_t yuki_tlsdesc_weak_entry(uintptr_t *descriptor);
+
+extern "C" __attribute__((visibility("hidden"))) uintptr_t
+yuki_tlsdesc_dynamic_body(uintptr_t *descriptor) {
+  auto *index = reinterpret_cast<TlsIndex *>(descriptor[1]);
+  void *address = yuki_tls_get_addr(index);
+  return reinterpret_cast<uintptr_t>(address) - current_thread_pointer();
+}
+#else
+struct TlsIndex {
+  unsigned long module;
+  unsigned long offset;
+};
+bool activate_tls(ImageState *) { return true; }
+void deactivate_tls(ImageState *) {}
+extern "C" void *yuki_tls_get_addr(TlsIndex *) { return nullptr; }
+void *current_thread_tls_data(uintptr_t, uintptr_t) { return nullptr; }
+#endif // #if YUKILINKER_FULL
+
+bool discover_tls_segment(ImageState *image) {
+  bool found = false;
+  for (size_t i = 0; i < image->memory.program_header_count; ++i) {
+    const ElfW(Phdr) &ph = image->memory.program_headers[i];
+    if (ph.p_type != PT_TLS)
+      continue;
+    if (found || ph.p_filesz > ph.p_memsz ||
+        (ph.p_align > 1 && !is_power_of_two(ph.p_align)))
+      return false;
+    found = true;
+    image->tls.initial_bytes =
+        runtime_pointer<uint8_t>(image, ph.p_vaddr, ph.p_filesz);
+    if (ph.p_filesz != 0 && image->tls.initial_bytes == nullptr)
+      return false;
+    image->tls.file_bytes = ph.p_filesz;
+    image->tls.memory_bytes = ph.p_memsz;
+    image->tls.alignment = ph.p_align == 0 ? 1 : ph.p_align;
+  }
+  return true;
+}
+
+LifecycleFunction normalized_lifecycle_function(ImageState *image,
+                                                LifecycleFunction function) {
+  uintptr_t value = reinterpret_cast<uintptr_t>(function);
+  if (value == 0 || image_contains(image, reinterpret_cast<void *>(value)))
+    return function;
+  auto *rebased = runtime_pointer<uint8_t>(image, value);
+  if (rebased != nullptr)
+    return reinterpret_cast<LifecycleFunction>(rebased);
+  return function;
+}
+
+void run_initializers(ImageState *image) {
+#if YUKILINKER_FULL
+  pthread_mutex_lock(&g_exit_mutex);
+  g_initializing_image = image;
+  pthread_mutex_unlock(&g_exit_mutex);
+#endif // #if YUKILINKER_FULL
+  LifecycleFunction init =
+      normalized_lifecycle_function(image, image->lifecycle.init);
+  if (init != nullptr)
+    init();
+  for (size_t i = 0; i < image->lifecycle.init_count; ++i) {
+    LifecycleFunction entry =
+        normalized_lifecycle_function(image, image->lifecycle.init_array[i]);
+    if (entry != nullptr)
+      entry();
+  }
+#if YUKILINKER_FULL
+  pthread_mutex_lock(&g_exit_mutex);
+  if (g_initializing_image == image)
+    g_initializing_image = nullptr;
+  pthread_mutex_unlock(&g_exit_mutex);
+#endif // #if YUKILINKER_FULL
+  image->lifecycle.initialized = true;
+}
+
+void run_finalizers(ImageState *image) {
+  if (image == nullptr || !image->lifecycle.initialized)
+    return;
+  for (size_t i = image->lifecycle.fini_count; i != 0; --i) {
+    LifecycleFunction entry = normalized_lifecycle_function(
+        image, image->lifecycle.fini_array[i - 1]);
+    if (entry != nullptr)
+      entry();
+  }
+  LifecycleFunction fini =
+      normalized_lifecycle_function(image, image->lifecycle.fini);
+  if (fini != nullptr)
+    fini();
+#if YUKILINKER_FULL
+  drain_exit_callbacks(image, nullptr);
+#endif // #if YUKILINKER_FULL
+  image->lifecycle.initialized = false;
+}
+
+uintptr_t invoke_ifunc(uintptr_t resolver) {
+  using Resolver = ElfW(Addr) (*)(uint64_t);
+  return reinterpret_cast<Resolver>(resolver)(getauxval(AT_HWCAP));
+}
+
+struct SymbolResolution {
+  uintptr_t address = 0;
+  bool valid = false;
+};
+
+SymbolResolution materialize_defined_symbol(ImageState *image,
+                                            const ElfW(Sym) & symbol) {
+  if (symbol.st_shndx == SHN_UNDEF)
+    return {};
+  uintptr_t address;
+  if (symbol.st_shndx == SHN_ABS) {
+    address = symbol.st_value;
+  } else {
+    auto *pointer = runtime_pointer<uint8_t>(image, symbol.st_value);
+    if (pointer == nullptr)
+      return {};
+    address = reinterpret_cast<uintptr_t>(pointer);
+  }
+  if (ELF64_ST_TYPE(symbol.st_info) == STT_GNU_IFUNC)
+    address = invoke_ifunc(address);
+  return {address, true};
+}
+
+SymbolResolution resolve_symbol(ImageState *image, uint32_t symbol_index) {
+  const ElfW(Sym) *symbol = symbol_at(image, symbol_index);
+  if (symbol == nullptr || !symbol_name_valid(image->symbols, *symbol))
+    return {};
+  const char *name = image->symbols.strings + symbol->st_name;
+
+  if (symbol->st_shndx == SHN_UNDEF) {
+    if (strcmp(name, "dl_iterate_phdr") == 0)
+      return {reinterpret_cast<uintptr_t>(&dl_iterate_phdr_hook), true};
+    if (strcmp(name, "__cxa_atexit") == 0)
+      return {reinterpret_cast<uintptr_t>(&module_cxa_atexit), true};
+    if (strcmp(name, "__cxa_finalize") == 0)
+      return {reinterpret_cast<uintptr_t>(&module_cxa_finalize), true};
+    if (strcmp(name, "__cxa_thread_atexit_impl") == 0)
+      return {reinterpret_cast<uintptr_t>(&yuki_thread_atexit_noop), true};
+#if YUKILINKER_FULL
+    if (strcmp(name, "__tls_get_addr") == 0)
+      return {reinterpret_cast<uintptr_t>(&yuki_tls_get_addr), true};
+#endif // #if YUKILINKER_FULL
+  } else
+    return materialize_defined_symbol(image, *symbol);
+
+  for (Dependency *dependency = image->dependencies; dependency != nullptr;
+       dependency = dependency->next) {
+    if (dependency->system_handle == nullptr)
+      continue;
+    void *address = ::dlsym(dependency->system_handle, name);
+    if (address != nullptr)
+      return {reinterpret_cast<uintptr_t>(address), true};
+  }
+  void *global = ::dlsym(RTLD_DEFAULT, name);
+  if (global != nullptr)
+    return {reinterpret_cast<uintptr_t>(global), true};
+  if (ELF64_ST_BIND(symbol->st_info) == STB_WEAK)
+    return {0, true};
+  ZLOGE("yukilinker: unresolved import: %s", name);
+  return {};
+}
+
+#if YUKILINKER_FULL
+struct TlsReference {
+  uintptr_t module_id = 0;
+  uintptr_t byte_offset = 0;
+  uintptr_t generation = 0;
+  bool unresolved_weak = false;
+};
+
+bool resolve_tls_reference(ImageState *image, uint32_t symbol_index,
+                           ElfW(Sxword) addend, TlsReference *result) {
+  *result = {};
+  if (symbol_index == 0) {
+    uintptr_t offset;
+    if (!image->tls.active || !add_signed_offset(0, addend, &offset) ||
+        offset >= image->tls.memory_bytes)
+      return false;
+    result->module_id = image->tls.module_id;
+    result->byte_offset = offset;
+    result->generation = image->tls.generation;
+    return true;
+  }
+
+  const ElfW(Sym) *symbol = symbol_at(image, symbol_index);
+  if (symbol == nullptr)
+    return false;
+  if (symbol->st_shndx == SHN_UNDEF) {
+    if (ELF64_ST_BIND(symbol->st_info) != STB_WEAK)
+      return false;
+    result->unresolved_weak = true;
+    result->byte_offset = static_cast<uintptr_t>(addend);
+    return true;
+  }
+  if (ELF64_ST_TYPE(symbol->st_info) != STT_TLS || !image->tls.active)
+    return false;
+  uintptr_t offset;
+  if (!add_signed_offset(symbol->st_value, addend, &offset) ||
+      offset >= image->tls.memory_bytes)
+    return false;
+  result->module_id = image->tls.module_id;
+  result->byte_offset = offset;
+  result->generation = image->tls.generation;
+  return true;
+}
+#endif // #if YUKILINKER_FULL
+
+uint64_t *relocation_destination(ImageState *image, ElfW(Addr) offset) {
+  return runtime_pointer<uint64_t>(image, offset);
+}
+
+bool apply_relocation(ImageState *image, const ElfW(Rela) & relocation) {
+  uint32_t type = ELF64_R_TYPE(relocation.r_info);
+  uint32_t symbol_index = ELF64_R_SYM(relocation.r_info);
+  uint64_t *destination = relocation_destination(image, relocation.r_offset);
+  if (destination == nullptr)
+    return false;
+
+  switch (type) {
+  case R_AARCH64_NONE:
+    return true;
+  case R_AARCH64_RELATIVE: {
+    uintptr_t value;
+    if (!add_signed_offset(reinterpret_cast<uintptr_t>(image->memory.bias),
+                           relocation.r_addend, &value))
+      return false;
+    *destination = value;
+    return true;
+  }
+  case R_AARCH64_IRELATIVE: {
+    uintptr_t resolver;
+    if (!add_signed_offset(reinterpret_cast<uintptr_t>(image->memory.bias),
+                           relocation.r_addend, &resolver) ||
+        !image_contains(image, reinterpret_cast<void *>(resolver)))
+      return false;
+    *destination = invoke_ifunc(resolver);
+    return true;
+  }
+#if YUKILINKER_FULL
+  case R_AARCH64_TLSDESC: {
+    TlsReference reference;
+    if (!resolve_tls_reference(image, symbol_index, relocation.r_addend,
+                               &reference))
+      return false;
+    auto *descriptor = reinterpret_cast<uintptr_t *>(destination);
+    if (reference.unresolved_weak) {
+      descriptor[0] = reinterpret_cast<uintptr_t>(&yuki_tlsdesc_weak_entry);
+      descriptor[1] = reference.byte_offset;
+      return true;
+    }
+    auto *cookie = metadata_object<TlsDescriptorIndex>();
+    if (cookie == nullptr)
+      return false;
+    cookie->module = reference.module_id;
+    cookie->offset = reference.byte_offset;
+    cookie->generation = reference.generation;
+    descriptor[0] = reinterpret_cast<uintptr_t>(&yuki_tlsdesc_dynamic_entry);
+    descriptor[1] = reinterpret_cast<uintptr_t>(cookie);
+    return true;
+  }
+  case R_AARCH64_TLS_DTPREL64: {
+    TlsReference reference;
+    if (!resolve_tls_reference(image, symbol_index, relocation.r_addend,
+                               &reference))
+      return false;
+    *destination = reference.byte_offset;
+    return true;
+  }
+  case R_AARCH64_TLS_DTPMOD64: {
+    TlsReference reference;
+    if (!resolve_tls_reference(image, symbol_index, relocation.r_addend,
+                               &reference))
+      return false;
+    *destination = reference.unresolved_weak ? 0 : reference.module_id;
+    return true;
+  }
+  case R_AARCH64_TLS_TPREL64: {
+    TlsReference reference;
+    if (!resolve_tls_reference(image, symbol_index, relocation.r_addend,
+                               &reference))
+      return false;
+    if (reference.unresolved_weak) {
+      *destination = 0;
+      return true;
+    }
+    ZLOGE("yukilinker: static TLS access model is unsupported");
+    return false;
+  }
+#endif // #if YUKILINKER_FULL
+  case R_AARCH64_ABS64: {
+    SymbolResolution symbol = resolve_symbol(image, symbol_index);
+    uintptr_t value;
+    if (!symbol.valid ||
+        !add_signed_offset(symbol.address, relocation.r_addend, &value))
+      return false;
+    *destination = value;
+    return true;
+  }
+  case R_AARCH64_GLOB_DAT:
+  case R_AARCH64_JUMP_SLOT: {
+    SymbolResolution symbol = resolve_symbol(image, symbol_index);
+    if (!symbol.valid)
+      return false;
+    *destination = symbol.address;
+    return true;
+  }
+  default:
+    ZLOGE("yukilinker: unsupported AArch64 relocation %u", type);
+    return false;
+  }
+}
+
+bool apply_rela_span(ImageState *image, const ElfW(Rela) * entries,
+                     size_t bytes) {
+  if (bytes == 0)
+    return true;
+  if (entries == nullptr || bytes % sizeof(ElfW(Rela)) != 0)
+    return false;
+  size_t count = bytes / sizeof(ElfW(Rela));
+  for (size_t i = 0; i < count; ++i)
+    if (!apply_relocation(image, entries[i]))
+      return false;
+  return true;
+}
+
+bool patch_relative_word(ImageState *image, ElfW(Addr) offset) {
+  auto *word = runtime_pointer<ElfW(Addr)>(image, offset);
+  if (word == nullptr)
+    return false;
+  *word += reinterpret_cast<ElfW(Addr)>(image->memory.bias);
+  return true;
+}
+
+bool apply_relr_span(ImageState *image) {
+  const RelocationSet &relocations = image->relocations;
+  if (relocations.relr_bytes == 0)
+    return true;
+  if (relocations.relr == nullptr ||
+      relocations.relr_bytes % sizeof(ElfW(Addr)) != 0)
+    return false;
+
+  size_t count = relocations.relr_bytes / sizeof(ElfW(Addr));
+  ElfW(Addr) next_offset = 0;
+  constexpr size_t kBitmapBits = sizeof(ElfW(Addr)) * 8 - 1;
+  for (size_t i = 0; i < count; ++i) {
+    ElfW(Addr) encoded = relocations.relr[i];
+    if ((encoded & 1U) == 0) {
+      if (!patch_relative_word(image, encoded))
+        return false;
+      if (encoded > UINTPTR_MAX - sizeof(ElfW(Addr)))
+        return false;
+      next_offset = encoded + sizeof(ElfW(Addr));
+      continue;
+    }
+    ElfW(Addr) bitmap = encoded >> 1;
+    for (size_t bit = 0; bit < kBitmapBits; ++bit) {
+      size_t displacement = bit * sizeof(ElfW(Addr));
+      if ((bitmap & (static_cast<ElfW(Addr)>(1) << bit)) != 0 &&
+          (next_offset > UINTPTR_MAX - displacement ||
+           !patch_relative_word(image, next_offset + displacement)))
+        return false;
+    }
+    constexpr size_t kBitmapSpan = kBitmapBits * sizeof(ElfW(Addr));
+    if (next_offset > UINTPTR_MAX - kBitmapSpan)
+      return false;
+    next_offset += kBitmapSpan;
+  }
+  return true;
+}
+
+bool relocate_image(ImageState *image) {
+  return apply_relr_span(image) &&
+         apply_rela_span(image, image->relocations.rela,
+                         image->relocations.rela_bytes) &&
+         apply_rela_span(image, image->relocations.plt,
+                         image->relocations.plt_bytes);
+}
+
+void release_failed_image(ImageState *image) {
+  if (image == nullptr)
+    return;
+  deactivate_tls(image);
+  close_dependencies(image);
+  if (image->memory.reservation != nullptr) {
+    munmap(image->memory.reservation, image->memory.span);
+    image->memory.reservation = nullptr;
+  }
+  if (image->public_handle != nullptr) {
+    image->public_handle->load_bias = nullptr;
+    image->public_handle->map_size = 0;
+    image->public_handle->private_state = nullptr;
+  }
+}
+
+} // namespace
+
+SoHandle *dlopen_memfd(int memfd, const char *vma_name, bool file_backed) {
+  (void)vma_name;
+  struct stat status{};
+  if (memfd < 0 || fstat(memfd, &status) != 0 || status.st_size <= 0)
+    return nullptr;
+  size_t file_size = static_cast<size_t>(status.st_size);
+  void *source = mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, memfd, 0);
+  if (source == MAP_FAILED)
+    return nullptr;
+
+  SourceLayout layout;
+  if (!inspect_source(source, file_size, &layout)) {
+    munmap(source, file_size);
+    ZLOGE("yukilinker: invalid AArch64 shared object");
+    return nullptr;
+  }
+
+  SoHandle *handle = metadata_object<SoHandle>();
+  ImageState *image = metadata_object<ImageState>();
+  if (handle == nullptr || image == nullptr) {
+    munmap(source, file_size);
+    return nullptr;
+  }
+  handle->private_state = image;
+  image->public_handle = handle;
+
+  if (!create_address_space(memfd, static_cast<const uint8_t *>(source),
+                            file_size, layout, file_backed, &image->memory)) {
+    munmap(source, file_size);
+    release_failed_image(image);
+    return nullptr;
+  }
+  handle->load_bias = image->memory.bias;
+  handle->map_size = image->memory.span;
+
+  DynamicParse dynamic;
+  bool metadata_ready =
+      discover_tls_segment(image) &&
+      parse_dynamic_tags(image, layout.dynamic_index, &dynamic) &&
+      establish_symbol_count(image, dynamic);
+  if (metadata_ready && requires_system_tls_runtime(image)) {
+    munmap(source, file_size);
+    release_failed_image(image);
+    return nullptr;
+  }
+  if (metadata_ready)
+    build_symbol_index(image);
+  if (!metadata_ready || !open_dependencies(image, dynamic) ||
+      !activate_tls(image) || !relocate_image(image) ||
+      !restore_anonymous_protections(image) || !protect_relro(image)) {
+    munmap(source, file_size);
+    release_failed_image(image);
+    return nullptr;
+  }
+
+  munmap(source, file_size);
+  register_image(image);
+  run_initializers(image);
+  return handle;
+}
+
+void *dlsym(SoHandle *handle, const char *name) {
+  ImageState *image = state_of(handle);
+  const ElfW(Sym) *symbol = find_defined_symbol(image, name);
+  if (symbol == nullptr)
+    return nullptr;
+#if YUKILINKER_FULL
+  if (ELF64_ST_TYPE(symbol->st_info) == STT_TLS) {
+    if (!image->tls.active)
+      return nullptr;
+    TlsIndex index{image->tls.module_id, symbol->st_value};
+    return yuki_tls_get_addr(&index);
+  }
+#endif // #if YUKILINKER_FULL
+  SymbolResolution resolution = materialize_defined_symbol(image, *symbol);
+  return resolution.valid ? reinterpret_cast<void *>(resolution.address)
+                          : nullptr;
+}
+
+void dlclose(SoHandle *handle) {
+  ImageState *image = state_of(handle);
+  if (image == nullptr)
+    return;
+  run_finalizers(image);
+  discard_exit_callbacks(image);
+  deactivate_tls(image);
+  unregister_image(image);
+  close_dependencies(image);
+  if (image->memory.reservation != nullptr)
+    munmap(image->memory.reservation, image->memory.span);
+  image->memory.reservation = nullptr;
+  handle->load_bias = nullptr;
+  handle->map_size = 0;
+  handle->private_state = nullptr;
+}
+
+bool has_active_tls() {
+#if YUKILINKER_FULL
+  pthread_mutex_lock(&g_tls_mutex);
+  bool active = g_tls_templates != nullptr;
+  pthread_mutex_unlock(&g_tls_mutex);
+  return active;
+#else
+  return false;
+#endif // #if YUKILINKER_FULL
 }
 
 void shutdown() {
 #if YUKILINKER_FULL
-  pthread_mutex_lock(&g_tls_lock);
-  g_tls_shutdown = true;
-  for (size_t i = 1; i < kMaxTlsModules; i++) {
-    g_tls_modules[i].unloading = true;
-    g_tls_modules[i].owner = nullptr;
-  }
-  pthread_mutex_unlock(&g_tls_lock);
-  if (g_tls_key_ready) {
-    pthread_key_delete(g_tls_key);
-    g_tls_key_ready = false;
+#if defined(__aarch64__)
+  disable_tls_fast_path();
+#endif // #if defined(__aarch64__)
+  pthread_mutex_lock(&g_tls_mutex);
+  g_tls_stopped = true;
+  for (TlsTemplate *tls = g_tls_templates; tls != nullptr; tls = tls->next)
+    tls->active = false;
+  g_tls_templates = nullptr;
+  for (size_t i = 1; i <= kMaxTlsModuleSlots; ++i)
+    __atomic_store_n(&g_tls_module_generations[i], uintptr_t{0},
+                     __ATOMIC_RELEASE);
+  pthread_mutex_unlock(&g_tls_mutex);
+
+  if (__atomic_load_n(&g_thread_tls_key_valid, __ATOMIC_ACQUIRE)) {
+    auto *thread =
+        static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
+    pthread_setspecific(g_thread_tls_key, nullptr);
+    destroy_thread_tls_state(thread);
+    pthread_key_delete(g_thread_tls_key);
+    __atomic_store_n(&g_thread_tls_key_valid, false, __ATOMIC_RELEASE);
   }
 #endif // #if YUKILINKER_FULL
 }
 
 extern "C" void __cxa_finalize(void *);
-// Non-weak so __cxa_finalize targets only this DSO.
 extern "C" __attribute__((visibility("hidden"))) void *__dso_handle;
-inline void finalize_self_dso() { __cxa_finalize(&__dso_handle); }
 
-/* Resolve system dl_iterate_phdr without a static import. */
-using sys_iter_fn = int (*)(int (*)(struct dl_phdr_info *, size_t, void *),
-                            void *);
-static sys_iter_fn g_sys_dl_iterate = nullptr;
+void finalize_self_dso() { __cxa_finalize(&__dso_handle); }
 
-int dl_iterate_phdr_hook(int (*cb)(struct dl_phdr_info *, size_t, void *),
+using SystemIterateFunction = int (*)(int (*)(struct dl_phdr_info *, size_t,
+                                              void *),
+                                      void *);
+
+SystemIterateFunction resolve_system_iterator() {
+  // Build the symbol name at runtime so the compiler cannot introduce a direct
+  // import to the function being wrapped.
+  constexpr uint8_t encoded[] = {0xdf, 0xd7, 0xe4, 0xd2, 0xcf, 0xde,
+                                 0xc9, 0xda, 0xcf, 0xde, 0xe4, 0xcb,
+                                 0xd3, 0xdf, 0xc9, 0x00};
+  char name[sizeof(encoded)];
+  for (size_t i = 0; i + 1 < sizeof(encoded); ++i)
+    name[i] = static_cast<char>(encoded[i] ^ 0xbb);
+  name[sizeof(encoded) - 1] = '\0';
+  return reinterpret_cast<SystemIterateFunction>(::dlsym(RTLD_DEFAULT, name));
+}
+
+struct PhdrSnapshot {
+  struct dl_phdr_info info;
+  uintptr_t tls_generation;
+};
+
+int dl_iterate_phdr_hook(int (*callback)(struct dl_phdr_info *, size_t, void *),
                          void *data) {
-  if (g_sys_dl_iterate == nullptr) {
-    // Avoid constant-folded direct imports.
-    volatile char vn[] = "dl_iterate_phdr";
-    char nm[sizeof(vn)];
-    for (size_t i = 0; i < sizeof(vn); i++)
-      nm[i] = vn[i];
-    g_sys_dl_iterate = reinterpret_cast<sys_iter_fn>(::dlsym(RTLD_DEFAULT, nm));
+  if (callback == nullptr)
+    return 0;
+  static SystemIterateFunction system_iterator = resolve_system_iterator();
+  int result = system_iterator == nullptr ? 0 : system_iterator(callback, data);
+  if (result != 0)
+    return result;
+
+  registry_lock();
+  size_t image_count = 0;
+  for (ImageState *image = g_first_image; image != nullptr; image = image->next)
+    ++image_count;
+  size_t snapshot_bytes;
+  if (multiply_overflow(image_count, sizeof(PhdrSnapshot), &snapshot_bytes)) {
+    registry_unlock();
+    return 0;
   }
-  /* First the real system libraries. */
-  int rc = g_sys_dl_iterate != nullptr ? g_sys_dl_iterate(cb, data) : 0;
-  if (rc != 0)
-    return rc;
-  /* Then our anonymously-mapped modules, so they can find themselves. */
-  for (size_t i = 0; i < g_image_count; i++) {
-    SoHandle *h = g_images[i];
-    struct dl_phdr_info info = {};
-    info.dlpi_addr = (ElfW(Addr))h->load_bias;
-    info.dlpi_name = h->soname;
-    info.dlpi_phdr = h->phdr;
-    info.dlpi_phnum = (ElfW(Half))h->phnum;
-    rc = cb(&info, sizeof(info), data);
-    if (rc != 0)
+  auto *snapshot = static_cast<PhdrSnapshot *>(
+      snapshot_bytes == 0 ? nullptr : malloc(snapshot_bytes));
+  if (snapshot_bytes != 0 && snapshot == nullptr) {
+    registry_unlock();
+    return 0;
+  }
+  size_t snapshot_index = 0;
+  for (ImageState *image = g_first_image; image != nullptr;
+       image = image->next) {
+    PhdrSnapshot &entry = snapshot[snapshot_index++];
+    struct dl_phdr_info &info = entry.info;
+    memset(&info, 0, sizeof(info));
+    info.dlpi_addr = reinterpret_cast<ElfW(Addr)>(image->memory.bias);
+    info.dlpi_name = image->display_name;
+    info.dlpi_phdr = image->memory.program_headers;
+    info.dlpi_phnum =
+        static_cast<ElfW(Half)>(image->memory.program_header_count);
+    if (image->tls.active) {
+      info.dlpi_tls_modid = image->tls.module_id;
+      entry.tls_generation = image->tls.generation;
+    } else {
+      entry.tls_generation = 0;
+    }
+  }
+  registry_unlock();
+
+  for (size_t i = 0; i < image_count; ++i) {
+    PhdrSnapshot &entry = snapshot[i];
+    entry.info.dlpi_tls_data = current_thread_tls_data(
+        entry.info.dlpi_tls_modid, entry.tls_generation);
+    result = callback(&entry.info, sizeof(entry.info), data);
+    if (result != 0)
       break;
   }
-  return rc;
+  free(snapshot);
+  return result;
 }
 
 } // namespace yukilinker
 
-/* Raw close for AT_ENTRY. */
-static inline void yuki_raw_close(int fd) {
+namespace {
+
+void raw_close_descriptor(int fd) {
 #if defined(__aarch64__)
-  register long x8 asm("x8") = 57; // __NR_close
-  register long x0 asm("x0") = fd;
-  asm volatile("svc #0" : "+r"(x0) : "r"(x8) : "memory");
+  register long syscall_number asm("x8") = 57;
+  register long argument asm("x0") = fd;
+  asm volatile("svc #0" : "+r"(argument) : "r"(syscall_number) : "memory");
 #else
   (void)fd;
 #endif // #if defined(__aarch64__)
 }
 
-static bool yuki_read_all(int fd, void *buf, size_t n) {
-  auto *p = static_cast<uint8_t *>(buf);
-  while (n > 0) {
-    ssize_t r = read(fd, p, n);
-    if (r <= 0)
+bool read_exactly(int fd, void *buffer, size_t bytes) {
+  auto *cursor = static_cast<uint8_t *>(buffer);
+  while (bytes != 0) {
+    ssize_t amount = read(fd, cursor, bytes);
+    if (amount <= 0)
       return false;
-    p += r;
-    n -= static_cast<size_t>(r);
+    cursor += amount;
+    bytes -= static_cast<size_t>(amount);
   }
   return true;
 }
 
-static void yuki_close_early_packet(int packet_fd) {
+void close_early_packet(int packet_fd) {
   if (packet_fd < 0)
     return;
-
-  yz_early_native_packet_header hdr{};
+  yz_early_native_packet_header header{};
   if (lseek(packet_fd, 0, SEEK_SET) == 0 &&
-      yuki_read_all(packet_fd, &hdr, sizeof(hdr)) &&
-      hdr.magic == YZ_EARLY_NATIVE_PACKET_MAGIC &&
-      hdr.version == YZ_EARLY_NATIVE_VERSION &&
-      hdr.header_size == sizeof(hdr) &&
-      hdr.entry_size == sizeof(yz_early_native_packet_entry) &&
-      hdr.count <= YZ_NATIVE_TARGET_MAX) {
-    for (uint32_t i = 0; i < hdr.count; i++) {
+      read_exactly(packet_fd, &header, sizeof(header)) &&
+      header.magic == YZ_EARLY_NATIVE_PACKET_MAGIC &&
+      header.version == YZ_EARLY_NATIVE_VERSION &&
+      header.header_size == sizeof(header) &&
+      header.entry_size == sizeof(yz_early_native_packet_entry) &&
+      header.count <= YZ_NATIVE_TARGET_MAX) {
+    for (uint32_t i = 0; i < header.count; ++i) {
       yz_early_native_packet_entry entry{};
-      if (!yuki_read_all(packet_fd, &entry, sizeof(entry)))
+      if (!read_exactly(packet_fd, &entry, sizeof(entry)))
         break;
       if (entry.fd >= 0)
-        yuki_raw_close(entry.fd);
+        raw_close_descriptor(entry.fd);
     }
   }
-  yuki_raw_close(packet_fd);
+  raw_close_descriptor(packet_fd);
 }
 
-static constexpr char kCorePath[] = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
+constexpr char kCorePath[] = "/data/adb/ksu/lib/yukizygisk/libzygisk.so";
+
+} // namespace
 
 extern "C" {
 
 [[gnu::visibility("default")]] void *yuki_dlopen_memfd(int memfd,
                                                        const char *vma_name) {
-  return yukilinker::dlopen_memfd(memfd, vma_name, /*file_backed=*/true);
+  return yukilinker::dlopen_memfd(memfd, vma_name, true);
 }
 
-[[gnu::visibility("default")]] void *yuki_dlsym(void *h, const char *name) {
-  return yukilinker::dlsym(static_cast<yukilinker::SoHandle *>(h), name);
+[[gnu::visibility("default")]] void *yuki_dlsym(void *handle,
+                                                const char *name) {
+  return yukilinker::dlsym(static_cast<yukilinker::SoHandle *>(handle), name);
 }
 
-[[gnu::visibility("default")]] void yuki_dlclose(void *h) {
-  yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(h));
+[[gnu::visibility("default")]] void yuki_dlclose(void *handle) {
+  yukilinker::dlclose(static_cast<yukilinker::SoHandle *>(handle));
 }
 
-/* First-stage entry. */
 [[gnu::visibility("default")]] void yuki_bootstrap(int core_fd,
                                                    int early_packet_fd_plus1) {
-  int early_packet_fd =
-      early_packet_fd_plus1 > 0 ? early_packet_fd_plus1 - 1 : -1;
+  int packet_fd = early_packet_fd_plus1 > 0 ? early_packet_fd_plus1 - 1 : -1;
   if (core_fd < 0) {
-    yuki_close_early_packet(early_packet_fd);
+    close_early_packet(packet_fd);
     return;
   }
+
   yukilinker::SoHandle *core =
-      yukilinker::dlopen_memfd(core_fd, "data-code-cache",
-                               /*file_backed=*/true);
-  yuki_raw_close(core_fd); // before the zygote's pre-fork fd allowlist check
+      yukilinker::dlopen_memfd(core_fd, "data-code-cache", true);
+  raw_close_descriptor(core_fd);
   if (core == nullptr) {
-    yuki_close_early_packet(early_packet_fd);
+    close_early_packet(packet_fd);
     return;
   }
-  using core_entry_fn = void (*)(const char *, void *, void *, void *, int);
-  auto entry = reinterpret_cast<core_entry_fn>(
-      yukilinker::dlsym(core, "zygisk_core_entry"));
+
+  using CoreEntry = void (*)(const char *, void *, void *, void *, int);
+  auto entry =
+      reinterpret_cast<CoreEntry>(yukilinker::dlsym(core, "zygisk_core_entry"));
   if (entry == nullptr) {
-    yuki_close_early_packet(early_packet_fd);
+    close_early_packet(packet_fd);
     return;
   }
-  // Pass loader address plus core range to the core.
   entry(kCorePath, reinterpret_cast<void *>(&yuki_bootstrap),
         reinterpret_cast<void *>(core->load_bias),
         reinterpret_cast<void *>(core->map_size), early_packet_fd_plus1);
   yukilinker::finalize_self_dso();
-  using fin_fn = void (*)(int, int);
-  auto fin = reinterpret_cast<fin_fn>(
+
+  using FinalizeLoader = void (*)(int, int);
+  auto finalize = reinterpret_cast<FinalizeLoader>(
       yukilinker::dlsym(core, "zygisk_finalize_loader"));
-  if (fin != nullptr) [[clang::musttail]]
-    return fin(0, 0);
+  if (finalize != nullptr) [[clang::musttail]]
+    return finalize(0, 0);
 }
 
 } // extern "C"
