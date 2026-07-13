@@ -411,6 +411,7 @@
     <string name="kernel_simple_kernel_summary">Enable or disable the clean mode displayed by the YukiSU kernel version</string>
     <string name="home_zygisk_implement">Zygisk implement</string>
     <string name="module_disabled_by_yukizygisk">YukiZygisk is enabled; this module is disabled to prevent conflicts</string>
+    <string name="module_disabled_standalone_yukizygisk">You are already using YukiSU. Why not use the built-in version instead? :(</string>
     <string name="home_meta_module_implement">Meta Module implement</string>
     <string name="home_hook_type">Hook type</string>
     <!-- 确认安装相关字符串 -->

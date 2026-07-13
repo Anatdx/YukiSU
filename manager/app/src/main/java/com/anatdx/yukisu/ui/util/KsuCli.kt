@@ -867,10 +867,13 @@ fun getMetaModuleImplement(): String {
 }
 
 /** Module IDs of known third-party Zygisk implementations ("zygisksu" covers
- *  both ZygiskNext and NeoZygisk -- they share that id). Built-in YukiZygisk is
- *  a kernel feature (detected via its flag), not a module, so it's not here.
- *  These are the implementations YukiZygisk force-disables to avoid conflicts. */
-val ZYGISK_IMPL_MODULE_IDS = listOf("zygisksu", "rezygisk")
+ *  both ZygiskNext and NeoZygisk -- they share that id). "yukizygisk" is the
+ *  standalone module; built-in YukiZygisk remains a kernel feature detected by
+ *  its flag. These modules are force-disabled while the built-in feature is on. */
+val ZYGISK_IMPL_MODULE_IDS = listOf("zygisksu", "rezygisk", "yukizygisk")
+
+private const val YUKIZYGISK_STANDALONE_MODULE_ID = "yukizygisk"
+private const val YUKIZYGISK_STANDALONE_DISPLAY_NAME = "YukiZygisk-Standalone"
 
 suspend fun getZygiskImplement(): String = withContext(Dispatchers.IO) {
     // Built-in YukiZygisk wins: it's a kernel feature, not a /data/adb module.
@@ -886,7 +889,11 @@ suspend fun getZygiskImplement(): String = withContext(Dispatchers.IO) {
         val prop = Properties()
         prop.load(propFile.newInputStream())
 
-        val name = prop.getProperty("name")
+        val name = if (moduleId == YUKIZYGISK_STANDALONE_MODULE_ID) {
+            YUKIZYGISK_STANDALONE_DISPLAY_NAME
+        } else {
+            prop.getProperty("name")
+        }
         Log.i(TAG, "Zygisk implement: $name")
         return@withContext name
     }

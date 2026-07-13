@@ -373,6 +373,7 @@
     <!-- 备份和还原相关字符串 -->
     <string name="home_zygisk_implement">Zygisk 实现</string>
     <string name="module_disabled_by_yukizygisk">YukiZygisk已启用，为防止冲突，此模块已禁用</string>
+    <string name="module_disabled_standalone_yukizygisk">你都在用 YukiSU 了，为什么不直接用内置版呢:(</string>
     <string name="home_meta_module_implement">元模块实现</string>
     <string name="home_hook_type">钩子类型</string>
     <!-- 确认安装相关字符串 -->

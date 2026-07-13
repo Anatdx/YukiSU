@@ -1671,7 +1671,13 @@ fun ModuleItem(
             if (conflictDisabled) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.module_disabled_by_yukizygisk),
+                    text = stringResource(
+                        if (module.dirId == "yukizygisk") {
+                            R.string.module_disabled_standalone_yukizygisk
+                        } else {
+                            R.string.module_disabled_by_yukizygisk
+                        }
+                    ),
                     color = MaterialTheme.colorScheme.error,
                     fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
