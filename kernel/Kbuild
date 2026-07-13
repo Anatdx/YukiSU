@@ -106,7 +106,7 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 REPO_OWNER := Anatdx
 REPO_NAME := YukiSU
-REPO_BRANCH := main
+REPO_FALLBACK_BRANCH := main
 
 GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git
 CURL_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin curl
@@ -115,7 +115,6 @@ KDIR := $(KDIR)
 MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
 KSU_GITHUB_VERSION := $(shell $(CURL_BIN) -s "https://api.github.com/repos/$(REPO_OWNER)/$(REPO_NAME)/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-KSU_GITHUB_VERSION_COMMIT := $(shell $(CURL_BIN) -sI "https://api.github.com/repos/$(REPO_OWNER)/$(REPO_NAME)/commits?sha=$(REPO_BRANCH)&per_page=1" | grep -i "link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p')
 
 ifeq ($(findstring $(srctree),$(src)),$(srctree))
   KSU_SRC := $(src)
@@ -136,20 +135,23 @@ define get_ksu_version_full
 v$1-$(shell cd $(KSU_SRC); $(GIT_BIN) rev-parse --short=8 HEAD)@$(REPO_NAME)
 endef
 
-ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
-  ifeq ($(LOCAL_GIT_EXISTS),1)
-    $(shell cd $(KSU_SRC) 2>/dev/null; [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow 2>/dev/null)
-    KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC) 2>/dev/null && ($(GIT_BIN) rev-list --count $(REPO_BRANCH) 2>/dev/null || $(GIT_BIN) rev-list --count HEAD 2>/dev/null))
-    KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 1135 2>/dev/null || true)
-    KSU_VERSION := $(if $(KSU_VERSION),$(KSU_VERSION),12000)
-    $(info -- $(REPO_NAME) version (local .git): $(KSU_VERSION))
-  else
+# Keep the numeric kernel version tied to the checked-out revision, just like the
+# manager version. Only use the remote default branch when Git metadata is absent.
+ifeq ($(LOCAL_GIT_EXISTS),1)
+  $(shell cd $(KSU_SRC) 2>/dev/null; [ -f ../.git/shallow ] && $(GIT_BIN) fetch --unshallow 2>/dev/null)
+  KSU_LOCAL_VERSION := $(shell cd $(KSU_SRC) 2>/dev/null && $(GIT_BIN) rev-list --count HEAD 2>/dev/null)
+  KSU_VERSION := $(shell expr 10000 + $(KSU_LOCAL_VERSION) - 1135 2>/dev/null || true)
+  KSU_VERSION := $(if $(KSU_VERSION),$(KSU_VERSION),12000)
+  $(info -- $(REPO_NAME) version (local HEAD): $(KSU_VERSION))
+else
+  KSU_GITHUB_VERSION_COMMIT := $(shell $(CURL_BIN) -sI "https://api.github.com/repos/$(REPO_OWNER)/$(REPO_NAME)/commits?sha=$(REPO_FALLBACK_BRANCH)&per_page=1" | grep -i "link:" | sed -n 's/.*page=\([0-9]*\)>; rel="last".*/\1/p')
+  ifeq ($(KSU_GITHUB_VERSION_COMMIT),)
     KSU_VERSION := 12000
     $(warning -- Could not fetch version online or via local .git! Using fallback version: $(KSU_VERSION))
+  else
+    KSU_VERSION := $(shell expr 10000 + $(KSU_GITHUB_VERSION_COMMIT) - 1135)
+    $(info -- $(REPO_NAME) version (GitHub $(REPO_FALLBACK_BRANCH)): $(KSU_VERSION))
   endif
-else
-  KSU_VERSION := $(shell expr 10000 + $(KSU_GITHUB_VERSION_COMMIT) - 1135)
-  $(info -- $(REPO_NAME) version (GitHub): $(KSU_VERSION))
 endif
 
 ifeq ($(KSU_GITHUB_VERSION),)
