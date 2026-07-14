@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU local build: DDK LKM -> ksuinit -> ksud -> Manager App
 # Signing env: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# Usage: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
+# Usage: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk|--yukizygisk-off] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ SKIP_LKM=false
 SKIP_KASUMI=false
 DDK_RELEASE="20260313"
 DO_INSTALL=false
-ENABLE_YUKIZYGISK=false
+ENABLE_YUKIZYGISK=true
 YUKIZYGISK_PARTS="all"
 # Default Kasumi checkout; override with --kasumi-dir.
 KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
@@ -44,6 +44,10 @@ while [[ $# -gt 0 ]]; do
 	--yukizygisk)
 		ENABLE_YUKIZYGISK=true
 		YUKIZYGISK_PARTS="all"
+		shift
+		;;
+	--yukizygisk-off)
+		ENABLE_YUKIZYGISK=false
 		shift
 		;;
 	--yukizygisk-parts)
