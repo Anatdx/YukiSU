@@ -8,6 +8,7 @@ namespace ksud {
 // SELinux contexts
 constexpr const char* SYSTEM_CON = "u:object_r:system_file:s0";
 constexpr const char* ADB_CON = "u:object_r:adb_data_file:s0";
+constexpr const char* SYSTEM_LIB_CON = "u:object_r:system_lib_file:s0";
 constexpr const char* UNLABEL_CON = "u:object_r:unlabeled:s0";
 
 // Set SELinux context for a path

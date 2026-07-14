@@ -18,6 +18,10 @@ on:
         required: false
         type: boolean
         default: true
+      pack_yukizygisk:
+        required: false
+        type: boolean
+        default: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -90,25 +94,56 @@ jobs:
       run: |
         case "${{ inputs.target }}" in
           aarch64-linux-android|aarch64)
-            echo "arch=aarch64" >> $GITHUB_OUTPUT
-            echo "abi=arm64-v8a" >> $GITHUB_OUTPUT
-            echo "android_target=aarch64-linux-android26" >> $GITHUB_OUTPUT
+            echo "arch=aarch64" >> "$GITHUB_OUTPUT"
+            echo "abi=arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "android_target=aarch64-linux-android26" >> "$GITHUB_OUTPUT"
             ;;
           x86_64-linux-android|x86_64)
-            echo "arch=x86_64" >> $GITHUB_OUTPUT
-            echo "abi=x86_64" >> $GITHUB_OUTPUT
-            echo "android_target=x86_64-linux-android26" >> $GITHUB_OUTPUT
+            echo "arch=x86_64" >> "$GITHUB_OUTPUT"
+            echo "abi=x86_64" >> "$GITHUB_OUTPUT"
+            echo "android_target=x86_64-linux-android26" >> "$GITHUB_OUTPUT"
             ;;
           armv7-linux-androideabi|armv7)
-            echo "arch=armv7" >> $GITHUB_OUTPUT
-            echo "abi=armeabi-v7a" >> $GITHUB_OUTPUT
-            echo "android_target=armv7a-linux-androideabi26" >> $GITHUB_OUTPUT
+            echo "arch=armv7" >> "$GITHUB_OUTPUT"
+            echo "abi=armeabi-v7a" >> "$GITHUB_OUTPUT"
+            echo "android_target=armv7a-linux-androideabi26" >> "$GITHUB_OUTPUT"
             ;;
           *)
             echo "Unknown target: ${{ inputs.target }}"
             exit 1
             ;;
         esac
+
+    - name: Prepare YukiZygisk payload
+      run: |
+        set -euo pipefail
+        if [ "${{ inputs.pack_yukizygisk }}" != "true" ]; then
+          echo "YukiZygisk payload: disabled"
+          exit 0
+        fi
+        case "${{ inputs.target }}" in
+          aarch64-linux-android|aarch64) ;;
+          *)
+            echo "YukiZygisk payload: skipped for ${{ inputs.target }} (aarch64 only)"
+            exit 0
+            ;;
+        esac
+
+        artifact="yukizygisk-aarch64-linux-android"
+        for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
+          if [ ! -f "$artifact/$asset" ]; then
+            echo "::error::YukiZygisk artifact missing: $artifact/$asset"
+            exit 1
+          fi
+        done
+
+        mkdir -p ./userspace/ksud/assets
+        cp "$artifact"/libzygisk.so "$artifact"/libyukilinker.so \
+          "$artifact"/libyukizncore.so ./userspace/ksud/assets/
+        echo "YukiZygisk payload staged into ksud/assets:"
+        ls -lh ./userspace/ksud/assets/libzygisk.so \
+          ./userspace/ksud/assets/libyukilinker.so \
+          ./userspace/ksud/assets/libyukizncore.so
 
     # busybox is built into ksud (ndk-busybox multi-call); no standalone busybox in assets
 
@@ -127,20 +162,20 @@ jobs:
         mkdir -p build && cd build
         
         # Cross-compile using Android NDK toolchain
-        TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-        export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
-        export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
-        export AR=$TOOLCHAIN/bin/llvm-ar
-        export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-        export STRIP=$TOOLCHAIN/bin/llvm-strip
+        TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+        export CC="$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang"
+        export CXX="$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++"
+        export AR="$TOOLCHAIN/bin/llvm-ar"
+        export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+        export STRIP="$TOOLCHAIN/bin/llvm-strip"
         
         cmake .. \
           -G Ninja \
           -DCMAKE_SYSTEM_NAME=Android \
-          -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
-          -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
-          -DCMAKE_C_COMPILER=$CC \
-          -DCMAKE_CXX_COMPILER=$CXX \
+          -DCMAKE_ANDROID_ARCH_ABI="${{ steps.target.outputs.abi }}" \
+          -DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
+          -DCMAKE_C_COMPILER="$CC" \
+          -DCMAKE_CXX_COMPILER="$CXX" \
           -DCMAKE_BUILD_TYPE=Release
 
         ninja
@@ -150,6 +185,20 @@ jobs:
         file ksud
         echo "Embedded Kasumi assets:"
         strings ksud | grep -F '_kasumi_lkm.ko' | sort -u || true
+        if [ "${{ inputs.pack_yukizygisk }}" = "true" ]; then
+          case "${{ inputs.target }}" in
+            aarch64-linux-android|aarch64)
+              echo "Embedded YukiZygisk payload assets:"
+              for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
+                if ! grep -F "{\"$asset\"" generated/assets_data.cpp >/dev/null; then
+                  echo "::error::Expected embedded YukiZygisk asset missing: $asset"
+                  exit 1
+                fi
+                echo "  $asset"
+              done
+              ;;
+          esac
+        fi
         case "${{ inputs.target }}" in
           aarch64-linux-android|aarch64)
             if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_kasumi_lkm\.ko$'; then

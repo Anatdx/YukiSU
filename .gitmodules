@@ -10,3 +10,6 @@
 [submodule "userspace/ksud/third_party/ndk-busybox"]
 	path = userspace/ksud/third_party/ndk-busybox
 	url = https://github.com/Anatdx/ndk-busybox.git
+[submodule "userspace/zygisk/third_party/lsplt"]
+	path = userspace/zygisk/third_party/lsplt
+	url = https://github.com/Anatdx/LSPlt.git

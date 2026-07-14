@@ -6,6 +6,7 @@
 #include "../log.hpp"
 #include "../sepolicy/sepolicy.hpp"
 #include "../utils.hpp"
+#include "../yukizygisk_snapshot.hpp"
 #include "metamodule.hpp"
 
 #include <dirent.h>
@@ -160,6 +161,13 @@ void collect_rc_files(const std::filesystem::path& dir, const std::string* modul
 void warn_regenerate_preinit_rc_failed(int ret) {
     if (ret != 0) {
         LOGW("regenerate preinit rc failed: %d", ret);
+    }
+}
+
+void warn_refresh_yukizygisk_early_snapshot_failed() {
+    const int ret = refresh_yukizygisk_early_snapshot();
+    if (ret != 0) {
+        LOGW("refresh YukiZygisk early snapshot failed: %d", ret);
     }
 }
 
@@ -475,6 +483,8 @@ CommonScriptEnv build_common_script_env() {
     CommonScriptEnv env;
     env.kernel_ver_code = std::to_string(get_version());
     env.late_load = (get_flags() & KSU_GET_INFO_FLAG_LATE_LOAD) != 0;
+    const auto [zygisk_value, zygisk_supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
+    env.zygisk_enabled = zygisk_supported && zygisk_value != 0;
 
     std::string binary_dir = std::string(BINARY_DIR);
     if (!binary_dir.empty() && binary_dir.back() == '/') {
@@ -500,6 +510,12 @@ void apply_common_script_env(const CommonScriptEnv& env, const char* module_id,
     setenv("KSU_VER_CODE", VERSION_CODE, 1);
     setenv("KSU_VER", VERSION_NAME, 1);
     setenv("PATH", env.path.c_str(), 1);
+
+    if (env.zygisk_enabled) {
+        setenv("ZYGISK_ENABLED", "1", 1);
+    } else {
+        unsetenv("ZYGISK_ENABLED");
+    }
 
     if (env.late_load) {
         setenv("KSU_LATE_LOAD", "1", 1);
@@ -727,6 +743,7 @@ int module_install(const std::string& zip_path) {
 
     LOGI("Module installed successfully");
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -754,6 +771,7 @@ int module_uninstall(const std::string& id) {
 
     printf("Module %s marked for removal\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -778,6 +796,7 @@ int module_undo_uninstall(const std::string& id) {
 
     printf("Undid uninstall for module %s\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -804,6 +823,7 @@ int module_enable(const std::string& id) {
 
     printf("Module %s enabled\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 
@@ -830,6 +850,7 @@ int module_disable(const std::string& id) {
 
     printf("Module %s disabled\n", id.c_str());
     warn_regenerate_preinit_rc_failed(regenerate_preinit_rc());
+    warn_refresh_yukizygisk_early_snapshot_failed();
     return 0;
 }
 

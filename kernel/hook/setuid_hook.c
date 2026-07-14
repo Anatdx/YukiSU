@@ -14,6 +14,9 @@
 #include "policy/allowlist.h"
 #include "policy/feature.h"
 #include "feature/kernel_umount.h"
+#ifdef CONFIG_KSU_YZ_ORCH
+#include "feature/zygote_orch.h"
+#endif // #ifdef CONFIG_KSU_YZ_ORCH
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 #include "infra/seccomp_cache.h"
@@ -52,6 +55,14 @@ static const struct ksu_feature_handler enhanced_security_handler = {
 int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
 {
 	pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
+
+	/*
+	 * Feed the zygote orchestrator: a tracked app child dropping to its app
+	 * uid here is the specialization signal that reveals its identity.
+	 */
+#ifdef CONFIG_KSU_YZ_ORCH
+	ksu_zygote_orch_on_setresuid(old_uid, new_uid);
+#endif // #ifdef CONFIG_KSU_YZ_ORCH
 
 	// if old process is root, ignore it.
 	if (old_uid != 0 && ksu_enhanced_security_enabled) {

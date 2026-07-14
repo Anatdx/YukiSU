@@ -5,6 +5,7 @@
 #include "../module/module.hpp"
 #include "../sulog.hpp"
 #include "../utils.hpp"
+#include "../yukizygisk_snapshot.hpp"
 #include "ksucalls.hpp"
 
 #include <cinttypes>
@@ -37,6 +38,7 @@ const std::map<std::string, uint32_t>& get_feature_map() {
         {"default_no_new_privs", KSU_FEATURE_DEFAULT_NO_NEW_PRIVS},
         {"sulog", KSU_FEATURE_SULOG},
         {"magisk_compat", KSU_FEATURE_MAGISK_COMPAT},
+        {"yukizygisk", KSU_FEATURE_YUKIZYGISK},
     };
     return map;
 }
@@ -62,6 +64,9 @@ const std::map<uint32_t, const char*>& get_feature_descriptions() {
         {KSU_FEATURE_MAGISK_COMPAT,
          "Magisk-compat su prompt - shows a visible su and asks for authorization on first use "
          "for apps that are not in the allowlist"},
+        {KSU_FEATURE_YUKIZYGISK,
+         "YukiZygisk - kernel captures zygote and injects Zygisk modules; the daemon is brought "
+         "up at post-fs-data when enabled (off by default)"},
     };
     return desc;
 }
@@ -157,6 +162,10 @@ int feature_set(const std::string& id, uint64_t value) {
 
     if (feature_id == KSU_FEATURE_MAGISK_COMPAT && value != 0 && ensure_msud_running() != 0) {
         LOGW("Failed to ensure msud is running after enabling magisk_compat");
+    }
+
+    if (feature_id == KSU_FEATURE_YUKIZYGISK && refresh_yukizygisk_early_snapshot() != 0) {
+        LOGW("Failed to refresh YukiZygisk early snapshot after feature change");
     }
 
     printf("Feature '%s' set to %" PRIu64 " (%s)\n", feature_id_to_name(feature_id), value,

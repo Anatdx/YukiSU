@@ -1,7 +1,29 @@
 name: Build LKM for KernelSU
 on:
   workflow_call:
+    inputs:
+      yukizygisk:
+        description: 'Enable YukiZygisk kernel hooks'
+        required: false
+        default: false
+        type: boolean
+      yukizygisk_parts:
+        description: 'YukiZygisk kernel hook parts: probe,nl,orch,ctl'
+        required: false
+        default: 'probe,nl,orch,ctl'
+        type: string
   workflow_dispatch:
+    inputs:
+      yukizygisk:
+        description: 'Enable YukiZygisk kernel hooks'
+        required: false
+        default: false
+        type: boolean
+      yukizygisk_parts:
+        description: 'YukiZygisk kernel hook parts'
+        required: false
+        default: 'probe,nl,orch,ctl'
+        type: string
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -23,3 +45,5 @@ jobs:
     with:
       kmi: ${{ matrix.kmi }}
       ddk_release: '20260313'
+      yukizygisk: ${{ inputs.yukizygisk }}
+      yukizygisk_parts: ${{ inputs.yukizygisk_parts || 'probe,nl,orch,ctl' }}

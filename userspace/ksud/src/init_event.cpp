@@ -16,6 +16,7 @@
 #include "sulog.hpp"
 #include "umount.hpp"
 #include "utils.hpp"
+#include "yukizygisk_snapshot.hpp"
 
 // Kasumi integration
 #include "hymo/conf/config.hpp"
@@ -24,11 +25,13 @@
 #include "hymo/hymo_cli.hpp"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <array>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -148,6 +151,124 @@ void run_stage(const std::string& stage, bool block) {
     exec_stage_script(stage, block);
 }
 
+// Launch zygiskd detached.
+int spawn_zygiskd() {
+    int ready_pipe[2] = {-1, -1};
+    if (pipe(ready_pipe) != 0) {
+        LOGW("Failed to create zygiskd ready pipe: %s", strerror(errno));
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOGE("Failed to fork zygiskd launcher: %s", strerror(errno));
+        if (ready_pipe[0] >= 0)
+            close(ready_pipe[0]);
+        if (ready_pipe[1] >= 0)
+            close(ready_pipe[1]);
+        return -1;
+    }
+    if (pid == 0) {
+        if (ready_pipe[0] >= 0)
+            close(ready_pipe[0]);
+
+        if (setpgid(0, 0) != 0) {
+            LOGW("Failed to detach zygiskd process group: %s", strerror(errno));
+        }
+        switch_cgroups();
+
+        const int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > STDERR_FILENO) {
+                close(devnull);
+            }
+        }
+
+        const pid_t grandchild = fork();
+        if (grandchild < 0) {
+            if (ready_pipe[1] >= 0) {
+                const char fail = '0';
+                write(ready_pipe[1], &fail, 1);
+                close(ready_pipe[1]);
+            }
+            _exit(127);
+        }
+        if (grandchild > 0) {
+            if (ready_pipe[1] >= 0)
+                close(ready_pipe[1]);
+            _exit(0);
+        }
+
+        if (ready_pipe[1] >= 0) {
+            char fd_env[16];
+            snprintf(fd_env, sizeof(fd_env), "%d", ready_pipe[1]);
+            setenv("YUKIZYGISK_READY_FD", fd_env, 1);
+        }
+
+        char* const argv[] = {const_cast<char*>(DAEMON_PATH), const_cast<char*>("zygiskd"),
+                              nullptr};
+        execv(DAEMON_PATH, argv);
+
+        char* const fallback_argv[] = {const_cast<char*>("ksud"), const_cast<char*>("zygiskd"),
+                                       nullptr};
+        execv("/proc/self/exe", fallback_argv);
+        if (ready_pipe[1] >= 0) {
+            const char fail = '0';
+            write(ready_pipe[1], &fail, 1);
+            close(ready_pipe[1]);
+        }
+        _exit(127);
+    }
+
+    if (ready_pipe[1] >= 0)
+        close(ready_pipe[1]);
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        LOGW("waitpid for zygiskd launcher failed: %s", strerror(errno));
+    }
+
+    if (ready_pipe[0] >= 0) {
+        pollfd pfd{};
+        pfd.fd = ready_pipe[0];
+        pfd.events = POLLIN | POLLHUP;
+        const int pr = poll(&pfd, 1, 5000);
+        char ready = '0';
+
+        if (pr > 0 && read(ready_pipe[0], &ready, 1) == 1 && ready == '1') {
+            LOGI("zygiskd reported ready");
+        } else {
+            LOGW("zygiskd did not report ready before zygote exec (poll=%d, byte=%c)", pr, ready);
+        }
+        close(ready_pipe[0]);
+    }
+    return 0;
+}
+
+bool yukizygisk_feature_enabled() {
+    if (is_safe_mode()) {
+        return false;
+    }
+    const auto [value, supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
+    return supported && value != 0;
+}
+
+void ensure_yukizygisk_payload_if_enabled() {
+    if (!yukizygisk_feature_enabled()) {
+        return;
+    }
+    ensure_yukizygisk(true);
+}
+
+void ensure_zygiskd_running_if_enabled() {
+    if (!yukizygisk_feature_enabled())
+        return;
+    LOGI("YukiZygisk feature on -- launching zygiskd");
+    spawn_zygiskd();
+}
+
 }  // namespace
 
 int on_post_data_fs() {
@@ -227,7 +348,12 @@ int on_post_data_fs() {
 
     // Load feature config (with init_features handling managed features)
     init_features();
+    ensure_yukizygisk_payload_if_enabled();
+    if (refresh_yukizygisk_early_snapshot() != 0) {
+        LOGW("refresh YukiZygisk early snapshot failed");
+    }
     ensure_sulogd_running_if_enabled();
+    ensure_zygiskd_running_if_enabled();
 
     // Kasumi LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
     hymo::lkm_autoload_post_fs_data();

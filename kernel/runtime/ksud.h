@@ -32,5 +32,8 @@ struct user_arg_ptr {
 void ksu_handle_execveat_ksud(const char *filename, struct user_arg_ptr *argv,
 			      struct user_arg_ptr *envp, int *flags);
 void ksu_execve_hook_ksud(const struct pt_regs *regs);
+#ifdef CONFIG_KSU_YZ_PROBE
+void ksu_zygote_probe_execve(const struct pt_regs *regs);
+#endif // #ifdef CONFIG_KSU_YZ_PROBE
 
 #endif // #ifndef __KSU_H_KSUD

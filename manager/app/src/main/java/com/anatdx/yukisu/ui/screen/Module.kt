@@ -100,6 +100,7 @@ import com.anatdx.yukisu.ui.util.*
 import com.anatdx.yukisu.ui.util.module.ModuleModify
 import com.anatdx.yukisu.ui.util.module.ModuleUtils
 import com.anatdx.yukisu.ui.util.module.Shortcut
+import com.anatdx.yukisu.ui.viewmodel.ModuleRuntimeKind
 import com.anatdx.yukisu.ui.viewmodel.ModuleViewModel
 import com.anatdx.yukisu.ui.webui.WebUIActivity
 import com.anatdx.yukisu.ui.webui.WebUIXActivity
@@ -1530,6 +1531,8 @@ fun ModuleItem(
         var localEnabled by remember(module.enabled) { mutableStateOf(module.enabled) }
         val scope = rememberCoroutineScope()
 
+        val conflictDisabled = viewModel.yukiZygiskEnabled && module.dirId in ZYGISK_IMPL_MODULE_IDS
+
         val sizeStr = remember(module.dirId) {
             viewModel.getModuleSize(module.dirId)
         }
@@ -1636,7 +1639,7 @@ fun ModuleItem(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     Switch(
-                        enabled = !module.update,
+                        enabled = !module.update && !conflictDisabled,
                         checked = localEnabled,
                         onCheckedChange = { newChecked ->
                             localEnabled = newChecked
@@ -1665,14 +1668,69 @@ fun ModuleItem(
                 textDecoration = textDecoration,
             )
 
+            if (conflictDisabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        if (module.dirId == "yukizygisk") {
+                            R.string.module_disabled_standalone_yukizygisk
+                        } else {
+                            R.string.module_disabled_by_yukizygisk
+                        }
+                    ),
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
+                    fontFamily = MaterialTheme.typography.bodySmall.fontFamily,
+                )
+            }
+
             if (!isHideTagRow) {
+                val isLoadedRuntimeModule =
+                    module.dirId in viewModel.loadedZygiskModules ||
+                        module.dirId in viewModel.loadedNativeModules
+                val runtimeKind = viewModel.runtimeModuleKinds[module.dirId]
                 Spacer(modifier = Modifier.height(12.dp))
-                // 文件夹名称和大小标签
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    if (isLoadedRuntimeModule) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF2E7D32),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.module_zygisk_loaded),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    runtimeKind?.let { kind ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    when (kind) {
+                                        ModuleRuntimeKind.Native -> R.string.module_zn_module
+                                        ModuleRuntimeKind.Zygisk -> R.string.module_zygisk_module
+                                    }
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                     if (module.metamodule) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),

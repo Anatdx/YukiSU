@@ -271,6 +271,7 @@ set(KSUD_OUR_SOURCES
     src/sepolicy/sepolicy.cpp
     src/su.cpp
     src/init_event.cpp
+    src/yukizygisk_snapshot.cpp
     src/late_load.cpp
     src/umount.cpp
     src/debug.cpp
@@ -319,6 +320,15 @@ endif()
 
 get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
 
+# Zygisk daemon (zygiskd), welded into ksud as a multi-call face. Invoked as
+# `ksud zygiskd` or via a `zygiskd` -> ksud symlink. Source lives with the rest
+# of the zygisk project; bundled here (no clang-tidy) like the other tools.
+set(ZYGISKD_DIR ${REPO_ROOT}/userspace/zygisk/daemon)
+if(EXISTS ${ZYGISKD_DIR}/zygiskd.cpp)
+    set(ZYGISKD_AVAILABLE 1)
+    list(APPEND KSUD_THIRDPARTY_SOURCES ${ZYGISKD_DIR}/zygiskd.cpp)
+endif()
+
 # Include directories (for both object libs and ksud)
 set(KSUD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src
@@ -345,6 +355,9 @@ if(RESETPROP_ALONE_AVAILABLE)
 endif()
 if(NDK_BUSYBOX_AVAILABLE)
     list(APPEND KSUD_DEFINES NDK_BUSYBOX_AVAILABLE=1)
+endif()
+if(ZYGISKD_AVAILABLE)
+    list(APPEND KSUD_DEFINES ZYGISKD_AVAILABLE=1)
 endif()
 
 # Object library: our sources (with clang-tidy on host only)
@@ -375,6 +388,10 @@ add_executable(ksud
     $<TARGET_OBJECTS:ksud_thirdparty_objs>
 )
 target_compile_definitions(ksud PRIVATE ${KSUD_DEFINES})
+if(ZYGISKD_AVAILABLE)
+    # zygiskd (welded in) logs via liblog's __android_log_print
+    target_link_libraries(ksud PRIVATE log)
+endif()
 if(NDK_BUSYBOX_AVAILABLE)
     target_compile_definitions(ksud PRIVATE NDK_BUSYBOX_AVAILABLE=1)
     target_link_libraries(ksud PRIVATE busybox)

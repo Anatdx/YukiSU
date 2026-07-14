@@ -22,4 +22,7 @@ std::vector<std::string> list_supported_kmi();
 // Ensure binary assets are extracted
 int ensure_binaries(bool ignore_if_exist);
 
+// Stage embedded YukiZygisk payloads.
+int ensure_yukizygisk(bool ignore_if_exist);
+
 }  // namespace ksud

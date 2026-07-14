@@ -12,6 +12,16 @@ on:
         required: false
         default: '20260313'
         type: string
+      yukizygisk:
+        description: 'Enable YukiZygisk kernel hooks'
+        required: false
+        default: false
+        type: boolean
+      yukizygisk_parts:
+        description: 'YukiZygisk kernel hook parts: probe,nl,orch,ctl'
+        required: false
+        default: 'probe,nl,orch,ctl'
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -27,6 +37,8 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
     - name: Build kernelsu.ko
       run: |
@@ -35,7 +47,29 @@ jobs:
         test -f include/uapi/supercall.h
 
         echo "=== Building kernelsu.ko for KMI: ${{ inputs.kmi }} ==="
-        CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y CC=clang make
+        make_args=(CONFIG_KSU=m CONFIG_KSU_SUPERKEY=y CC=clang)
+        if [ "${{ inputs.yukizygisk }}" = "true" ]; then
+          make_args+=(CONFIG_KSU_YUKIZYGISK=y)
+          IFS=',' read -r -a yz_parts <<< "${{ inputs.yukizygisk_parts }}"
+          for part in "${yz_parts[@]}"; do
+            case "$part" in
+              "" ) ;;
+              probe) make_args+=(CONFIG_KSU_YZ_PROBE=y) ;;
+              orch) make_args+=(CONFIG_KSU_YZ_ORCH=y) ;;
+              nl) make_args+=(CONFIG_KSU_YZ_NL=y) ;;
+              ctl) make_args+=(CONFIG_KSU_YZ_CTL=y) ;;
+              *)
+                echo "Unknown YukiZygisk part: $part"
+                exit 1
+                ;;
+            esac
+          done
+          echo "YukiZygisk kernel hooks: enabled (${{ inputs.yukizygisk_parts }})"
+        else
+          echo "YukiZygisk kernel hooks: disabled"
+        fi
+
+        make "${make_args[@]}"
         
         echo "=== Build completed ==="
         # Create output directory in GitHub workspace

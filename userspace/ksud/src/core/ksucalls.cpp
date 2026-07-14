@@ -219,6 +219,15 @@ bool uid_granted_root(uint32_t uid) {
     return cmd.granted != 0;
 }
 
+bool uid_should_umount(uint32_t uid) {
+    ksu_uid_should_umount_cmd cmd{};
+    cmd.uid = uid;
+    if (ksuctl(KSU_IOCTL_UID_SHOULD_UMOUNT, &cmd) != 0) {
+        return false;
+    }
+    return cmd.should_umount != 0;
+}
+
 int set_magisk_su_profile(const std::string& package, uint32_t uid, bool allow) {
     if (package.empty()) {
         return -1;

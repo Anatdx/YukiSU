@@ -102,6 +102,7 @@ object KsuCli {
                 installOrUpdateKsudDaemon()
             } else {
                 Log.d(TAG, "ksud is up-to-date: $installedKsudVersion")
+                refreshYukiZygiskSnapshotForNextBoot()
             }
         } catch (e: Exception) {
             Log.e(TAG, "checkAndInstallKsud failed, falling back to install", e)
@@ -120,7 +121,7 @@ object KsuCli {
         BuildConfig.KSUD_BUNDLED_VERSION.takeIf { it.isNotBlank() }
 
     /**
-     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx (8-char hash).
+     * Normalize ksud version string to app-style display: vx.x.x-xxxxxxxx.
      * e.g. "1.3.0-1-g56b0efb0" -> "v1.3.0-56b0efb0"
      */
     fun formatKsudVersionForDisplay(raw: String?): String? {
@@ -130,9 +131,14 @@ object KsuCli {
         val semverMatch = Regex("""^(\d+\.\d+\.\d+)""").find(s) ?: return "v$s"
         val semver = semverMatch.value
         val rest = s.drop(semver.length).trimStart('-')
-        val hashPart = Regex("""[a-fA-F0-9]+""").findAll(rest).map { it.value }.joinToString("").takeLast(8)
+        val describeHash = Regex("""(?:^|-)g([a-fA-F0-9]{7,40})""")
+            .find(rest)
+            ?.groupValues
+            ?.get(1)
+        val hashPart = describeHash
+            ?: Regex("""[a-fA-F0-9]{7,40}""").find(rest)?.value
         val suffix = when {
-            hashPart.length >= 8 -> hashPart.take(8)
+            hashPart != null -> hashPart.take(8)
             rest.isNotEmpty() -> rest.filter { it.isLetterOrDigit() }.take(8)
             else -> ""
         }
@@ -283,12 +289,30 @@ object KsuCli {
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/resetprop",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
             "restorecon ${KsuPaths.KSUD_BIN} || true",
-            "restorecon -R ${KsuPaths.KSU_ROOT} || true"
+            "restorecon -R ${KsuPaths.KSU_ROOT} || true",
+            // Precompute YukiZygisk's early native snapshot before reboot. If the
+            // feature is off, ksud clears the snapshot and returns success.
+            "${KsuPaths.KSUD_BIN} yukizygisk refresh-snapshot || true"
         )
 
         Log.i(TAG, "installOrUpdateKsudDaemon: syncing ${ksudSo.absolutePath} -> /data/adb/ksud")
         val result = shell.newJob().add(*cmds).exec()
         Log.i(TAG, "installOrUpdateKsudDaemon: result code=${result.code}, isSuccess=${result.isSuccess}")
+    }
+
+    private fun refreshYukiZygiskSnapshotForNextBoot() {
+        val shell = getRootShell()
+        if (!shell.isRoot) {
+            Log.w(TAG, "refreshYukiZygiskSnapshotForNextBoot: shell is not root, skip")
+            return
+        }
+        val result = shell.newJob()
+            .add("${KsuPaths.KSUD_BIN} yukizygisk refresh-snapshot || true")
+            .exec()
+        Log.i(
+            TAG,
+            "refreshYukiZygiskSnapshotForNextBoot: result code=${result.code}, isSuccess=${result.isSuccess}"
+        )
     }
 }
 
@@ -375,6 +399,19 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
         .firstOrNull { it == "supported" || it == "unsupported" || it == "managed" }
         .orEmpty()
 }
+
+/** Read a feature's current on/off value via `ksud feature get` (parses the
+ *  "Status: enabled/disabled" line). Returns false when unsupported. */
+suspend fun getFeatureValue(feature: String): Boolean = withContext(Dispatchers.IO) {
+    ksudReadLines("feature get $feature").any { it.equals("Status: enabled", ignoreCase = true) }
+}
+
+/** Set a feature value and persist it; returns whether ksud reported success. */
+suspend fun setFeatureValue(feature: String, enabled: Boolean): Boolean =
+    withContext(Dispatchers.IO) {
+        execKsud("feature set $feature ${if (enabled) 1 else 0}", true) &&
+            execKsud("feature save", true)
+    }
 
 fun install() {
     val start = SystemClock.elapsedRealtime()
@@ -829,15 +866,21 @@ fun getMetaModuleImplement(): String {
     }
 }
 
-fun getZygiskImplement(): String {
-    val zygiskModuleIds = listOf(
-        "zygisksu",
-        "rezygisk",
-        "shirokozygisk"
-    )
+/** Module IDs of known third-party Zygisk implementations ("zygisksu" covers
+ *  both ZygiskNext and NeoZygisk -- they share that id). "yukizygisk" is the
+ *  standalone module; built-in YukiZygisk remains a kernel feature detected by
+ *  its flag. These modules are force-disabled while the built-in feature is on. */
+val ZYGISK_IMPL_MODULE_IDS = listOf("zygisksu", "rezygisk", "yukizygisk")
 
-    for (moduleId in zygiskModuleIds) {
-        // 忽略禁用/即将删除
+private const val YUKIZYGISK_STANDALONE_MODULE_ID = "yukizygisk"
+private const val YUKIZYGISK_STANDALONE_DISPLAY_NAME = "YukiZygisk-Standalone"
+
+suspend fun getZygiskImplement(): String = withContext(Dispatchers.IO) {
+    // Built-in YukiZygisk wins: it's a kernel feature, not a /data/adb module.
+    if (getFeatureValue("yukizygisk")) return@withContext "YukiZygisk"
+
+    for (moduleId in ZYGISK_IMPL_MODULE_IDS) {
+        // skip disabled / pending-removal modules
         if (SuFile.open("/data/adb/modules/$moduleId/disable").isFile || SuFile.open("/data/adb/modules/$moduleId/remove").isFile) continue
 
         val propFile = SuFile.open("/data/adb/modules/$moduleId/module.prop")
@@ -846,13 +889,17 @@ fun getZygiskImplement(): String {
         val prop = Properties()
         prop.load(propFile.newInputStream())
 
-        val name = prop.getProperty("name")
+        val name = if (moduleId == YUKIZYGISK_STANDALONE_MODULE_ID) {
+            YUKIZYGISK_STANDALONE_DISPLAY_NAME
+        } else {
+            prop.getProperty("name")
+        }
         Log.i(TAG, "Zygisk implement: $name")
-        return name
+        return@withContext name
     }
 
     Log.i(TAG, "Zygisk implement: None")
-    return "None"
+    "None"
 }
 
 fun addUmountPath(path: String, flags: Int): Boolean {

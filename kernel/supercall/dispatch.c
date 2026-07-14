@@ -8,7 +8,10 @@
 #include <linux/fs.h>
 #include <linux/kprobes.h>
 #include <linux/pid.h>
+#include <linux/mm.h>
+#include <linux/ptrace.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/task.h>
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
@@ -40,6 +43,12 @@
 #include "sulog/fd.h"
 #include "supercall/supercall.h"
 #include "supercall/internal.h"
+#ifdef CONFIG_KSU_YUKIZYGISK
+#include "feature/zygote_ctl.h"
+#include "feature/zygote_nl.h"
+#include "feature/zygote_probe.h"
+#include "uapi/yukizygisk.h"
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
 #include "hook/syscall_hook_manager.h"
 
 #ifdef CONFIG_KSU_SUPERKEY
@@ -625,7 +634,7 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 				sizeof(mnt));
 	if (ret < 0) {
 		pr_err("nuke ext4 copy mnt failed: %ld\\n", ret);
-		return -EFAULT; // 或者 return ret;
+		return -EFAULT;
 	}
 
 	if (ret == sizeof(mnt)) {
@@ -1006,6 +1015,274 @@ static int do_get_uapi_version(void __user *arg)
 	return 0;
 }
 
+#ifdef CONFIG_KSU_YUKIZYGISK
+static int do_yz_handoff(void __user *arg)
+{
+	return ksu_zygote_ctl_handoff(arg);
+}
+
+static int do_yz_set_dlopen(void __user *arg)
+{
+	struct yz_dlopen_cmd cmd;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	ksu_zygote_probe_set_dlopen_off(cmd.dlopen_offset, cmd.dlsym_offset);
+	return 0;
+}
+
+static int do_yz_reload(void __user *arg)
+{
+	(void)arg;
+	ksu_zygote_nl_emit_reload();
+	return 0;
+}
+
+static int do_yz_set_yukilinker(void __user *arg)
+{
+	struct yz_yukilinker_cmd cmd;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	ksu_zygote_probe_set_yukilinker(cmd.enabled != 0);
+	return 0;
+}
+
+static int do_yz_set_native_targets(void __user *arg)
+{
+	struct yz_native_targets_cmd *cmd;
+	int ret;
+
+	cmd = memdup_user(arg, sizeof(*cmd));
+	if (IS_ERR(cmd))
+		return PTR_ERR(cmd);
+	ret = ksu_zygote_probe_set_native_targets(cmd);
+	kfree(cmd);
+	return ret;
+}
+
+static int do_yz_restore_native_load_policy(void __user *arg)
+{
+	struct yz_native_load_policy_cmd cmd;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	return ksu_zygote_probe_restore_native_policy((pid_t)cmd.pid);
+}
+
+static int do_yz_get_safemode(void __user *arg)
+{
+	struct yz_safemode_status_cmd cmd;
+	int ret;
+
+	ret = ksu_zygote_probe_get_safemode(&cmd);
+	if (ret)
+		return ret;
+	if (copy_to_user(arg, &cmd, sizeof(cmd)))
+		return -EFAULT;
+	return 0;
+}
+
+/* Schedule app mount revert. */
+static int do_yz_umount_pid(void __user *arg)
+{
+	struct yz_umount_pid_cmd cmd;
+	struct task_struct *task;
+	int ret;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	/* app processes only */
+	if (!is_appuid(task_uid(task).val)) {
+		pr_info("yz_umount_pid: reject non-app pid=%u uid=%u\n",
+			cmd.pid, task_uid(task).val);
+		put_task_struct(task);
+		return -EPERM;
+	}
+
+	ret = ksu_umount_task_modules(task);
+	put_task_struct(task);
+	pr_info("yz_umount_pid: scheduled for pid=%u ret=%d\n", cmd.pid, ret);
+	return ret;
+}
+
+struct yz_unmap_tw {
+	struct callback_head cb;
+	unsigned long addr[YZ_MAX_UNMAP_SEGS];
+	unsigned long size[YZ_MAX_UNMAP_SEGS];
+	unsigned int n;
+	unsigned int retry;
+};
+
+/* task_work unmap; retry while PC is inside the target range. */
+static void yz_unmap_tw_func(struct callback_head *cb)
+{
+	struct yz_unmap_tw *tw = container_of(cb, struct yz_unmap_tw, cb);
+	struct pt_regs *regs = task_pt_regs(current);
+	unsigned long pc = regs ? instruction_pointer(regs) : 0;
+	unsigned int i;
+
+	for (i = 0; i < tw->n; i++) {
+		if (pc >= tw->addr[i] && pc < tw->addr[i] + tw->size[i]) {
+			if (++tw->retry < 16) {
+				init_task_work(&tw->cb, yz_unmap_tw_func);
+				if (!task_work_add(current, &tw->cb,
+						   TWA_RESUME))
+					return; /* re-queued; keep tw */
+			}
+			pr_warn("yz_unmap: pc=0x%lx still in core after %u "
+				"tries, skip pid=%d\n",
+				pc, tw->retry, current->pid);
+			kfree(tw);
+			return;
+		}
+	}
+
+	for (i = 0; i < tw->n; i++) {
+		pr_info("yz_unmap: munmap [0x%lx +0x%lx] pid=%d\n", tw->addr[i],
+			tw->size[i], current->pid);
+		vm_munmap(tw->addr[i], tw->size[i]);
+	}
+	kfree(tw);
+}
+
+/* Schedule vm_munmap of reported segments. */
+static int do_yz_unmap_pid(void __user *arg)
+{
+	struct yz_unmap_pid_cmd cmd;
+	struct task_struct *task;
+	struct yz_unmap_tw *tw;
+	unsigned int i;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.n_segs == 0 || cmd.n_segs > YZ_MAX_UNMAP_SEGS)
+		return -EINVAL;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	if (!is_appuid(task_uid(task).val)) {
+		pr_info("yz_unmap_pid: reject non-app pid=%u uid=%u\n", cmd.pid,
+			task_uid(task).val);
+		put_task_struct(task);
+		return -EPERM;
+	}
+
+	tw = kzalloc(sizeof(*tw), GFP_KERNEL);
+	if (!tw) {
+		put_task_struct(task);
+		return -ENOMEM;
+	}
+	init_task_work(&tw->cb, yz_unmap_tw_func);
+	tw->n = cmd.n_segs;
+	for (i = 0; i < cmd.n_segs; i++) {
+		tw->addr[i] = (unsigned long)cmd.addr[i];
+		tw->size[i] = (unsigned long)cmd.size[i];
+	}
+	if (task_work_add(task, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		put_task_struct(task);
+		return -ESRCH;
+	}
+	put_task_struct(task);
+	pr_info("yz_unmap_pid: scheduled %u seg(s) for pid=%u\n", cmd.n_segs,
+		cmd.pid);
+	return 0;
+}
+
+/* Current-task unmap. */
+static int do_yz_unmap_self(void __user *arg)
+{
+	struct yz_unmap_self_cmd cmd;
+	struct yz_unmap_tw *tw;
+	unsigned int i;
+
+	if (!current->mm)
+		return -EINVAL;
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.n_segs == 0 || cmd.n_segs > YZ_MAX_UNMAP_SEGS)
+		return -EINVAL;
+	/* validate userspace ranges */
+	for (i = 0; i < cmd.n_segs; i++) {
+		unsigned long a = (unsigned long)cmd.addr[i];
+		unsigned long s = (unsigned long)cmd.size[i];
+
+		if (a == 0 || s == 0 || a >= TASK_SIZE || s > TASK_SIZE ||
+		    a + s < a || a + s > TASK_SIZE) {
+			pr_warn(
+			    "yz_unmap_self: bad seg [0x%lx +0x%lx] pid=%d\n", a,
+			    s, current->pid);
+			return -EINVAL;
+		}
+	}
+
+	tw = kzalloc(sizeof(*tw), GFP_KERNEL);
+	if (!tw)
+		return -ENOMEM;
+	init_task_work(&tw->cb, yz_unmap_tw_func);
+	tw->n = cmd.n_segs;
+	for (i = 0; i < cmd.n_segs; i++) {
+		tw->addr[i] = (unsigned long)cmd.addr[i];
+		tw->size[i] = (unsigned long)cmd.size[i];
+	}
+	if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		return -ESRCH;
+	}
+	pr_info("yz_unmap_self: pid=%d armed %u seg(s)\n", current->pid,
+		cmd.n_segs);
+	return 0;
+}
+
+/* COW-patch target text via access_process_vm(FOLL_FORCE|FOLL_WRITE). */
+static int do_yz_patch_text(void __user *arg)
+{
+	struct yz_patch_text_cmd cmd;
+	struct task_struct *task;
+	int n;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+	if (cmd.len == 0 || cmd.len > YZ_PATCH_TEXT_MAX)
+		return -EINVAL;
+	if (cmd.addr == 0 || cmd.addr >= TASK_SIZE ||
+	    cmd.addr + cmd.len < cmd.addr || cmd.addr + cmd.len > TASK_SIZE)
+		return -EINVAL;
+
+	rcu_read_lock();
+	task = get_pid_task(find_vpid(cmd.pid), PIDTYPE_PID);
+	rcu_read_unlock();
+	if (!task)
+		return -ESRCH;
+
+	/* cmd.pid is checked by zygiskd via SO_PEERCRED. */
+
+	n = access_process_vm(task, (unsigned long)cmd.addr, cmd.bytes, cmd.len,
+			      FOLL_FORCE | FOLL_WRITE);
+	put_task_struct(task);
+	if (n != (int)cmd.len) {
+		pr_warn("yz_patch_text: wrote %d/%u @0x%llx pid=%u\n", n,
+			cmd.len, cmd.addr, cmd.pid);
+		return -EFAULT;
+	}
+	pr_info("yz_patch_text: %u byte(s) @0x%llx pid=%u\n", cmd.len, cmd.addr,
+		cmd.pid);
+	return 0;
+}
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     {.cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1142,6 +1419,52 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
      .name = "LIST_TRY_UMOUNT",
      .handler = list_try_umount,
      .perm_check = manager_or_root},
+#ifdef CONFIG_KSU_YUKIZYGISK
+    {.cmd = KSU_IOCTL_YZ_HANDOFF,
+     .name = "YZ_HANDOFF",
+     .handler = do_yz_handoff,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_SET_DLOPEN,
+     .name = "YZ_SET_DLOPEN",
+     .handler = do_yz_set_dlopen,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_SET_YUKILINKER,
+     .name = "YZ_SET_YUKILINKER",
+     .handler = do_yz_set_yukilinker,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_SET_NATIVE_TARGETS,
+     .name = "YZ_SET_NATIVE_TARGETS",
+     .handler = do_yz_set_native_targets,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_RESTORE_NATIVE_LOAD_POLICY,
+     .name = "YZ_RESTORE_NATIVE_LOAD_POLICY",
+     .handler = do_yz_restore_native_load_policy,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_GET_SAFEMODE,
+     .name = "YZ_GET_SAFEMODE",
+     .handler = do_yz_get_safemode,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UMOUNT_PID,
+     .name = "YZ_UMOUNT_PID",
+     .handler = do_yz_umount_pid,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UNMAP_PID,
+     .name = "YZ_UNMAP_PID",
+     .handler = do_yz_unmap_pid,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_UNMAP_SELF,
+     .name = "YZ_UNMAP_SELF",
+     .handler = do_yz_unmap_self,
+     .perm_check = injected_app},
+    {.cmd = KSU_IOCTL_YZ_PATCH_TEXT,
+     .name = "YZ_PATCH_TEXT",
+     .handler = do_yz_patch_text,
+     .perm_check = only_root},
+    {.cmd = KSU_IOCTL_YZ_RELOAD,
+     .name = "YZ_RELOAD",
+     .handler = do_yz_reload,
+     .perm_check = manager_or_root},
+#endif // #ifdef CONFIG_KSU_YUKIZYGISK
     {.cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL} // Sentinel
 };
 
