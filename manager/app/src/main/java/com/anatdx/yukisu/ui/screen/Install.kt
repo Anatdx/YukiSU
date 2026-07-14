@@ -166,6 +166,7 @@ fun InstallScreen(
     var signatureBypass by remember { mutableStateOf(false) }
     var allowShell by remember { mutableStateOf(false) }
     var enableAdb by remember { mutableStateOf(false) }
+    var forceBackup by remember { mutableStateOf(false) }
     // Experimental: embed Kasumi LKM in cpio (init_boot)
     var kasumiInCpio by remember { mutableStateOf(false) }
     var kasumiLkmUri by remember { mutableStateOf<Uri?>(null) }
@@ -181,6 +182,7 @@ fun InstallScreen(
                 partition = partitionSelection,
                 allowShell = allowShell,
                 enableAdb = enableAdb,
+                backup = method is InstallMethod.SelectFile && forceBackup,
                 superKey = effectiveSuperKey.ifBlank { null },
                 signatureBypass = signatureBypass,
                 kasumiInCpio = kasumiInCpio,
@@ -511,6 +513,33 @@ fun InstallScreen(
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            if (installMethod is InstallMethod.SelectFile) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(id = R.string.install_force_backup),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            text = stringResource(id = R.string.install_force_backup_summary),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                        )
+                                    }
+                                    Switch(
+                                        checked = forceBackup,
+                                        onCheckedChange = { forceBackup = it }
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

@@ -599,6 +599,7 @@ fun installBoot(
     partition: String?,
     allowShell: Boolean = false,
     enableAdb: Boolean = false,
+    forceBackup: Boolean = false,
     superKey: String? = null,
     signatureBypass: Boolean = false,
     kasumiInCpio: Boolean = false,  // Experimental: embed Kasumi LKM in cpio, load after KernelSU
@@ -644,6 +645,10 @@ fun installBoot(
 
     if (ota) {
         cmd += " -u"
+    }
+
+    if (forceBackup) {
+        cmd += " --backup"
     }
 
     // Add superkey if specified

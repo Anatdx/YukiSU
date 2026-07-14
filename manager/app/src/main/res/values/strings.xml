@@ -190,6 +190,8 @@
     <string name="allow_shell_summary">Always allow adb shell to call su. Do not enable this unless absolutely necessary.</string>
     <string name="enable_adb">Force enable adb on boot</string>
     <string name="enable_adb_summary">Force enable USB debugging and disable adb authentication. Do not enable this unless absolutely necessary.</string>
+    <string name="install_force_backup">Back up as stock image</string>
+    <string name="install_force_backup_summary">Make sure the selected boot image is an unmodified stock image.</string>
     <string name="kasumi_in_cpio_title">Experimental: Embed Kasumi in cpio</string>
     <string name="kasumi_in_cpio_desc">When enabled, Kasumi LKM will be added to cpio and loaded after KernelSU at boot</string>
     <string name="kasumi_custom_lkm_title">Custom Kasumi LKM</string>

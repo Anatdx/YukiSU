@@ -274,6 +274,11 @@ void ensure_zygiskd_running_if_enabled() {
 int on_post_data_fs() {
     LOGI("post-fs-data triggered");
 
+    if (!ensure_uapi_version_matched()) {
+        LOGE("Skip post-fs-data due to UAPI version mismatch");
+        return 0;
+    }
+
     if (set_init_pgrp() != 0) {
         LOGW("set init pgrp failed");
     }
@@ -394,6 +399,11 @@ int on_post_data_fs() {
 void on_services() {
     LOGI("services triggered");
 
+    if (!ensure_uapi_version_matched()) {
+        LOGE("Skip services due to UAPI version mismatch");
+        return;
+    }
+
     // Hide bootloader unlock status (soft BL hiding)
     // Service stage is the correct timing - after boot_completed is set
     hide_bootloader_status();
@@ -405,6 +415,11 @@ void on_services() {
 
 void on_boot_completed() {
     LOGI("boot-completed triggered");
+
+    if (!ensure_uapi_version_matched()) {
+        LOGE("Skip boot-completed due to UAPI version mismatch");
+        return;
+    }
 
     // Report to kernel
     report_boot_complete();

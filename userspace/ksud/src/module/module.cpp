@@ -482,7 +482,9 @@ bool exec_install_script(const std::string& zip_path, bool installing_metamodule
 CommonScriptEnv build_common_script_env() {
     CommonScriptEnv env;
     env.kernel_ver_code = std::to_string(get_version());
-    env.late_load = (get_flags() & KSU_GET_INFO_FLAG_LATE_LOAD) != 0;
+    env.uapi_version = std::to_string(uapi_version());
+    env.runtime_mode = runtime_mode();
+    env.late_load = is_late_load();
     const auto [zygisk_value, zygisk_supported] = get_feature(KSU_FEATURE_YUKIZYGISK);
     env.zygisk_enabled = zygisk_supported && zygisk_value != 0;
 
@@ -509,6 +511,8 @@ void apply_common_script_env(const CommonScriptEnv& env, const char* module_id,
     setenv("KSU_KERNEL_VER_CODE", env.kernel_ver_code.c_str(), 1);
     setenv("KSU_VER_CODE", VERSION_CODE, 1);
     setenv("KSU_VER", VERSION_NAME, 1);
+    setenv("KSU_UAPI_VER", env.uapi_version.c_str(), 1);
+    setenv("KSU_RUNTIME_MODE", env.runtime_mode.c_str(), 1);
     setenv("PATH", env.path.c_str(), 1);
 
     if (env.zygisk_enabled) {
@@ -626,6 +630,12 @@ int module_install(const std::string& zip_path) {
     // Ensure stdout is unbuffered for real-time output
     if (setvbuf(stdout, nullptr, _IONBF, 0) != 0) {
         (void)0;  // best-effort
+    }
+
+    std::string uapi_error;
+    if (!ensure_uapi_version_matched(&uapi_error)) {
+        printf("! %s\n", uapi_error.c_str());
+        return 1;
     }
 
     const auto boot_completed = getprop("sys.boot_completed");
@@ -857,6 +867,12 @@ int module_disable(const std::string& id) {
 int module_run_action(const std::string& id) {
     if (!validate_module_id(id)) {
         printf("Invalid module ID: %s\n", id.c_str());
+        return 1;
+    }
+
+    std::string uapi_error;
+    if (!ensure_uapi_version_matched(&uapi_error)) {
+        printf("! %s\n", uapi_error.c_str());
         return 1;
     }
 

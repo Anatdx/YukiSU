@@ -164,6 +164,39 @@ uint32_t get_uapi_version() {
     return v;
 }
 
+bool is_lkm() {
+    return (get_flags() & KSU_GET_INFO_FLAG_LKM) != 0;
+}
+
+bool is_late_load() {
+    return (get_flags() & KSU_GET_INFO_FLAG_LATE_LOAD) != 0;
+}
+
+const char* runtime_mode() {
+    if (is_late_load()) {
+        return "late-load";
+    }
+    // YukiSU has no built-in kernel mode; a normal load is always LKM.
+    return "lkm";
+}
+
+bool ensure_uapi_version_matched(std::string* error) {
+    const uint32_t kernel_uapi = get_uapi_version();
+    const uint32_t userspace_uapi = uapi_version();
+    if (kernel_uapi == userspace_uapi) {
+        return true;
+    }
+
+    const std::string message = "UAPI version mismatch: kernel=" + std::to_string(kernel_uapi) +
+                                ", ksud=" + std::to_string(userspace_uapi) +
+                                ". Please update YukiSU!";
+    if (error != nullptr) {
+        *error = message;
+    }
+    LOGE("%s", message.c_str());
+    return false;
+}
+
 int grant_root() {
     return ksuctl(KSU_IOCTL_GRANT_ROOT, nullptr);
 }

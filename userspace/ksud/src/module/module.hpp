@@ -8,6 +8,8 @@ namespace ksud {
 
 struct CommonScriptEnv {
     std::string kernel_ver_code;
+    std::string uapi_version;
+    std::string runtime_mode;
     std::string path;
     bool late_load{};
     bool zygisk_enabled{};

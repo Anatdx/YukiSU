@@ -11,6 +11,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <array>
+#include <cctype>
 #include <cerrno>
 #include <climits>
 #include <cstdio>
@@ -374,6 +375,81 @@ bool do_backup(const std::string& magiskboot, const std::string& workdir,
     return true;
 }
 
+std::string parse_kmi_from_kernel_file(const std::string& kernel_path) {
+    std::ifstream kernel(kernel_path, std::ios::binary);
+    if (!kernel) {
+        LOGE("Failed to read kernel from %s", kernel_path.c_str());
+        return "";
+    }
+
+    kernel.seekg(0, std::ios::end);
+    const auto length = kernel.tellg();
+    if (length <= 0) {
+        LOGE("Kernel image is empty: %s", kernel_path.c_str());
+        return "";
+    }
+    kernel.seekg(0, std::ios::beg);
+
+    std::vector<unsigned char> data(static_cast<size_t>(length));
+    kernel.read(reinterpret_cast<char*>(data.data()), length);
+    if (!kernel) {
+        LOGE("Failed to read kernel image: %s", kernel_path.c_str());
+        return "";
+    }
+
+    static const std::regex kmi_pattern(R"((\d+\.\d+)\S*(android\d+))");
+    for (size_t i = 0; i + 4 <= data.size(); ++i) {
+        if (data[i] < '5' || data[i] > '9' || data[i + 1] != '.' || !std::isdigit(data[i + 2]) ||
+            (data[i] == '5' && !std::isdigit(data[i + 3]))) {
+            continue;
+        }
+
+        const size_t limit = std::min(data.size(), i + 100);
+        size_t end = i;
+        while (end < limit && data[end] != '\0') {
+            ++end;
+        }
+        if (end == limit) {
+            continue;
+        }
+
+        const std::string candidate(reinterpret_cast<const char*>(data.data() + i), end - i);
+        std::smatch match;
+        if (std::regex_search(candidate, match, kmi_pattern)) {
+            return match[2].str() + "-" + match[1].str();
+        }
+    }
+
+    return "";
+}
+
+std::string parse_kmi_from_boot(const std::string& magiskboot, const std::string& workdir,
+                                const std::string& boot_path) {
+    const std::string detect_dir = workdir + "/ota_kmi";
+    if (!ensure_clean_dir(detect_dir)) {
+        LOGE("Failed to create OTA KMI detection directory");
+        return "";
+    }
+
+    auto unpack_result = exec_command_magiskboot(magiskboot, {"unpack", boot_path}, detect_dir);
+    if (unpack_result.exit_code != 0) {
+        // Kernel is extracted before ramdisk. Some legacy ramdisks can still make magiskboot
+        // abort after a valid kernel file has already been written, so try that file first.
+        LOGW("Inactive slot boot unpack exited with %d: %s", unpack_result.exit_code,
+             boot_path.c_str());
+        if (!unpack_result.stderr_str.empty()) {
+            LOGW("magiskboot stderr: %s", unpack_result.stderr_str.c_str());
+        }
+    }
+
+    const std::string kernel_path = detect_dir + "/kernel";
+    const std::string kmi = parse_kmi_from_kernel_file(kernel_path);
+    if (kmi.empty()) {
+        LOGE("Failed to get KMI from inactive slot boot image");
+    }
+    return kmi;
+}
+
 // Clean old backups
 void clean_backup(const std::string& current_sha1) {
     printf("- Clean up backup\n");
@@ -410,6 +486,7 @@ struct BootPatchArgs {
     bool signature_bypass = false;  // --signature-bypass
     bool ota = false;               // -u, --ota
     bool flash = false;             // -f, --flash
+    bool backup = false;            // --backup
     std::string out;                // -o, --out
     std::string magiskboot;         // --magiskboot
     std::string mkbootfs_dir;       // --mkbootfs-dir (5_10/5_15+ tools for ramdisk format)
@@ -454,6 +531,8 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
             result.ota = true;
         } else if (arg == "-f" || arg == "--flash") {
             result.flash = true;
+        } else if (arg == "--backup") {
+            result.backup = true;
         } else if (arg == "-o" || arg == "--out") {
             if (i + 1 < args.size())
                 result.out = args[++i];
@@ -574,6 +653,17 @@ int boot_patch_impl(const std::vector<std::string>& args) {
 
     // Get or detect KMI
     std::string kmi = parsed.kmi;
+    if (kmi.empty() && parsed.ota && parsed.module.empty()) {
+        const std::string target_boot = "/dev/block/by-name/boot" + get_slot_suffix(true);
+        printf("- Trying to auto detect KMI version from %s\n", target_boot.c_str());
+        kmi = parse_kmi_from_boot(magiskboot, workdir, target_boot);
+        if (kmi.empty()) {
+            printf("! Failed to detect KMI from inactive slot boot image\n");
+            printf("! Please select an LKM file manually or specify --kmi\n");
+            cleanup();
+            return 1;
+        }
+    }
     if (kmi.empty()) {
         kmi = get_current_kmi();
         if (kmi.empty() && parsed.boot_image.empty()) {
@@ -992,8 +1082,9 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         }
     }
 
-    // Backup if flashing and not already patched
-    if (!already_patched && parsed.flash) {
+    // Direct flashing automatically backs up stock images. --backup also allows an explicitly
+    // selected file to be treated as stock, even when it appears to have been patched already.
+    if (parsed.backup || (!already_patched && parsed.flash)) {
         if (!do_backup(magiskboot, workdir, ramdisk, bootimage)) {
             printf("- Warning: Backup stock image failed\n");
         }

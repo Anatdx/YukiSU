@@ -170,7 +170,7 @@ void print_usage() {
 }
 
 void print_version() {
-    printf("ksud version %s (code: %s)\n", VERSION_NAME, VERSION_CODE);
+    printf("ksud version %s (code: %s, uapi: %u)\n", VERSION_NAME, VERSION_CODE, uapi_version());
 }
 
 int cmd_module(const std::vector<std::string>& args) {

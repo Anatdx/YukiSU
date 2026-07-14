@@ -43,6 +43,13 @@ int ksuctl(int request, void* arg);
 int32_t get_version();
 uint32_t get_flags();
 uint32_t get_uapi_version();
+constexpr uint32_t uapi_version() {
+    return KERNEL_SU_UAPI_VERSION;
+}
+bool is_lkm();
+bool is_late_load();
+const char* runtime_mode();
+bool ensure_uapi_version_matched(std::string* error = nullptr);
 
 int grant_root();
 int set_ksu_no_new_privs();
