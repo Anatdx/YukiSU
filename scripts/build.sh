@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU local build: DDK LKM -> ksuinit -> ksud -> Manager App
 # Signing env: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# Usage: ./scripts/build.sh [-k KMI] [--yukizygisk|--yukizygisk-off] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
+# Usage: ./scripts/build.sh [-k KMI] [--yukizygisk|--yukizygisk-off] [--yukizygisk-parts PARTS] [--skip-lkm] [-i] [-h]
 
 set -euo pipefail
 
@@ -11,13 +11,10 @@ OUT_DIR="$REPO_ROOT/out"
 KMI="android16-6.12"
 ANDROID_ABI="arm64-v8a"
 SKIP_LKM=false
-SKIP_KASUMI=false
 DDK_RELEASE="20260313"
 DO_INSTALL=false
 ENABLE_YUKIZYGISK=true
 YUKIZYGISK_PARTS="all"
-# Default Kasumi checkout; override with --kasumi-dir.
-KASUMI_DIR="${KASUMI_DIR:-/Volumes/Workspace/Kasumi}"
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -27,14 +24,6 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--skip-lkm)
 		SKIP_LKM=true
-		shift
-		;;
-	--skip-kasumi)
-		SKIP_KASUMI=true
-		shift
-		;;
-	--build-kasumi)
-		SKIP_KASUMI=false
 		shift
 		;;
 	--yukizygisk)
@@ -49,10 +38,6 @@ while [[ $# -gt 0 ]]; do
 	--yukizygisk-parts)
 		ENABLE_YUKIZYGISK=true
 		YUKIZYGISK_PARTS="$2"
-		shift 2
-		;;
-	--kasumi-dir)
-		KASUMI_DIR="$2"
 		shift 2
 		;;
 	-i | --install)
@@ -175,45 +160,17 @@ cmake .. \
 ninja
 echo "    ksuinit built"
 
-arch_suffix="_arm64"
-
-if [[ "$SKIP_KASUMI" != "true" ]]; then
-	echo ">>> [2.5/5] Build Kasumi LKM (DDK) from $KASUMI_DIR ..."
-	if [[ ! -f "$KASUMI_DIR/src/Makefile" ]]; then
-		echo "    missing $KASUMI_DIR/src/Makefile"
-		exit 1
-	fi
-	KASUMI_OUT_DIR="$OUT_DIR/${KMI}-kasumi-lkm"
-	mkdir -p "$KASUMI_OUT_DIR"
-	# /src is the Kasumi checkout; the DDK image sets KDIR.
-	docker run --rm -v "$KASUMI_DIR:/src" -w /src \
-		"ghcr.io/ylarod/ddk:${KMI}-${DDK_RELEASE}" \
-		bash -c "make -C src ARCH=arm64 -j${MAKE_JOBS} && \
-		         (llvm-strip -d src/kasumi_lkm.ko 2>/dev/null || true) && \
-		         cp src/kasumi_lkm.ko /src/.kasumi_built.ko"
-	# Name expected by lkm.cpp: <KMI>${arch_suffix}_kasumi_lkm.ko
-	cp "$KASUMI_DIR/.kasumi_built.ko" "$KASUMI_OUT_DIR/${KMI}${arch_suffix}_kasumi_lkm.ko"
-	rm -f "$KASUMI_DIR/.kasumi_built.ko"
-	echo "    Kasumi LKM: $KASUMI_OUT_DIR/${KMI}${arch_suffix}_kasumi_lkm.ko"
-else
-	echo ">>> [2.5/5] Skip Kasumi LKM"
-fi
-
 echo ">>> [3/5] Build ksud ..."
 KSUD_ASSETS="$REPO_ROOT/userspace/ksud/assets"
 mkdir -p "$KSUD_ASSETS"
 mkdir -p "$OUT_DIR"
+find "$KSUD_ASSETS" -maxdepth 1 -type f -name '*.ko' -delete
 
 if [[ -f "$OUT_DIR/${KMI}_kernelsu.ko" ]]; then
 	cp "$OUT_DIR/${KMI}_kernelsu.ko" "$KSUD_ASSETS/"
 else
 	echo "    warning: ${KMI}_kernelsu.ko not found"
 fi
-
-shopt -s nullglob 2>/dev/null || true
-for d in "$OUT_DIR"/*-kasumi-lkm; do
-	[[ -d "$d" ]] && cp "$d"/*"${arch_suffix}_kasumi_lkm.ko" "$KSUD_ASSETS/" 2>/dev/null || true
-done
 
 cp "$KSUINIT_DIR/build/ksuinit" "$KSUD_ASSETS/"
 
@@ -318,7 +275,7 @@ if [[ "$DO_INSTALL" == "true" ]]; then
 	fi
 else
 	echo "Install: adb install -r $APK_DIR/*.apk"
-	echo "Or: ./scripts/build.sh --skip-lkm --skip-kasumi -i"
+	echo "Or: ./scripts/build.sh --skip-lkm -i"
 	echo ""
 	echo "After installing, sync ksud from the app before reboot."
 fi

@@ -1,7 +1,7 @@
 #include "dynamic_manager.hpp"
 #include "boot/apk_sign.hpp"
+#include "core/json.hpp"
 #include "defs.hpp"
-#include "hymo/core/json.hpp"
 #include "log.hpp"
 #include "utils.hpp"
 
@@ -38,8 +38,8 @@ bool parse_size(const std::string& value, uint32_t* out) {
     return true;
 }
 
-bool parse_size(const hymo::json::Value& value, uint32_t* out) {
-    if (value.type == hymo::json::Type::Number) {
+bool parse_size(const json::Value& value, uint32_t* out) {
+    if (value.type == json::Type::Number) {
         if (value.n < 0 || value.n > std::numeric_limits<uint32_t>::max()) {
             return false;
         }
@@ -47,7 +47,7 @@ bool parse_size(const hymo::json::Value& value, uint32_t* out) {
         return true;
     }
 
-    if (value.type != hymo::json::Type::String) {
+    if (value.type != json::Type::String) {
         return false;
     }
     return parse_size(value.s, out);
@@ -69,8 +69,8 @@ bool normalize_hash(const std::string& value, char out[65]) {
     return true;
 }
 
-bool normalize_hash(const hymo::json::Value& value, char out[65]) {
-    return value.type == hymo::json::Type::String && normalize_hash(value.s, out);
+bool normalize_hash(const json::Value& value, char out[65]) {
+    return value.type == json::Type::String && normalize_hash(value.s, out);
 }
 
 bool same_sign(const DynamicManagerSign& lhs, const DynamicManagerSign& rhs) {
@@ -83,8 +83,8 @@ bool contains_sign(const std::vector<DynamicManagerSign>& signs, const DynamicMa
     });
 }
 
-bool append_sign(const hymo::json::Value& object, std::vector<DynamicManagerSign>* signs) {
-    if (object.type != hymo::json::Type::Object) {
+bool append_sign(const json::Value& object, std::vector<DynamicManagerSign>* signs) {
+    if (object.type != json::Type::Object) {
         return false;
     }
 
@@ -105,8 +105,8 @@ bool append_sign(const hymo::json::Value& object, std::vector<DynamicManagerSign
     return true;
 }
 
-void append_signs(const hymo::json::Value& value, std::vector<DynamicManagerSign>* signs) {
-    if (value.type == hymo::json::Type::Array) {
+void append_signs(const json::Value& value, std::vector<DynamicManagerSign>* signs) {
+    if (value.type == json::Type::Array) {
         for (const auto& item : value.a) {
             append_sign(item, signs);
         }
@@ -117,7 +117,7 @@ void append_signs(const hymo::json::Value& value, std::vector<DynamicManagerSign
         return;
     }
 
-    if (value.type != hymo::json::Type::Object) {
+    if (value.type != json::Type::Object) {
         return;
     }
 
@@ -452,7 +452,7 @@ std::vector<DynamicManagerSign> load_dynamic_manager_signs() {
 
     std::vector<DynamicManagerSign> signs;
     try {
-        append_signs(hymo::json::parse(*content), &signs);
+        append_signs(json::parse(*content), &signs);
     } catch (...) {
         LOGW("dynamic_manager: failed to parse %s", DYNAMIC_MANAGER_CONFIG_PATH);
         return {};

@@ -39,29 +39,7 @@ constexpr uint64_t SUPERKEY_VERIFICATION_SIGNATURE_ONLY = 0;
 constexpr uint64_t SUPERKEY_VERIFICATION_SIGN_AND_KEY = 1;
 constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 
-// Arch suffix for Kasumi LKM asset name (must match lkm.cpp)
-#define KASUMI_ARCH_SUFFIX "_arm64"
-
 namespace {
-
-bool copy_embedded_kasumi_asset(const std::string& kmi, const std::string& dest_path,
-                                std::string* used_asset = nullptr) {
-    std::vector<std::string> candidates;
-    if (!kmi.empty()) {
-        candidates.push_back(kmi + KASUMI_ARCH_SUFFIX "_kasumi_lkm.ko");
-    }
-    candidates.push_back(std::string(KASUMI_ARCH_SUFFIX) + "_kasumi_lkm.ko");
-
-    for (const auto& asset_name : candidates) {
-        if (copy_asset_to_file(asset_name, dest_path)) {
-            if (used_asset != nullptr) {
-                *used_asset = asset_name;
-            }
-            return true;
-        }
-    }
-    return false;
-}
 
 // LZ4 legacy ramdisk magic (reject before cpio to avoid huge cache/hang).
 constexpr std::array<unsigned char, 4> LZ4_LEGACY_MAGIC = {0x02, 0x21, 0x4c, 0x18};
@@ -489,9 +467,6 @@ struct BootPatchArgs {
     bool no_custom_rc = false;      // --no-custom-rc
     bool enable_adbd = false;       // --enable-adbd
     std::string adb_debug_prop;     // --adb-debug-prop
-    bool kasumi_in_cpio =
-        false;  // --kasumi (experimental: embed Kasumi LKM in cpio, load after KernelSU)
-    std::string kasumi_module;  // --kasumi-module (custom Kasumi LKM path; overrides embedded)
 };
 
 namespace {
@@ -552,11 +527,6 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
         } else if (arg == "--adb-debug-prop") {
             if (i + 1 < args.size())
                 result.adb_debug_prop = args[++i];
-        } else if (arg == "--kasumi") {
-            result.kasumi_in_cpio = true;
-        } else if (arg == "--kasumi-module") {
-            if (i + 1 < args.size())
-                result.kasumi_module = args[++i];
         }
     }
 
@@ -1036,42 +1006,11 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         }
     }
 
-    // Experimental: add or remove Kasumi LKM in cpio (load after KernelSU in ksuinit)
-    if (parsed.kasumi_in_cpio) {
-        const std::string kasumi_file = workdir + "/kasumi.ko";
-        bool have_kasumi = false;
-        if (!parsed.kasumi_module.empty() && fs::exists(parsed.kasumi_module)) {
-            std::error_code cp_ec;
-            fs::copy_file(parsed.kasumi_module, kasumi_file, fs::copy_options::overwrite_existing,
-                          cp_ec);
-            if (!cp_ec) {
-                have_kasumi = true;
-                printf("- Adding Kasumi LKM (custom)\n");
-            } else {
-                LOGW("Failed to copy custom Kasumi LKM: %s", cp_ec.message().c_str());
-            }
-        }
-        if (!have_kasumi) {
-            std::string used_asset;
-            if (copy_embedded_kasumi_asset(kmi, kasumi_file, &used_asset)) {
-                have_kasumi = true;
-                printf("- Adding Kasumi LKM (embedded: %s)\n", used_asset.c_str());
-            } else {
-                LOGW("Kasumi LKM asset for %s not found, skipping", kmi.c_str());
-            }
-        }
-        if (have_kasumi &&
-            !do_cpio_cmd(magiskboot, workdir, ramdisk, "add 0644 kasumi.ko kasumi.ko")) {
-            LOGW("Failed to add kasumi.ko to cpio");
-        }
-    } else {
-        // User disabled Kasumi: remove kasumi.ko from cpio if it was previously
-        // embedded (otherwise it stays forever after re-patch without the option).
-        auto kasumi_exists =
-            exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists kasumi.ko"}, workdir);
-        if (kasumi_exists.exit_code == 0) {
-            do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kasumi.ko");
-        }
+    // Remove the legacy embedded module when repatching an image created by an older manager.
+    auto legacy_kasumi_exists =
+        exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists kasumi.ko"}, workdir);
+    if (legacy_kasumi_exists.exit_code == 0) {
+        do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kasumi.ko");
     }
 
     // Direct flashing automatically backs up stock images. --backup also allows an explicitly
@@ -1363,10 +1302,10 @@ int boot_restore(const std::vector<std::string>& args) {
         // Remove kernelsu.ko
         do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kernelsu.ko");
 
-        // Remove kasumi.ko if present (experimental cpio embed)
-        auto kasumi_exists =
+        // Remove the legacy embedded module if present.
+        auto legacy_kasumi_exists =
             exec_command_magiskboot(magiskboot, {"cpio", ramdisk, "exists kasumi.ko"}, workdir);
-        if (kasumi_exists.exit_code == 0) {
+        if (legacy_kasumi_exists.exit_code == 0) {
             do_cpio_cmd(magiskboot, workdir, ramdisk, "rm kasumi.ko");
         }
 
@@ -1442,8 +1381,7 @@ int boot_restore(const std::vector<std::string>& args) {
     return 0;
 }
 
-// Read real kernel release from sysfs. Not spoofed by Kasumi uname hiding (uname(2) is).
-// Prefer this for KMI so LKM selection uses the actual kernel, not spoofed version.
+// Prefer the sysctl value for KMI selection and fall back to uname when unavailable.
 static std::string read_kernel_release_from_sysfs() {
     std::ifstream f("/proc/sys/kernel/osrelease");
     std::string line;

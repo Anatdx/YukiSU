@@ -425,20 +425,7 @@ fun install() {
 }
 
 fun hasMetaModule(): Boolean {
-    // Treat both external metamodule and built-in Kasumi as valid metamodule implementations.
-    // External metamodule: /data/adb/metamodule/module.prop present and readable.
-    // Built-in Kasumi: /data/adb/hymo/config.json or /data/adb/hymo directory exists.
-    return try {
-        val hymoDir = SuFile.open("/data/adb/hymo")
-        val hymoConfig = SuFile.open("/data/adb/hymo/config.json")
-        if ((hymoDir.exists() && hymoDir.isDirectory) || hymoConfig.isFile) {
-            true
-        } else {
-            getMetaModuleImplement() != "None"
-        }
-    } catch (_: Throwable) {
-        getMetaModuleImplement() != "None"
-    }
+    return getMetaModuleImplement() != "None"
 }
 
 fun listModules(): String =
@@ -602,8 +589,6 @@ fun installBoot(
     forceBackup: Boolean = false,
     superKey: String? = null,
     signatureBypass: Boolean = false,
-    kasumiInCpio: Boolean = false,  // Experimental: embed Kasumi LKM in cpio, load after KernelSU
-    kasumiLkmUri: Uri? = null,      // Custom Kasumi LKM file; when null, use embedded
     onFinish: (Boolean, Int) -> Unit,
     onStdout: (String) -> Unit,
     onStderr: (String) -> Unit,
@@ -700,29 +685,11 @@ fun installBoot(
         cmd += " --enable-adbd"
     }
 
-    var kasumiFile: File? = null
-    if (kasumiInCpio) {
-        cmd += " --kasumi"
-        kasumiLkmUri?.let { uri ->
-            val file = with(resolver.openInputStream(uri)) {
-                val f = File(ksuApp.cacheDir, "kasumi-tmp-lkm.ko")
-                f.outputStream().use { output ->
-                    this?.copyTo(output)
-                }
-                f
-            }
-            kasumiFile = file
-            cmd += " --kasumi-module ${file.absolutePath}"
-        }
-    }
-
     val result = flashWithIO(ksudCmd(cmd), onStdout, onStderr)
     Log.i("KernelSU", "install boot result: ${result.isSuccess}")
 
     bootFile?.delete()
     lkmFile?.delete()
-    kasumiFile?.delete()
-
     // if boot uri is empty, it is direct install, when success, we should show reboot button
     onFinish(bootUri == null && result.isSuccess, result.code)
 

@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0 */
 /*
- * YukiZygisk - minimal self-contained JSON (value / parse / dump). Extracted
- * from the to-be-removed hymo component so config code carries no dependency on
- * it. Header-only; suitable for ksud + zygiskd config (yzconfig.json).
+ * Minimal self-contained JSON (value / parse / dump). Header-only and suitable
+ * for small ksud and zygiskd configuration files.
  *
  * Author: Anatdx
  */

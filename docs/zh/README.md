@@ -21,14 +21,14 @@
 ## 特性
 
 1. 基于内核的 `su` 与 root 权限管理
-2. 内置 Kasumi 混合挂载模块后端，替代旧的 HymoFS 路径
-   > **说明：** YukiSU 已不再支持 SUSFS。部分外部内核包名称仍可能包含 SUSFS，但 YukiSU 自身使用 Kasumi。
+2. 支持外部 MetaModule 生命周期与脚本集成，由用户自行选择模块挂载后端
+   > **说明：** YukiSU 不再内置 SUSFS 或任何挂载后端。需要挂载系统模块时，请安装兼容的外部 MetaModule。
 3. [App Profile](https://kernelsu.org/zh_CN/guide/app-profile.html) 与按应用控制的非 root 配置
 4. 动态管理器支持，可配置除内置包名/签名路径之外的受信任管理器
 5. APatch 风格的 SuperKey 认证，支持编译期密钥，也支持由 `ksud` 写入 LKM
 6. ADB root、sulog、SELinux hide、模块 `init.rc` 注入，以及同步到当前 C++ `ksud` 栈的 KernelSU 用户空间行为
 7. 基于 TSR 的 sucompat/syscall hook 基础设施，支持 arm64 LKM
-8. 管理器更新：Kasumi 配置、超级用户列表滑动操作、日志查看、软重启与 WebUI 修复
+8. 管理器更新：超级用户列表滑动操作、日志查看、软重启与 WebUI 修复
 
 ## 兼容状态
 
@@ -66,7 +66,7 @@
 ## 鸣谢
 
 - [KernelSU](https://github.com/tiann/KernelSU)：上游
-- Kasumi：内置混合挂载后端
+- 模块挂载：由用户安装的外部 MetaModule 提供
 - [MKSU](https://github.com/5ec1cff/KernelSU)：Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU)：non-GKI 支持
 - [KernelPatch](https://github.com/bmax121/KernelPatch)：KernelPatch 为 APatch 内核模块实现的关键部分

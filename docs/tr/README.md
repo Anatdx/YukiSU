@@ -22,14 +22,14 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 ## Özellikler
 
 1. Çekirdek tabanlı `su` ve root erişim yönetimi
-2. Eski HymoFS yolunun yerine geçen yerleşik Kasumi hibrit bağlama modülü arka ucu
-   > **Not:** YukiSU artık SUSFS desteklemez. Harici çekirdek paketlerinde SUSFS adı geçebilir, ancak YukiSU Kasumi kullanır.
+2. Kullanıcının seçtiği modül bağlama arka uçları için harici MetaModule yaşam döngüsü ve betik entegrasyonu
+   > **Not:** YukiSU, SUSFS veya yerleşik bir bağlama arka ucu içermez. Sistem modüllerini bağlamak için uyumlu bir harici MetaModule yükleyin.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html) ve uygulama başına non-root profil denetimleri
 4. Yerleşik paket imzası yolunun dışındaki güvenilir yönetici uygulamaları için Dynamic Manager desteği
 5. APatch tarzı SuperKey kimlik doğrulaması; derleme zamanı anahtarı veya `ksud` tarafından LKM içine yazılan anahtar desteklenir
 6. ADB root, sulog, SELinux hide, modül `init.rc` ekleme ve güncel KernelSU userspace davranışları C++ `ksud` yığınına eşitlendi
 7. arm64 LKM desteği olan TSR tabanlı sucompat/syscall hook altyapısı
-8. Kasumi yapılandırması, SuperUser kaydırma eylemleri, günlük görüntüleme, soft reboot ve WebUI düzeltmeleri içeren yönetici güncellemeleri
+8. SuperUser kaydırma eylemleri, günlük görüntüleme, soft reboot ve WebUI düzeltmeleri içeren yönetici güncellemeleri
 
 ## Uyumluluk
 
@@ -68,7 +68,7 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 ## Katkıda Bulunanlar
 
 - [KernelSU](https://github.com/tiann/KernelSU): Üst akış
-- Kasumi: Yerleşik hibrit bağlama arka ucu
+- Modül bağlama: kullanıcı tarafından yüklenen harici MetaModule tarafından sağlanır
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): non-GKI desteği
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch, APatch çekirdek modülü uygulamasının önemli bir parçasıdır

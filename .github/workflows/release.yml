@@ -106,7 +106,5 @@ jobs:
             Manager/*.apk.asc
             android*-lkm/*_kernelsu.ko
             android*-lkm/*_kernelsu.ko.sig
-            *-kasumi-lkm/*.ko
-            *-kasumi-lkm/*.asc
             ksud/ksud-*
             ksud/*.sig

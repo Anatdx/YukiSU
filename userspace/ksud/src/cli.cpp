@@ -9,7 +9,6 @@
 #include "defs.hpp"
 #include "dynamic_manager.hpp"
 #include "flash/flash_partition.hpp"
-#include "hymo/hymo_cli.hpp"
 #include "init_event.hpp"
 #include "late_load.hpp"
 #include "log.hpp"
@@ -164,7 +163,6 @@ void print_usage() {
     printf("  umount         Manage umount paths\n");
     printf("  kernel         Kernel interface\n");
     printf("  debug          For developers\n");
-    printf("  hymo           Kasumi module manager\n");
     printf("  help           Show this help\n");
     printf("  version        Show version\n");
 }
@@ -966,8 +964,6 @@ int cli_run(int argc, char** argv) {
         return cmd_kernel(args);
     } else if (cmd == "debug") {
         return cmd_debug(args);
-    } else if (cmd == "hymo") {
-        return hymo::cmd_hymo(args);
     } else if (cmd == "flash") {
         return cmd_flash_new(args);
     }

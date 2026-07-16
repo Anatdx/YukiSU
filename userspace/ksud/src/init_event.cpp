@@ -18,18 +18,11 @@
 #include "utils.hpp"
 #include "yukizygisk_snapshot.hpp"
 
-// Kasumi integration
-#include "hymo/conf/config.hpp"
-#include "hymo/core/lkm.hpp"
-#include "hymo/defs.hpp"
-#include "hymo/hymo_cli.hpp"
-
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <array>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -38,40 +31,6 @@
 namespace ksud {
 
 namespace {
-
-// Built-in Kasumi: mount at metamount stage only.
-void try_kasumi_metamount_mount() {
-    using hymo::Config;
-
-    // Config::load_default() and hymo::run_hymo_main() both catch their own
-    // exceptions internally, so no outer try-catch is needed.
-    if (access("/data/adb/ksu/.disable_builtin_mount", F_OK) == 0) {
-        LOGI("Kasumi metamount: built-in mount disabled by .disable_builtin_mount, skip");
-        return;
-    }
-    if (ksud::get_metamodule_id() == "hymo") {
-        LOGI("Kasumi metamount: metamodule is hymo, skip (already mounted via metamount.sh)");
-        return;
-    }
-
-    const Config config = Config::load_default();
-
-    if (!config.kasumi_enabled) {
-        LOGI("Kasumi metamount: kasumi_enabled=false, skip");
-        return;
-    }
-
-    // Built-in hymo uses ksud log, no separate daemon.log
-    std::array<char*, 2> argv = {const_cast<char*>("hymod"), const_cast<char*>("mount")};
-
-    LOGI("Kasumi metamount: invoking hymod mount");
-    const int ret = hymo::run_hymo_main(2, argv.data());
-    if (ret != 0) {
-        LOGW("Kasumi metamount mount failed, ret=%d", ret);
-    } else {
-        LOGI("Kasumi metamount mount succeeded");
-    }
-}
 
 // Catch boot logs (logcat/dmesg) to file
 void catch_bootlog(const char* logname, const std::vector<const char*>& command) {
@@ -360,9 +319,6 @@ int on_post_data_fs() {
     ensure_sulogd_running_if_enabled();
     ensure_zygiskd_running_if_enabled();
 
-    // Kasumi LKM: extract embedded .ko, load via finit_module, cleanup (no shell)
-    hymo::lkm_autoload_post_fs_data();
-
     // KernelSU execution order (https://kernelsu.org/guide/metamodule.html):
     // 1. Common post-fs-data.d, prune, restorecon, sepolicy
     // 2. Metamodule's post-fs-data.sh
@@ -375,13 +331,8 @@ int on_post_data_fs() {
     exec_stage_script("post-fs-data", true);
     load_system_prop();
 
-    // Metamodule metamount runs AFTER all post-fs-data (modules may load LKM in post-fs-data).
-    // When no external metamodule, this runs built-in hymo mount.
+    // Metamodule metamount runs AFTER all post-fs-data.
     metamodule_exec_mount_script();
-
-    // When external metamodule exists, run hymod after metamodule metamount;
-    // metamodule may not invoke hymo's metamount.sh. Mount only at metamount.
-    try_kasumi_metamount_mount();
 
     umount_apply_config();
 

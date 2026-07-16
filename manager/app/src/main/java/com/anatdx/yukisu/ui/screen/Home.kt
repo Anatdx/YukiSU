@@ -38,7 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.KasumiConfigScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.YukiZygiskScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.KernelVersion
@@ -62,8 +61,6 @@ import com.anatdx.yukisu.ui.component.rememberSuperKeyDialog
 import com.anatdx.yukisu.ui.component.SuperKeyAuthResult
 import com.anatdx.yukisu.ui.util.KsuCli
 import com.anatdx.yukisu.ui.activity.util.AppData
-import com.anatdx.yukisu.ui.kasumi.util.KasumiManager
-import com.anatdx.yukisu.ui.kasumi.util.KasumiManager.KasumiStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -159,11 +156,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         }
                     }
                 }
-                val kasumiStatus by produceState(initialValue = KasumiStatus.NOT_PRESENT) {
-                    value = KasumiManager.getStatus()
-                }
-                var showKernelSpoofDialog by remember { mutableStateOf(false) }
-                
                 val superKeyPrefs = context.getSharedPreferences("superkey", Context.MODE_PRIVATE)
                 
                 SuperKeyDialog(
@@ -330,8 +322,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                         isHideZygiskImplement = viewModel.isHideZygiskImplement,
                         isHideMetaModuleImplement = viewModel.isHideMetaModuleImplement,
                         isHideSeccompStatus = viewModel.isHideSeccompStatus,
-                        kasumiAvailable = kasumiStatus == KasumiStatus.AVAILABLE,
-                        onKernelClick = { showKernelSpoofDialog = true },
                         onYukiZygiskClick = { navigator.navigate(YukiZygiskScreenDestination) },
                     )
 
@@ -339,15 +329,6 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     if (!viewModel.isSimpleMode && !viewModel.isHideLinkCard) {
                         ContributionCard()
                         DonateCard()
-                    }
-
-                    if (showKernelSpoofDialog) {
-                        KernelSpoofDialog(
-                            onDismiss = { showKernelSpoofDialog = false },
-                            onSaved = {
-                                viewModel.refreshData(context, forceRefresh = true)
-                            }
-                        )
                     }
                 }
 
@@ -452,16 +433,6 @@ private fun TopBar(
         ),
         actions = {
             if (isDataLoaded) {
-                // Kasumi 配置按钮
-                IconButton(onClick = {
-                    navigator.navigate(KasumiConfigScreenDestination)
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Tune,
-                        contentDescription = stringResource(R.string.kasumi_title)
-                    )
-                }
-
                 // 重启按钮
                 var showDropdown by remember { mutableStateOf(false) }
                 KsuIsValid {
@@ -881,8 +852,6 @@ private fun InfoCard(
     isHideZygiskImplement: Boolean,
     isHideMetaModuleImplement: Boolean,
     isHideSeccompStatus: Boolean = false,
-    kasumiAvailable: Boolean = false,
-    onKernelClick: () -> Unit = {},
     onYukiZygiskClick: () -> Unit = {},
 ) {
     var showKsudDialog by remember { mutableStateOf(false) }
@@ -967,7 +936,6 @@ private fun InfoCard(
                 stringResource(R.string.home_kernel),
                 systemInfo.kernelRelease,
                 icon = Icons.Default.Memory,
-                onClick = if (kasumiAvailable) onKernelClick else null,
             )
 
             if (!isSimpleMode) {
@@ -1164,180 +1132,6 @@ private fun KsudVersionDialog(
                         stringResource(id = R.string.home_ksud_daemon_syncing)
                     else
                         stringResource(id = R.string.home_ksud_daemon_sync)
-                )
-            }
-        }
-    )
-}
-
-@Composable
-private fun KernelSpoofDialog(
-    onDismiss: () -> Unit,
-    onSaved: () -> Unit = {},
-) {
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    var unameRelease by remember { mutableStateOf("") }
-    var unameVersion by remember { mutableStateOf("") }
-    var unameMode by remember { mutableStateOf("scoped") }
-    var loading by remember { mutableStateOf(true) }
-    var saving by remember { mutableStateOf(false) }
-    var restoring by remember { mutableStateOf(false) }
-    var loadFromSysfsTrigger by remember { mutableStateOf(0) }
-
-    LaunchedEffect(Unit) {
-        loading = true
-        val config = KasumiManager.loadConfig()
-        unameRelease = config.unameRelease
-        unameVersion = config.unameVersion
-        unameMode = config.unameMode.ifBlank { "scoped" }
-        loading = false
-    }
-
-    LaunchedEffect(loadFromSysfsTrigger) {
-        if (loadFromSysfsTrigger > 0) {
-            val (r, v) = KasumiManager.readKernelUnameFromSysfs()
-            unameRelease = r
-            unameVersion = v
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text(stringResource(R.string.kasumi_uname_title)) },
-        text = {
-            if (loading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = unameRelease,
-                        onValueChange = { unameRelease = it },
-                        label = { Text(stringResource(R.string.kasumi_uname_release)) },
-                        supportingText = { Text(stringResource(R.string.kasumi_uname_release_desc)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = unameVersion,
-                        onValueChange = { unameVersion = it },
-                        label = { Text(stringResource(R.string.kasumi_uname_version)) },
-                        supportingText = { Text(stringResource(R.string.kasumi_uname_version_desc)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    FilledTonalButton(
-                        onClick = { loadFromSysfsTrigger++ },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.kasumi_uname_use_current))
-                    }
-
-                    Text(
-                        text = stringResource(R.string.kasumi_uname_mode),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = unameMode == "scoped",
-                            onClick = { unameMode = "scoped" },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        ) { Text(stringResource(R.string.kasumi_uname_mode_scoped)) }
-                        SegmentedButton(
-                            selected = unameMode == "global",
-                            onClick = { unameMode = "global" },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        ) { Text(stringResource(R.string.kasumi_uname_mode_global)) }
-                    }
-                    Text(
-                        text = stringResource(
-                            if (unameMode == "global") R.string.kasumi_uname_mode_global_desc
-                            else R.string.kasumi_uname_mode_scoped_desc
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    if (unameMode == "global") {
-                        OutlinedButton(
-                            onClick = {
-                                if (restoring || saving) return@OutlinedButton
-                                restoring = true
-                                scope.launch {
-                                    val ok = KasumiManager.restoreUnameGlobal()
-                                    restoring = false
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        context.getString(
-                                            if (ok) R.string.kasumi_uname_restored
-                                            else R.string.kasumi_uname_restore_failed
-                                        ),
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            },
-                            enabled = !saving && !restoring,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.kasumi_uname_restore))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (!saving) onDismiss() }) {
-                Text(stringResource(R.string.close))
-            }
-        },
-        dismissButton = {
-            TextButton(
-                enabled = !loading && !saving,
-                onClick = {
-                    if (loading || saving) return@TextButton
-                    saving = true
-                    scope.launch {
-                        val config = KasumiManager.loadConfig()
-                        val updated = config.copy(
-                            unameRelease = unameRelease.trim(),
-                            unameVersion = unameVersion.trim(),
-                            unameMode = unameMode,
-                        )
-                        val ok = KasumiManager.saveConfig(updated)
-                        if (ok && unameRelease.isNotBlank() && unameVersion.isNotBlank()) {
-                            KasumiManager.setUname(
-                                unameRelease.trim(),
-                                unameVersion.trim(),
-                                unameMode,
-                            )
-                        }
-                        saving = false
-                        if (ok) {
-                            onSaved()
-                            onDismiss()
-                        } else {
-                            android.widget.Toast.makeText(
-                                context,
-                                context.getString(R.string.kasumi_toast_settings_failed),
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                }
-            ) {
-                Text(
-                    text = if (saving) stringResource(R.string.kasumi_saving) else stringResource(R.string.app_profile_template_save)
                 )
             }
         }

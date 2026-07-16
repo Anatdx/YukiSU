@@ -167,10 +167,6 @@ fun InstallScreen(
     var allowShell by remember { mutableStateOf(false) }
     var enableAdb by remember { mutableStateOf(false) }
     var forceBackup by remember { mutableStateOf(false) }
-    // Experimental: embed Kasumi LKM in cpio (init_boot)
-    var kasumiInCpio by remember { mutableStateOf(false) }
-    var kasumiLkmUri by remember { mutableStateOf<Uri?>(null) }
-
     val onInstall = {
         installMethod?.let { method ->
             val isOta = method is InstallMethod.DirectInstallToInactiveSlot
@@ -184,9 +180,7 @@ fun InstallScreen(
                 enableAdb = enableAdb,
                 backup = method is InstallMethod.SelectFile && forceBackup,
                 superKey = effectiveSuperKey.ifBlank { null },
-                signatureBypass = signatureBypass,
-                kasumiInCpio = kasumiInCpio,
-                kasumiLkmUri = kasumiLkmUri
+                signatureBypass = signatureBypass
             )
             navigator.navigate(FlashScreenDestination(flashIt))
         }
@@ -234,31 +228,6 @@ fun InstallScreen(
 
     val onLkmUpload = {
         selectLkmLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = "application/octet-stream"
-        })
-    }
-
-    val selectKasumiLkmLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (it.resultCode == Activity.RESULT_OK) {
-            it.data?.data?.let { uri ->
-                if (isKoFile(context, uri)) {
-                    kasumiLkmUri = uri
-                } else {
-                    kasumiLkmUri = null
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.install_only_support_ko_file),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
-    }
-
-    val onKasumiLkmUpload = {
-        selectKasumiLkmLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "application/octet-stream"
         })
     }
@@ -722,88 +691,6 @@ fun InstallScreen(
                     )
                 }
 
-                // Experimental: embed Kasumi in init_boot
-                AnimatedVisibility(
-                    visible = installMethod != null,
-                    enter = fadeIn() + expandVertically(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    Column(modifier = Modifier.padding(top = 12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(id = R.string.kasumi_in_cpio_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = stringResource(id = R.string.kasumi_in_cpio_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = kasumiInCpio,
-                                onCheckedChange = { kasumiInCpio = it }
-                            )
-                        }
-                        // Custom Kasumi LKM selection (when kasumi in cpio is enabled)
-                        AnimatedVisibility(
-                            visible = kasumiInCpio,
-                            enter = fadeIn() + expandVertically(),
-                            exit = shrinkVertically() + fadeOut()
-                        ) {
-                            ElevatedCard(
-                                colors = getCardColors(MaterialTheme.colorScheme.surfaceVariant),
-                                elevation = getCardElevation(),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 12.dp)
-                            ) {
-                                ListItem(
-                                    headlineContent = {
-                                        Text(stringResource(id = R.string.kasumi_custom_lkm_title))
-                                    },
-                                    supportingContent = {
-                                        kasumiLkmUri?.let { uri ->
-                                            Text(
-                                                stringResource(
-                                                    id = R.string.selected_lkm,
-                                                    uri.lastPathSegment?.substringAfterLast('/') ?: "(file)"
-                                                )
-                                            )
-                                        } ?: Text(stringResource(id = R.string.kasumi_custom_lkm_desc))
-                                    },
-                                    leadingContent = {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.Input,
-                                            contentDescription = null
-                                        )
-                                    },
-                                    trailingContent = {
-                                        if (kasumiLkmUri != null) {
-                                            IconButton(
-                                                onClick = { kasumiLkmUri = null }
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = stringResource(R.string.kasumi_use_embedded)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onKasumiLkmUpload() }
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }

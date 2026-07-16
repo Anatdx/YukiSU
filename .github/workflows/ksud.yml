@@ -44,21 +44,6 @@ jobs:
         set -euo pipefail
         mkdir -p ./userspace/ksud/assets
         cp android*-lkm/*_kernelsu.ko ./userspace/ksud/assets/ 2>/dev/null || true
-        arch_suffix="_arm64"
-        mapfile -t kasumi_assets < <(find . -type f -name "android*${arch_suffix}_kasumi_lkm.ko" | sort)
-        if [ "${#kasumi_assets[@]}" -gt 0 ]; then
-          cp "${kasumi_assets[@]}" ./userspace/ksud/assets/
-        fi
-        echo "Kasumi assets copied into ksud/assets:"
-        find ./userspace/ksud/assets -maxdepth 1 -type f -name "*${arch_suffix}_kasumi_lkm.ko" -print \
-          | sed 's|^.*/||' | sort || true
-        if [ "$arch_suffix" = "_arm64" ] && ! find ./userspace/ksud/assets -maxdepth 1 -type f \
-          -name "android*${arch_suffix}_kasumi_lkm.ko" | grep -q .; then
-          echo "::error::No KMI-tagged Kasumi assets were copied for ${arch_suffix}"
-          echo "Downloaded Kasumi-related files:"
-          find . -type f -name "*kasumi_lkm.ko" -print | sort || true
-          exit 1
-        fi
     
     - name: Prepare ksuinit
       if: ${{ inputs.pack_ksuinit }}
@@ -159,8 +144,6 @@ jobs:
         # Show binary info
         ls -lh ksud
         file ksud
-        echo "Embedded Kasumi assets:"
-        strings ksud | grep -F '_kasumi_lkm.ko' | sort -u || true
         if [ "${{ inputs.pack_yukizygisk }}" = "true" ]; then
           echo "Embedded YukiZygisk payload assets:"
           for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
@@ -171,11 +154,6 @@ jobs:
             echo "  $asset"
           done
         fi
-        if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_kasumi_lkm\.ko$'; then
-          echo "::error::Expected KMI-tagged embedded Kasumi assets were not found in ksud"
-          exit 1
-        fi
-
     - name: Import GPG key
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}

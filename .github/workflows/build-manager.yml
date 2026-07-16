@@ -3,13 +3,11 @@ name: Build Manager
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "dev", "feat/kasumi*", "feat/yukizygisk" ]
+    branches: [ "main", "dev", "feat/yukizygisk" ]
     paths:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
       - '.github/workflows/ddk-lkm.yml'
-      - '.github/workflows/build-kasumi-lkm.yml'
-      - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/su.yml'
@@ -24,8 +22,6 @@ on:
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
       - '.github/workflows/ddk-lkm.yml'
-      - '.github/workflows/build-kasumi-lkm.yml'
-      - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/ksud.yml'
       - '.github/workflows/ksuinit.yml'
       - '.github/workflows/su.yml'
@@ -74,9 +70,6 @@ jobs:
       yukizygisk: true
       yukizygisk_parts: probe,nl,orch,ctl
 
-  build-kasumi-lkm:
-    uses: ./.github/workflows/build-kasumi-lkm.yml
-
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
     secrets: inherit
@@ -95,7 +88,7 @@ jobs:
       target: aarch64-linux-android
 
   build-ksud:
-    needs: [build-lkm, build-kasumi-lkm, build-ksuinit, build-su, build-yukizygisk]
+    needs: [build-lkm, build-ksuinit, build-su, build-yukizygisk]
     uses: ./.github/workflows/ksud.yml
     secrets: inherit
     with:

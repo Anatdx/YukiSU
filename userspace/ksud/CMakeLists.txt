@@ -289,25 +289,6 @@ set(KSUD_OUR_SOURCES
     src/magica/magica.cpp
     src/core/hide_bootloader.cpp
     src/flash/flash_partition.cpp
-    src/hymo/hymo_cli.cpp
-    src/hymo/hymo_main.cpp
-    src/hymo/utils.cpp
-    src/hymo/conf/config.cpp
-    src/hymo/core/executor.cpp
-    src/hymo/core/inventory.cpp
-    src/hymo/core/lkm.cpp
-    src/hymo/core/modules.cpp
-    src/hymo/core/planner.cpp
-    src/hymo/core/state.cpp
-    src/hymo/core/storage.cpp
-    src/hymo/core/sync.cpp
-    src/hymo/core/user_rules.cpp
-    src/hymo/core/webui.cpp
-    src/hymo/mount/kasumi.cpp
-    src/hymo/mount/magic.cpp
-    src/hymo/mount/overlay.cpp
-    src/hymo/mount/mount_utils.cpp
-    src/hymo/mount/partition_utils.cpp
     ${ASSETS_CPP}
 )
 
@@ -337,7 +318,6 @@ endif()
 # Include directories (for both object libs and ksud)
 set(KSUD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/hymo
     ${mbedtls_SOURCE_DIR}/include
     ${miniz_SOURCE_DIR}
     ${miniz_BINARY_DIR}

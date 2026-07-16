@@ -95,7 +95,6 @@ import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.*
 import com.anatdx.yukisu.ui.theme.getCardColors
 import com.anatdx.yukisu.ui.theme.getCardElevation
-import com.anatdx.yukisu.ui.kasumi.util.KasumiManager
 import com.anatdx.yukisu.ui.util.*
 import com.anatdx.yukisu.ui.util.module.ModuleModify
 import com.anatdx.yukisu.ui.util.module.ModuleUtils
@@ -159,11 +158,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
     var selectedShortcutType by rememberSaveable { mutableStateOf<ShortcutType?>(null) }
     var showShortcutDialog by remember { mutableStateOf(false) }
     var showShortcutTypeDialog by remember { mutableStateOf(false) }
-    var hymoModuleIds by remember { mutableStateOf(emptySet<String>()) }
-    var hymoBuiltinMountEnabled by remember { mutableStateOf(true) }
-    var hymoModules by remember { mutableStateOf(emptyMap<String, KasumiManager.ModuleInfo>()) }
-    var hymoMountDialogModule by remember { mutableStateOf<Pair<String, String>?>(null) }
-
     val selectZipLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
@@ -333,21 +327,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            try {
-                val modules = KasumiManager.getModules()
-                hymoModules = modules.associateBy { it.id }
-                hymoModuleIds = hymoModules.keys.toSet()
-                hymoBuiltinMountEnabled = KasumiManager.isBuiltinMountEnabled()
-            } catch (_: Exception) {
-                hymoModules = emptyMap()
-                hymoModuleIds = emptySet()
-                hymoBuiltinMountEnabled = true
-            }
-        }
-    }
-
     // Both checks were re-running on every recomposition; cache them.
     // hasMagisk() shells out, so push it to IO via produceState.
     val isSafeMode = remember { Natives.isSafeMode }
@@ -468,26 +447,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                     navigator = navigator,
                     viewModel = viewModel,
                     listState = listState,
-                    hymoModuleIds = hymoModuleIds,
-                    hymoBuiltinMountEnabled = hymoBuiltinMountEnabled,
-                    hymoModules = hymoModules,
-                    onShowHymoMountDialog = { id, name -> hymoMountDialogModule = Pair(id, name) },
-                    onRefreshHymoModules = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                try {
-                                    val modules = KasumiManager.getModules()
-                                    hymoModules = modules.associateBy { it.id }
-                                    hymoModuleIds = hymoModules.keys.toSet()
-                                    hymoBuiltinMountEnabled = KasumiManager.isBuiltinMountEnabled()
-                                } catch (_: Exception) {
-                                    hymoModules = emptyMap()
-                                    hymoModuleIds = emptySet()
-                                    hymoBuiltinMountEnabled = true
-                                }
-                            }
-                        }
-                    },
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     boxModifier = Modifier.padding(innerPadding),
                     onInstallModule = {
@@ -591,27 +550,6 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                 )
             }
         }
-
-    hymoMountDialogModule?.let { (moduleId, moduleName) ->
-        HymoMountConfigDialog(
-            moduleId = moduleId,
-            moduleName = moduleName,
-            initialInfo = hymoModules[moduleId],
-            onDismiss = { hymoMountDialogModule = null },
-            onSaved = {
-                hymoMountDialogModule = null
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val modules = KasumiManager.getModules()
-                            hymoModules = modules.associateBy { it.id }
-                            hymoModuleIds = hymoModules.keys.toSet()
-                        } catch (_: Exception) { }
-                    }
-                }
-            }
-        )
-    }
 
     // 快捷方式类型选择对话框
     if (showShortcutTypeDialog) {
@@ -964,11 +902,6 @@ private fun ModuleList(
     navigator: DestinationsNavigator,
     viewModel: ModuleViewModel,
     listState: LazyListState,
-    hymoModuleIds: Set<String> = emptySet(),
-    hymoBuiltinMountEnabled: Boolean = true,
-    hymoModules: Map<String, KasumiManager.ModuleInfo> = emptyMap(),
-    onShowHymoMountDialog: (moduleId: String, moduleName: String) -> Unit = { _, _ -> },
-    onRefreshHymoModules: () -> Unit = {},
     modifier: Modifier = Modifier,
     boxModifier: Modifier = Modifier,
     onInstallModule: (Uri) -> Unit,
@@ -1135,7 +1068,6 @@ private fun ModuleList(
         modifier = boxModifier,
         onRefresh = {
             viewModel.fetchModuleList()
-            onRefreshHymoModules()
         },
         isRefreshing = viewModel.isRefreshing
     ) {
@@ -1197,9 +1129,6 @@ private fun ModuleList(
                             navigator = navigator,
                             module = module,
                             updateUrl = updatedModule.first,
-                            hasHymoMountConfig = hymoBuiltinMountEnabled && hymoModules[module.dirId] != null,
-                            hymoModuleInfo = hymoModules[module.dirId],
-                            onShowHymoMountDialog = onShowHymoMountDialog,
                             onUninstallClicked = {
                                 scope.launch { onModuleUninstallClicked(module) }
                             },
@@ -1258,251 +1187,11 @@ private fun ModuleList(
 
 }
 
-private val HYMO_MOUNT_MODES = listOf("auto", "kasumi", "overlay", "magic", "none")
-
-private val HYMO_MODE_COLORS = mapOf(
-    "auto" to Color(0xFF1976D2),
-    "kasumi" to Color(0xFF388E3C),
-    "overlay" to Color(0xFFF57C00),
-    "magic" to Color(0xFF7B1FA2),
-    "none" to Color(0xFF616161)
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HymoMountConfigDialog(
-    moduleId: String,
-    moduleName: String,
-    initialInfo: KasumiManager.ModuleInfo?,
-    onDismiss: () -> Unit,
-    onSaved: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackbarHost = LocalSnackbarHost.current
-
-    var selectedMode by remember(moduleId) {
-        mutableStateOf(initialInfo?.mode ?: "auto")
-    }
-    var rules by remember(moduleId) {
-        mutableStateOf(initialInfo?.rules ?: emptyList<KasumiManager.ModuleRule>())
-    }
-    var newPath by remember { mutableStateOf("") }
-    var newMode by remember { mutableStateOf("auto") }
-    var modeExpanded by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
-    var rulesExpanded by remember { mutableStateOf(false) }
-
-    val modeLabels = mapOf(
-        "auto" to stringResource(R.string.kasumi_mount_mode_auto),
-        "kasumi" to stringResource(R.string.kasumi_mount_mode_kasumi),
-        "overlay" to stringResource(R.string.kasumi_mount_mode_overlay),
-        "magic" to stringResource(R.string.kasumi_mount_mode_magic),
-        "none" to stringResource(R.string.kasumi_mount_mode_none)
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text(stringResource(R.string.kasumi_mount_config))
-                Text(
-                    text = moduleName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.kasumi_mount_mode),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HYMO_MOUNT_MODES.forEach { mode ->
-                        FilterChip(
-                            selected = selectedMode == mode,
-                            onClick = { selectedMode = mode },
-                            label = { Text(modeLabels[mode] ?: mode) },
-                            leadingIcon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .background(
-                                            HYMO_MODE_COLORS[mode] ?: MaterialTheme.colorScheme.primary,
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                )
-                            }
-                        )
-                    }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { rulesExpanded = !rulesExpanded }
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.kasumi_module_rules_title),
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Icon(
-                        imageVector = if (rulesExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                        contentDescription = null
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(
-                            animationSpec = tween(280, easing = FastOutSlowInEasing)
-                        )
-                ) {
-                    if (rulesExpanded) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                        rules.forEach { rule: KasumiManager.ModuleRule ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${rule.path} → ${rule.mode}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                IconButton(
-                                    onClick = { rules = rules.filter { r -> r != rule } }
-                                ) {
-                                    Icon(Icons.Outlined.Delete, contentDescription = null)
-                                }
-                            }
-                        }
-                        OutlinedTextField(
-                            value = newPath,
-                            onValueChange = { newPath = it },
-                            placeholder = { Text(stringResource(R.string.kasumi_module_rules_placeholder)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box {
-                                FilledTonalButton(
-                                    onClick = { modeExpanded = true },
-                                    shape = RoundedCornerShape(20.dp)
-                                ) {
-                                    Text(modeLabels[newMode] ?: newMode)
-                                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
-                                }
-                                DropdownMenu(
-                                    expanded = modeExpanded,
-                                    onDismissRequest = { modeExpanded = false }
-                                ) {
-                                    HYMO_MOUNT_MODES.forEach { mode ->
-                                        DropdownMenuItem(
-                                            text = { Text(modeLabels[mode] ?: mode) },
-                                            onClick = {
-                                                newMode = mode
-                                                modeExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                            FilledTonalButton(
-                                onClick = {
-                                    if (newPath.isNotBlank()) {
-                                        rules = rules + KasumiManager.ModuleRule(newPath.trim(), newMode)
-                                        newPath = ""
-                                    }
-                                },
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Text(stringResource(R.string.kasumi_module_rules_add))
-                            }
-                        }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    scope.launch {
-                        isSaving = true
-                        val rulesToSave = rules
-                        try {
-                            val modeOk = KasumiManager.setModuleMode(moduleId, selectedMode)
-                            if (!modeOk) {
-                                snackbarHost.showSnackbar(context.getString(R.string.kasumi_module_rules_add_failed))
-                                return@launch
-                            }
-                            val oldRules = initialInfo?.rules ?: emptyList<KasumiManager.ModuleRule>()
-                            for (r in oldRules) {
-                                if (!rulesToSave.contains(r)) {
-                                    KasumiManager.removeModuleRule(moduleId, r.path)
-                                }
-                            }
-                            for (r in rulesToSave) {
-                                if (!oldRules.contains(r)) {
-                                    KasumiManager.addModuleRule(moduleId, r.path, r.mode)
-                                }
-                            }
-                            onSaved()
-                        } catch (e: Exception) {
-                            snackbarHost.showSnackbar(e.message ?: "Error")
-                        } finally {
-                            isSaving = false
-                        }
-                    }
-                },
-                enabled = !isSaving
-            ) {
-                Text(stringResource(android.R.string.ok))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
-            }
-        }
-    )
-}
-
 @Composable
 fun ModuleItem(
     navigator: DestinationsNavigator,
     module: ModuleViewModel.ModuleInfo,
     updateUrl: String,
-    hasHymoMountConfig: Boolean = false,
-    hymoModuleInfo: KasumiManager.ModuleInfo? = null,
-    onShowHymoMountDialog: (moduleId: String, moduleName: String) -> Unit = { _, _ -> },
     onUninstallClicked: (ModuleViewModel.ModuleInfo) -> Unit,
     onCheckChanged: suspend (Boolean) -> Boolean,
     onUpdate: (ModuleViewModel.ModuleInfo) -> Unit,
@@ -1774,37 +1463,6 @@ fun ModuleItem(
                             maxLines = 1
                         )
                     }
-                    if (hasHymoMountConfig) {
-                        val mode = hymoModuleInfo?.mode
-                        val strategy = hymoModuleInfo?.strategy
-                        val (displayStrategy, strategyLabel) = if (mode == "none") {
-                            "none" to stringResource(R.string.kasumi_strategy_not_mounted)
-                        } else {
-                            val s = strategy?.takeIf { it in listOf("kasumi", "overlay", "magic") } ?: "overlay"
-                            val label = when (s) {
-                                "kasumi" -> stringResource(R.string.kasumi_mount_mode_kasumi)
-                                "overlay" -> stringResource(R.string.kasumi_mount_mode_overlay)
-                                "magic" -> stringResource(R.string.kasumi_strategy_magic_mount)
-                                else -> s
-                            }
-                            s to label
-                        }
-                        val strategyColor = HYMO_MODE_COLORS[displayStrategy] ?: MaterialTheme.colorScheme.primary
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = strategyColor,
-                            modifier = Modifier
-                        ) {
-                            Text(
-                                text = strategyLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
                 }
             }
 
@@ -1818,20 +1476,6 @@ fun ModuleItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (hasHymoMountConfig) {
-                    FilledTonalButton(
-                        modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
-                        enabled = !module.remove && localEnabled,
-                        onClick = { onShowHymoMountDialog(module.dirId, module.name) },
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
-                    ) {
-                        Icon(
-                            modifier = Modifier.size(20.dp),
-                            imageVector = Icons.Outlined.Folder,
-                            contentDescription = stringResource(R.string.kasumi_mount_config)
-                        )
-                    }
-                }
                 if (module.hasActionScript) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
@@ -1947,7 +1591,6 @@ fun ModuleItemPreview() {
         navigator = EmptyDestinationsNavigator,
         module = module,
         updateUrl = "",
-        hasHymoMountConfig = false,
         onUninstallClicked = {},
         onCheckChanged = { true },
         onUpdate = {},

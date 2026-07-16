@@ -189,14 +189,6 @@ bool init() {
         if (!load_module("/kernelsu.ko")) {
             KLOGE("Cannot load kernelsu.ko");
         }
-
-        // Experimental: load Kasumi LKM if present in cpio (must be after kernelsu.ko)
-        if (access("/kasumi.ko", F_OK) == 0) {
-            KLOGI("Loading kasumi.ko..");
-            if (!load_module("/kasumi.ko")) {
-                KLOGW("Cannot load kasumi.ko (non-fatal)");
-            }
-        }
     }
     // /proc and /sys are unmounted here
 

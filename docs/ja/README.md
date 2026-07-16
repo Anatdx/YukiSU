@@ -22,14 +22,14 @@ Android デバイス向けのカーネルベース root ソリューション。
 ## 特徴
 
 1. カーネルベースの `su` と root アクセス管理
-2. 旧 HymoFS パスを置き換える、組み込み Kasumi ハイブリッドマウントモジュールバックエンド
-   > **Note:** YukiSU は SUSFS をサポートしなくなりました。外部カーネルパッケージ名に SUSFS が残る場合でも、YukiSU 本体は Kasumi を使用します。
+2. ユーザーが選択したモジュールマウントバックエンド向けの外部 MetaModule ライフサイクルとスクリプト統合
+   > **Note:** YukiSU は SUSFS や組み込みマウントバックエンドを同梱しません。システムモジュールのマウントが必要な場合は、互換性のある外部 MetaModule をインストールしてください。
 3. [App Profile](https://kernelsu.org/ja_JP/guide/app-profile.html) とアプリごとの non-root プロファイル制御
 4. 組み込みパッケージ署名以外の信頼済みマネージャーに対応する Dynamic Manager
 5. APatch 風の SuperKey 認証。コンパイル時キー、または `ksud` による LKM へのキー注入に対応
 6. ADB root、sulog、SELinux hide、モジュール `init.rc` 注入、現在の KernelSU userspace 挙動を C++ `ksud` スタックへ同期
 7. arm64 LKM をサポートする TSR ベースの sucompat/syscall hook 基盤
-8. Kasumi 設定、SuperUser スワイプ操作、ログビューア、ソフト再起動、WebUI 修正を含むマネージャー更新
+8. SuperUser スワイプ操作、ログビューア、ソフト再起動、WebUI 修正を含むマネージャー更新
 
 ## 互換性
 
@@ -68,7 +68,7 @@ Android デバイス向けのカーネルベース root ソリューション。
 ## クレジット
 
 - [KernelSU](https://github.com/tiann/KernelSU): 上流
-- Kasumi: 組み込みハイブリッドマウントバックエンド
+- モジュールマウント: ユーザーがインストールした外部 MetaModule が提供
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): non-GKI サポート
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch は APatch カーネルモジュール実装の重要な一部です

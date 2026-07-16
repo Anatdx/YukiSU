@@ -22,14 +22,14 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 ## Features
 
 1. Kernel-based `su` and root access management
-2. Built-in Kasumi hybrid mounting module backend, replacing the old HymoFS path
-   > **Note:** YukiSU no longer supports SUSFS. External kernel packages may still mention SUSFS, but YukiSU uses Kasumi.
+2. External MetaModule lifecycle and script integration for user-supplied module mounting backends
+   > **Note:** YukiSU does not bundle SUSFS or any built-in mounting backend. Install a compatible external MetaModule when system-module mounting is required.
 3. [App Profile](https://kernelsu.org/guide/app-profile.html) and per-app non-root profile controls
 4. Dynamic manager support for trusted manager apps beyond the built-in package signature path
 5. APatch-style SuperKey authentication, with compile-time keys or keys patched into the LKM by `ksud`
 6. ADB root, sulog, SELinux hide, module `init.rc` injection, and current KernelSU userspace behavior synced into the C++ `ksud` stack
 7. TSR-based sucompat/syscall hook infrastructure with arm64 LKM support
-8. Manager updates including Kasumi configuration, SuperUser swipe actions, log viewing, soft reboot, and WebUI fixes
+8. Manager updates including SuperUser swipe actions, log viewing, soft reboot, and WebUI fixes
 
 ## Compatibility Status
 
@@ -68,7 +68,7 @@ See [`guide/how-to-integrate.md`](guide/how-to-integrate.md)
 ## Credit
 
 - [KernelSU](https://github.com/tiann/KernelSU): upstream
-- Kasumi: built-in hybrid mounting backend
+- Module mounting: supplied by a user-installed external MetaModule
 - [MKSU](https://github.com/5ec1cff/KernelSU): Magic Mount
 - [RKSU](https://github.com/rsuntk/KernelsU): support non-GKI
 - [KernelPatch](https://github.com/bmax121/KernelPatch): KernelPatch is a key part of the APatch implementation of the kernel module
