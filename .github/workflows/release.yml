@@ -12,8 +12,6 @@ jobs:
   build-manager:
     uses: ./.github/workflows/build-manager.yml
     secrets: inherit
-    with:
-      full_archs: true
   release:
     needs:
       - build-manager
@@ -25,7 +23,7 @@ jobs:
       - name: Merge Manager APKs
         run: |
           mkdir -p Manager
-          for dir in Manager-arm64-v8a Manager-x86_64 Manager-armv7; do
+          for dir in Manager-arm64-v8a; do
             if [ -d "$dir" ]; then
               find "$dir" -name "*.apk" -exec cp {} Manager/ \;
               find "$dir" -name "*.sig" -exec cp {} Manager/ \;

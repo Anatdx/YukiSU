@@ -28,7 +28,7 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 4. Yerleşik paket imzası yolunun dışındaki güvenilir yönetici uygulamaları için Dynamic Manager desteği
 5. APatch tarzı SuperKey kimlik doğrulaması; derleme zamanı anahtarı veya `ksud` tarafından LKM içine yazılan anahtar desteklenir
 6. ADB root, sulog, SELinux hide, modül `init.rc` ekleme ve güncel KernelSU userspace davranışları C++ `ksud` yığınına eşitlendi
-7. arm64 ve x86_64 LKM desteği olan TSR tabanlı sucompat/syscall hook altyapısı
+7. arm64 LKM desteği olan TSR tabanlı sucompat/syscall hook altyapısı
 8. Kasumi yapılandırması, SuperUser kaydırma eylemleri, günlük görüntüleme, soft reboot ve WebUI düzeltmeleri içeren yönetici güncellemeleri
 
 ## Uyumluluk
@@ -37,7 +37,9 @@ Android cihazlar için çekirdek tabanlı root çözümü; [`SukiSU-Ultra`](http
 
 - YukiSU, Android GKI 2.0 cihazlarında (çekirdek 5.10+) LKM modunu resmen destekler. Eski ve non-GKI çekirdeklerde cihaza özel kaynak entegrasyonu gerekebilir.
 
-- Şu an yalnızca `arm64-v8a`, `armeabi-v7a (bare)` ve `X86_64` (bazıları) desteklenmektedir.
+- Dağıtılan tüm YukiSU bileşenleri yalnızca `arm64-v8a` hedefler. YukiZygisk,
+  gelecekteki `zygote32` uygulaması için ayrıca işlevsiz `armeabi-v7a` yer
+  tutucu DSO'ları ayırır; 32 bit enjeksiyon henüz desteklenmez.
 
 ## Kurulum
 

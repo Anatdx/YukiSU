@@ -20,15 +20,7 @@
 #define KSU_SULOG_MAX_FILENAME_LEN 256U
 
 struct user_arg_ptr {
-#ifdef CONFIG_COMPAT
-	bool is_compat;
-#endif // #ifdef CONFIG_COMPAT
-	union {
-		const char __user *const __user *native;
-#ifdef CONFIG_COMPAT
-		const compat_uptr_t __user *compat;
-#endif // #ifdef CONFIG_COMPAT
-	} ptr;
+	const char __user *const __user *native;
 };
 
 static struct ksu_event_queue sulog_queue;
@@ -61,19 +53,7 @@ static long ksu_sulog_copy_user_string(char *dst, const char __user *src,
 static struct user_arg_ptr
 ksu_sulog_user_argv(const char __user *const __user *argv_user)
 {
-	struct user_arg_ptr argv;
-
-#ifdef CONFIG_COMPAT
-	if (unlikely(in_compat_syscall())) {
-		argv.is_compat = true;
-		argv.ptr.compat = (const compat_uptr_t __user *)argv_user;
-		return argv;
-	}
-
-	argv.is_compat = false;
-#endif // #ifdef CONFIG_COMPAT
-	argv.ptr.native = argv_user;
-	return argv;
+	return (struct user_arg_ptr){.native = argv_user};
 }
 
 static const char __user *ksu_sulog_get_user_arg_ptr(struct user_arg_ptr argv,
@@ -81,18 +61,7 @@ static const char __user *ksu_sulog_get_user_arg_ptr(struct user_arg_ptr argv,
 {
 	const char __user *native;
 
-#ifdef CONFIG_COMPAT
-	if (unlikely(argv.is_compat)) {
-		compat_uptr_t compat;
-
-		if (get_user(compat, argv.ptr.compat + nr))
-			return ERR_PTR(-EFAULT);
-
-		return compat_ptr(compat);
-	}
-#endif // #ifdef CONFIG_COMPAT
-
-	if (get_user(native, argv.ptr.native + nr))
+	if (get_user(native, argv.native + nr))
 		return ERR_PTR(-EFAULT);
 
 	return native;
@@ -224,6 +193,12 @@ ksu_sulog_capture(__u16 event_type, const char __user *filename_user,
 
 	if (!ksu_sulog_is_enabled())
 		return NULL;
+
+#ifdef CONFIG_COMPAT
+	/* arm64-only: never decode a 32-bit process argument vector. */
+	if (unlikely(in_compat_syscall()))
+		return NULL;
+#endif // #ifdef CONFIG_COMPAT
 
 	pending = kzalloc(sizeof(*pending), gfp);
 	if (!pending)

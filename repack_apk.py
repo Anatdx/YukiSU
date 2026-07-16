@@ -12,9 +12,6 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ARCH_TO_TRIPLE = {
     "arm64-v8a": "aarch64-linux-android",
-    "armeabi-v7a": "armv7-linux-androideabi",
-    "x86": "i686-linux-android",
-    "x86_64": "x86_64-linux-android",
 }
 
 
@@ -29,6 +26,9 @@ def normalize_arch_values(values: Iterable[str]) -> List[str]:
         for part in str(item).split(","):
             arch = part.strip()
             if arch and arch not in seen:
+                if arch not in ARCH_TO_TRIPLE:
+                    supported = ", ".join(ARCH_TO_TRIPLE)
+                    raise ValueError(f"Unsupported ABI '{arch}'; supported ABI: {supported}")
                 seen.add(arch)
                 out.append(arch)
     return out
@@ -254,6 +254,15 @@ def do_repack(args: argparse.Namespace) -> int:
     if not arches:
         arches = collect_existing_arches(apk) or ["arm64-v8a"]
         print(f"[INFO] No arch configured, using: {', '.join(arches)}")
+
+    unsupported_arches = [arch for arch in arches if arch not in ARCH_TO_TRIPLE]
+    if unsupported_arches:
+        supported = ", ".join(ARCH_TO_TRIPLE)
+        raise RuntimeError(
+            "APK contains unsupported ABI(s): "
+            + ", ".join(unsupported_arches)
+            + f"; supported ABI: {supported}"
+        )
 
     ksud_by_arch = find_ksud_binaries_by_arch(ksud_build_type, arches)
     missing_ksud = [arch for arch in arches if arch not in ksud_by_arch]

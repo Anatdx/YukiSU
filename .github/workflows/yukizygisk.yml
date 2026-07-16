@@ -5,7 +5,7 @@ on:
       target:
         required: true
         type: string
-        description: "Target architecture: aarch64"
+        description: "Target architecture: aarch64 only"
       os:
         required: false
         type: string
@@ -44,7 +44,7 @@ jobs:
               echo "android_target=aarch64-linux-android26" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "YukiZygisk currently supports aarch64 only, got: ${{ inputs.target }}"
+              echo "YukiZygisk workflow supports aarch64 only, got: ${{ inputs.target }}"
               exit 1
               ;;
           esac

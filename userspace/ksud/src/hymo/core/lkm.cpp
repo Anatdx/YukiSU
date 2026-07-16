@@ -29,23 +29,9 @@ static void set_lkm_last_error(const std::string& msg) {
 }
 
 // finit_module and init_module syscall numbers
-#if defined(__aarch64__)
 #define SYS_init_module_num 105
 #define SYS_finit_module_num 379
 #define SYS_delete_module_num 106
-#elif defined(__x86_64__) || defined(__i386__)
-#define SYS_init_module_num 175
-#define SYS_finit_module_num 313
-#define SYS_delete_module_num 176
-#elif defined(__arm__)
-#define SYS_init_module_num 128
-#define SYS_finit_module_num 379
-#define SYS_delete_module_num 129
-#else
-#define SYS_init_module_num 105
-#define SYS_finit_module_num 379
-#define SYS_delete_module_num 106
-#endif  // #if defined(__aarch64__)
 
 static bool load_module_via_init(const char* ko_path, const char* params) {
     int fd = open(ko_path, O_RDONLY | O_CLOEXEC);
@@ -219,15 +205,7 @@ static std::string get_current_kmi() {
 }
 
 // Arch suffix for embedded kasumi .ko
-#if defined(__aarch64__)
 #define KASUMI_ARCH_SUFFIX "_arm64"
-#elif defined(__arm__)
-#define KASUMI_ARCH_SUFFIX "_armv7"
-#elif defined(__x86_64__)
-#define KASUMI_ARCH_SUFFIX "_x86_64"
-#else
-#define KASUMI_ARCH_SUFFIX "_arm64"
-#endif  // #if defined(__aarch64__)
 
 static bool copy_embedded_kasumi_asset(const std::string& kmi, const std::string& dest_path,
                                        std::string* used_asset = nullptr) {

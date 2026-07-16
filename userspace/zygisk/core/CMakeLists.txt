@@ -4,6 +4,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(zygisk_core VERSION 1.0.0 LANGUAGES C CXX ASM)
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    message(FATAL_ERROR "YukiZygisk supports Android targets only")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -12,6 +16,23 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
+if(CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
+    # zygote32 support is reserved, but has no implementation yet.  Build
+    # inert DSOs with the normal names so the armv7 artifact contract stays
+    # stable without accidentally shipping the arm64-only implementation.
+    message(STATUS "Building empty YukiZygisk armv7 placeholders")
+    foreach(target zygisk yukizncore yukilinker)
+        add_library(${target} SHARED src/armv7_placeholder.c)
+        set_target_properties(${target} PROPERTIES PREFIX "lib" OUTPUT_NAME ${target})
+        target_compile_options(${target} PRIVATE
+            -Os -ffunction-sections -fdata-sections -fvisibility=hidden
+            -fno-stack-protector)
+        target_link_options(${target} PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+    endforeach()
+elseif(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR
+        "YukiZygisk supports Android arm64-v8a and reserved armeabi-v7a only")
+else()
 # Vendored PLT-hook engine (LGPL-3.0). Static only -- we ship no extra .so.
 set(LSPLT_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(
@@ -127,6 +148,7 @@ target_compile_options(yukilinker PRIVATE
 target_compile_definitions(yukilinker PRIVATE YUKILINKER_BOOTSTRAP=1)
 target_link_libraries(yukilinker PRIVATE dl)
 target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+endif()
 
 find_program(LLVM_STRIP NAMES llvm-strip)
 if(LLVM_STRIP)

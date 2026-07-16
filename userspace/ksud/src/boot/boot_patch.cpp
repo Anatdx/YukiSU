@@ -40,15 +40,7 @@ constexpr uint64_t SUPERKEY_VERIFICATION_SIGN_AND_KEY = 1;
 constexpr uint64_t SUPERKEY_VERIFICATION_KEY_ONLY = 2;
 
 // Arch suffix for Kasumi LKM asset name (must match lkm.cpp)
-#if defined(__aarch64__)
 #define KASUMI_ARCH_SUFFIX "_arm64"
-#elif defined(__arm__)
-#define KASUMI_ARCH_SUFFIX "_armv7"
-#elif defined(__x86_64__)
-#define KASUMI_ARCH_SUFFIX "_x86_64"
-#else
-#define KASUMI_ARCH_SUFFIX "_arm64"
-#endif  // #if defined(__aarch64__)
 
 namespace {
 

@@ -28,7 +28,7 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 4. Dynamic manager support for trusted manager apps beyond the built-in package signature path
 5. APatch-style SuperKey authentication, with compile-time keys or keys patched into the LKM by `ksud`
 6. ADB root, sulog, SELinux hide, module `init.rc` injection, and current KernelSU userspace behavior synced into the C++ `ksud` stack
-7. TSR-based sucompat/syscall hook infrastructure with arm64 and x86_64 LKM support
+7. TSR-based sucompat/syscall hook infrastructure with arm64 LKM support
 8. Manager updates including Kasumi configuration, SuperUser swipe actions, log viewing, soft reboot, and WebUI fixes
 
 ## Compatibility Status
@@ -37,7 +37,9 @@ A kernel-based root solution for Android devices, forked from [`SukiSU-Ultra`](h
 
 - YukiSU officially supports Android GKI 2.0 devices (kernel 5.10+) in LKM mode. Legacy and non-GKI kernels may require device-specific source integration.
 
-- Currently, only `arm64-v8a`, `armeabi-v7a (bare)` and `X86_64`(some) are supported.
+- All shipped YukiSU components target `arm64-v8a`. YukiZygisk reserves inert
+  `armeabi-v7a` placeholder DSOs for a future `zygote32`
+  implementation; they do not provide 32-bit injection yet.
 
 ## Installation
 

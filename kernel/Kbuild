@@ -18,8 +18,8 @@ kernelsu-objs += hook/tp_marker.o
 
 ifeq ($(CONFIG_ARM64),y)
   kernelsu-objs += hook/arm64/patch_memory.o hook/arm64/syscall_hook.o
-else ifeq ($(CONFIG_X86_64),y)
-  kernelsu-objs += hook/x86_64/patch_memory.o hook/x86_64/syscall_hook.o
+else
+  $(error YukiSU supports ARM64 kernels only)
 endif
 kernelsu-objs += hook/setuid_hook.o
 kernelsu-objs += feature/kernel_umount.o

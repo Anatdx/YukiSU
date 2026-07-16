@@ -478,7 +478,6 @@ static int anon_ksu_release(struct inode *inode, struct file *filp)
 static const struct file_operations anon_ksu_fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = anon_ksu_ioctl,
-    .compat_ioctl = anon_ksu_ioctl,
     .release = anon_ksu_release,
 };
 

@@ -32,15 +32,11 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 {
 	struct pt_regs *current_regs;
 
-#if defined(__x86_64__)
-	if (unlikely(in_compat_syscall()))
-		return;
-#elif defined(__aarch64__)
 #ifdef CONFIG_COMPAT
+	/* arm64-only: do not redirect 32-bit compat syscalls. */
 	if (unlikely(is_compat_task()))
 		return;
 #endif // #ifdef CONFIG_COMPAT
-#endif // #if defined(__x86_64__)
 	if (ksu_dispatcher_nr < 0)
 		return;
 	if (!ksu_has_syscall_hook(id))
@@ -49,13 +45,8 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 	/* Redirect the real task pt_regs, not a tracepoint-local view. */
 	current_regs = task_pt_regs(current);
 
-#if defined(__x86_64__)
-	current_regs->ax = id;
-	current_regs->orig_ax = ksu_dispatcher_nr;
-#elif defined(__aarch64__)
 	PT_REGS_ORIG_SYSCALL(current_regs) = id;
 	current_regs->syscallno = ksu_dispatcher_nr;
-#endif // #if defined(__x86_64__)
 }
 #endif /* CONFIG_HAVE_SYSCALL_TRACEPOINTS */
 

@@ -98,7 +98,7 @@ android {
     }
 
     applicationVariants.all {
-        val abi = project.findProperty("ABI")?.toString() ?: "universal"
+        val abi = "arm64-v8a"
         outputs.forEach {
             val output = it as BaseVariantOutputImpl
             output.outputFileName = "YukiSU_${managerVersionName}_${managerVersionCode}-${abi}-$name.apk"

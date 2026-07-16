@@ -30,7 +30,11 @@
 #define YUKILINKER_FULL 0
 #endif
 
-#if YUKILINKER_FULL && defined(__aarch64__)
+#if !defined(__aarch64__)
+#error "YukiLinker supports arm64 only"
+#endif
+
+#if YUKILINKER_FULL
 
 /*
  * A TLSDESC resolver is not an ordinary AAPCS64 function: the generated call

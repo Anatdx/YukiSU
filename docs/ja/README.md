@@ -28,7 +28,7 @@ Android デバイス向けのカーネルベース root ソリューション。
 4. 組み込みパッケージ署名以外の信頼済みマネージャーに対応する Dynamic Manager
 5. APatch 風の SuperKey 認証。コンパイル時キー、または `ksud` による LKM へのキー注入に対応
 6. ADB root、sulog、SELinux hide、モジュール `init.rc` 注入、現在の KernelSU userspace 挙動を C++ `ksud` スタックへ同期
-7. arm64 と x86_64 LKM をサポートする TSR ベースの sucompat/syscall hook 基盤
+7. arm64 LKM をサポートする TSR ベースの sucompat/syscall hook 基盤
 8. Kasumi 設定、SuperUser スワイプ操作、ログビューア、ソフト再起動、WebUI 修正を含むマネージャー更新
 
 ## 互換性
@@ -37,7 +37,9 @@ Android デバイス向けのカーネルベース root ソリューション。
 
 - YukiSU は Android GKI 2.0 デバイス（カーネル 5.10+）の LKM モードを公式にサポートしています。古いカーネルや non-GKI カーネルでは、デバイス固有のソース統合が必要になる場合があります。
 
-- 現在サポートしているのは `arm64-v8a`、`armeabi-v7a (bare)`、`X86_64`（一部）のみです。
+- 出荷する YukiSU の全コンポーネントは `arm64-v8a` のみを対象とします。YukiZygisk
+  だけは将来の `zygote32` 実装用に機能を持たない `armeabi-v7a` のプレースホルダー DSO
+  を予約していますが、現在は 32 ビット注入を提供しません。
 
 ## インストール
 

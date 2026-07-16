@@ -1,7 +1,6 @@
 #ifndef __KSU_H_KSUD
 #define __KSU_H_KSUD
 
-#include <linux/compat.h>
 #include <linux/types.h>
 
 struct pt_regs;
@@ -18,15 +17,7 @@ extern u32 ksu_file_sid;
 
 #define MAX_ARG_STRINGS 0x7FFFFFFF
 struct user_arg_ptr {
-#ifdef CONFIG_COMPAT
-	bool is_compat;
-#endif // #ifdef CONFIG_COMPAT
-	union {
-		const char __user *const __user *native;
-#ifdef CONFIG_COMPAT
-		const compat_uptr_t __user *compat;
-#endif // #ifdef CONFIG_COMPAT
-	} ptr;
+	const char __user *const __user *native;
 };
 
 void ksu_handle_execveat_ksud(const char *filename, struct user_arg_ptr *argv,

@@ -10,6 +10,10 @@
 #define YUKILINKER_FULL 0
 #endif // #ifndef YUKILINKER_FULL
 
+#if !defined(__aarch64__)
+#error "YukiLinker supports arm64 only"
+#endif // #if !defined(__aarch64__)
+
 #include "yukilinker.hpp"
 
 #include <cerrno>
@@ -32,7 +36,7 @@
 #include <pthread.h>
 #endif // #if YUKILINKER_FULL
 
-#if YUKILINKER_FULL && defined(__aarch64__)
+#if YUKILINKER_FULL
 struct YukiTlsFastConfig {
   uintptr_t enabled;
   uintptr_t key_index;
@@ -46,7 +50,7 @@ static_assert(offsetof(YukiTlsFastConfig, key_sequence) == 16);
 extern "C" {
 __attribute__((visibility("hidden"))) YukiTlsFastConfig yuki_tls_fast_config{};
 }
-#endif // #if YUKILINKER_FULL && defined(__aarch6...
+#endif // #if YUKILINKER_FULL
 
 #ifndef R_AARCH64_NONE
 #define R_AARCH64_NONE 0
@@ -1194,7 +1198,6 @@ struct ThreadTlsState {
   ThreadTlsBlock *first = nullptr;
 };
 
-#if defined(__aarch64__)
 struct BionicPthreadKeyData {
   uintptr_t sequence;
   void *data;
@@ -1209,7 +1212,6 @@ static_assert(offsetof(ThreadTlsBlock, storage) == 8);
 static_assert(offsetof(TlsDescriptorIndex, module) == 0);
 static_assert(offsetof(TlsDescriptorIndex, offset) == 8);
 static_assert(offsetof(TlsDescriptorIndex, generation) == 16);
-#endif // #if defined(__aarch64__)
 
 constexpr size_t kMaxTlsModuleSlots = 1024;
 TlsTemplate *g_tls_templates = nullptr;
@@ -1221,7 +1223,6 @@ pthread_once_t g_thread_tls_once = PTHREAD_ONCE_INIT;
 bool g_thread_tls_key_valid = false;
 bool g_tls_stopped = false;
 
-#if defined(__aarch64__)
 constexpr uint32_t kPthreadKeyValidFlag = 1U << 31;
 
 void configure_tls_fast_path() {
@@ -1269,7 +1270,6 @@ ThreadTlsState *fast_thread_tls_state() {
     return nullptr;
   return static_cast<ThreadTlsState *>(entry.data);
 }
-#endif // #if defined(__aarch64__)
 
 void destroy_thread_tls_state(void *opaque) {
   auto *state = static_cast<ThreadTlsState *>(opaque);
@@ -1289,10 +1289,8 @@ void destroy_thread_tls_state(void *opaque) {
 void initialize_thread_tls_key() {
   bool valid =
       pthread_key_create(&g_thread_tls_key, destroy_thread_tls_state) == 0;
-#if defined(__aarch64__)
   if (valid)
     configure_tls_fast_path();
-#endif // #if defined(__aarch64__)
   __atomic_store_n(&g_thread_tls_key_valid, valid, __ATOMIC_RELEASE);
 }
 
@@ -1476,12 +1474,7 @@ extern "C" void *yuki_tls_get_addr(TlsIndex *index) {
   uintptr_t generation = active_tls_generation(index->module);
   if (generation == 0)
     return nullptr;
-  ThreadTlsState *thread = nullptr;
-#if defined(__aarch64__)
-  thread = fast_thread_tls_state();
-#else
-  thread = static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
-#endif // #if defined(__aarch64__)
+  ThreadTlsState *thread = fast_thread_tls_state();
   if (thread != nullptr) {
     ThreadTlsBlock *block = find_thread_block(thread, index->module);
     if (block != nullptr && block->generation == generation)
@@ -1530,15 +1523,10 @@ void *current_thread_tls_data(uintptr_t module_id, uintptr_t generation) {
   if (module_id == 0 || generation == 0 ||
       active_tls_generation(module_id) != generation)
     return nullptr;
-  ThreadTlsState *thread = nullptr;
-#if defined(__aarch64__)
-  thread = fast_thread_tls_state();
+  ThreadTlsState *thread = fast_thread_tls_state();
   if (thread == nullptr)
     thread =
         static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
-#else
-  thread = static_cast<ThreadTlsState *>(pthread_getspecific(g_thread_tls_key));
-#endif // #if defined(__aarch64__)
   if (thread == nullptr)
     return nullptr;
   ThreadTlsBlock *block = find_thread_block(thread, module_id);
@@ -1547,11 +1535,7 @@ void *current_thread_tls_data(uintptr_t module_id, uintptr_t generation) {
 }
 
 uintptr_t current_thread_pointer() {
-#if defined(__aarch64__)
   return reinterpret_cast<uintptr_t>(__builtin_thread_pointer());
-#else
-  return 0;
-#endif // #if defined(__aarch64__)
 }
 
 extern "C" uintptr_t yuki_tlsdesc_dynamic_entry(uintptr_t *descriptor);
@@ -2060,9 +2044,7 @@ bool has_active_tls() {
 
 void shutdown() {
 #if YUKILINKER_FULL
-#if defined(__aarch64__)
   disable_tls_fast_path();
-#endif // #if defined(__aarch64__)
   pthread_mutex_lock(&g_tls_mutex);
   g_tls_stopped = true;
   for (TlsTemplate *tls = g_tls_templates; tls != nullptr; tls = tls->next)
@@ -2172,13 +2154,9 @@ int dl_iterate_phdr_hook(int (*callback)(struct dl_phdr_info *, size_t, void *),
 namespace {
 
 void raw_close_descriptor(int fd) {
-#if defined(__aarch64__)
   register long syscall_number asm("x8") = 57;
   register long argument asm("x0") = fd;
   asm volatile("svc #0" : "+r"(argument) : "r"(syscall_number) : "memory");
-#else
-  (void)fd;
-#endif // #if defined(__aarch64__)
 }
 
 bool read_exactly(int fd, void *buffer, size_t bytes) {

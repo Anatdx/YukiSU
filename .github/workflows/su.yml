@@ -5,7 +5,7 @@ on:
       target:
         required: true
         type: string
-        description: "Target architecture: aarch64, x86_64, armv7"
+        description: "Target architecture: aarch64 only"
       os:
         required: false
         type: string
@@ -33,16 +33,8 @@ jobs:
             echo "abi=arm64-v8a" >> $GITHUB_OUTPUT
             echo "android_target=aarch64-linux-android26" >> $GITHUB_OUTPUT
             ;;
-          x86_64-linux-android|x86_64)
-            echo "abi=x86_64" >> $GITHUB_OUTPUT
-            echo "android_target=x86_64-linux-android26" >> $GITHUB_OUTPUT
-            ;;
-          armv7-linux-androideabi|armv7)
-            echo "abi=armeabi-v7a" >> $GITHUB_OUTPUT
-            echo "android_target=armv7a-linux-androideabi26" >> $GITHUB_OUTPUT
-            ;;
           *)
-            echo "Unknown target: ${{ inputs.target }}"
+            echo "YukiSU supports aarch64 only, got: ${{ inputs.target }}"
             exit 1
             ;;
         esac

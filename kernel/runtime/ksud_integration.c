@@ -75,18 +75,7 @@ static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
 {
 	const char __user *native;
 
-#ifdef CONFIG_COMPAT
-	if (unlikely(argv.is_compat)) {
-		compat_uptr_t compat;
-
-		if (get_user(compat, argv.ptr.compat + nr))
-			return ERR_PTR(-EFAULT);
-
-		return compat_ptr(compat);
-	}
-#endif // #ifdef CONFIG_COMPAT
-
-	if (get_user(native, argv.ptr.native + nr))
+	if (get_user(native, argv.native + nr))
 		return ERR_PTR(-EFAULT);
 
 	return native;
@@ -96,7 +85,7 @@ static int count(struct user_arg_ptr argv, int max)
 {
 	int i = 0;
 
-	if (argv.ptr.native != NULL) {
+	if (argv.native != NULL) {
 		for (;;) {
 			const char __user *p = get_user_arg_ptr(argv, i);
 
@@ -310,7 +299,7 @@ void ksu_execve_hook_ksud(const struct pt_regs *regs)
 	const char __user *const __user *__argv =
 	    (const char __user *const __user *)PT_REGS_PARM2(regs);
 	struct user_arg_ptr argv = {
-	    .ptr.native = __argv,
+	    .native = __argv,
 	};
 	char path[32];
 	const char __user *fn;
@@ -341,7 +330,7 @@ void ksu_zygote_probe_execve(const struct pt_regs *regs)
 	const char __user *const __user *__argv =
 	    (const char __user *const __user *)PT_REGS_PARM2(regs);
 	struct user_arg_ptr argv = {
-	    .ptr.native = __argv,
+	    .native = __argv,
 	};
 	char path[64];
 	char socket_name[32];

@@ -139,14 +139,6 @@ static long ksu_wrapper_unlocked_ioctl(struct file *fp, unsigned int cmd,
 	return orig->f_op->unlocked_ioctl(orig, cmd, arg);
 }
 
-static long ksu_wrapper_compat_ioctl(struct file *fp, unsigned int cmd,
-				     unsigned long arg)
-{
-	struct ksu_file_wrapper *data = fp->private_data;
-	struct file *orig = data->orig;
-	return orig->f_op->compat_ioctl(orig, cmd, arg);
-}
-
 static int ksu_wrapper_mmap(struct file *fp, struct vm_area_struct *vma)
 {
 	struct ksu_file_wrapper *data = fp->private_data;
@@ -394,8 +386,6 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
 	p->ops.poll = fp->f_op->poll ? ksu_wrapper_poll : NULL;
 	p->ops.unlocked_ioctl =
 	    fp->f_op->unlocked_ioctl ? ksu_wrapper_unlocked_ioctl : NULL;
-	p->ops.compat_ioctl =
-	    fp->f_op->compat_ioctl ? ksu_wrapper_compat_ioctl : NULL;
 	p->ops.mmap = fp->f_op->mmap ? ksu_wrapper_mmap : NULL;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 	p->ops.fop_flags = fp->f_op->fop_flags;

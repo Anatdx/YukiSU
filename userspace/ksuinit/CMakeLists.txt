@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(ksuinit VERSION 1.0.0 LANGUAGES CXX)
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" OR
+   NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "YukiSU userspace supports Android arm64-v8a only")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

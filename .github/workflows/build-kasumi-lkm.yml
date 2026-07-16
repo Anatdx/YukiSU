@@ -7,11 +7,6 @@ on:
         required: false
         default: ""
         type: string
-      full_archs:
-        description: "Reserved input; DDK workflow currently builds arm64 only"
-        required: false
-        default: false
-        type: boolean
   workflow_dispatch:
     inputs:
       kasumi_ref:
@@ -19,11 +14,6 @@ on:
         required: false
         default: ""
         type: string
-      full_archs:
-        description: "Reserved input; DDK workflow currently builds arm64 only"
-        required: false
-        default: false
-        type: boolean
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -40,12 +30,10 @@ jobs:
           - android14-6.1
           - android15-6.6
           - android16-6.12
-        arch:
-          - arm64
     uses: ./.github/workflows/kasumi-lkm.yml
     secrets: inherit
     with:
       kmi: ${{ matrix.kmi }}
-      arch: ${{ matrix.arch }}
+      arch: arm64
       kasumi_ref: ${{ inputs.kasumi_ref || (startsWith(github.head_ref || github.ref_name, 'feat/hymofs') && 'dev' || 'main') }}
       ddk_release: '20260313'

@@ -19,6 +19,11 @@ endif()
 
 project(ksud VERSION 1.0.0 LANGUAGES C CXX)
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" OR
+   NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "YukiSU userspace supports Android arm64-v8a only")
+endif()
+
 # Allow FetchContent deps (e.g. miniz) that use cmake_minimum_required < 3.5
 if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
     set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Min CMake version for subprojects")

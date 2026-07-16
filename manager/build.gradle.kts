@@ -10,10 +10,12 @@ plugins {
     alias(libs.plugins.lsplugin.cmaker)
 }
 
-val buildAbiList = provider {
-    val abi = findProperty("ABI")?.toString()
-    if (abi != null) listOf(abi) else listOf("arm64-v8a", "x86_64", "armeabi-v7a")
+val arm64Abi = "arm64-v8a"
+val requestedAbi = findProperty("ABI")?.toString()
+require(requestedAbi == null || requestedAbi == arm64Abi) {
+    "YukiSU supports only $arm64Abi; requested ABI: $requestedAbi"
 }
+val buildAbiList = provider { listOf(arm64Abi) }
 
 cmaker {
     default {
@@ -94,7 +96,7 @@ subprojects {
                     versionName = managerVersionName
                 }
                 ndk {
-                    abiFilters += (rootProject.findProperty("ABI")?.toString()?.let { listOf(it) } ?: listOf("arm64-v8a", "x86_64", "armeabi-v7a"))
+                    abiFilters += buildAbiList.get()
                 }
             }
 

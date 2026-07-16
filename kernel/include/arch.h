@@ -3,7 +3,9 @@
 
 #include <linux/version.h>
 
-#if defined(__aarch64__)
+#if !defined(__aarch64__)
+#error "YukiSU supports ARM64 kernels only"
+#endif // #if !defined(__aarch64__)
 
 #define __PT_PARM1_REG regs[0]
 #define __PT_PARM2_REG regs[1]
@@ -24,32 +26,6 @@
 #define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
 #define SYS_FSTAT_SYMBOL "__arm64_sys_newfstat"
 #define SYS_PRCTL_SYMBOL "__arm64_sys_prctl"
-
-#elif defined(__x86_64__)
-
-#define __PT_PARM1_REG di
-#define __PT_PARM2_REG si
-#define __PT_PARM3_REG dx
-/* syscall uses r10 for PARM4 */
-#define __PT_SYSCALL_PARM4_REG r10
-#define __PT_CCALL_PARM4_REG cx
-#define __PT_PARM5_REG r8
-#define __PT_PARM6_REG r9
-#define __PT_ORIG_SYSCALL_REG orig_ax
-#define __PT_RET_REG sp
-#define __PT_FP_REG bp
-#define __PT_RC_REG ax
-#define __PT_SP_REG sp
-#define __PT_IP_REG ip
-#define REBOOT_SYMBOL "__x64_sys_reboot"
-#define SYS_READ_SYMBOL "__x64_sys_read"
-#define SYS_EXECVE_SYMBOL "__x64_sys_execve"
-#define SYS_FSTAT_SYMBOL "__x64_sys_newfstat"
-#define SYS_PRCTL_SYMBOL "__x64_sys_prctl"
-
-#else
-#error "Unsupported arch"
-#endif // #if defined(__aarch64__)
 
 /* allow some architecutres to override `struct pt_regs` */
 #ifndef __PT_REGS_CAST

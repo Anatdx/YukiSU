@@ -12,6 +12,11 @@ include_directories(${REPO_ROOT})
 
 project("kernelsu")
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" OR
+   NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "YukiSU Manager supports Android arm64-v8a only")
+endif()
+
 find_package(cxx REQUIRED CONFIG)
 link_libraries(cxx::cxx)
 

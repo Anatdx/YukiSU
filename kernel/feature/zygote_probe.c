@@ -1245,7 +1245,7 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	}
 
 #ifdef CONFIG_COMPAT
-	/* 32-bit targets need a separate stub. */
+	/* arm64-only: 32-bit zygotes are unsupported, so never inject them. */
 	if (is_compat_task()) {
 		pr_info("zygote_probe: pid=%d socket=%s 32-bit target, "
 			"skipping injection\n",
@@ -1335,7 +1335,6 @@ static void zp_inject_tw_func(struct callback_head *cb)
 	/* Redirect only after the stub is staged. */
 	if ((yukizygisk_enabled || (native && tw->early_native)) &&
 	    at_entry_uaddr && at_entry_uval == saved && saved) {
-#ifdef CONFIG_ARM64
 		/* AArch64 AT_ENTRY stub. */
 		static const u32 tmpl[] = {
 		    0x10000013, 0xd10103ff, 0xd2800014, 0xf2a00014, 0xf2c00014,
@@ -1537,11 +1536,6 @@ static void zp_inject_tw_func(struct callback_head *cb)
 			zp_publish_native_policy_state(current->tgid,
 						       &native_policy);
 		}
-#else
-		pr_info("zygote_probe: [1c] pid=%d socket=%s redirect: arm64 "
-			"only\n",
-			current->pid, socket_name);
-#endif // #ifdef CONFIG_ARM64
 	}
 out:
 	kfree(tw);

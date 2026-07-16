@@ -3,7 +3,9 @@
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
 
-#ifdef __aarch64__
+#ifndef __aarch64__
+#error "YukiSU supports ARM64 kernels only"
+#endif // #ifndef __aarch64__
 
 #include "hook/patch_memory.h"
 #include "klog.h" // IWYU pragma: keep
@@ -170,5 +172,3 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
 
 	return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
 }
-
-#endif /* __aarch64__ */

@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
-#ifdef __aarch64__
+#ifndef __aarch64__
+#error "YukiSU supports ARM64 kernels only"
+#endif // #ifndef __aarch64__
 
 #include "hook/syscall_hook.h"
 
@@ -258,5 +260,3 @@ clear_state:
 
 	pr_info("all syscall hooks restored\n");
 }
-
-#endif /* __aarch64__ */

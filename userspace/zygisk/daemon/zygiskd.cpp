@@ -87,17 +87,7 @@ namespace {
 #define MFD_ALLOW_SEALING 0x0002U
 #endif // #ifndef MFD_ALLOW_SEALING
 
-#if defined(__aarch64__)
 constexpr char kAbi[] = "arm64-v8a";
-#elif defined(__arm__)
-constexpr char kAbi[] = "armeabi-v7a";
-#elif defined(__x86_64__)
-constexpr char kAbi[] = "x86_64";
-#elif defined(__i386__)
-constexpr char kAbi[] = "x86";
-#else
-constexpr char kAbi[] = "unknown";
-#endif // #if defined(__aarch64__)
 
 constexpr char kModulesDir[] = "/data/adb/modules";
 
@@ -908,9 +898,11 @@ std::vector<ZygoteMonitorRecord> scan_zygote_monitor() {
       continue;
     std::string abi = zygote_abi(pid, abi_list);
     std::string state = "failed";
-    if (is_32bit_abi(abi))
+    if (is_32bit_abi(abi)) {
+      // Keep zygote32 visible in the Manager status, but do not treat it as
+      // injected until a real 32-bit YukiZygisk payload exists.
       state = "unsupported32";
-    else if (g_safemode.active)
+    } else if (g_safemode.active)
       state = "crashed";
     else if (is_zygote_injected(static_cast<uint32_t>(pid), name, abi))
       state = "injected";

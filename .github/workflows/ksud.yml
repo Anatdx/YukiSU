@@ -5,7 +5,7 @@ on:
       target:
         required: true
         type: string
-        description: "Target architecture: aarch64, x86_64, armv7"
+        description: "Target architecture: aarch64 only"
       os:
         required: false
         type: string
@@ -44,13 +44,7 @@ jobs:
         set -euo pipefail
         mkdir -p ./userspace/ksud/assets
         cp android*-lkm/*_kernelsu.ko ./userspace/ksud/assets/ 2>/dev/null || true
-        # Kasumi: copy only arch-matching .ko (arm64/armv7/x86_64)
-        case "${{ inputs.target }}" in
-          aarch64|aarch64-linux-android) arch_suffix="_arm64" ;;
-          x86_64|x86_64-linux-android) arch_suffix="_x86_64" ;;
-          armv7|armv7-linux-androideabi) arch_suffix="_armv7" ;;
-          *) arch_suffix="_arm64" ;;
-        esac
+        arch_suffix="_arm64"
         mapfile -t kasumi_assets < <(find . -type f -name "android*${arch_suffix}_kasumi_lkm.ko" | sort)
         if [ "${#kasumi_assets[@]}" -gt 0 ]; then
           cp "${kasumi_assets[@]}" ./userspace/ksud/assets/
@@ -98,18 +92,8 @@ jobs:
             echo "abi=arm64-v8a" >> "$GITHUB_OUTPUT"
             echo "android_target=aarch64-linux-android26" >> "$GITHUB_OUTPUT"
             ;;
-          x86_64-linux-android|x86_64)
-            echo "arch=x86_64" >> "$GITHUB_OUTPUT"
-            echo "abi=x86_64" >> "$GITHUB_OUTPUT"
-            echo "android_target=x86_64-linux-android26" >> "$GITHUB_OUTPUT"
-            ;;
-          armv7-linux-androideabi|armv7)
-            echo "arch=armv7" >> "$GITHUB_OUTPUT"
-            echo "abi=armeabi-v7a" >> "$GITHUB_OUTPUT"
-            echo "android_target=armv7a-linux-androideabi26" >> "$GITHUB_OUTPUT"
-            ;;
           *)
-            echo "Unknown target: ${{ inputs.target }}"
+            echo "YukiSU supports aarch64 only, got: ${{ inputs.target }}"
             exit 1
             ;;
         esac
@@ -121,14 +105,6 @@ jobs:
           echo "YukiZygisk payload: disabled"
           exit 0
         fi
-        case "${{ inputs.target }}" in
-          aarch64-linux-android|aarch64) ;;
-          *)
-            echo "YukiZygisk payload: skipped for ${{ inputs.target }} (aarch64 only)"
-            exit 0
-            ;;
-        esac
-
         artifact="yukizygisk-aarch64-linux-android"
         for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
           if [ ! -f "$artifact/$asset" ]; then
@@ -186,27 +162,19 @@ jobs:
         echo "Embedded Kasumi assets:"
         strings ksud | grep -F '_kasumi_lkm.ko' | sort -u || true
         if [ "${{ inputs.pack_yukizygisk }}" = "true" ]; then
-          case "${{ inputs.target }}" in
-            aarch64-linux-android|aarch64)
-              echo "Embedded YukiZygisk payload assets:"
-              for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
-                if ! grep -F "{\"$asset\"" generated/assets_data.cpp >/dev/null; then
-                  echo "::error::Expected embedded YukiZygisk asset missing: $asset"
-                  exit 1
-                fi
-                echo "  $asset"
-              done
-              ;;
-          esac
-        fi
-        case "${{ inputs.target }}" in
-          aarch64-linux-android|aarch64)
-            if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_kasumi_lkm\.ko$'; then
-              echo "::error::Expected KMI-tagged embedded Kasumi assets were not found in ksud"
+          echo "Embedded YukiZygisk payload assets:"
+          for asset in libzygisk.so libyukilinker.so libyukizncore.so; do
+            if ! grep -F "{\"$asset\"" generated/assets_data.cpp >/dev/null; then
+              echo "::error::Expected embedded YukiZygisk asset missing: $asset"
               exit 1
             fi
-            ;;
-        esac
+            echo "  $asset"
+          done
+        fi
+        if ! strings ksud | grep -Eq '^android[0-9]+-[0-9]+\.[0-9]+_arm64_kasumi_lkm\.ko$'; then
+          echo "::error::Expected KMI-tagged embedded Kasumi assets were not found in ksud"
+          exit 1
+        fi
 
     - name: Import GPG key
       env:

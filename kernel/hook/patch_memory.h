@@ -9,17 +9,15 @@
 #include <linux/types.h>
 #include <linux/version.h>
 
-#ifdef __aarch64__
+#ifndef __aarch64__
+#error "YukiSU supports ARM64 kernels only"
+#endif // #ifndef __aarch64__
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 #include <asm/patching.h> // IWYU pragma: keep
 #else
 #include <asm/insn.h> // IWYU pragma: keep
 #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSIO...
-#elif defined(__x86_64__)
-#include <asm/text-patching.h> // IWYU pragma: keep
-#else
-#error "Unsupported arch"
-#endif // #ifdef __aarch64__
 
 #define KSU_PATCH_TEXT_FLUSH_DCACHE 1
 #define KSU_PATCH_TEXT_FLUSH_ICACHE 2

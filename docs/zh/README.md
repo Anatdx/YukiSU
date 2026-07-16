@@ -27,7 +27,7 @@
 4. 动态管理器支持，可配置除内置包名/签名路径之外的受信任管理器
 5. APatch 风格的 SuperKey 认证，支持编译期密钥，也支持由 `ksud` 写入 LKM
 6. ADB root、sulog、SELinux hide、模块 `init.rc` 注入，以及同步到当前 C++ `ksud` 栈的 KernelSU 用户空间行为
-7. 基于 TSR 的 sucompat/syscall hook 基础设施，支持 arm64 与 x86_64 LKM
+7. 基于 TSR 的 sucompat/syscall hook 基础设施，支持 arm64 LKM
 8. 管理器更新：Kasumi 配置、超级用户列表滑动操作、日志查看、软重启与 WebUI 修复
 
 ## 兼容状态
@@ -36,7 +36,8 @@
 
 - YukiSU 官方支持 Android GKI 2.0 设备（内核 5.10+）的 LKM 模式。旧内核与 non-GKI 内核可能需要按设备进行源码集成。
 
-- 目前仅支持 `arm64-v8a`、`armeabi-v7a (bare)` 与 `X86_64`（部分）。
+- 所有已交付的 YukiSU 组件仅支持 `arm64-v8a`。YukiZygisk 额外保留无功能的
+  `armeabi-v7a` 占位 DSO，供未来 `zygote32` 实现使用；目前不提供 32 位注入功能。
 
 ## 安装
 

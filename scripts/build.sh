@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # YukiSU local build: DDK LKM -> ksuinit -> ksud -> Manager App
 # Signing env: YUKISU_KEYSTORE, YUKISU_KEYSTORE_PASSWORD, YUKISU_KEY_ALIAS, YUKISU_KEY_PASSWORD
-# Usage: ./scripts/build.sh [-k KMI] [-a ABI] [--yukizygisk|--yukizygisk-off] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
+# Usage: ./scripts/build.sh [-k KMI] [--yukizygisk|--yukizygisk-off] [--yukizygisk-parts PARTS] [--skip-lkm] [--skip-kasumi] [--kasumi-dir PATH] [-i] [-h]
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT_DIR="$REPO_ROOT/out"
 KMI="android16-6.12"
-ABI="arm64-v8a"
+ANDROID_ABI="arm64-v8a"
 SKIP_LKM=false
 SKIP_KASUMI=false
 DDK_RELEASE="20260313"
@@ -23,10 +23,6 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-k | --kmi)
 		KMI="$2"
-		shift 2
-		;;
-	-a | --abi)
-		ABI="$2"
 		shift 2
 		;;
 	--skip-lkm)
@@ -74,24 +70,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-case "$ABI" in
-arm64-v8a)
-	TARGET_ARCH=aarch64
-	ANDROID_TARGET=aarch64-linux-android26
-	;;
-x86_64)
-	TARGET_ARCH=x86_64
-	ANDROID_TARGET=x86_64-linux-android26
-	;;
-armeabi-v7a)
-	TARGET_ARCH=armv7
-	ANDROID_TARGET=armv7a-linux-androideabi26
-	;;
-*)
-	echo "Unsupported ABI: $ABI"
-	exit 1
-	;;
-esac
+ANDROID_TARGET=aarch64-linux-android26
 
 detect_ndk_host() {
 	if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
@@ -128,7 +107,7 @@ TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST"
 MAKE_JOBS=$(detect_jobs)
 
 echo "=== YukiSU local build ==="
-echo "KMI: $KMI | ABI: $ABI | NDK: $ANDROID_NDK_HOME"
+echo "KMI: $KMI | ABI: $ANDROID_ABI | NDK: $ANDROID_NDK_HOME"
 echo ""
 
 KSU_YUKIZYGISK_MAKE=""
@@ -187,7 +166,7 @@ export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 cmake .. \
 	-G Ninja \
 	-DCMAKE_SYSTEM_NAME=Android \
-	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_ARCH_ABI="$ANDROID_ABI" \
 	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
 	-DCMAKE_C_COMPILER="$CC" \
 	-DCMAKE_CXX_COMPILER="$CXX" \
@@ -196,12 +175,7 @@ cmake .. \
 ninja
 echo "    ksuinit built"
 
-case "$TARGET_ARCH" in
-aarch64) arch_suffix="_arm64" ;;
-x86_64) arch_suffix="_x86_64" ;;
-armv7) arch_suffix="_armv7" ;;
-*) arch_suffix="_arm64" ;;
-esac
+arch_suffix="_arm64"
 
 if [[ "$SKIP_KASUMI" != "true" ]]; then
 	echo ">>> [2.5/5] Build Kasumi LKM (DDK) from $KASUMI_DIR ..."
@@ -254,7 +228,7 @@ cd "$SU_DIR/build"
 cmake .. \
 	-G Ninja \
 	-DCMAKE_SYSTEM_NAME=Android \
-	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_ARCH_ABI="$ANDROID_ABI" \
 	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
 	-DCMAKE_C_COMPILER="$CC" \
 	-DCMAKE_CXX_COMPILER="$CXX" \
@@ -269,7 +243,7 @@ ZCORE_DIR="$REPO_ROOT/userspace/zygisk/core"
 rm -rf "$ZCORE_DIR/build"; mkdir -p "$ZCORE_DIR/build"; cd "$ZCORE_DIR/build"
 if cmake .. -G Ninja \
 	-DCMAKE_SYSTEM_NAME=Android \
-	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_ARCH_ABI="$ANDROID_ABI" \
 	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
 	-DCMAKE_C_COMPILER="$CC" \
 	-DCMAKE_CXX_COMPILER="$CXX" \
@@ -290,7 +264,7 @@ cd "$KSUD_DIR/build"
 cmake .. \
 	-G Ninja \
 	-DCMAKE_SYSTEM_NAME=Android \
-	-DCMAKE_ANDROID_ARCH_ABI="$ABI" \
+	-DCMAKE_ANDROID_ARCH_ABI="$ANDROID_ABI" \
 	-DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
 	-DCMAKE_C_COMPILER="$CC" \
 	-DCMAKE_CXX_COMPILER="$CXX" \
@@ -303,7 +277,7 @@ echo "    ksud built"
 
 echo ">>> [4/5] Build Manager App ..."
 MANAGER_DIR="$REPO_ROOT/manager"
-JNILIBS="$MANAGER_DIR/app/src/main/jniLibs/$ABI"
+JNILIBS="$MANAGER_DIR/app/src/main/jniLibs/$ANDROID_ABI"
 mkdir -p "$JNILIBS"
 cp "$KSUD_DIR/build/ksud" "$JNILIBS/libksud.so"
 
@@ -320,7 +294,7 @@ if [[ -n "${YUKISU_KEYSTORE:-}" && -n "${YUKISU_KEYSTORE_PASSWORD:-}" && -n "${Y
 fi
 
 cd "$MANAGER_DIR"
-./gradlew assembleRelease --build-cache --no-daemon -PABI="$ABI"
+./gradlew assembleRelease --build-cache --no-daemon -PABI="$ANDROID_ABI"
 echo "    APK built"
 
 APK_DIR="$MANAGER_DIR/app/build/outputs/apk/release"

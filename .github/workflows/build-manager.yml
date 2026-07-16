@@ -34,13 +34,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
-  workflow_call:
-    inputs:
-      full_archs:
-        description: "Build extra ksud/ksuinit archs for release; Kasumi LKM is arm64-only in DDK CI"
-        required: false
-        default: false
-        type: boolean
+  workflow_call: {}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -82,26 +76,18 @@ jobs:
 
   build-kasumi-lkm:
     uses: ./.github/workflows/build-kasumi-lkm.yml
-    with:
-      full_archs: ${{ inputs.full_archs == true || github.event_name == 'pull_request' }}
 
   build-ksuinit:
-    strategy:
-      matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"target":"aarch64-linux-android"},{"target":"x86_64-linux-android"},{"target":"armv7-linux-androideabi"}]') || fromJSON('[{"target":"aarch64-linux-android"}]') }}
     uses: ./.github/workflows/ksuinit.yml
     secrets: inherit
     with:
-      target: ${{ matrix.target }}
+      target: aarch64-linux-android
 
   build-su:
-    strategy:
-      matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"target":"aarch64-linux-android"},{"target":"x86_64-linux-android"},{"target":"armv7-linux-androideabi"}]') || fromJSON('[{"target":"aarch64-linux-android"}]') }}
     uses: ./.github/workflows/su.yml
     secrets: inherit
     with:
-      target: ${{ matrix.target }}
+      target: aarch64-linux-android
 
   build-yukizygisk:
     uses: ./.github/workflows/yukizygisk.yml
@@ -110,21 +96,15 @@ jobs:
 
   build-ksud:
     needs: [build-lkm, build-kasumi-lkm, build-ksuinit, build-su, build-yukizygisk]
-    strategy:
-      matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"},{"target":"x86_64-linux-android","os":"ubuntu-latest"},{"target":"armv7-linux-androideabi","os":"ubuntu-latest"}]') || fromJSON('[{"target":"aarch64-linux-android","os":"ubuntu-latest"}]') }}
     uses: ./.github/workflows/ksud.yml
     secrets: inherit
     with:
-      target: ${{ matrix.target }}
-      os: ${{ matrix.os }}
+      target: aarch64-linux-android
+      os: ubuntu-latest
       pack_yukizygisk: true
 
   build-manager:
     needs: [generate-key]
-    strategy:
-      matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"abi":"arm64-v8a"},{"abi":"x86_64"},{"abi":"armeabi-v7a"}]') || fromJSON('[{"abi":"arm64-v8a"}]') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -185,26 +165,23 @@ jobs:
 
       - name: Build with Gradle
         if: ${{ steps.determine.outputs.SKIP != 'true' }}
-        run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=${{ matrix.abi }}
+        run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=arm64-v8a
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Manager-gradle-${{ matrix.abi }}
+          name: Manager-gradle-arm64-v8a
           path: manager/app/build/outputs/apk/release/
 
       - name: Upload mappings
         uses: actions/upload-artifact@v6
         with:
-          name: "${{ steps.determine.outputs.title }}-mappings-${{ matrix.abi }}"
+          name: "${{ steps.determine.outputs.title }}-mappings-arm64-v8a"
           path: "manager/app/build/outputs/mapping/release/"
 
   repack-manager:
     needs: [build-manager, build-ksud, generate-key]
     if: always() && needs.build-manager.result == 'success' && needs.build-ksud.result == 'success' && needs.generate-key.result == 'success'
-    strategy:
-      matrix:
-        include: ${{ (inputs.full_archs == true || github.event_name == 'pull_request') && fromJSON('[{"abi":"arm64-v8a","target":"aarch64-linux-android","ksud_artifact":"ksud-aarch64-linux-android"},{"abi":"x86_64","target":"x86_64-linux-android","ksud_artifact":"ksud-x86_64-linux-android"},{"abi":"armeabi-v7a","target":"armv7-linux-androideabi","ksud_artifact":"ksud-armv7-linux-androideabi"}]') || fromJSON('[{"abi":"arm64-v8a","target":"aarch64-linux-android","ksud_artifact":"ksud-aarch64-linux-android"}]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -248,14 +225,14 @@ jobs:
       - name: Download manager APK
         uses: actions/download-artifact@v7
         with:
-          name: Manager-gradle-${{ matrix.abi }}
+          name: Manager-gradle-arm64-v8a
           path: artifacts/manager-gradle
 
       - name: Download ksud
         uses: actions/download-artifact@v7
         with:
-          name: ${{ matrix.ksud_artifact }}
-          path: artifacts/${{ matrix.ksud_artifact }}
+          name: ksud-aarch64-linux-android
+          path: artifacts/ksud-aarch64-linux-android
 
       - name: Place manager APK and ksud
         run: |
@@ -265,10 +242,10 @@ jobs:
           test -n "$APK"
           cp -f "$APK" manager/app/build/outputs/apk/release/
 
-          mkdir -p target/${{ matrix.target }}/release
-          KSUD=$(find artifacts/${{ matrix.ksud_artifact }} -type f -name "ksud" | head -n 1)
+          mkdir -p target/aarch64-linux-android/release
+          KSUD=$(find artifacts/ksud-aarch64-linux-android -type f -name "ksud" | head -n 1)
           test -n "$KSUD"
-          cp -f "$KSUD" target/${{ matrix.target }}/release/ksud
+          cp -f "$KSUD" target/aarch64-linux-android/release/ksud
 
       - name: Prepare signing inputs
         env:
@@ -303,7 +280,7 @@ jobs:
           python3 repack_apk.py repack \
             -b release \
             -t release \
-            -a ${{ matrix.abi }} \
+            -a arm64-v8a \
             -K "$SIGN_KEYSTORE_FILE" \
             -A "$SIGN_KEY_ALIAS" \
             -P "$SIGN_KEYSTORE_PASSWORD" \
@@ -339,11 +316,11 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Manager-${{ matrix.abi }}
+          name: Manager-arm64-v8a
           path: dist/
 
       - name: Upload to telegram
-        if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) && matrix.abi == 'arm64-v8a' && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
+        if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
         env:
           CHAT_ID: ${{ vars.CHAT_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
