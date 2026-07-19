@@ -30,12 +30,18 @@ void klog(int level, const char* fmt, ...) {
     char buf[512];
 
     // Format: "<level>message"
-    int prefix_len = snprintf(buf, sizeof(buf), "<%d>", level);
+    const int prefix_len = snprintf(buf, sizeof(buf), "<%d>", level);
+    if (prefix_len < 0 || prefix_len >= static_cast<int>(sizeof(buf))) {
+        return;
+    }
 
     va_list args;
     va_start(args, fmt);
-    int msg_len = vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len, fmt, args);
+    const int msg_len = vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len, fmt, args);
     va_end(args);
+    if (msg_len < 0) {
+        return;
+    }
 
     int total_len = prefix_len + msg_len;
     if (total_len >= static_cast<int>(sizeof(buf))) {
@@ -46,7 +52,7 @@ void klog(int level, const char* fmt, ...) {
         write(g_kmsg_fd, buf, total_len);
     } else {
         // Fallback to stderr if kmsg is not available
-        fprintf(stderr, "%s", buf + prefix_len);
+        (void)fprintf(stderr, "%s", buf + prefix_len);
     }
 }
 

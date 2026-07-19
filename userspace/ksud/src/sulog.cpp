@@ -5,13 +5,13 @@
 #include "log.hpp"
 #include "utils.hpp"
 
-#include <errno.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <cerrno>
 
 #include <array>
 #include <chrono>
@@ -46,7 +46,7 @@ constexpr uint64_t MIN_VALID_WALL_TIME_MS = 946684800000ULL;  // 2000-01-01 00:0
 constexpr uint64_t SULOG_TIME_SYNC_THRESHOLD_MS = 5000ULL;
 constexpr uint64_t NS_PER_MILLISECOND = 1000000ULL;
 constexpr uint64_t DEFAULT_SULOG_RETENTION_DAYS = 3U;
-constexpr uint64_t DEFAULT_SULOG_MAX_FILE_SIZE = 10U * 1024U * 1024U;
+constexpr uint64_t DEFAULT_SULOG_MAX_FILE_SIZE = 10ULL * 1024U * 1024U;
 constexpr std::chrono::seconds SULOGD_RESTART_DELAY(3);
 
 #pragma pack(push, 1)
@@ -93,12 +93,12 @@ struct SulogEvent {
     std::string argv;
 };
 
-enum class ReadState {
+enum class ReadState : std::uint8_t {
     Drained,
     Closed,
 };
 
-enum class SessionExitReason {
+enum class SessionExitReason : std::uint8_t {
     FdClosed,
     EpollHangup,
 };
@@ -153,7 +153,7 @@ public:
 
     ~SulogdLockGuard() { reset(); }
 
-    auto valid() const -> bool { return fd_ >= 0; }
+    [[nodiscard]] auto valid() const -> bool { return fd_ >= 0; }
 
     void reset() {
         if (fd_ >= 0) {
@@ -199,7 +199,7 @@ auto parse_c_string(const char* data, size_t len) -> std::string {
     while (end < len && data[end] != '\0') {
         end++;
     }
-    return std::string(data, end);
+    return {data, end};
 }
 
 auto parse_c_string(const uint8_t* data, size_t len) -> std::string {
@@ -207,12 +207,16 @@ auto parse_c_string(const uint8_t* data, size_t len) -> std::string {
 }
 
 auto current_log_day() -> std::string {
-    std::time_t now = std::time(nullptr);
+    std::time_t const now = std::time(nullptr);
     struct tm tm_buf{};
-    localtime_r(&now, &tm_buf);
+    if (localtime_r(&now, &tm_buf) == nullptr) {
+        return {};
+    }
     char buf[16] = {};
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_buf);
-    return std::string(buf);
+    if (std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_buf) == 0) {
+        return {};
+    }
+    return {buf};
 }
 
 auto current_epoch_millis() -> uint64_t {
@@ -220,7 +224,7 @@ auto current_epoch_millis() -> uint64_t {
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
         return 0;
     }
-    return static_cast<uint64_t>(ts.tv_sec) * 1000U +
+    return (static_cast<uint64_t>(ts.tv_sec) * 1000U) +
            static_cast<uint64_t>(ts.tv_nsec / NS_PER_MILLISECOND);
 }
 
@@ -229,7 +233,7 @@ auto current_elapsed_realtime_millis() -> uint64_t {
     if (clock_gettime(CLOCK_BOOTTIME, &ts) != 0) {
         return 0;
     }
-    return static_cast<uint64_t>(ts.tv_sec) * 1000U +
+    return (static_cast<uint64_t>(ts.tv_sec) * 1000U) +
            static_cast<uint64_t>(ts.tv_nsec / NS_PER_MILLISECOND);
 }
 
@@ -250,12 +254,16 @@ auto absolute_diff_u64(uint64_t lhs, uint64_t rhs) -> uint64_t {
 }
 
 auto day_before(uint64_t days) -> std::string {
-    std::time_t now = std::time(nullptr) - static_cast<std::time_t>(days * 24U * 60U * 60U);
+    std::time_t const now = std::time(nullptr) - static_cast<std::time_t>(days * 24U * 60U * 60U);
     struct tm tm_buf{};
-    localtime_r(&now, &tm_buf);
+    if (localtime_r(&now, &tm_buf) == nullptr) {
+        return {};
+    }
     char buf[16] = {};
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_buf);
-    return std::string(buf);
+    if (std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_buf) == 0) {
+        return {};
+    }
+    return {buf};
 }
 
 bool parse_log_name(const std::filesystem::path& path, std::string* day, uint32_t* index) {
@@ -355,7 +363,7 @@ bool parse_positive_u64(const std::string& raw, uint64_t* out_value) {
 }
 
 auto ensure_sulog_config_value(const char* key, uint64_t default_value) -> std::string {
-    const std::string default_string = std::to_string(default_value);
+    std::string default_string = std::to_string(default_value);
     if (!ensure_sulog_config_dir_exists()) {
         return default_string;
     }
@@ -811,7 +819,7 @@ auto escape_field(const std::string& value) -> std::string {
         default:
             if (static_cast<unsigned char>(ch) < 0x20U) {
                 char buf[5] = {};
-                std::snprintf(buf, sizeof(buf), "\\x%02x", static_cast<unsigned char>(ch));
+                (void)std::snprintf(buf, sizeof(buf), "\\x%02x", static_cast<unsigned char>(ch));
                 escaped += buf;
             } else {
                 escaped.push_back(ch);
@@ -1034,7 +1042,7 @@ bool acquire_sulogd_lock(SulogdLockGuard* guard) {
 }
 
 int spawn_sulogd() {
-    pid_t pid = fork();
+    pid_t const pid = fork();
     if (pid < 0) {
         LOGE("Failed to fork sulogd launcher: %s", strerror(errno));
         return -1;

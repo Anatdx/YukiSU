@@ -61,6 +61,12 @@ inline uintptr_t page_up(uintptr_t addr, size_t pg) {
 
 class LinkerSyms {
 public:
+  LinkerSyms() = default;
+  LinkerSyms(const LinkerSyms &) = delete;
+  LinkerSyms &operator=(const LinkerSyms &) = delete;
+  LinkerSyms(LinkerSyms &&) = delete;
+  LinkerSyms &operator=(LinkerSyms &&) = delete;
+
   bool init() {
     if (!find_linker_base())
       return false;
@@ -87,7 +93,7 @@ public:
     return 0;
   }
 
-  uintptr_t base() const { return base_; }
+  [[nodiscard]] uintptr_t base() const { return base_; }
 
 private:
   bool find_linker_base() {
@@ -114,7 +120,7 @@ private:
       }
       break;
     }
-    fclose(fp);
+    (void)fclose(fp);
     return base_ != 0 && path_[0] != '\0';
   }
 
@@ -123,7 +129,8 @@ private:
     if (fd < 0)
       return false;
     struct stat st{};
-    if (fstat(fd, &st) != 0 || st.st_size < (off_t)sizeof(Elf64_Ehdr)) {
+    if (fstat(fd, &st) != 0 || st.st_size < 0 ||
+        static_cast<uint64_t>(st.st_size) < sizeof(Elf64_Ehdr)) {
       close(fd);
       return false;
     }
@@ -133,14 +140,14 @@ private:
     if (map_ == MAP_FAILED)
       return false;
 
-    auto *base = static_cast<const uint8_t *>(map_);
-    auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
+    const auto *base = static_cast<const uint8_t *>(map_);
+    const auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
     if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 ||
         eh->e_ident[EI_CLASS] != ELFCLASS64)
       return false;
 
-    auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
-    for (int i = 0; i < eh->e_shnum; ++i) {
+    const auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
+    for (size_t i = 0; i < eh->e_shnum; ++i) {
       if (sh[i].sh_type != SHT_SYMTAB)
         continue;
       if (sh[i].sh_link >= eh->e_shnum)
@@ -210,7 +217,7 @@ bool u_probe_offsets(void *somain, void *solinker, void *vdso,
   for (size_t i = 0; i < kSizeBlockRange / sizeof(void *); ++i) {
     if (!size_ok) {
       size_t v = *reinterpret_cast<size_t *>(
-          reinterpret_cast<uintptr_t>(somain) + i * sizeof(void *));
+          reinterpret_cast<uintptr_t>(somain) + (i * sizeof(void *)));
       if (v > kSizeMin && v < kSizeMax) {
         g_size_off = i * sizeof(void *);
         size_ok = true;
@@ -220,7 +227,7 @@ bool u_probe_offsets(void *somain, void *solinker, void *vdso,
     if (!size_ok)
       continue;
     uintptr_t field =
-        reinterpret_cast<uintptr_t>(solinker) + i * sizeof(void *);
+        reinterpret_cast<uintptr_t>(solinker) + (i * sizeof(void *));
     if (!next_ok) {
       void *nx = *reinterpret_cast<void **>(field);
       if (nx == somain || (vdso != nullptr && nx == vdso)) {
@@ -234,7 +241,7 @@ bool u_probe_offsets(void *somain, void *solinker, void *vdso,
     if (!ctor_ok) {
       auto *lm = reinterpret_cast<link_map *>(field);
       size_t gap = (sizeof(link_map) + sizeof(void *) - 1) / sizeof(void *);
-      uintptr_t fwd = field + gap * sizeof(void *);
+      uintptr_t fwd = field + (gap * sizeof(void *));
       if (*reinterpret_cast<bool *>(fwd) && lm->l_addr != 0 &&
           lm->l_name != nullptr && strcmp(linker_path, lm->l_name) == 0) {
         g_ctor_off = fwd - reinterpret_cast<uintptr_t>(solinker);
@@ -411,9 +418,10 @@ int drop_module_from_solist(const char *path_substr, bool dry_run,
     /* Match realpath or soname. */
     bool match = (p != nullptr && strstr(p, path_substr) != nullptr) ||
                  (sn != nullptr && strstr(sn, path_substr) != nullptr);
-    if (!keep_mapped && !dry_run && p != nullptr && strncmp(p, "/system", 7) &&
-        strncmp(p, "/apex", 5) && strncmp(p, "/vendor", 7) &&
-        strncmp(p, "/product", 8) && strncmp(p, "/system_ext", 11))
+    if (!keep_mapped && !dry_run && p != nullptr &&
+        strncmp(p, "/system", 7) != 0 && strncmp(p, "/apex", 5) != 0 &&
+        strncmp(p, "/vendor", 7) != 0 && strncmp(p, "/product", 8) != 0 &&
+        strncmp(p, "/system_ext", 11) != 0)
       SLOGI("solist-scan: realpath=%s soname=%s size=%zu", p,
             sn != nullptr ? sn : "(null)", u_size(cur));
     if (match && u_size(cur) > 0) {
@@ -515,10 +523,10 @@ bool find_cfi_shadow(CfiShadowRange *out) {
     out->prot = (perms[0] == 'r' ? PROT_READ : 0) |
                 (perms[1] == 'w' ? PROT_WRITE : 0) |
                 (perms[2] == 'x' ? PROT_EXEC : 0);
-    fclose(fp);
+    (void)fclose(fp);
     return true;
   }
-  fclose(fp);
+  (void)fclose(fp);
   return false;
 }
 
@@ -591,7 +599,7 @@ int spoof_virtual_maps(const char *path_substr, bool private_only) {
                (perms[2] == 'x' ? PROT_EXEC : 0);
     ranges[nr++] = {start, end, prot};
   }
-  fclose(fp);
+  (void)fclose(fp);
 
   int done = 0;
   for (int i = 0; i < nr; ++i) {
@@ -646,7 +654,7 @@ int name_anonymous_exec() {
           end - start, "dalvik-jit-code-cache");
     ++n;
   }
-  fclose(fp);
+  (void)fclose(fp);
   SLOGI("maps-spoof: named %d bare anon exec seg(s)", n);
   return n;
 }

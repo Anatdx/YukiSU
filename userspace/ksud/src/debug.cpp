@@ -82,8 +82,10 @@ int debug_set_manager(const std::string& pkg) {
 
     // Force-stop the package to apply changes
     printf("Force-stopping package...\n");
-    const std::string cmd = "am force-stop " + pkg;
-    system(cmd.c_str());
+    const auto stop_result = exec_command({"am", "force-stop", pkg});
+    if (stop_result.exit_code != 0) {
+        LOGW("Failed to force-stop %s: %s", pkg.c_str(), stop_result.stderr_str.c_str());
+    }
 
     printf("Manager set successfully!\n");
     return 0;

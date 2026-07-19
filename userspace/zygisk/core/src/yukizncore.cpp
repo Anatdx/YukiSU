@@ -28,6 +28,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
@@ -64,7 +65,7 @@ constexpr int kApiVersion1 = 3;
 constexpr int kSuccess = 0;
 constexpr int kFailed = 1;
 constexpr uint32_t kHandleMagic = 0x595a4e31u;
-constexpr size_t kMaxGnuDebugDataSize = 32U * 1024U * 1024U;
+constexpr size_t kMaxGnuDebugDataSize = size_t{32} * 1024 * 1024;
 
 struct ZnSymbolResolver;
 
@@ -364,8 +365,7 @@ bool path_matches_map(const std::string &want, const std::string &map_path) {
     return true;
   if (want[0] == '/')
     return false;
-  return clean.size() > want.size() &&
-         clean.compare(clean.size() - want.size(), want.size(), want) == 0 &&
+  return clean.size() > want.size() && clean.ends_with(want) &&
          clean[clean.size() - want.size() - 1] == '/';
 }
 
@@ -483,7 +483,7 @@ bool decompress_xz(const uint8_t *data, size_t size,
     return false;
 
   out->clear();
-  out->resize(64U * 1024U);
+  out->resize(size_t{64} * 1024);
   xz_buf b{};
   b.in = data;
   b.in_size = size;
@@ -505,9 +505,7 @@ bool decompress_xz(const uint8_t *data, size_t size,
     if (b.out_pos == out->size()) {
       if (out->size() >= kMaxGnuDebugDataSize)
         break;
-      size_t next = out->size() * 2;
-      if (next > kMaxGnuDebugDataSize)
-        next = kMaxGnuDebugDataSize;
+      const size_t next = std::min(out->size() * 2, kMaxGnuDebugDataSize);
       out->resize(next);
       b.out = out->data();
       b.out_size = out->size();
@@ -761,7 +759,7 @@ std::string bounded_cstr(const char *s, size_t max) {
   size_t n = 0;
   while (n < max && s[n] != '\0')
     n++;
-  return std::string(s, n);
+  return {s, n};
 }
 
 std::string module_id_of(const zygiskd::NativeModuleInfo &info) {
@@ -874,9 +872,10 @@ bool early_packet_entry_to_info(const yz_early_native_packet_entry &entry,
   *info = {};
   info->target_type = module.target_type;
   info->has_companion = 0;
-  snprintf(info->module_id, sizeof(info->module_id), "%s", module.module_id);
-  snprintf(info->target, sizeof(info->target), "%s", module.target);
-  snprintf(info->lib_path, sizeof(info->lib_path), "%s", module.lib_path);
+  (void)snprintf(info->module_id, sizeof(info->module_id), "%s",
+                 module.module_id);
+  (void)snprintf(info->target, sizeof(info->target), "%s", module.target);
+  (void)snprintf(info->lib_path, sizeof(info->lib_path), "%s", module.lib_path);
   return true;
 }
 
@@ -1157,22 +1156,21 @@ extern "C" void yz_klog(const char *fmt, ...) {
   char buf[1024];
   va_list ap;
   va_start(ap, fmt);
-  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  const int n = vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
   if (n <= 0)
     return;
-  size_t len = n < static_cast<int>(sizeof(buf)) ? static_cast<size_t>(n)
-                                                 : sizeof(buf) - 1;
+  const size_t len = static_cast<size_t>(n) < sizeof(buf)
+                         ? static_cast<size_t>(n)
+                         : sizeof(buf) - 1;
   constexpr size_t kChunk = 220;
   for (size_t off = 0; off < len; off += kChunk) {
-    size_t chunk = len - off;
-    if (chunk > kChunk)
-      chunk = kChunk;
-    int s = connect_zygiskd();
+    const size_t chunk = std::min(len - off, kChunk);
+    const int s = connect_zygiskd();
     if (s < 0)
       return;
-    uint8_t op = static_cast<uint8_t>(ZdRequest::Log);
-    uint16_t l16 = static_cast<uint16_t>(chunk);
+    const uint8_t op = static_cast<uint8_t>(ZdRequest::Log);
+    const uint16_t l16 = static_cast<uint16_t>(chunk);
     if (write_all(s, &op, 1) && write_all(s, &l16, sizeof(l16)))
       (void)!write_all(s, buf + off, chunk);
     close(s);

@@ -24,7 +24,7 @@ std::string get_metamodule_module_path(std::string* module_id_out = nullptr) {
         return "";
     }
 
-    const std::string module_path = std::string(MODULE_DIR) + module_id;
+    std::string module_path = std::string(MODULE_DIR) + module_id;
     if (!file_exists(module_path)) {
         return "";
     }
@@ -47,7 +47,7 @@ std::string get_enabled_metamodule_script_path(const std::string& script_name,
         return "";
     }
 
-    const std::string script_path = module_path + "/" + script_name;
+    std::string script_path = module_path + "/" + script_name;
     if (!file_exists(script_path)) {
         return "";
     }

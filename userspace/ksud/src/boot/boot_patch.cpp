@@ -102,14 +102,14 @@ bool inject_superkey_to_lkm(const std::string& lkm_path, const std::string& supe
             signature_bypass ? SUPERKEY_VERIFICATION_KEY_ONLY : SUPERKEY_VERIFICATION_SIGN_AND_KEY;
     }
 
-    printf("- SuperKey hash: 0x%016llx\n", (unsigned long long)hash);
+    printf("- SuperKey hash: 0x%016llx\n", static_cast<unsigned long long>(hash));
     const char* mode_str;
     if (superkey.empty()) {
         mode_str = "signature-only";
     } else {
         mode_str = signature_bypass ? "key-only" : "sign+key";
     }
-    printf("- Verification mode: %llu (%s)\n", (unsigned long long)flags, mode_str);
+    printf("- Verification mode: %llu (%s)\n", static_cast<unsigned long long>(flags), mode_str);
 
     std::fstream file(lkm_path, std::ios::in | std::ios::out | std::ios::binary);
     if (!file) {
@@ -208,12 +208,23 @@ bool repack_ramdisk_with_mkbootfs(const std::string& magiskboot, const std::stri
         LOGW("uname failed, skip mkbootfs repack");
         return false;
     }
-    int major = 0;
-    int minor = 0;
-    if (sscanf(uts.release, "%d.%d", &major, &minor) < 2) {
+    char* major_end = nullptr;
+    errno = 0;
+    const long major_value = std::strtol(uts.release, &major_end, 10);
+    if (errno == ERANGE || major_end == uts.release || *major_end != '.') {
         LOGW("Cannot parse kernel version from %s", uts.release);
         return false;
     }
+    char* minor_end = nullptr;
+    errno = 0;
+    const long minor_value = std::strtol(major_end + 1, &minor_end, 10);
+    if (errno == ERANGE || minor_end == major_end + 1 || major_value < 0 || major_value > INT_MAX ||
+        minor_value < 0 || minor_value > INT_MAX) {
+        LOGW("Cannot parse kernel version from %s", uts.release);
+        return false;
+    }
+    const auto major = static_cast<int>(major_value);
+    const auto minor = static_cast<int>(minor_value);
     const bool use_5_15 = (major > 5) || (major == 5 && minor >= 15);
     const std::string mkbootfs_name = use_5_15 ? "5_15+-mkbootfs" : "5_10-mkbootfs";
     const std::string mkbootfs_path = mkbootfs_dir + "/" + mkbootfs_name;
@@ -536,8 +547,8 @@ BootPatchArgs parse_boot_patch_args(const std::vector<std::string>& args) {
 int boot_patch_impl(const std::vector<std::string>& args) {
     auto parsed = parse_boot_patch_args(args);
 
-    setvbuf(stdout, nullptr, _IONBF, 0);
-    setvbuf(stderr, nullptr, _IONBF, 0);
+    (void)setvbuf(stdout, nullptr, _IONBF, 0);
+    (void)setvbuf(stderr, nullptr, _IONBF, 0);
     printf("\n");
     printf("__   __ _   _  _  __ ___  ____   _   _ \n");
     printf("\\ \\ / /| | | || |/ /|_ _|/ ___| | | | |\n");
@@ -552,7 +563,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     // 2. Current working directory (if writable)
     // 3. /data/local/tmp (fallback, requires shell access)
     std::string workdir;
-    char* tmpdir = nullptr;
+    const char* tmpdir = nullptr;
 
     // Try TMPDIR env first (manager sets this to app cache dir)
     const char* env_tmpdir = getenv("TMPDIR");
@@ -601,8 +612,12 @@ int boot_patch_impl(const std::vector<std::string>& args) {
 
     // Cleanup function
     auto cleanup = [&workdir]() {
-        const std::string cmd = "rm -rf " + workdir;
-        system(cmd.c_str());
+        std::error_code ec;
+        fs::remove_all(workdir, ec);
+        if (ec) {
+            LOGW("Failed to remove temporary directory %s: %s", workdir.c_str(),
+                 ec.message().c_str());
+        }
     };
 
     // Find magiskboot
@@ -775,8 +790,8 @@ int boot_patch_impl(const std::vector<std::string>& args) {
             // Fallback: check standard location
             const std::string ksuinit_path = std::string(BINARY_DIR) + "ksuinit";
             if (access(ksuinit_path.c_str(), R_OK) == 0) {
-                std::ifstream src(ksuinit_path,
-                                  std::ios::binary);  // NOLINT(misc-const-correctness)
+                std::ifstream const src(ksuinit_path,
+                                        std::ios::binary);  // NOLINT(misc-const-correctness)
                 std::ofstream dst(init_file, std::ios::binary);
                 dst << src.rdbuf();
                 printf("- Using ksuinit from %s\n", ksuinit_path.c_str());
@@ -792,7 +807,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
 
     // Unpack boot image (must run in workdir so output files go there)
     printf("- Unpacking boot image\n");
-    fflush(stdout);
+    (void)fflush(stdout);
     printf("- magiskboot: %s\n", magiskboot.c_str());
     printf("- bootimage: %s\n", bootimage.c_str());
     printf("- workdir: %s\n", workdir.c_str());
@@ -804,7 +819,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         cleanup();
         return 1;
     }
-    printf("- Boot image size: %ld bytes\n", (long)boot_stat.st_size);
+    printf("- Boot image size: %ld bytes\n", static_cast<long>(boot_stat.st_size));
 
     // Try normal unpack first (with decompress). On some devices LZ4_LEGACY in-process decompress
     // crashes (SIGSEGV, exit 139); then we retry with --skip-decomp and tell user to use PC.
@@ -831,7 +846,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
             cleanup();
             return 1;
         }
-        std::string ramdisk_cpio = workdir + "/ramdisk.cpio";
+        std::string const ramdisk_cpio = workdir + "/ramdisk.cpio";
         std::ifstream ramdisk_in(ramdisk_cpio, std::ios::binary);
         std::array<unsigned char, 4> magic_buf{};
         if (ramdisk_in && ramdisk_in.read(reinterpret_cast<char*>(magic_buf.data()), 4) &&
@@ -1041,7 +1056,7 @@ int boot_patch_impl(const std::vector<std::string>& args) {
     const std::string new_boot =
         workdir + "/" + (is_init_boot ? "new-init_boot.img" : "new-boot.img");
     printf("- Repacking boot image\n");
-    fflush(stdout);
+    (void)fflush(stdout);
     // MagiskbootAlone supports LZ4_LEGACY, GZIP, and LZ4 compression natively.
     // Do NOT use --skip-comp: the ramdisk must be recompressed to fit the
     // partition. Without recompression the uncompressed ramdisk makes the output
@@ -1074,10 +1089,14 @@ int boot_patch_impl(const std::vector<std::string>& args) {
         std::string name = parsed.out_name;
         if (name.empty()) {
             const time_t now = time(nullptr);
-            struct tm* tm_info = localtime(&now);
+            const struct tm* tm_info = localtime(&now);
             std::array<char, 32> time_str{};
-            (void)strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info);
-            name = std::string("kernelsu_patched_") + time_str.data() + ".img";
+            if (tm_info != nullptr &&
+                strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info) != 0) {
+                name = std::string("kernelsu_patched_") + time_str.data() + ".img";
+            } else {
+                name = "kernelsu_patched.img";
+            }
         }
 
         const std::string output_image = output_dir + "/" + name;
@@ -1155,7 +1174,7 @@ int boot_restore(const std::vector<std::string>& args) {
     std::array<char, 32> tmpdir_buf{};
     (void)strncpy(tmpdir_buf.data(), "/data/local/tmp/KernelSU_XXXXXX", tmpdir_buf.size() - 1);
     tmpdir_buf[tmpdir_buf.size() - 1] = '\0';
-    char* tmpdir = mkdtemp(tmpdir_buf.data());
+    const char* tmpdir = mkdtemp(tmpdir_buf.data());
     if (!tmpdir) {
         LOGE("Failed to create temp directory");
         return 1;
@@ -1163,8 +1182,12 @@ int boot_restore(const std::vector<std::string>& args) {
     std::string workdir = tmpdir;
 
     auto cleanup = [&workdir]() {
-        const std::string cmd = "rm -rf " + workdir;
-        system(cmd.c_str());
+        std::error_code ec;
+        fs::remove_all(workdir, ec);
+        if (ec) {
+            LOGW("Failed to remove temporary directory %s: %s", workdir.c_str(),
+                 ec.message().c_str());
+        }
     };
 
     // Find magiskboot
@@ -1216,7 +1239,7 @@ int boot_restore(const std::vector<std::string>& args) {
     }
     if (unpack_result.exit_code == 0) {
         constexpr unsigned char LZ4_LEG_MAGIC[] = {0x02, 0x21, 0x4c, 0x18};
-        std::string rd_cpio = workdir + "/ramdisk.cpio";
+        std::string const rd_cpio = workdir + "/ramdisk.cpio";
         std::ifstream rd_in(rd_cpio, std::ios::binary);
         unsigned char mb[4];
         if (rd_in && rd_in.read(reinterpret_cast<char*>(mb), 4) && rd_in.gcount() == 4 &&
@@ -1341,10 +1364,14 @@ int boot_restore(const std::vector<std::string>& args) {
         std::string name = parsed.out_name;
         if (name.empty()) {
             const time_t now = time(nullptr);
-            struct tm* tm_info = localtime(&now);
+            const struct tm* tm_info = localtime(&now);
             std::array<char, 32> time_str{};
-            (void)strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info);
-            name = std::string("kernelsu_restore_") + time_str.data() + ".img";
+            if (tm_info != nullptr &&
+                strftime(time_str.data(), time_str.size(), "%Y%m%d_%H%M%S", tm_info) != 0) {
+                name = std::string("kernelsu_restore_") + time_str.data() + ".img";
+            } else {
+                name = "kernelsu_restore.img";
+            }
         }
 
         const std::string output_image = "./" + name;
@@ -1381,14 +1408,18 @@ int boot_restore(const std::vector<std::string>& args) {
     return 0;
 }
 
+namespace {
+
 // Prefer the sysctl value for KMI selection and fall back to uname when unavailable.
-static std::string read_kernel_release_from_sysfs() {
+std::string read_kernel_release_from_sysfs() {
     std::ifstream f("/proc/sys/kernel/osrelease");
     std::string line;
     if (std::getline(f, line))
         return line;
     return "";
 }
+
+}  // namespace
 
 std::string get_current_kmi() {
     std::string full_version = read_kernel_release_from_sysfs();

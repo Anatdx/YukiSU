@@ -58,7 +58,7 @@ bool extract_and_load_kernelsu(bool allow_shell) {
     std::array<char, PATH_MAX> tmp_path{};
     int tmp_fd = -1;
     for (const char* candidate : kLateLoadTmpCandidates) {
-        std::snprintf(tmp_path.data(), tmp_path.size(), "%s", candidate);
+        (void)std::snprintf(tmp_path.data(), tmp_path.size(), "%s", candidate);
         tmp_fd = mkstemp(tmp_path.data());
         if (tmp_fd >= 0) {
             LOGI("late-load: using temp module path %s", tmp_path.data());
@@ -140,68 +140,68 @@ void run_post_magica_cleanup() {
 
 int run(bool post_magica, bool allow_shell) {
     LOGI("late-load command triggered");
-    int result = 0;
+    const auto execute = [allow_shell]() -> int {
+        if (!is_kernelsu_loaded() && !extract_and_load_kernelsu(allow_shell)) {
+            return 1;
+        }
 
-    if (!is_kernelsu_loaded() && !extract_and_load_kernelsu(allow_shell)) {
-        result = 1;
-        goto finalize;
-    }
+        ksud::umask(0);
 
-    ksud::umask(0);
+        clear_all_temp_configs();
 
-    clear_all_temp_configs();
+        if (install(std::nullopt, std::nullopt) != 0) {
+            LOGE("late-load: install() failed");
+            return 1;
+        }
 
-    if (install(std::nullopt, std::nullopt) != 0) {
-        LOGE("late-load: install() failed");
-        result = 1;
-        goto finalize;
-    }
+        if (handle_updated_modules() != 0) {
+            LOGW("late-load: handle_updated_modules failed");
+        }
 
-    if (handle_updated_modules() != 0) {
-        LOGW("late-load: handle_updated_modules failed");
-    }
+        if (prune_modules() != 0) {
+            LOGW("late-load: prune_modules failed");
+        }
 
-    if (prune_modules() != 0) {
-        LOGW("late-load: prune_modules failed");
-    }
+        if (!restorecon()) {
+            LOGW("late-load: restorecon failed");
+        }
 
-    if (!restorecon()) {
-        LOGW("late-load: restorecon failed");
-    }
+        if (load_sepolicy_rule() != 0) {
+            LOGW("late-load: load_sepolicy_rule failed");
+        }
 
-    if (load_sepolicy_rule() != 0) {
-        LOGW("late-load: load_sepolicy_rule failed");
-    }
+        if (apply_profile_sepolies() != 0) {
+            LOGW("late-load: apply_profile_sepolies failed");
+        }
 
-    if (apply_profile_sepolies() != 0) {
-        LOGW("late-load: apply_profile_sepolies failed");
-    }
+        if (init_features() != 0) {
+            LOGW("late-load: init_features failed");
+        }
 
-    if (init_features() != 0) {
-        LOGW("late-load: init_features failed");
-    }
+        run_stage_scripts("late-load", true);
 
-    run_stage_scripts("late-load", true);
+        if (load_system_prop() != 0) {
+            LOGW("late-load: load_system_prop failed");
+        }
 
-    if (load_system_prop() != 0) {
-        LOGW("late-load: load_system_prop failed");
-    }
+        if (metamodule_exec_mount_script() != 0) {
+            LOGW("late-load: metamodule_exec_mount_script failed");
+        }
 
-    if (metamodule_exec_mount_script() != 0) {
-        LOGW("late-load: metamodule_exec_mount_script failed");
-    }
+        if (umount_apply_config() != 0) {
+            LOGW("late-load: umount_apply_config failed");
+        }
 
-    if (umount_apply_config() != 0) {
-        LOGW("late-load: umount_apply_config failed");
-    }
+        run_stage_scripts("post-mount", true);
+        on_services();
+        on_boot_completed();
 
-    run_stage_scripts("post-mount", true);
-    on_services();
-    on_boot_completed();
+        restart_manager();
 
-    restart_manager();
+        return 0;
+    };
 
-finalize:
+    const int result = execute();
     if (post_magica) {
         run_post_magica_cleanup();
     }

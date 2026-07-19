@@ -619,8 +619,8 @@ int cmd_flash_new(const std::vector<std::string>& args) {
     }
 
     if (filtered_args[0] == "image" && filtered_args.size() >= 3) {
-        const std::string image_path = filtered_args[1];
-        const std::string partition = filtered_args[2];
+        const std::string& image_path = filtered_args[1];
+        const std::string& partition = filtered_args[2];
 
         printf("Flashing %s to %s", image_path.c_str(), partition.c_str());
         if (!target_slot.empty()) {
@@ -637,8 +637,8 @@ int cmd_flash_new(const std::vector<std::string>& args) {
         }
 
     } else if (filtered_args[0] == "backup" && filtered_args.size() >= 3) {
-        const std::string partition = filtered_args[1];
-        const std::string output = filtered_args[2];
+        const std::string& partition = filtered_args[1];
+        const std::string& output = filtered_args[2];
 
         printf("Backing up %s to %s", partition.c_str(), output.c_str());
         if (!target_slot.empty()) {
@@ -676,13 +676,13 @@ int cmd_flash_new(const std::vector<std::string>& args) {
             if (ksud::flash::is_dangerous_partition(p)) {
                 marker = " [DANGEROUS]";
             }
-            printf("  %-20s [%s, %lu bytes]%s\n", p.c_str(), type, (unsigned long)info.size,
-                   marker);
+            printf("  %-20s [%s, %lu bytes]%s\n", p.c_str(), type,
+                   static_cast<unsigned long>(info.size), marker);
         }
         return 0;
 
     } else if (filtered_args[0] == "info" && filtered_args.size() >= 2) {
-        const std::string partition = filtered_args[1];
+        const std::string& partition = filtered_args[1];
         const std::string slot =
             target_slot.empty() ? ksud::flash::get_current_slot_suffix() : target_slot;
         auto info = ksud::flash::get_partition_info(partition, slot);
@@ -695,7 +695,7 @@ int cmd_flash_new(const std::vector<std::string>& args) {
         printf("Partition: %s\n", info.name.c_str());
         printf("Block device: %s\n", info.block_device.c_str());
         printf("Type: %s\n", info.is_logical ? "logical" : "physical");
-        printf("Size: %lu bytes (%.2f MB)\n", (unsigned long)info.size,
+        printf("Size: %lu bytes (%.2f MB)\n", static_cast<unsigned long>(info.size),
                info.size / 1024.0 / 1024.0);
 
         if (ksud::flash::is_ab_device()) {
@@ -805,7 +805,7 @@ int cmd_late_load(const std::vector<std::string>& args) {
             if (i + 1 < args.size() && !args[i + 1].empty() && args[i + 1].rfind("--", 0) != 0) {
                 char* end = nullptr;
                 errno = 0;
-                long parsed_long = std::strtol(args[++i].c_str(), &end, 10);
+                long const parsed_long = std::strtol(args[++i].c_str(), &end, 10);
                 if (end == args[i].c_str() || *end != '\0' || errno == ERANGE || parsed_long <= 0 ||
                     parsed_long > 65535) {
                     printf("Invalid magica port: %s\n", args[i].c_str());

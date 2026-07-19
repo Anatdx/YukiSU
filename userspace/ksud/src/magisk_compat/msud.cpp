@@ -73,20 +73,23 @@ uint64_t random_u64() {
     return v;
 }
 
+// printf-style logging is intentional at this C/POSIX boundary.
+// NOLINTNEXTLINE(cert-dcl50-cpp)
 void mlog(const char* fmt, ...) {
     FILE* f = fopen("/data/adb/ksu/log/msud.log", "ae");
     if (f == nullptr) {
         return;
     }
     struct timespec ts{};
-    clock_gettime(CLOCK_REALTIME, &ts);
-    fprintf(f, "[%ld.%03ld pid %d] ", static_cast<long>(ts.tv_sec), ts.tv_nsec / 1000000, getpid());
+    (void)clock_gettime(CLOCK_REALTIME, &ts);
+    (void)fprintf(f, "[%ld.%03ld pid %d] ", static_cast<long>(ts.tv_sec), ts.tv_nsec / 1000000,
+                  getpid());
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(f, fmt, ap);
+    (void)vfprintf(f, fmt, ap);
     va_end(ap);
-    fputc('\n', f);
-    fclose(f);
+    (void)fputc('\n', f);
+    (void)fclose(f);
 }
 
 void set_recv_timeout(int fd, int seconds) {
@@ -163,8 +166,13 @@ int create_verdict_listener(std::string* out_name) {
     }
 
     char namebuf[40];
-    snprintf(namebuf, sizeof(namebuf), "ksu_msud_%016llx",
-             static_cast<unsigned long long>(random_u64()));
+    const int name_length = snprintf(namebuf, sizeof(namebuf), "ksu_msud_%016llx",
+                                     static_cast<unsigned long long>(random_u64()));
+    if (name_length < 0 || static_cast<size_t>(name_length) >= sizeof(namebuf)) {
+        mlog("msud: failed to format verdict socket name");
+        close(fd);
+        return -1;
+    }
 
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
@@ -251,13 +259,17 @@ void launch_prompt(uint32_t uid, uint32_t req_id, const std::string& comm,
 
 bool await_verdict(int listen_fd, uint32_t req_id, uint64_t nonce, MsudReply* out) {
     struct timespec start{};
-    clock_gettime(CLOCK_MONOTONIC, &start);
+    if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+        return false;
+    }
 
     for (;;) {
         struct timespec now{};
-        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+            return false;
+        }
         const long elapsed_ms =
-            (now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000;
+            ((now.tv_sec - start.tv_sec) * 1000) + ((now.tv_nsec - start.tv_nsec) / 1000000);
         const int remaining = kVerdictTimeoutMs - static_cast<int>(elapsed_ms);
         if (remaining <= 0) {
             return false;
@@ -389,7 +401,9 @@ void send_result(int conn, int32_t granted, int32_t exit_code) {
 }
 
 void handle_su_client(int conn) {
-    signal(SIGCHLD, SIG_DFL);
+    if (signal(SIGCHLD, SIG_DFL) == SIG_ERR) {
+        mlog("msud: failed to reset SIGCHLD handler: %s", strerror(errno));
+    }
     set_recv_timeout(conn, 10);
 
     struct ucred cred{};
@@ -406,7 +420,7 @@ void handle_su_client(int conn) {
     if (!sucompat::recv_with_fds(conn, &hdr, sizeof(hdr), fds.data(), 3, &nfds) ||
         hdr.magic != sucompat::kSuMagic || hdr.payload_len > sucompat::kSuMaxPayload) {
         mlog("msud: bad su request from uid %u", cred.uid);
-        for (int f : fds) {
+        for (int const f : fds) {
             if (f >= 0) {
                 close(f);
             }
@@ -417,7 +431,7 @@ void handle_su_client(int conn) {
 
     std::string payload(hdr.payload_len, '\0');
     if (hdr.payload_len > 0 && !sucompat::read_all(conn, payload.data(), payload.size())) {
-        for (int f : fds) {
+        for (int const f : fds) {
             if (f >= 0) {
                 close(f);
             }
@@ -431,7 +445,7 @@ void handle_su_client(int conn) {
     std::vector<std::string> env;
     if (!sucompat::parse_payload(payload, hdr.argc, hdr.envc, &cwd, &args, &env)) {
         mlog("msud: malformed payload from uid %u", cred.uid);
-        for (int f : fds) {
+        for (int const f : fds) {
             if (f >= 0) {
                 close(f);
             }
@@ -456,7 +470,7 @@ void handle_su_client(int conn) {
 
     if (!granted) {
         mlog("handle: uid %u DENIED", cred.uid);
-        for (int f : fds) {
+        for (int const f : fds) {
             if (f >= 0) {
                 close(f);
             }
@@ -467,7 +481,7 @@ void handle_su_client(int conn) {
 
     const pid_t shell = fork();
     if (shell < 0) {
-        for (int f : fds) {
+        for (int const f : fds) {
             if (f >= 0) {
                 close(f);
             }
@@ -482,7 +496,7 @@ void handle_su_client(int conn) {
 
     mlog("handle: uid %u GRANTED, shell pid %d running", cred.uid, shell);
 
-    for (int f : fds) {
+    for (int const f : fds) {
         if (f >= 0) {
             close(f);
         }
@@ -563,8 +577,12 @@ int run_msud() {
         return 0;
     }
 
-    signal(SIGPIPE, SIG_IGN);
-    signal(SIGCHLD, reap_children);
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        mlog("msud: failed to ignore SIGPIPE: %s", strerror(errno));
+    }
+    if (signal(SIGCHLD, reap_children) == SIG_ERR) {
+        mlog("msud: failed to install SIGCHLD handler: %s", strerror(errno));
+    }
 
     const int listen_fd = create_su_listener();
     if (listen_fd < 0) {

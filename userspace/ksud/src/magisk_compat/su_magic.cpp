@@ -6,11 +6,11 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <climits>
 
 #include <cerrno>
 #include <cstdlib>
@@ -47,7 +47,7 @@ const char* g_skel = kSkelTmpfs;
 bool g_on_tmpfs = true;
 
 bool get_context(const char* path, char* out, size_t out_sz) {
-    ssize_t n = lgetxattr(path, kSelinuxXattr, out, out_sz - 1);
+    ssize_t const n = lgetxattr(path, kSelinuxXattr, out, out_sz - 1);
     if (n <= 0) {
         return false;
     }
@@ -68,7 +68,7 @@ bool tmpfs_xattr_supported() {
     bool ok = false;
     if (mount("tmpfs", probe, "tmpfs", 0, nullptr) == 0) {
         const std::string f = std::string(probe) + "/probe";
-        int fd = open(f.c_str(), O_CREAT | O_WRONLY, 0600);
+        int const fd = open(f.c_str(), O_CREAT | O_WRONLY, 0600);
         if (fd >= 0) {
             close(fd);
             if (lsetxattr(f.c_str(), kSelinuxXattr, kBinDirContextFallback,
@@ -88,7 +88,7 @@ bool tmpfs_xattr_supported() {
 
 // Preserve per-entry labels such as system_linker_exec.
 void clone_attr(const char* src, const char* dst) {
-    struct stat st;
+    struct stat st{};
     if (lstat(src, &st) != 0) {
         return;
     }
@@ -105,14 +105,14 @@ bool bind_mount(const char* src, const char* dst) {
 }
 
 bool mirror_entry(const std::string& src, const std::string& dst) {
-    struct stat st;
+    struct stat st{};
     if (lstat(src.c_str(), &st) != 0) {
         LOGW("magisk_su: lstat %s failed: %s", src.c_str(), strerror(errno));
         return false;
     }
 
     if (S_ISREG(st.st_mode)) {
-        int fd = open(dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, st.st_mode & 07777);
+        int const fd = open(dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, st.st_mode & 07777);
         if (fd < 0) {
             LOGE("magisk_su: create mirror %s failed: %s", dst.c_str(), strerror(errno));
             return false;
@@ -124,7 +124,7 @@ bool mirror_entry(const std::string& src, const std::string& dst) {
         }
     } else if (S_ISLNK(st.st_mode)) {
         char tgt[PATH_MAX];
-        ssize_t len = readlink(src.c_str(), tgt, sizeof(tgt) - 1);
+        ssize_t const len = readlink(src.c_str(), tgt, sizeof(tgt) - 1);
         if (len < 0) {
             LOGE("magisk_su: readlink %s failed: %s", src.c_str(), strerror(errno));
             return false;
@@ -177,7 +177,7 @@ void rm_rf(const std::string& path) {
                 continue;
             }
             const std::string child = path + "/" + e->d_name;
-            struct stat st;
+            struct stat st{};
             if (lstat(child.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
                 rm_rf(child);
             } else {
@@ -212,7 +212,8 @@ bool su_magic_mounted() {
     std::string line;
     while (std::getline(in, line)) {
         std::istringstream iss(line);
-        std::string src, mnt;
+        std::string src;
+        std::string mnt;
         if ((iss >> src >> mnt) && mnt == "/system/bin") {
             return true;
         }
@@ -306,7 +307,7 @@ bool magic_mount_su() {
 
     const std::string su_dst = std::string(g_skel) + "/su";
     {
-        int fd = open(su_dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0755);
+        int const fd = open(su_dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0755);
         if (fd >= 0) {
             close(fd);
         }

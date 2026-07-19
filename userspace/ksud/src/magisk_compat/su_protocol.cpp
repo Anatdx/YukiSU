@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 
@@ -107,9 +108,7 @@ bool send_with_fds(int sock, const void* buf, size_t len, const int* fds, int nf
     msg.msg_iovlen = 1;
 
     if (nfds > 0) {
-        if (nfds > 3) {
-            nfds = 3;
-        }
+        nfds = std::min(nfds, 3);
         msg.msg_control = cmsg;
         msg.msg_controllen = CMSG_SPACE(sizeof(int) * nfds);
         struct cmsghdr* h = CMSG_FIRSTHDR(&msg);

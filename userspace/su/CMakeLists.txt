@@ -15,6 +15,8 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/ClangTidy.cmake")
+
 # Standalone magisk-compat su client. Built on its own (NOT by ksud's CMake) and
 # embedded into ksud as a prebuilt asset, exactly like ksuinit. It speaks the
 # shared su wire protocol, whose source lives next to the broker (msud) in the
@@ -31,6 +33,7 @@ add_executable(su
 target_include_directories(su PRIVATE src ${KSUD_SRC})
 target_compile_options(su PRIVATE -Os -ffunction-sections -fdata-sections)
 target_link_options(su PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+yukisu_enable_clang_tidy(su CXX)
 
 # Shrink the embedded binary (notes/comment), matching the old in-ksud su target.
 find_program(LLVM_STRIP NAMES llvm-strip)

@@ -218,7 +218,7 @@ int ensure_binaries(bool ignore_if_exist) {
     if (stat(DAEMON_PATH, &st) == 0) {
         auto ensure_link = [](const char* link, const char* tag) {
             char cur[512];
-            ssize_t n = readlink(link, cur, sizeof(cur) - 1);
+            const ssize_t n = readlink(link, cur, sizeof(cur) - 1);
             if (n > 0) {
                 cur[n] = '\\0';
                 if (strcmp(cur, DAEMON_PATH) == 0) {

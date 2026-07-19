@@ -39,28 +39,13 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
-# clang-tidy: optional for our sources only (third_party/FetchContent excluded). Set KSUD_ENABLE_CLANG_TIDY=OFF to skip.
-option(KSUD_ENABLE_CLANG_TIDY "Run clang-tidy on ksud own sources" ON)
-set(CLANG_TIDY_ARGS "")
-if(KSUD_ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_PROGRAM NAMES clang-tidy clang-tidy-18 clang-tidy-17 clang-tidy-16 clang-tidy-14)
-    get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
-    set(CLANG_TIDY_CONFIG "${REPO_ROOT}/.clang-tidy")
-    if(NOT CLANG_TIDY_PROGRAM)
-        message(FATAL_ERROR "clang-tidy not found. Install it (e.g. apt install clang-tidy / brew install llvm) or configure with -DKSUD_ENABLE_CLANG_TIDY=OFF")
-    endif()
-    if(NOT EXISTS "${CLANG_TIDY_CONFIG}")
-        message(FATAL_ERROR ".clang-tidy not found at ${CLANG_TIDY_CONFIG}")
-    endif()
-    set(CLANG_TIDY_ARGS "${CLANG_TIDY_PROGRAM};--config-file=${CLANG_TIDY_CONFIG}")
-    if(ANDROID)
-        message(STATUS "clang-tidy: skipped for Android (run tidy on host build in CI instead)")
-    else()
-        message(STATUS "clang-tidy: enabled for ksud own sources (config=${CLANG_TIDY_CONFIG})")
-    endif()
-else()
-    message(STATUS "clang-tidy: disabled (KSUD_ENABLE_CLANG_TIDY=OFF)")
+# Backward-compatible alias for existing local invocations.
+if(DEFINED KSUD_ENABLE_CLANG_TIDY AND
+   NOT DEFINED YUKISU_ENABLE_CLANG_TIDY)
+    set(YUKISU_ENABLE_CLANG_TIDY "${KSUD_ENABLE_CLANG_TIDY}"
+        CACHE BOOL "Run clang-tidy on YukiSU first-party userspace sources")
 endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/ClangTidy.cmake")
 
 # ============================================================================
 # Super Aggressive Size Optimization
@@ -289,7 +274,6 @@ set(KSUD_OUR_SOURCES
     src/magica/magica.cpp
     src/core/hide_bootloader.cpp
     src/flash/flash_partition.cpp
-    ${ASSETS_CPP}
 )
 
 # Third-party sources (no clang-tidy: MagiskbootAlone, bootctl, resetprop)
@@ -307,12 +291,11 @@ endif()
 get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
 
 # Zygisk daemon (zygiskd), welded into ksud as a multi-call face. Invoked as
-# `ksud zygiskd` or via a `zygiskd` -> ksud symlink. Source lives with the rest
-# of the zygisk project; bundled here (no clang-tidy) like the other tools.
+# `ksud zygiskd` or via a `zygiskd` -> ksud symlink. It is first-party
+# userspace code and gets its own checked object target below.
 set(ZYGISKD_DIR ${REPO_ROOT}/userspace/zygisk/daemon)
 if(EXISTS ${ZYGISKD_DIR}/zygiskd.cpp)
     set(ZYGISKD_AVAILABLE 1)
-    list(APPEND KSUD_THIRDPARTY_SOURCES ${ZYGISKD_DIR}/zygiskd.cpp)
 endif()
 
 # Include directories (for both object libs and ksud)
@@ -345,19 +328,33 @@ if(ZYGISKD_AVAILABLE)
     list(APPEND KSUD_DEFINES ZYGISKD_AVAILABLE=1)
 endif()
 
-# Object library: our sources (with clang-tidy on host only)
-# Android: host clang-tidy + NDK headers mixes host /usr/include (bits/wordsize.h) with NDK and can
-# crash (e.g. bugprone-implicit-widening-of-multiplication-result in NDK errno.h). Run tidy on host build instead.
+# Object library: our sources (with clang-tidy when enabled). The Android NDK
+# compilation database supplies the real target sysroot and flags to clang-tidy.
 add_library(ksud_our_objs OBJECT ${KSUD_OUR_SOURCES})
 target_include_directories(ksud_our_objs PRIVATE ${KSUD_INCLUDE_DIRS})
 target_compile_definitions(ksud_our_objs PRIVATE ${KSUD_DEFINES})
 target_compile_features(ksud_our_objs PUBLIC cxx_std_17)
-if(KSUD_ENABLE_CLANG_TIDY AND NOT ANDROID)
-    set_target_properties(ksud_our_objs PROPERTIES
-        CXX_CLANG_TIDY "${CLANG_TIDY_ARGS}"
-        C_CLANG_TIDY "${CLANG_TIDY_ARGS}"
-    )
+yukisu_enable_clang_tidy(ksud_our_objs CXX)
+
+set(KSUD_FIRSTPARTY_EXTRA_OBJECTS)
+if(ZYGISKD_AVAILABLE)
+    add_library(ksud_zygiskd_objs OBJECT ${ZYGISKD_DIR}/zygiskd.cpp)
+    target_include_directories(ksud_zygiskd_objs PRIVATE ${KSUD_INCLUDE_DIRS})
+    target_compile_definitions(ksud_zygiskd_objs PRIVATE ${KSUD_DEFINES})
+    target_compile_features(ksud_zygiskd_objs PUBLIC cxx_std_20)
+    set(_KSUD_CLANG_TIDY_CONFIG "${YUKISU_CLANG_TIDY_CONFIG}")
+    set(YUKISU_CLANG_TIDY_CONFIG "${ZYGISKD_DIR}/../.clang-tidy")
+    yukisu_enable_clang_tidy(ksud_zygiskd_objs CXX)
+    set(YUKISU_CLANG_TIDY_CONFIG "${_KSUD_CLANG_TIDY_CONFIG}")
+    list(APPEND KSUD_FIRSTPARTY_EXTRA_OBJECTS
+        $<TARGET_OBJECTS:ksud_zygiskd_objs>)
 endif()
+
+# Generated compressed asset bytes are compiled into ksud, but are not useful
+# clang-tidy input. Keep them separate from the hand-written first-party code.
+add_library(ksud_generated_objs OBJECT ${ASSETS_CPP})
+target_include_directories(ksud_generated_objs PRIVATE ${KSUD_INCLUDE_DIRS})
+target_compile_definitions(ksud_generated_objs PRIVATE ${KSUD_DEFINES})
 
 # Object library: third-party sources (no clang-tidy)
 add_library(ksud_thirdparty_objs OBJECT ${KSUD_THIRDPARTY_SOURCES})
@@ -370,6 +367,8 @@ endif()
 # Executable: link object libs
 add_executable(ksud
     $<TARGET_OBJECTS:ksud_our_objs>
+    ${KSUD_FIRSTPARTY_EXTRA_OBJECTS}
+    $<TARGET_OBJECTS:ksud_generated_objs>
     $<TARGET_OBJECTS:ksud_thirdparty_objs>
 )
 target_compile_definitions(ksud PRIVATE ${KSUD_DEFINES})

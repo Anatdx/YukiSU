@@ -44,6 +44,11 @@ public:
         }
     }
 
+    KptrGuard(const KptrGuard&) = delete;
+    KptrGuard& operator=(const KptrGuard&) = delete;
+    KptrGuard(KptrGuard&&) = delete;
+    KptrGuard& operator=(KptrGuard&&) = delete;
+
 private:
     std::string original_value_;
 };
@@ -95,8 +100,8 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer) {
     }
 
     auto* shdr_base = reinterpret_cast<Shdr*>(buffer->data() + ehdr->e_shoff);
-    Shdr* symtab = nullptr;
-    Shdr* strtab = nullptr;
+    const Shdr* symtab = nullptr;
+    const Shdr* strtab = nullptr;
 
     for (int i = 0; i < ehdr->e_shnum; ++i) {
         auto* shdr = &shdr_base[i];
@@ -134,7 +139,7 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer) {
         return true;
     }
 
-    KptrGuard guard;
+    KptrGuard const guard;
     std::ifstream ifs("/proc/kallsyms");
     if (!ifs.is_open()) {
         LOGE("loader: cannot open /proc/kallsyms");
@@ -160,7 +165,7 @@ bool patch_undefined_symbols(std::vector<uint8_t>* buffer) {
 
         char* end = nullptr;
         errno = 0;
-        uint64_t addr = std::strtoull(addr_str.c_str(), &end, 16);
+        uint64_t const addr = std::strtoull(addr_str.c_str(), &end, 16);
         if (end == addr_str.c_str() || *end != '\0' || errno == ERANGE) {
             continue;
         }

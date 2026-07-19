@@ -148,7 +148,7 @@ void collect_rc_files(const std::filesystem::path& dir, const std::string* modul
             out << "# === from " << path.string() << " ===\n";
         }
 
-        std::ifstream input(path, std::ios::binary);
+        std::ifstream const input(path, std::ios::binary);
         if (!input) {
             LOGW("Failed to read init rc: %s", path.c_str());
             continue;
@@ -240,13 +240,7 @@ bool validate_module_id(const std::string& id) {
         return false;
     }
 
-    for (const char c : id) {
-        if (!is_valid_char(c)) {
-            return false;
-        }
-    }
-
-    return true;
+    return std::all_of(id.begin(), id.end(), is_valid_char);
 }
 
 // Check if module is metamodule
@@ -308,7 +302,7 @@ std::string get_metamodule_path_impl() {
 }
 
 // Get current metamodule ID if exists (internal impl)
-static std::string get_metamodule_id_impl() {
+std::string get_metamodule_id_impl() {
     const std::string metamodule_path = get_metamodule_path_impl();
     if (metamodule_path.empty()) {
         return "";
@@ -772,7 +766,7 @@ int module_uninstall(const std::string& id) {
 
     // Create remove flag
     const std::string remove_flag = module_dir + "/" + REMOVE_FILE_NAME;
-    std::ofstream ofs(
+    std::ofstream const ofs(
         remove_flag);  // NOLINT(misc-const-correctness) ofstream is non-const for write
     if (!ofs) {
         LOGE("Failed to create remove flag for %s", id.c_str());
@@ -851,7 +845,7 @@ int module_disable(const std::string& id) {
     }
 
     const std::string disable_flag = module_dir + "/" + DISABLE_FILE_NAME;
-    std::ofstream ofs(
+    std::ofstream const ofs(
         disable_flag);  // NOLINT(misc-const-correctness) ofstream is non-const for write
     if (!ofs) {
         LOGE("Failed to create disable flag for %s", id.c_str());
@@ -1117,8 +1111,12 @@ int handle_updated_modules() {
 
         // Remove old module if exists
         if (file_exists(dst)) {
-            const std::string cmd = "rm -rf " + dst;
-            system(cmd.c_str());
+            std::error_code remove_error;
+            std::filesystem::remove_all(dst, remove_error);
+            if (remove_error) {
+                LOGW("Failed to remove old module %s: %s", dst.c_str(),
+                     remove_error.message().c_str());
+            }
         }
 
         // Move updated module

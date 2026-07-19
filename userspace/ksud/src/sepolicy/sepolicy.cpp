@@ -50,7 +50,7 @@ static constexpr uint32_t SUBCMD_TYPE_MEMBER = 2;
 // PolicyObject - holds a sepolicy string or represents "all" (*)
 class PolicyObject {
 public:
-    enum Type : std::uint8_t { NONE, ALL, ONE };
+    enum class Type : std::uint8_t { NONE, ALL, ONE };
 
     PolicyObject() = default;
 
@@ -58,16 +58,16 @@ public:
 
     static PolicyObject all() {
         PolicyObject obj;
-        obj.type_ = ALL;
+        obj.type_ = Type::ALL;
         return obj;
     }
 
     static PolicyObject from_str(const std::string& s) {
         PolicyObject obj;
         if (s == "*") {
-            obj.type_ = ALL;
+            obj.type_ = Type::ALL;
         } else if (s.length() < SEPOLICY_MAX_LEN) {
-            obj.type_ = ONE;
+            obj.type_ = Type::ONE;
             (void)strncpy(obj.buf_.data(), s.c_str(), SEPOLICY_MAX_LEN - 1);
             obj.buf_[SEPOLICY_MAX_LEN - 1] = '\0';
         }
@@ -75,7 +75,7 @@ public:
     }
 
     [[nodiscard]] const char* c_ptr() const {
-        if (type_ == ONE) {
+        if (type_ == Type::ONE) {
             return buf_.data();
         }
         return nullptr;  // NULL for NONE and ALL
@@ -84,7 +84,7 @@ public:
     [[nodiscard]] Type type() const { return type_; }
 
 private:
-    Type type_{NONE};
+    Type type_{Type::NONE};
     std::array<char, SEPOLICY_MAX_LEN> buf_{};
 };
 

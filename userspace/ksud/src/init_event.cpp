@@ -117,7 +117,7 @@ int spawn_zygiskd() {
         LOGW("Failed to create zygiskd ready pipe: %s", strerror(errno));
     }
 
-    pid_t pid = fork();
+    pid_t const pid = fork();
     if (pid < 0) {
         LOGE("Failed to fork zygiskd launcher: %s", strerror(errno));
         if (ready_pipe[0] >= 0)
@@ -162,7 +162,7 @@ int spawn_zygiskd() {
 
         if (ready_pipe[1] >= 0) {
             char fd_env[16];
-            snprintf(fd_env, sizeof(fd_env), "%d", ready_pipe[1]);
+            (void)snprintf(fd_env, sizeof(fd_env), "%d", ready_pipe[1]);
             setenv("YUKIZYGISK_READY_FD", fd_env, 1);
         }
 

@@ -16,6 +16,8 @@ if(CCACHE_PROGRAM)
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/ClangTidy.cmake")
+
 # Size optimization (Os + LTO).
 # ksuinit is injected as /init into early ramdisk, so it must be fully static.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden -fno-rtti -fno-asynchronous-unwind-tables -fmerge-all-constants -fno-ident -fno-stack-protector -faddrsig -fno-semantic-interposition")
@@ -32,6 +34,7 @@ add_executable(ksuinit
 
 get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
 target_include_directories(ksuinit PRIVATE src ${REPO_ROOT})
+yukisu_enable_clang_tidy(ksuinit CXX)
 
 # Optional: UPX binary compression
 option(KSUINIT_UPX "Use UPX to compress ksuinit binary" OFF)

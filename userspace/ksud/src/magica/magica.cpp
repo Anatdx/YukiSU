@@ -7,11 +7,11 @@
 #include "../utils.hpp"
 #include "adb_client.hpp"
 
-#include <limits.h>
 #include <unistd.h>
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <climits>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -188,13 +188,8 @@ bool enable_adb_root(uint16_t port) {
         std::vector<std::string>{"setprop", "ctl.restart", "adbd"},
     };
 
-    for (const auto& cmd : adb_cmds) {
-        if (!run_shell_command(cmd, "magica")) {
-            return false;
-        }
-    }
-
-    return true;
+    return std::all_of(adb_cmds.begin(), adb_cmds.end(),
+                       [](const auto& cmd) { return run_shell_command(cmd, "magica"); });
 }
 
 bool connect_to_adbd(AdbClient* client, uint16_t port) {

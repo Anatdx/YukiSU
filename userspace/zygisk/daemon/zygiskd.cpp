@@ -33,14 +33,16 @@
 
 #include <cctype>
 #include <cerrno>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <fstream>
-#include <limits.h>
+#include <ranges>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <csignal>
@@ -202,7 +204,7 @@ void publish_native_targets() {
       break;
     yz_native_target &t = cmd.targets[cmd.count++];
     t.type = m.target_type;
-    snprintf(t.value, sizeof(t.value), "%s", m.target.c_str());
+    (void)snprintf(t.value, sizeof(t.value), "%s", m.target.c_str());
   }
   int ret = ksud::ksuctl(KSU_IOCTL_YZ_SET_NATIVE_TARGETS, &cmd);
   if (ret == 0) {
@@ -302,7 +304,7 @@ int copy_file_to_memfd(const std::string &path) {
     return -1;
   }
 
-  std::vector<uint8_t> buf(64 * 1024);
+  std::vector<uint8_t> buf(size_t{64} * 1024);
   while (true) {
     ssize_t r = read(src, buf.data(), buf.size());
     if (r == 0)
@@ -362,7 +364,7 @@ int copy_file_to_memfd(const std::string &path) {
   // so even a sealed image would unnecessarily require tmpfs:file write.
   // Reopen the sealed inode read-only and expose only that description.
   char proc_fd[64];
-  snprintf(proc_fd, sizeof(proc_fd), "/proc/self/fd/%d", mfd);
+  (void)snprintf(proc_fd, sizeof(proc_fd), "/proc/self/fd/%d", mfd);
   int ro_fd = open(proc_fd, O_RDONLY | O_CLOEXEC);
   if (ro_fd < 0) {
     DLOGE("module memfd: reopen read-only failed path=%s err=%s", path.c_str(),
@@ -643,13 +645,13 @@ static void yz_umount_root_in_ns() {
     if (!yz_mi_parse(line, root, target, source))
       continue;
     bool should = source == "KSU" || source == "magisk" || source == "APatch" ||
-                  target.rfind("/data/adb/", 0) == 0 ||
-                  root.rfind("/adb/modules", 0) == 0;
+                  target.starts_with("/data/adb/") ||
+                  root.starts_with("/adb/modules");
     if (should)
       targets.push_back(target);
   }
-  for (auto it = targets.rbegin(); it != targets.rend(); ++it)
-    umount2(it->c_str(), MNT_DETACH);
+  for (const auto &target : std::ranges::reverse_view(targets))
+    umount2(target.c_str(), MNT_DETACH);
 }
 
 static bool yz_revert_app_mounts(pid_t app_pid) {
@@ -660,7 +662,7 @@ static bool yz_revert_app_mounts(pid_t app_pid) {
     return false;
   if (child == 0) {
     char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/ns/mnt", app_pid);
+    (void)snprintf(path, sizeof(path), "/proc/%d/ns/mnt", app_pid);
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0)
       _exit(1);
@@ -789,7 +791,7 @@ bool is_zygote_process_name(const std::string &name) {
 bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
                           std::string *abi_list = nullptr) {
   char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
+  (void)snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return false;
@@ -805,9 +807,10 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
   std::string sock;
   std::string abi;
   size_t off = 0;
-  while (off < static_cast<size_t>(n)) {
+  const size_t bytes_read = static_cast<size_t>(n);
+  while (off != bytes_read) {
     const char *arg = buf + off;
-    size_t len = strnlen(arg, static_cast<size_t>(n) - off);
+    size_t len = strnlen(arg, bytes_read - off);
     if (len == 0) {
       ++off;
       continue;
@@ -845,7 +848,7 @@ bool parse_zygote_cmdline(pid_t pid, std::string *socket_name,
 
 std::string read_proc_exe(pid_t pid) {
   char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/exe", pid);
+  (void)snprintf(path, sizeof(path), "/proc/%d/exe", pid);
   char buf[PATH_MAX];
   ssize_t n = readlink(path, buf, sizeof(buf) - 1);
   if (n <= 0)
@@ -923,8 +926,7 @@ void record_zygote(pid_t pid) {
     name = "zygote";
 
   for (auto it = g_zygotes.begin(); it != g_zygotes.end(); ++it) {
-    if (it->pid == static_cast<uint32_t>(pid) ||
-        (it->name == name && it->abi == kAbi)) {
+    if (std::cmp_equal(it->pid, pid) || (it->name == name && it->abi == kAbi)) {
       g_zygotes.erase(it);
       break;
     }
@@ -939,7 +941,7 @@ void record_zygote(pid_t pid) {
 
 std::string read_proc_comm(pid_t pid) {
   char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/comm", pid);
+  (void)snprintf(path, sizeof(path), "/proc/%d/comm", pid);
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return {};
@@ -956,7 +958,7 @@ std::string read_proc_comm(pid_t pid) {
 
 uint64_t read_proc_start_time(pid_t pid) {
   char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+  (void)snprintf(path, sizeof(path), "/proc/%d/stat", pid);
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return 0;
@@ -1030,7 +1032,7 @@ void record_native_injection(pid_t pid, uint32_t idx) {
 
   for (auto it = g_native_injections.begin(); it != g_native_injections.end();
        ++it) {
-    if (it->pid == static_cast<uint32_t>(pid) && it->module_id == m.module_id) {
+    if (std::cmp_equal(it->pid, pid) && it->module_id == m.module_id) {
       g_native_injections.erase(it);
       break;
     }
@@ -1073,7 +1075,7 @@ void json_append_escaped(std::string &out, const std::string &s) {
     default:
       if (static_cast<unsigned char>(c) < 0x20) {
         char b[8];
-        snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned char>(c));
+        (void)snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned char>(c));
         out += b;
       } else {
         out += c;
@@ -1285,7 +1287,7 @@ void handle_client(int client) {
     int mgr = ksud::get_manager_uid();
     if (mgr > 0 &&
         getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
-        static_cast<int>(cr.uid) == mgr) {
+        std::cmp_equal(cr.uid, mgr)) {
       js = build_status_json();
     } else {
       DLOGI("GetStatus denied: peer uid=%d manager uid=%d",
@@ -1303,7 +1305,7 @@ void handle_client(int client) {
     uint8_t ok = 0;
     if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
         cr.pid > 0)
-      ok = yz_revert_app_mounts(static_cast<pid_t>(cr.pid)) ? 1 : 0;
+      ok = yz_revert_app_mounts(cr.pid) ? 1 : 0;
     write_exact(client, &ok, sizeof(ok));
     break;
   }
@@ -1377,7 +1379,7 @@ void handle_client(int client) {
     uint8_t ok = 0;
     if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
         cr.pid > 0) {
-      record_zygote(static_cast<pid_t>(cr.pid));
+      record_zygote(cr.pid);
       ok = 1;
     }
     write_exact(client, &ok, sizeof(ok));
@@ -1396,10 +1398,11 @@ void handle_client(int client) {
       const NativeModule &m = g_native_modules[idx];
       info.target_type = m.target_type;
       info.has_companion = m.has_companion ? 1 : 0;
-      snprintf(info.module_id, sizeof(info.module_id), "%s",
-               m.module_id.c_str());
-      snprintf(info.target, sizeof(info.target), "%s", m.target.c_str());
-      snprintf(info.lib_path, sizeof(info.lib_path), "%s", m.lib_path.c_str());
+      (void)snprintf(info.module_id, sizeof(info.module_id), "%s",
+                     m.module_id.c_str());
+      (void)snprintf(info.target, sizeof(info.target), "%s", m.target.c_str());
+      (void)snprintf(info.lib_path, sizeof(info.lib_path), "%s",
+                     m.lib_path.c_str());
     }
     write_exact(client, &info, sizeof(info));
     break;
@@ -1464,7 +1467,7 @@ void handle_client(int client) {
     if (read_exact(client, &idx, sizeof(idx)) &&
         getsockopt(client, SOL_SOCKET, SO_PEERCRED, &cr, &crlen) == 0 &&
         cr.pid > 0 && idx < g_native_modules.size()) {
-      record_native_injection(static_cast<pid_t>(cr.pid), idx);
+      record_native_injection(cr.pid, idx);
       ok = 1;
     }
     write_exact(client, &ok, sizeof(ok));
@@ -1511,7 +1514,8 @@ int nl_listen() {
   }
   sockaddr_nl addr{};
   addr.nl_family = AF_NETLINK;
-  addr.nl_groups = 1u << (YZ_NL_GROUP_EVENTS - 1);
+  // YZ_NL_GROUP_EVENTS is the first multicast group in the UAPI.
+  addr.nl_groups = 1U;
   if (bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
     DLOGE("netlink bind: %s", strerror(errno));
     close(fd);
@@ -1555,8 +1559,9 @@ uint64_t resolve_linker_sym(const char *path, const char *want) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return 0;
-  struct stat st;
-  if (fstat(fd, &st) < 0 || st.st_size < (off_t)sizeof(Elf64_Ehdr)) {
+  struct stat st{};
+  if (fstat(fd, &st) < 0 || st.st_size < 0 ||
+      static_cast<uint64_t>(st.st_size) < sizeof(Elf64_Ehdr)) {
     close(fd);
     return 0;
   }
@@ -1565,16 +1570,17 @@ uint64_t resolve_linker_sym(const char *path, const char *want) {
   if (map == MAP_FAILED)
     return 0;
 
-  auto *base = static_cast<const uint8_t *>(map);
-  auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
+  const auto *base = static_cast<const uint8_t *>(map);
+  const auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
   uint64_t result = 0;
   if (memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0 &&
       eh->e_ident[EI_CLASS] == ELFCLASS64) {
-    auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
-    for (int i = 0; i < eh->e_shnum && !result; i++) {
+    const auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
+    for (size_t i = 0; i < eh->e_shnum && !result; i++) {
       if (sh[i].sh_type != SHT_DYNSYM)
         continue;
-      auto *syms = reinterpret_cast<const Elf64_Sym *>(base + sh[i].sh_offset);
+      const auto *syms =
+          reinterpret_cast<const Elf64_Sym *>(base + sh[i].sh_offset);
       const char *strs =
           reinterpret_cast<const char *>(base + sh[sh[i].sh_link].sh_offset);
       size_t n = sh[i].sh_size / sizeof(Elf64_Sym);
@@ -1635,7 +1641,7 @@ bool send_dlopen_offset() {
 int run_daemon() {
   int ready_fd = consume_ready_fd();
 
-  signal(SIGPIPE, SIG_IGN);
+  (void)signal(SIGPIPE, SIG_IGN);
 
   int srv = bind_listen();
   if (srv < 0) {

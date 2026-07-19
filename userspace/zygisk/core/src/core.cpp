@@ -114,7 +114,7 @@ void api_plt_hook_register_byname(const char *path_regex, const char *symbol,
       zygisk_plt_hook_register(makedev(maj, min), static_cast<ino_t>(inode),
                                symbol, new_func, old_func);
   }
-  fclose(f);
+  (void)fclose(f);
   regfree(&re);
 }
 
@@ -365,13 +365,14 @@ extern "C" void yz_klog(const char *fmt, ...) {
   char buf[224];
   va_list ap;
   va_start(ap, fmt);
-  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  const int n = vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
   if (n <= 0)
     return;
-  size_t len = n < static_cast<int>(sizeof(buf)) ? static_cast<size_t>(n)
-                                                 : sizeof(buf) - 1;
-  int s = connect_zygiskd();
+  const size_t len = static_cast<size_t>(n) < sizeof(buf)
+                         ? static_cast<size_t>(n)
+                         : sizeof(buf) - 1;
+  const int s = connect_zygiskd();
   if (s < 0)
     return;
   uint8_t req = static_cast<uint8_t>(ZdRequest::Log);
@@ -770,7 +771,7 @@ static bool get_loader_map_identity(LoaderMapIdentity *identity) {
     found = true;
     break;
   }
-  fclose(maps);
+  (void)fclose(maps);
   if (!found) {
     LOGE("loader handoff: cannot identify first-stage mapping at %p",
          reinterpret_cast<void *>(g_loader_base));
@@ -812,7 +813,7 @@ static PointerOwner pointer_owner(uintptr_t address,
                 : PointerOwner::Other;
     break;
   }
-  fclose(maps);
+  (void)fclose(maps);
   return owner;
 }
 
@@ -972,7 +973,7 @@ extern "C" [[gnu::visibility("default")]] void zygisk_finalize_loader(int,
                                                                       int) {
   zd_load_config();
   LOGI("finalize_loader: finalizing loader at base=%p munmap=%d",
-       (void *)g_loader_base, g_loader_unmap_safe);
+       reinterpret_cast<void *>(g_loader_base), g_loader_unmap_safe);
   int n =
       yuki::solist::drop_lib_containing(g_loader_base, !g_loader_unmap_safe);
   LOGI("finalize_loader: unloaded %d soinfo(s)", n);
@@ -1050,7 +1051,9 @@ extern "C" [[noreturn]] void yz_self_unmap_tail(void *base, size_t size);
 
 // Non-weak so __cxa_finalize targets only this DSO.
 extern "C" __attribute__((visibility("hidden"))) void *__dso_handle;
-static inline void yz_finalize_self_dso() { __cxa_finalize(&__dso_handle); }
+static inline void yz_finalize_self_dso() {
+  __cxa_finalize(static_cast<void *>(&__dso_handle));
+}
 
 void zygisk_self_destruct(JNIEnv *env, bool isolated) {
   bool can_unmap = zygisk_specialize_fully_inline_hooked();

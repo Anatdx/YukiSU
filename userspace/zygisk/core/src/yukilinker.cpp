@@ -16,6 +16,7 @@
 
 #include "yukilinker.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
@@ -110,7 +111,7 @@ __attribute__((visibility("hidden"))) YukiTlsFastConfig yuki_tls_fast_config{};
 namespace yukilinker {
 namespace {
 
-constexpr size_t kMetadataPageSize = 64 * 1024;
+constexpr size_t kMetadataPageSize = size_t{64} * 1024;
 constexpr char kDisplayName[] = "libdata-code-cache.so";
 size_t g_page_size = 0;
 
@@ -453,7 +454,7 @@ bool inspect_source(const void *source, size_t file_size,
                     SourceLayout *layout) {
   if (file_size < sizeof(ElfW(Ehdr)))
     return false;
-  auto *header = static_cast<const ElfW(Ehdr) *>(source);
+  const auto *header = static_cast<const ElfW(Ehdr) *>(source);
   if (memcmp(header->e_ident, ELFMAG, SELFMAG) != 0 ||
       header->e_ident[EI_CLASS] != ELFCLASS64 ||
       header->e_ident[EI_DATA] != ELFDATA2LSB ||
@@ -466,7 +467,7 @@ bool inspect_source(const void *source, size_t file_size,
       !file_region_valid(file_size, header->e_phoff, phdr_bytes))
     return false;
 
-  auto *program_headers = reinterpret_cast<const ElfW(Phdr) *>(
+  const auto *program_headers = reinterpret_cast<const ElfW(Phdr) *>(
       static_cast<const uint8_t *>(source) + header->e_phoff);
   uintptr_t low = UINTPTR_MAX;
   uintptr_t high = 0;
@@ -494,10 +495,8 @@ bool inspect_source(const void *source, size_t file_size,
         !page_ceil(ph.p_vaddr + ph.p_memsz, &segment_end))
       return false;
     uintptr_t segment_begin = page_floor(ph.p_vaddr);
-    if (segment_begin < low)
-      low = segment_begin;
-    if (segment_end > high)
-      high = segment_end;
+    low = std::min(segment_begin, low);
+    high = std::max(segment_end, high);
   }
 
   if (low == UINTPTR_MAX || high <= low || dynamic_index == SIZE_MAX)
@@ -863,12 +862,12 @@ size_t symbol_count_from_gnu(ImageState *image, const uint32_t *table) {
   if (bucket_count == 0 || bloom_words == 0)
     return 0;
 
-  auto *bloom = reinterpret_cast<const ElfW(Addr) *>(table + 4);
+  const auto *bloom = reinterpret_cast<const ElfW(Addr) *>(table + 4);
   size_t bloom_bytes;
   if (multiply_overflow(bloom_words, sizeof(ElfW(Addr)), &bloom_bytes) ||
       !mapped_bytes(image, bloom, bloom_bytes))
     return 0;
-  auto *buckets = reinterpret_cast<const uint32_t *>(
+  const auto *buckets = reinterpret_cast<const uint32_t *>(
       reinterpret_cast<const uint8_t *>(bloom) + bloom_bytes);
   size_t bucket_bytes;
   if (multiply_overflow(bucket_count, sizeof(uint32_t), &bucket_bytes) ||
@@ -878,8 +877,7 @@ size_t symbol_count_from_gnu(ImageState *image, const uint32_t *table) {
 
   uint32_t largest_bucket = 0;
   for (uint32_t i = 0; i < bucket_count; ++i)
-    if (buckets[i] > largest_bucket)
-      largest_bucket = buckets[i];
+    largest_bucket = std::max(buckets[i], largest_bucket);
   if (largest_bucket < first_hashed_symbol)
     return first_hashed_symbol;
 
@@ -1882,7 +1880,7 @@ bool apply_relr_span(ImageState *image) {
 
   size_t count = relocations.relr_bytes / sizeof(ElfW(Addr));
   ElfW(Addr) next_offset = 0;
-  constexpr size_t kBitmapBits = sizeof(ElfW(Addr)) * 8 - 1;
+  constexpr size_t kBitmapBits = (sizeof(ElfW(Addr)) * 8) - 1;
   for (size_t i = 0; i < count; ++i) {
     ElfW(Addr) encoded = relocations.relr[i];
     if ((encoded & 1U) == 0) {
@@ -2264,7 +2262,7 @@ yuki_core_dlopen_memfd(int memfd, const char *vma_name) {
   auto finalize = reinterpret_cast<FinalizeLoader>(
       yukilinker::dlsym(core, "zygisk_finalize_loader"));
   if (finalize != nullptr) [[clang::musttail]]
-    return finalize(0, 0);
+    return finalize(0, 0); // NOLINT(readability-avoid-return-with-void-value)
 }
 
 } // extern "C"

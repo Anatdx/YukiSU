@@ -30,8 +30,8 @@ jobs:
       run: |
         case "${{ inputs.target }}" in
           aarch64-linux-android|aarch64)
-            echo "abi=arm64-v8a" >> $GITHUB_OUTPUT
-            echo "android_target=aarch64-linux-android26" >> $GITHUB_OUTPUT
+            echo "abi=arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "android_target=aarch64-linux-android26" >> "$GITHUB_OUTPUT"
             ;;
           *)
             echo "YukiSU supports aarch64 only, got: ${{ inputs.target }}"
@@ -53,20 +53,21 @@ jobs:
         cd userspace/ksuinit
         mkdir -p build && cd build
         
-        TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-        export CC=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang
-        export CXX=$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++
-        export AR=$TOOLCHAIN/bin/llvm-ar
-        export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+        TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+        export CC="$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang"
+        export CXX="$TOOLCHAIN/bin/${{ steps.target.outputs.android_target }}-clang++"
+        export AR="$TOOLCHAIN/bin/llvm-ar"
+        export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 
         cmake .. \
           -G Ninja \
           -DCMAKE_SYSTEM_NAME=Android \
           -DCMAKE_ANDROID_ARCH_ABI=${{ steps.target.outputs.abi }} \
-          -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
-          -DCMAKE_C_COMPILER=$CC \
-          -DCMAKE_CXX_COMPILER=$CXX \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
+          -DCMAKE_C_COMPILER="$CC" \
+          -DCMAKE_CXX_COMPILER="$CXX" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DYUKISU_ENABLE_CLANG_TIDY=OFF
         
         ninja
         

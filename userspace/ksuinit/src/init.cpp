@@ -22,6 +22,7 @@ extern "C" {
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fcntl.h>
@@ -41,6 +42,14 @@ namespace {
  */
 class AutoUmount {
 public:
+    AutoUmount() = default;
+    AutoUmount(const AutoUmount&) = delete;
+    AutoUmount& operator=(const AutoUmount&) = delete;
+    AutoUmount(AutoUmount&& other) noexcept : mountpoints_(std::move(other.mountpoints_)) {
+        other.mountpoints_.clear();
+    }
+    AutoUmount& operator=(AutoUmount&&) = delete;
+
     ~AutoUmount() {
         // Unmount in reverse order
         for (auto it = mountpoints_.rbegin(); it != mountpoints_.rend(); ++it) {

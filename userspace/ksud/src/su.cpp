@@ -138,7 +138,7 @@ int run_su_shell(int argc, char** argv) {
     argc = static_cast<int>(new_argv.size() - 1);
     argv = new_argv.data();
 
-    enum { OPT_KSU_NO_NEW_PRIVS = 0x100 };  // long-only option id (> any short opt)
+    constexpr int OPT_KSU_NO_NEW_PRIVS = 0x100;  // long-only option id
     static const std::array<struct option, 12> long_options = {{
         {"command", required_argument, nullptr, 'c'},
         {"help", no_argument, nullptr, 'h'},
@@ -217,7 +217,7 @@ int run_su_shell(int argc, char** argv) {
             target_uid = static_cast<uid_t>(uid_num);
         } else {
             // Try to look up username
-            struct passwd* pw = getpwnam(user);
+            const struct passwd* pw = getpwnam(user);
             if (pw) {
                 target_uid = pw->pw_uid;
             } else {
@@ -284,7 +284,7 @@ int run_su_shell(int argc, char** argv) {
     }
 
     if (!preserve_env) {
-        struct passwd* pw = getpwuid(target_uid);
+        const struct passwd* pw = getpwuid(target_uid);
         if (pw) {
             setenv("HOME", pw->pw_dir, 1);
             setenv("USER", pw->pw_name, 1);

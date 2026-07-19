@@ -16,6 +16,10 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
+set(YUKISU_CLANG_TIDY_CONFIG
+    "${CMAKE_CURRENT_SOURCE_DIR}/../.clang-tidy")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/ClangTidy.cmake")
+
 if(CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
     # zygote32 support is reserved, but has no implementation yet.  Build
     # inert DSOs with the normal names so the armv7 artifact contract stays
@@ -28,6 +32,7 @@ if(CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
             -Os -ffunction-sections -fdata-sections -fvisibility=hidden
             -fno-stack-protector)
         target_link_options(${target} PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+        yukisu_enable_clang_tidy(${target} C)
     endforeach()
 elseif(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR
@@ -90,6 +95,7 @@ target_link_libraries(zygisk PRIVATE dl lsplt_static)
 # we never call into it, so no point advertising the dependency.
 target_link_options(zygisk PRIVATE -Wl,--gc-sections -Wl,--strip-all
                     -Wl,--as-needed)
+yukisu_enable_clang_tidy(zygisk CXX)
 
 add_library(yukizncore SHARED
     src/yukizncore.cpp
@@ -124,6 +130,8 @@ target_compile_definitions(yukizncore PRIVATE
 target_link_libraries(yukizncore PRIVATE dl lsplt_static)
 target_link_options(yukizncore PRIVATE -Wl,--gc-sections -Wl,--strip-all
                     -Wl,--as-needed)
+# The C sources on this target are vendored BusyBox/XZ; check our C++ only.
+yukisu_enable_clang_tidy(yukizncore CXX)
 
 # libyukilinker.so -- the anonymous in-memory module loader, split into its own
 # .so that core dlopen+dlsym's at runtime (exports yuki_dlopen_memfd/dlsym/
@@ -148,6 +156,7 @@ target_compile_options(yukilinker PRIVATE
 target_compile_definitions(yukilinker PRIVATE YUKILINKER_BOOTSTRAP=1)
 target_link_libraries(yukilinker PRIVATE dl)
 target_link_options(yukilinker PRIVATE -Wl,--gc-sections -Wl,--strip-all)
+yukisu_enable_clang_tidy(yukilinker CXX)
 endif()
 
 find_program(LLVM_STRIP NAMES llvm-strip)

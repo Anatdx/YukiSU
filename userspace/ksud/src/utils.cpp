@@ -61,9 +61,12 @@ bool ensure_clean_dir(const std::string& path) {
 
     struct stat st{};
     if (stat(path.c_str(), &st) == 0) {
-        // Remove existing directory
-        const std::string cmd = "rm -rf " + path;
-        system(cmd.c_str());
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+        if (ec) {
+            LOGE("Failed to remove existing directory %s: %s", path.c_str(), ec.message().c_str());
+            return false;
+        }
     }
 
     return ensure_dir_exists(path);
@@ -125,7 +128,7 @@ bool ensure_binary(const std::string& path, const uint8_t* data, size_t size,
 std::optional<std::string> getprop(const std::string& prop) {
 #ifdef __ANDROID__
     char value[PROP_VALUE_MAX] = {0};
-    int len = __system_property_get(prop.c_str(), value);
+    int const len = __system_property_get(prop.c_str(), value);
     if (len > 0) {
         return std::string(value);
     }
@@ -176,7 +179,7 @@ bool switch_mnt_ns(pid_t pid) {
 
     // Save current directory
     std::array<char, PATH_MAX> cwd{};
-    char* cwd_result = getcwd(cwd.data(), cwd.size());
+    const char* cwd_result = getcwd(cwd.data(), cwd.size());
 
     // Switch namespace
     if (setns(fd, CLONE_NEWNS) != 0) {
@@ -507,8 +510,8 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
                 out->append(buf.data(), to_append);
             }
             if (forward_to_stdout && n > 0) {
-                fwrite(buf.data(), 1, static_cast<size_t>(n), stdout);
-                fflush(stdout);
+                (void)fwrite(buf.data(), 1, static_cast<size_t>(n), stdout);
+                (void)fflush(stdout);
             }
         }
         close(fd);
@@ -519,9 +522,9 @@ ExecResult exec_command_magiskboot(const std::string& magiskboot_path,
     waitpid(pid, &status, 0);
     t_stdout.join();
     t_stderr.join();
-    if (WIFEXITED(status))
+    if (WIFEXITED(status)) {
         result.exit_code = WEXITSTATUS(status);
-    else if (WIFSIGNALED(status)) {
+    } else if (WIFSIGNALED(status)) {
         const int sig = WTERMSIG(status);
         result.exit_code = 128 + sig;
         result.stderr_str.append("magiskboot terminated by signal ");
@@ -698,11 +701,14 @@ int uninstall(const std::optional<std::string>& magiskboot_path) {
     }
 
     printf("- Uninstall YukiSU manager..\n");
-    system("pm uninstall com.anatdx.yukisu");
+    const auto uninstall_result = exec_command({"pm", "uninstall", "com.anatdx.yukisu"});
+    if (uninstall_result.exit_code != 0) {
+        LOGW("Manager uninstall failed: %s", uninstall_result.stderr_str.c_str());
+    }
 
     printf("- Rebooting in 5 seconds..\n");
     sleep(5);
-    system("reboot");
+    (void)exec_command({"reboot"});
 
     return 0;
 }
@@ -742,8 +748,8 @@ bool parse_uint32(const std::string& s, uint32_t* out) {
         return false;
     char* end = nullptr;
     errno = 0;
-    unsigned long val = std::strtoul(s.c_str(), &end, 10);
-    if (end == s.c_str() || *end != '0' || errno == ERANGE || val > UINT32_MAX)
+    unsigned long const val = std::strtoul(s.c_str(), &end, 10);
+    if (end == s.c_str() || *end != '\0' || errno == ERANGE || val > UINT32_MAX)
         return false;
     *out = static_cast<uint32_t>(val);
     return true;
@@ -754,8 +760,8 @@ bool parse_uint64(const std::string& s, uint64_t* out) {
         return false;
     char* end = nullptr;
     errno = 0;
-    unsigned long long val = std::strtoull(s.c_str(), &end, 10);
-    if (end == s.c_str() || *end != '0' || errno == ERANGE)
+    unsigned long long const val = std::strtoull(s.c_str(), &end, 10);
+    if (end == s.c_str() || *end != '\0' || errno == ERANGE)
         return false;
     *out = static_cast<uint64_t>(val);
     return true;

@@ -1,0 +1,139 @@
+name: Userspace Clang-Tidy
+
+on:
+  push:
+    branches: [ "main", "dev", "feat/yukizygisk" ]
+    paths:
+      - '.clang-tidy'
+      - '.github/workflows/clang-tidy.yml'
+      - 'cmake/ClangTidy.cmake'
+      - 'userspace/zygisk/.clang-tidy'
+      - 'userspace/ksud/CMakeLists.txt'
+      - 'userspace/ksuinit/CMakeLists.txt'
+      - 'userspace/su/CMakeLists.txt'
+      - 'userspace/zygisk/core/CMakeLists.txt'
+      - 'userspace/ksud/src/**/*.c'
+      - 'userspace/ksud/src/**/*.cc'
+      - 'userspace/ksud/src/**/*.cpp'
+      - 'userspace/ksud/src/**/*.cxx'
+      - 'userspace/ksud/src/**/*.h'
+      - 'userspace/ksud/src/**/*.hh'
+      - 'userspace/ksud/src/**/*.hpp'
+      - 'userspace/ksud/src/**/*.hxx'
+      - 'userspace/ksuinit/src/**/*.cpp'
+      - 'userspace/ksuinit/src/**/*.h'
+      - 'userspace/ksuinit/src/**/*.hpp'
+      - 'userspace/su/src/**/*.cpp'
+      - 'userspace/su/src/**/*.h'
+      - 'userspace/su/src/**/*.hpp'
+      - 'userspace/zygisk/core/src/**/*.c'
+      - 'userspace/zygisk/core/src/**/*.cc'
+      - 'userspace/zygisk/core/src/**/*.cpp'
+      - 'userspace/zygisk/core/src/**/*.cxx'
+      - 'userspace/zygisk/core/src/**/*.h'
+      - 'userspace/zygisk/core/src/**/*.hh'
+      - 'userspace/zygisk/core/src/**/*.hpp'
+      - 'userspace/zygisk/core/src/**/*.hxx'
+      - 'userspace/zygisk/daemon/**/*.cpp'
+      - 'userspace/zygisk/daemon/**/*.h'
+      - 'userspace/zygisk/daemon/**/*.hpp'
+      - 'userspace/zygisk/include/**/*.h'
+      - 'userspace/zygisk/include/**/*.hpp'
+      - 'uapi/**/*.h'
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.clang-tidy'
+      - '.github/workflows/clang-tidy.yml'
+      - 'cmake/ClangTidy.cmake'
+      - 'userspace/zygisk/.clang-tidy'
+      - 'userspace/ksud/CMakeLists.txt'
+      - 'userspace/ksuinit/CMakeLists.txt'
+      - 'userspace/su/CMakeLists.txt'
+      - 'userspace/zygisk/core/CMakeLists.txt'
+      - 'userspace/ksud/src/**/*.c'
+      - 'userspace/ksud/src/**/*.cc'
+      - 'userspace/ksud/src/**/*.cpp'
+      - 'userspace/ksud/src/**/*.cxx'
+      - 'userspace/ksud/src/**/*.h'
+      - 'userspace/ksud/src/**/*.hh'
+      - 'userspace/ksud/src/**/*.hpp'
+      - 'userspace/ksud/src/**/*.hxx'
+      - 'userspace/ksuinit/src/**/*.cpp'
+      - 'userspace/ksuinit/src/**/*.h'
+      - 'userspace/ksuinit/src/**/*.hpp'
+      - 'userspace/su/src/**/*.cpp'
+      - 'userspace/su/src/**/*.h'
+      - 'userspace/su/src/**/*.hpp'
+      - 'userspace/zygisk/core/src/**/*.c'
+      - 'userspace/zygisk/core/src/**/*.cc'
+      - 'userspace/zygisk/core/src/**/*.cpp'
+      - 'userspace/zygisk/core/src/**/*.cxx'
+      - 'userspace/zygisk/core/src/**/*.h'
+      - 'userspace/zygisk/core/src/**/*.hh'
+      - 'userspace/zygisk/core/src/**/*.hpp'
+      - 'userspace/zygisk/core/src/**/*.hxx'
+      - 'userspace/zygisk/daemon/**/*.cpp'
+      - 'userspace/zygisk/daemon/**/*.h'
+      - 'userspace/zygisk/daemon/**/*.hpp'
+      - 'userspace/zygisk/include/**/*.h'
+      - 'userspace/zygisk/include/**/*.hpp'
+      - 'uapi/**/*.h'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  clang-tidy:
+    name: clang-tidy (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ksud
+            source: userspace/ksud
+            targets: ksud_our_objs ksud_zygiskd_objs
+          - name: ksuinit
+            source: userspace/ksuinit
+            targets: ksuinit
+          - name: su
+            source: userspace/su
+            targets: su
+          - name: yukizygisk
+            source: userspace/zygisk/core
+            targets: zygisk yukizncore yukilinker
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Configure Android clang-tidy check
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          "$toolchain/bin/clang-tidy" --version
+
+          cmake \
+            -S "${{ matrix.source }}" \
+            -B "build/clang-tidy/${{ matrix.name }}" \
+            -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+            -DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
+            -DCMAKE_C_COMPILER="$toolchain/bin/aarch64-linux-android26-clang" \
+            -DCMAKE_CXX_COMPILER="$toolchain/bin/aarch64-linux-android26-clang++" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYUKISU_ENABLE_CLANG_TIDY=ON \
+            -DYUKISU_CLANG_TIDY_PROGRAM="$toolchain/bin/clang-tidy"
+
+      - name: Run clang-tidy
+        shell: bash
+        run: |
+          read -ra targets <<< "${{ matrix.targets }}"
+          cmake --build "build/clang-tidy/${{ matrix.name }}" \
+            --target "${targets[@]}" --parallel 2

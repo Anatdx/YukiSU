@@ -19,9 +19,9 @@ std::string sha256_digest(const uint8_t* data, size_t len) {
     mbedtls_sha256(data, len, digest, 0);
     std::string out;
     out.reserve(64);
-    for (size_t i = 0; i < 32; i++) {
-        out.push_back(hex_chars[(digest[i] >> 4) & 0xf]);
-        out.push_back(hex_chars[digest[i] & 0xf]);
+    for (const unsigned char i : digest) {
+        out.push_back(hex_chars[(i >> 4) & 0xf]);
+        out.push_back(hex_chars[i & 0xf]);
     }
     return out;
 }

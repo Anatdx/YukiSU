@@ -57,7 +57,7 @@ bool range_ok(size_t offset, size_t size, size_t file_size) {
 bool string_table_equals(const char* table, size_t table_size, uint32_t offset, const char* want) {
     if (offset >= table_size)
         return false;
-    size_t want_len = strlen(want);
+    size_t const want_len = strlen(want);
     if (want_len >= table_size - offset)
         return false;
     return memcmp(table + offset, want, want_len + 1) == 0;
@@ -77,7 +77,7 @@ void remove_snapshot_dir(const fs::path& base) {
 }
 
 bool copy_regular_file(const fs::path& src, const fs::path& dst) {
-    std::ifstream in(src, std::ios::binary);
+    std::ifstream const in(src, std::ios::binary);
     if (!in)
         return false;
     std::ofstream out(dst, std::ios::binary | std::ios::trunc);
@@ -102,7 +102,7 @@ bool stage_asset_or_file(const char* asset, const fs::path& fallback, const fs::
 }
 
 uint64_t resolve_linker_sym(const char* path, const char* want) {
-    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    int const fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0)
         return 0;
 
@@ -122,8 +122,8 @@ uint64_t resolve_linker_sym(const char* path, const char* want) {
     uint64_t result = 0;
     if (memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0 && eh->e_ident[EI_CLASS] == ELFCLASS64 &&
         eh->e_shoff > 0 && eh->e_shnum > 0) {
-        size_t file_size = static_cast<size_t>(st.st_size);
-        size_t sh_size = static_cast<size_t>(eh->e_shnum) * sizeof(Elf64_Shdr);
+        size_t const file_size = static_cast<size_t>(st.st_size);
+        size_t const sh_size = static_cast<size_t>(eh->e_shnum) * sizeof(Elf64_Shdr);
         if (eh->e_shentsize != sizeof(Elf64_Shdr) ||
             !range_ok(static_cast<size_t>(eh->e_shoff), sh_size, file_size)) {
             munmap(map, static_cast<size_t>(st.st_size));
@@ -143,7 +143,7 @@ uint64_t resolve_linker_sym(const char* path, const char* want) {
                 continue;
             const auto* syms = reinterpret_cast<const Elf64_Sym*>(base + sh[i].sh_offset);
             const char* strs = reinterpret_cast<const char*>(base + str_sh.sh_offset);
-            size_t n = sh[i].sh_size / sizeof(Elf64_Sym);
+            size_t const n = sh[i].sh_size / sizeof(Elf64_Sym);
             for (size_t j = 0; j < n; j++) {
                 if (string_table_equals(strs, static_cast<size_t>(str_sh.sh_size), syms[j].st_name,
                                         want)) {
@@ -159,7 +159,7 @@ uint64_t resolve_linker_sym(const char* path, const char* want) {
 
 uint64_t resolve_first(const char* const* cands, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        uint64_t off = resolve_linker_sym(kSystemLinker64, cands[i]);
+        uint64_t const off = resolve_linker_sym(kSystemLinker64, cands[i]);
         if (off != 0)
             return off;
     }
@@ -225,14 +225,21 @@ std::vector<NativeModule> scan_early_native_modules() {
 void fill_cstr(char* dst, size_t dst_size, const std::string& src) {
     if (dst_size == 0)
         return;
-    snprintf(dst, dst_size, "%s", src.c_str());
+    const size_t copy_size = std::min(dst_size - 1, src.size());
+    std::memcpy(dst, src.data(), copy_size);
+    dst[copy_size] = '\0';
 }
 
 bool stage_module_entry(const NativeModule& m, size_t idx, const fs::path& module_dir,
                         yz_early_native_entry* entry) {
     char file_name[128];
-    snprintf(file_name, sizeof(file_name), "%03zu-%s.so", idx, m.module_id.c_str());
-    fs::path dst = module_dir / file_name;
+    const int file_name_len =
+        snprintf(file_name, sizeof(file_name), "%03zu-%s.so", idx, m.module_id.c_str());
+    if (file_name_len < 0 || static_cast<size_t>(file_name_len) >= sizeof(file_name)) {
+        LOGW("yukizygisk early: module filename too long for %s", m.module_id.c_str());
+        return false;
+    }
+    fs::path const dst = module_dir / file_name;
     if (!copy_regular_file(m.lib_path, dst)) {
         LOGW("yukizygisk early: failed to copy native module %s from %s", m.module_id.c_str(),
              m.lib_path.c_str());
@@ -330,7 +337,7 @@ int refresh_yukizygisk_early_snapshot() {
     };
 
     struct stat linker_stat{};
-    bool linker_stat_ok = entries.empty() || stat(kSystemLinker64, &linker_stat) == 0;
+    bool const linker_stat_ok = entries.empty() || stat(kSystemLinker64, &linker_stat) == 0;
 
     yz_early_native_snapshot_header header{};
     header.magic = YZ_EARLY_NATIVE_MAGIC;

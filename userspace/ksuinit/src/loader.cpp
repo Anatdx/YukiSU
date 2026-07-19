@@ -44,6 +44,11 @@ public:
         }
     }
 
+    KptrGuard(const KptrGuard&) = delete;
+    KptrGuard& operator=(const KptrGuard&) = delete;
+    KptrGuard(KptrGuard&&) = delete;
+    KptrGuard& operator=(KptrGuard&&) = delete;
+
     ~KptrGuard() {
         // Restore original value
         if (!original_value_.empty()) {
@@ -62,7 +67,7 @@ private:
  * Parse /proc/kallsyms to get kernel symbol addresses
  */
 std::unordered_map<std::string, uint64_t> parse_kallsyms() {
-    KptrGuard guard;
+    const KptrGuard guard;
 
     std::unordered_map<std::string, uint64_t> symbols;
 
@@ -75,7 +80,9 @@ std::unordered_map<std::string, uint64_t> parse_kallsyms() {
     std::string line;
     while (std::getline(ifs, line)) {
         std::istringstream iss(line);
-        std::string addr_str, type, name;
+        std::string addr_str;
+        std::string type;
+        std::string name;
 
         if (!(iss >> addr_str >> type >> name)) {
             continue;
@@ -199,7 +206,7 @@ bool load_module(const char* path) {
     auto* sym_base = reinterpret_cast<Elf64_Sym*>(buffer.data() + symtab->sh_offset);
     auto* str_base = reinterpret_cast<char*>(buffer.data() + strtab->sh_offset);
 
-    size_t sym_count = symtab->sh_size / sizeof(Elf64_Sym);
+    const size_t sym_count = symtab->sh_size / sizeof(Elf64_Sym);
 
     // Resolve undefined symbols
     for (size_t i = 1; i < sym_count; i++) {
@@ -230,7 +237,7 @@ bool load_module(const char* path) {
 
     std::string param_values;
     {
-        std::ifstream config("/ksu_config", std::ios::binary);
+        const std::ifstream config("/ksu_config", std::ios::binary);
         if (config.is_open()) {
             std::ostringstream buffer;
             buffer << config.rdbuf();

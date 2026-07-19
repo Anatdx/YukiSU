@@ -16,7 +16,7 @@
  * Entry point - we use C main because we need to handle missing stdin/stdout/stderr
  * gracefully (Rust's std would abort in that case).
  */
-int main(int argc, char* argv[], char* envp[]) {
+int main(int /*argc*/, char* argv[], char* envp[]) {
     // Initialize KernelSU (mount filesystems, load LKM, setup init)
     ksuinit::init();
 

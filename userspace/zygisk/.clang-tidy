@@ -1,0 +1,24 @@
+---
+InheritParentConfig: true
+
+# YukiZygisk is a loader/hooker. Its external ABI symbols, ELF unions, public
+# JNI argument adapters, /proc parsers, and address-oriented code deliberately
+# use patterns that general application-oriented checks reject.
+Checks: >
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-reserved-identifier,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -cert-err34-c,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-no-malloc,
+  -cppcoreguidelines-pro-type-union-access,
+  -misc-const-correctness,
+  -misc-non-private-member-variables-in-classes,
+  -misc-use-anonymous-namespace,
+  -performance-enum-size,
+  -readability-avoid-nested-conditional-operator,
+  -readability-isolate-declaration,
+  -readability-named-parameter,
+  -readability-static-definition-in-anonymous-namespace,
+  -readability-use-anyofallof
