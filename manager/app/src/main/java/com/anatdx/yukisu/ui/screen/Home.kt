@@ -59,6 +59,7 @@ import com.anatdx.yukisu.ui.component.rememberLoadingDialog
 import com.anatdx.yukisu.ui.component.YukiIcon
 import com.anatdx.yukisu.ui.component.YukiPullToRefreshBox
 import com.anatdx.yukisu.ui.component.YukiAlertDialog
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.theme.CardConfig.cardElevation
 import com.anatdx.yukisu.ui.theme.getCardColors
@@ -535,7 +536,7 @@ private fun TopBar(
                         DropdownMenu(
                             expanded = showDropdown,
                             onDismissRequest = { showDropdown = false },
-                            modifier = Modifier,
+                            modifier = Modifier.clickHapticFeedback(),
                             shape = if (isExpressiveUi) RectangleShape else MenuDefaults.shape,
                             containerColor = if (isExpressiveUi) {
                                 Color.Transparent

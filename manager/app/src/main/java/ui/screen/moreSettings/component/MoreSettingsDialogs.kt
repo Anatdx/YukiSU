@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import com.anatdx.yukisu.ui.theme.*
 import com.anatdx.yukisu.ui.component.YukiIcon
 import com.anatdx.yukisu.ui.component.YukiAlertDialog
 import com.anatdx.yukisu.ui.component.YukiDialogTheme
+import com.anatdx.yukisu.ui.component.performClickHapticFeedback
 import ui.screen.moreSettings.MoreSettingsHandlers
 import ui.screen.moreSettings.state.MoreSettingsState
 
@@ -170,6 +172,7 @@ fun LanguageSelectionDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val feedbackView = LocalView.current
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     // Check if should use system language settings
@@ -269,6 +272,7 @@ fun LanguageSelectionDialog(
                 state = rememberUseCaseState(
                     visible = true,
                     onFinishedRequest = {
+                        feedbackView.performClickHapticFeedback()
                         if (selectedIndex >= 0 && selectedIndex < allOptions.size) {
                             val newLocale = allOptions[selectedIndex].first
                             prefs.edit { putString("app_locale", newLocale) }
@@ -287,6 +291,7 @@ fun LanguageSelectionDialog(
                     showRadioButtons = true,
                     options = options
                 ) { index, _ ->
+                    feedbackView.performClickHapticFeedback()
                     selectedIndex = index
                 }
             )

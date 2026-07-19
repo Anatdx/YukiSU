@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.YukiIcon
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.util.listAppProfileTemplates
 import com.anatdx.yukisu.ui.util.setSepolicy
 import com.anatdx.yukisu.ui.viewmodel.getTemplateInfoById
@@ -66,7 +67,8 @@ fun TemplateConfig(
             }
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false }
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.clickHapticFeedback(),
             ) {
                 profileTemplates.forEach { tid ->
                     val templateInfo =

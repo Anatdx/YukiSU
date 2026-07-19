@@ -31,6 +31,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.anatdx.yukisu.R
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.theme.util.BackgroundTransformation
 import com.anatdx.yukisu.ui.theme.util.saveTransformedBackground
 import kotlinx.coroutines.launch
@@ -114,6 +115,7 @@ fun ImageEditorDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .clickHapticFeedback()
                 .background(
                     Brush.radialGradient(
                         colors = listOf(

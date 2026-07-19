@@ -52,7 +52,7 @@ fun YukiAlertDialog(
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
-        modifier = modifier,
+        modifier = modifier.clickHapticFeedback(),
         dismissButton = dismissButton,
         icon = icon,
         title = resolvedTitle,

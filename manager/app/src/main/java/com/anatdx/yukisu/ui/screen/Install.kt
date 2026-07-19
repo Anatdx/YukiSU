@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +67,7 @@ import com.anatdx.yukisu.ui.component.YukiDialogTheme
 import com.anatdx.yukisu.ui.component.rememberConfirmDialog
 import com.anatdx.yukisu.ui.component.rememberCustomDialog
 import com.anatdx.yukisu.ui.component.rememberLoadingDialog
+import com.anatdx.yukisu.ui.component.performClickHapticFeedback
 import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.theme.CardConfig.cardAlpha
 import com.anatdx.yukisu.ui.theme.ExpressiveListGroupMinHeight
@@ -1065,6 +1067,7 @@ private fun SelectInstallMethod(
 @Composable
 fun rememberSelectKmiDialog(onSelected: (String?) -> Unit): DialogHandle {
     return rememberCustomDialog { dismiss ->
+        val feedbackView = LocalView.current
         val supportedKmi by produceState(initialValue = emptyList()) {
             value = getSupportedKmis()
         }
@@ -1083,6 +1086,7 @@ fun rememberSelectKmiDialog(onSelected: (String?) -> Unit): DialogHandle {
         ) {
             YukiDialogTheme {
                 ListDialog(state = rememberUseCaseState(visible = true, onFinishedRequest = {
+                    feedbackView.performClickHapticFeedback()
                     onSelected(selection)
                 }, onCloseRequest = {
                     dismiss()
@@ -1092,6 +1096,7 @@ fun rememberSelectKmiDialog(onSelected: (String?) -> Unit): DialogHandle {
                     showRadioButtons = true,
                     options = options,
                 ) { _, option ->
+                    feedbackView.performClickHapticFeedback()
                     selection = option.titleText
                 })
             }

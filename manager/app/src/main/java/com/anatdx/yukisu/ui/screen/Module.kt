@@ -536,6 +536,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                 onDismissRequest = {
                     showBottomSheet = false
                 },
+                modifier = Modifier.clickHapticFeedback(),
                 sheetState = bottomSheetState,
                 dragHandle = {
                     Surface(

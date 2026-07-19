@@ -694,6 +694,7 @@ private fun LogBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.clickHapticFeedback(),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Row(

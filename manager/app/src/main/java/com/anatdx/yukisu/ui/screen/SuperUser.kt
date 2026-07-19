@@ -75,6 +75,7 @@ import com.anatdx.yukisu.ui.component.SearchAppBar
 import com.anatdx.yukisu.ui.component.VerticalExpandableFab
 import com.anatdx.yukisu.ui.component.YukiIcon
 import com.anatdx.yukisu.ui.component.YukiPullToRefreshBox
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.theme.isExpressiveUi
 import com.anatdx.yukisu.ui.theme.CardConfig
 import com.anatdx.yukisu.ui.util.module.ModuleModify
@@ -478,6 +479,7 @@ private fun SuperUserBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.clickHapticFeedback(),
         sheetState = bottomSheetState,
         dragHandle = {
             Surface(

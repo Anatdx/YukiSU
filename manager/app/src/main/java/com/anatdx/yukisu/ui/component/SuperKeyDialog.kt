@@ -156,6 +156,7 @@ fun SuperKeyDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickHapticFeedback()
                     .padding(horizontal = 24.dp),
                 shape = if (isExpressiveUi) MaterialTheme.shapes.extraLarge else RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(

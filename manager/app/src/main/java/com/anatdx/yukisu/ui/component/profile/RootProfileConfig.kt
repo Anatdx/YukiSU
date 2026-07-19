@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,6 +29,7 @@ import com.anatdx.yukisu.profile.Groups
 import com.anatdx.yukisu.ui.component.rememberCustomDialog
 import com.anatdx.yukisu.ui.component.YukiSwitch
 import com.anatdx.yukisu.ui.component.YukiDialogTheme
+import com.anatdx.yukisu.ui.component.performClickHapticFeedback
 import com.anatdx.yukisu.ui.util.isSepolicyValid
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -194,6 +196,7 @@ fun RootProfileConfig(
 @Composable
 fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>) -> Unit) {
     val selectGroupsDialog = rememberCustomDialog { dismiss: () -> Unit ->
+        val feedbackView = LocalView.current
         val groups = Groups.entries.toTypedArray().sortedWith(
             compareBy<Groups> { if (selected.contains(it)) 0 else 1 }
                 .then(compareBy {
@@ -225,6 +228,7 @@ fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>)
             YukiDialogTheme {
                 ListDialog(
                     state = rememberUseCaseState(visible = true, onFinishedRequest = {
+                        feedbackView.performClickHapticFeedback()
                         closeSelection(selection)
                     }, onCloseRequest = {
                         dismiss()
@@ -237,6 +241,7 @@ fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>)
                         options = options,
                         maxChoices = 32, // Kernel only supports 32 groups at most
                     ) { indecies, _ ->
+                        feedbackView.performClickHapticFeedback()
                         // Handle selection
                         selection.clear()
                         indecies.forEach { index ->
@@ -284,6 +289,7 @@ fun CapsPanel(
     closeSelection: (selection: Set<Capabilities>) -> Unit
 ) {
     val selectCapabilitiesDialog = rememberCustomDialog { dismiss ->
+        val feedbackView = LocalView.current
         val caps = Capabilities.entries.toTypedArray().sortedWith(
             compareBy<Capabilities> { if (selected.contains(it)) 0 else 1 }
                 .then(compareBy { it.name })
@@ -306,6 +312,7 @@ fun CapsPanel(
             YukiDialogTheme {
                 ListDialog(
                     state = rememberUseCaseState(visible = true, onFinishedRequest = {
+                        feedbackView.performClickHapticFeedback()
                         closeSelection(selection)
                     }, onCloseRequest = {
                         dismiss()
@@ -317,6 +324,7 @@ fun CapsPanel(
                         showCheckBoxes = true,
                         options = options
                     ) { indecies, _ ->
+                        feedbackView.performClickHapticFeedback()
                         // Handle selection
                         selection.clear()
                         indecies.forEach { index ->
@@ -408,6 +416,7 @@ private fun SELinuxPanel(
     onSELinuxChange: (domain: String, rules: String) -> Unit
 ) {
     val editSELinuxDialog = rememberCustomDialog { dismiss ->
+        val feedbackView = LocalView.current
         var domain by remember { mutableStateOf(profile.context) }
         var rules by remember { mutableStateOf(profile.rules) }
 
@@ -464,6 +473,7 @@ private fun SELinuxPanel(
                     state = rememberUseCaseState(
                         visible = true,
                         onFinishedRequest = {
+                            feedbackView.performClickHapticFeedback()
                             onSELinuxChange(domain, rules)
                         },
                         onCloseRequest = {

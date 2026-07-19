@@ -30,6 +30,7 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.theme.util.BackgroundTransformation
 import com.anatdx.yukisu.ui.theme.util.saveTransformedBackground
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -295,17 +296,19 @@ fun KernelSUTheme(
     SystemBarController(darkTheme)
 
     val themedContent: @Composable () -> Unit = {
-        if (showBackground) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                // 背景层
-                BackgroundLayer(darkTheme)
-                // 内容层
-                Box(modifier = Modifier.fillMaxSize().zIndex(1f)) {
-                    content()
+        Box(modifier = Modifier.clickHapticFeedback()) {
+            if (showBackground) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 背景层
+                    BackgroundLayer(darkTheme)
+                    // 内容层
+                    Box(modifier = Modifier.fillMaxSize().zIndex(1f)) {
+                        content()
+                    }
                 }
+            } else {
+                content()
             }
-        } else {
-            content()
         }
     }
 

@@ -515,7 +515,8 @@ private fun LogControlPanel(
                         )
                         ExposedDropdownMenu(
                             expanded = fileSelectorExpanded,
-                            onDismissRequest = { fileSelectorExpanded = false }
+                            onDismissRequest = { fileSelectorExpanded = false },
+                            modifier = Modifier.clickHapticFeedback(),
                         ) {
                             logSources.forEachIndexed { index, source ->
                                 DropdownMenuItem(
@@ -648,6 +649,7 @@ private fun LogFilterBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.clickHapticFeedback(),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(

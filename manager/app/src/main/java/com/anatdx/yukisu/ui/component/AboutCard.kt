@@ -43,7 +43,9 @@ fun AboutDialog(dismiss: () -> Unit) {
     Dialog(
         onDismissRequest = { dismiss() }
     ) {
-        AboutCard()
+        Box(modifier = Modifier.clickHapticFeedback()) {
+            AboutCard()
+        }
     }
 }
 

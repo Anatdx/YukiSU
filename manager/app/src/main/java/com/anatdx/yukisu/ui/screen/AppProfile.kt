@@ -47,6 +47,7 @@ import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.SwitchItem
 import com.anatdx.yukisu.ui.component.YukiIcon
+import com.anatdx.yukisu.ui.component.clickHapticFeedback
 import com.anatdx.yukisu.ui.component.profile.AppProfileConfig
 import com.anatdx.yukisu.ui.component.profile.RootProfileConfig
 import com.anatdx.yukisu.ui.component.profile.TemplateConfig
@@ -804,6 +805,7 @@ private fun AppMenuBox(
 
         DropdownMenu(
             expanded = expanded,
+            modifier = Modifier.clickHapticFeedback(),
             offset = DpOffset(offsetX, offsetY),
             onDismissRequest = {
                 expanded = false
