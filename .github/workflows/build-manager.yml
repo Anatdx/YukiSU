@@ -304,7 +304,9 @@ jobs:
           cd dist
           mapfile -t APKS < <(find . -maxdepth 1 -type f -name '*.apk')
           test "${#APKS[@]}" -eq 1
-          mv "${APKS[0]}" app-release.apk
+          if [[ "${APKS[0]}" != './app-release.apk' ]]; then
+            mv -- "${APKS[0]}" app-release.apk
+          fi
           gpg --detach-sign --local-user 'C09CE484EEA3F2D88E9CDCC8EBDB0D663D7AB2F6!' \
             --batch --yes --pinentry-mode loopback \
             --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
