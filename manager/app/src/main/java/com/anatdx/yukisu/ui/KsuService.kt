@@ -16,7 +16,7 @@ class KsuService : RootService() {
 
     private val TAG = "KsuService"
 
-    private val cacheLock = Object()
+    private val cacheLock = Any()
     private var _all: List<PackageInfo>? = null
     private val allPackages: List<PackageInfo>
         get() = synchronized(cacheLock) {

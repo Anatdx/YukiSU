@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.anatdx.yukisu.R
 
@@ -112,7 +113,7 @@ fun VerticalExpandableFab(
 
             Row(
                 modifier = Modifier
-                    .offset(y = animatedOffsetY.dp)
+                    .offset { IntOffset(x = 0, y = animatedOffsetY.dp.roundToPx()) }
                     .scale(animatedScale)
                     .alpha(animatedAlpha),
                 verticalAlignment = Alignment.CenterVertically,

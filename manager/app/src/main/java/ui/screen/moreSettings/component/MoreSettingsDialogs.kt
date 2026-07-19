@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -172,6 +173,7 @@ fun LanguageSelectionDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val feedbackView = LocalView.current
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -183,7 +185,7 @@ fun LanguageSelectionDialog(
     } else {
         // Android < 13 - Show app language selector
         // Dynamically detect supported locales from resources
-        val supportedLocales = remember {
+        val supportedLocales = remember(resources.configuration) {
             val locales = mutableListOf<java.util.Locale>()
 
             // Add system default first
@@ -218,7 +220,7 @@ fun LanguageSelectionDialog(
 
                     // Try to get a translated string to verify the locale is supported
                     val testString = localizedContext.getString(R.string.settings_language)
-                    val defaultString = context.getString(R.string.settings_language)
+                    val defaultString = resources.getString(R.string.settings_language)
 
                     // If the string is different or it's English, it's supported
                     if (testString != defaultString || locale.language == "en") {
@@ -247,7 +249,7 @@ fun LanguageSelectionDialog(
             }
 
             val displayName = if (locale == java.util.Locale.ROOT) {
-                context.getString(R.string.language_system_default)
+                resources.getString(R.string.language_system_default)
             } else {
                 locale.getDisplayName(locale)
             }

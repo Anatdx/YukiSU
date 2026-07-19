@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.content.edit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
@@ -181,7 +183,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                                 if (success) {
                                     val skipStore = superKeyPrefs.getBoolean("skip_store_superkey", false)
                                     if (!skipStore) {
-                                        superKeyPrefs.edit().putString("saved_superkey", superKey).apply()
+                                        superKeyPrefs.edit { putString("saved_superkey", superKey) }
                                     }
                                 }
                                 success
@@ -1288,6 +1290,7 @@ private fun KsudVersionDialog(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
 
     var apkVersion by remember { mutableStateOf<String?>(null) }
     var installedVersion by remember { mutableStateOf<String?>(null) }
@@ -1320,7 +1323,7 @@ private fun KsudVersionDialog(
                     Text(
                         text = stringResource(
                             id = R.string.home_ksud_daemon_apk_version,
-                            apkVersion ?: context.getString(R.string.home_ksud_daemon_unknown)
+                            apkVersion ?: resources.getString(R.string.home_ksud_daemon_unknown)
                         ),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -1328,7 +1331,7 @@ private fun KsudVersionDialog(
                         text = stringResource(
                             id = R.string.home_ksud_daemon_installed_version,
                             installedVersion
-                                ?: context.getString(R.string.home_ksud_daemon_unknown)
+                                ?: resources.getString(R.string.home_ksud_daemon_unknown)
                         ),
                         style = MaterialTheme.typography.bodyMedium
                     )

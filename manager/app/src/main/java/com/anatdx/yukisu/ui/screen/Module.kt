@@ -64,6 +64,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -128,6 +129,7 @@ private enum class ShortcutType {
 fun ModuleScreen(navigator: DestinationsNavigator) {
     val viewModel = viewModel<ModuleViewModel>()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val prefs = context.getSharedPreferences("settings", MODE_PRIVATE)
     val snackBarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -196,10 +198,10 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
 
                 val modulesList = selectedModuleNames.values.joinToString("\n• ", "• ")
                 val confirmResult = confirmDialog.awaitConfirm(
-                    title = context.getString(R.string.module_install),
-                    content = context.getString(R.string.module_install_multiple_confirm_with_names, selectedModules.size, modulesList),
-                    confirm = context.getString(R.string.install),
-                    dismiss = context.getString(R.string.cancel)
+                    title = resources.getString(R.string.module_install),
+                    content = resources.getString(R.string.module_install_multiple_confirm_with_names, selectedModules.size, modulesList),
+                    confirm = resources.getString(R.string.install),
+                    dismiss = resources.getString(R.string.cancel)
                 )
 
                 if (confirmResult == ConfirmResult.Confirmed) {
@@ -226,10 +228,10 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                     val moduleName = ModuleUtils.extractModuleName(context, uri)
 
                     val confirmResult = confirmDialog.awaitConfirm(
-                        title = context.getString(R.string.module_install),
-                        content = context.getString(R.string.module_install_confirm, moduleName),
-                        confirm = context.getString(R.string.install),
-                        dismiss = context.getString(R.string.cancel)
+                        title = resources.getString(R.string.module_install),
+                        content = resources.getString(R.string.module_install_confirm, moduleName),
+                        confirm = resources.getString(R.string.install),
+                        dismiss = resources.getString(R.string.cancel)
                     )
 
                     if (confirmResult == ConfirmResult.Confirmed) {
@@ -945,7 +947,7 @@ private fun ModuleList(
 
     val loadingDialog = rememberLoadingDialog()
     val confirmDialog = rememberConfirmDialog()
-    var lastRebootSnackbarTime by remember { mutableStateOf(0L) }
+    var lastRebootSnackbarTime by remember { mutableLongStateOf(0L) }
 
     suspend fun onModuleUpdate(
         module: ModuleViewModel.ModuleInfo,
@@ -1213,6 +1215,7 @@ fun ModuleItem(
     onAddShortcut: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val (isHideTagRow, showMoreModuleInfo) = remember {
         val p = context.getSharedPreferences("settings", MODE_PRIVATE)
         Pair(p.getBoolean("is_hide_tag_row", false), p.getBoolean("show_more_module_info", false))
@@ -1316,7 +1319,7 @@ fun ModuleItem(
 
                                         Toast.makeText(
                                             context,
-                                            context.getString(R.string.module_update_json_copied),
+                                            resources.getString(R.string.module_update_json_copied),
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
@@ -1524,7 +1527,7 @@ fun ModuleItem(
                 ModuleActionButton(
                     onClick = { onUninstallClicked(module) },
                     imageVector = if (!module.remove) Icons.Outlined.Delete else Icons.Outlined.Refresh,
-                    iconModifier = if (!module.remove) Modifier else Modifier.rotate(180f),
+                    modifier = if (!module.remove) Modifier else Modifier.rotate(180f),
                     contentDescription = null
                 )
             }
@@ -1537,14 +1540,14 @@ private fun ModuleActionButton(
     imageVector: ImageVector,
     contentDescription: String?,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     enabled: Boolean = true,
     prominent: Boolean = false,
-    interactionSource: MutableInteractionSource? = null,
-    iconModifier: Modifier = Modifier
+    interactionSource: MutableInteractionSource? = null
 ) {
     val icon: @Composable () -> Unit = {
         YukiIcon(
-            modifier = iconModifier.size(20.dp),
+            modifier = modifier.size(20.dp),
             imageVector = imageVector,
             contentDescription = contentDescription
         )

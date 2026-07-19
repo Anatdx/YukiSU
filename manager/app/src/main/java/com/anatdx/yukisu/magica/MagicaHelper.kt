@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.content.edit
 
 object MagicaHelper {
+    private const val TAG = "YukiSUMagica"
     private const val SETTINGS_PREFS = "settings"
     private const val AUTO_JAILBREAK_KEY = "auto_jailbreak"
 
@@ -32,7 +33,7 @@ object MagicaHelper {
                 PackageManager.DONT_KILL_APP
             )
         }.onFailure {
-            Log.e(AppZygotePreload.TAG, "failed to update auto jailbreak receiver state to $enabled", it)
+            Log.e(TAG, "failed to update auto jailbreak receiver state to $enabled", it)
         }
 
         appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE).edit {
@@ -45,10 +46,10 @@ object MagicaHelper {
         val appContext = context.applicationContext
         return runCatching {
             appContext.startService(Intent(appContext, MagicaService::class.java))
-            Log.i(AppZygotePreload.TAG, "MagicaService started from trigger: $trigger")
+            Log.i(TAG, "MagicaService started from trigger: $trigger")
             true
         }.getOrElse {
-            Log.e(AppZygotePreload.TAG, "failed to start MagicaService from trigger: $trigger", it)
+            Log.e(TAG, "failed to start MagicaService from trigger: $trigger", it)
             false
         }
     }

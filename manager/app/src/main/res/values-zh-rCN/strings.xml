@@ -578,14 +578,12 @@
     <string name="yukizygisk_injected_zygotes">Zygote 监视器</string>
     <string name="yukizygisk_no_zygotes">无 Zygote</string>
     <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
-    <string name="yukizygisk_native_modules">Native 模块</string>
     <string name="yukizygisk_no_native_modules">无 Native 模块</string>
     <string name="yukizygisk_native_module_detail">%1$s=%2$s · %3$s</string>
     <string name="yukizygisk_native_companion">companion</string>
     <string name="yukizygisk_native_no_companion">无 companion</string>
     <string name="yukizygisk_native_injections">Native 注入监视器</string>
     <string name="yukizygisk_no_native_injections">无注入记录</string>
-    <string name="yukizygisk_native_injection_detail">%1$s · %2$s · pid %3$d</string>
     <string name="yukizygisk_native_mode_module">按模块</string>
     <string name="yukizygisk_native_mode_process">按进程</string>
     <string name="yukizygisk_native_process_detail">%1$s · pid %2$d</string>
@@ -611,7 +609,6 @@
     <string name="yukizygisk_denylist_restore">恢复</string>
     <string name="yukizygisk_log_dmesg_title">记录到 dmesg</string>
     <string name="yukizygisk_log_dmesg_summary">输出到 dmesg。</string>
-    <string name="yukizygisk_uid_fallback">uid %1$d</string>
     <string name="module_zygisk_loaded">已加载</string>
     <string name="module_zygisk_module">Zygisk模块</string>
     <string name="module_zn_module">ZN模块</string>

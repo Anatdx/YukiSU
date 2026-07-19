@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="home">Inicio</string>
     <string name="learn_more">Más información</string>
     <string name="home_not_installed">No instalado</string>
@@ -110,7 +110,7 @@
     <string name="settings_check_update">Comprobar actualización</string>
     <string name="settings_check_update_summary">Comprobación automática de actualizaciones al abrir la aplicación</string>
     <string name="settings_auto_jailbreak">Jailbreak automático</string>
-    <string name="settings_auto_jailbreak_summary">Usar Magica automáticamente para iniciar la carga tardía cuando se detecta un SELinux permisivo al arrancar. Requiere conceder permiso de inicio automático a esta aplicación.</string>
+    <string name="settings_auto_jailbreak_summary" tools:ignore="Typos">Usar Magica automáticamente para iniciar la carga tardía cuando se detecta un SELinux permisivo al arrancar. Requiere conceder permiso de inicio automático a esta aplicación.</string>
     <string name="settings_adb_root">ADB Root</string>
     <string name="settings_adb_root_summary">Ejecutar adbd con privilegios de root</string>
     <string name="grant_root_failed">¡No se ha podido conceder el acceso root!</string>
@@ -127,7 +127,7 @@
     <string name="install_next">Siguiente</string>
     <string name="install_select_partition">Seleccionar partición</string>
     <string name="install_jailbreak_title">Instalación por jailbreak</string>
-    <string name="install_jailbreak_summary">Activar la carga tardía directamente desde la página de instalación en un dispositivo permisivo. Si aún no hay un shell de root disponible, se usará el arranque de Magica en su lugar.</string>
+    <string name="install_jailbreak_summary" tools:ignore="Typos">Activar la carga tardía directamente desde la página de instalación en un dispositivo permisivo. Si aún no hay un shell de root disponible, se usará el arranque de Magica en su lugar.</string>
     <string name="install_jailbreak_requires_permissive">Esta acción solo está disponible cuando SELinux es permisivo.</string>
     <string name="install_jailbreak_button">Activar carga tardía</string>
     <string name="install_jailbreak_failed">No se pudo activar la carga tardía</string>

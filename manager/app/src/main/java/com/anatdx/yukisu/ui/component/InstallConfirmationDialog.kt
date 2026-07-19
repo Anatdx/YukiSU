@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.anatdx.yukisu.R
@@ -145,6 +146,7 @@ fun InstallConfirmationDialog(
 ) {
     if (show && zipFiles.isNotEmpty()) {
         val context = LocalContext.current
+        val resources = LocalResources.current
 
         YukiAlertDialog(
             onDismissRequest = onDismiss,
@@ -162,9 +164,9 @@ fun InstallConfirmationDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = if (zipFiles.size == 1) {
-                            context.getString(R.string.confirm_installation)
+                            resources.getString(R.string.confirm_installation)
                         } else {
-                            context.getString(R.string.confirm_multiple_installation, zipFiles.size)
+                            resources.getString(R.string.confirm_multiple_installation, zipFiles.size)
                         }
                     )
                 }
@@ -195,13 +197,13 @@ fun InstallConfirmationDialog(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(context.getString(R.string.install_confirm))
+                    Text(resources.getString(R.string.install_confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = onDismiss) {
                     Text(
-                        context.getString(android.R.string.cancel),
+                        resources.getString(android.R.string.cancel),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -214,6 +216,7 @@ fun InstallConfirmationDialog(
 @Composable
 fun InstallItemCard(zipFile: ZipFileInfo) {
     val context = LocalContext.current
+    val resources = LocalResources.current
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -251,8 +254,8 @@ fun InstallItemCard(zipFile: ZipFileInfo) {
                     Text(
                         text = zipFile.name.ifEmpty {
                             when (zipFile.type) {
-                                ZipType.MODULE -> context.getString(R.string.unknown_module)
-                                else -> context.getString(R.string.unknown_file)
+                                ZipType.MODULE -> resources.getString(R.string.unknown_module)
+                                else -> resources.getString(R.string.unknown_file)
                             }
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -261,8 +264,8 @@ fun InstallItemCard(zipFile: ZipFileInfo) {
                     )
                     Text(
                         text = when (zipFile.type) {
-                            ZipType.MODULE -> context.getString(R.string.module_package)
-                            else -> context.getString(R.string.unknown_package)
+                            ZipType.MODULE -> resources.getString(R.string.module_package)
+                            else -> resources.getString(R.string.unknown_package)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -284,7 +287,7 @@ fun InstallItemCard(zipFile: ZipFileInfo) {
                 // 版本信息
                 if (zipFile.version.isNotEmpty()) {
                     InfoRow(
-                        label = context.getString(R.string.version),
+                        label = resources.getString(R.string.version),
                         value = zipFile.version + if (zipFile.versionCode.isNotEmpty()) " (${zipFile.versionCode})" else ""
                     )
                 }
@@ -292,7 +295,7 @@ fun InstallItemCard(zipFile: ZipFileInfo) {
                 // 作者信息
                 if (zipFile.author.isNotEmpty()) {
                     InfoRow(
-                        label = context.getString(R.string.author),
+                        label = resources.getString(R.string.author),
                         value = zipFile.author
                     )
                 }
@@ -300,7 +303,7 @@ fun InstallItemCard(zipFile: ZipFileInfo) {
                 // 描述信息 (仅模块)
                 if (zipFile.description.isNotEmpty() && zipFile.type == ZipType.MODULE) {
                     InfoRow(
-                        label = context.getString(R.string.description),
+                        label = resources.getString(R.string.description),
                         value = zipFile.description
                     )
                 }

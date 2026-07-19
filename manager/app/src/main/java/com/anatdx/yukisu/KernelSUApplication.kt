@@ -1,6 +1,7 @@
 package com.anatdx.yukisu
 
 import android.app.Application
+import android.os.Build
 import android.os.Process
 import android.system.Os
 import androidx.lifecycle.ViewModelProvider
@@ -32,7 +33,7 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
         ksuApp = this
 
         // Isolated Magica processes only need TMPDIR for the bundled ksud bootstrap.
-        if (Process.isIsolated()) {
+        if (isIsolatedProcess()) {
             Os.setenv("TMPDIR", cacheDir.absolutePath, true)
             return
         }
@@ -76,4 +77,13 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
     }
     override val viewModelStore: ViewModelStore
         get() = appViewModelStore
+
+    private fun isIsolatedProcess(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Process.isIsolated()
+        }
+        // FIRST_ISOLATED_UID..LAST_ISOLATED_UID on Android 8.x.
+        val appId = Process.myUid() % 100_000
+        return appId in 99_000..99_999
+    }
 }

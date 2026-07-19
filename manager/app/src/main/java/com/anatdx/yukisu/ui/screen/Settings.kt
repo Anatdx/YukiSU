@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,6 +89,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
     }
     val snackBarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val isKsuManager = remember { Natives.isManager }
     var isSuLogEnabled by remember { mutableStateOf(Natives.isSuLogEnabled()) }
@@ -132,7 +134,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         }
                     }
                     loadingDialog.hide()
-                    snackBarHost.showSnackbar(context.getString(R.string.log_saved))
+                    snackBarHost.showSnackbar(resources.getString(R.string.log_saved))
                 }
             }
 
@@ -162,19 +164,19 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             checked = skipStoreSuperKey,
                             onCheckedChange = {
                                 skipStoreSuperKey = it
-                                superKeyPrefs.edit().putBoolean("skip_store_superkey", it).apply()
+                                superKeyPrefs.edit { putBoolean("skip_store_superkey", it) }
                                 if (it) {
                                     // 如果开启了不保存，立即清除已保存的密钥
-                                    superKeyPrefs.edit().remove("saved_superkey").apply()
+                                    superKeyPrefs.edit { remove("saved_superkey") }
                                 }
                             }
                         )
 
                         // 清除 SuperKey
                         val clearKeyDialog = rememberConfirmDialog(onConfirm = {
-                            superKeyPrefs.edit().remove("saved_superkey").apply()
+                            superKeyPrefs.edit { remove("saved_superkey") }
                             scope.launch {
-                                snackBarHost.showSnackbar(context.getString(R.string.clear_super_key) + " ✓")
+                                snackBarHost.showSnackbar(resources.getString(R.string.clear_super_key) + " ✓")
                             }
                         })
                         val clearKeyDialogTitle = stringResource(R.string.clear_super_key)
@@ -216,7 +218,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                 }
                                 scope.launch {
                                     snackBarHost.showSnackbar(
-                                        context.getString(
+                                        resources.getString(
                                             if (ok) R.string.setting_change_saved_reboot
                                             else R.string.setting_change_failed
                                         )
@@ -384,7 +386,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                 scope.launch {
                                     if (setFeatureValue("yukizygisk", enable)) {
                                         snackBarHost.showSnackbar(
-                                            context.getString(
+                                            resources.getString(
                                                 if (enable) R.string.settings_yukizygisk_toast_on
                                                 else R.string.settings_yukizygisk_toast_off
                                             )
@@ -392,7 +394,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                     } else {
                                         yukiZygiskEnabled = getFeatureValue("yukizygisk")
                                         snackBarHost.showSnackbar(
-                                            context.getString(R.string.settings_yukizygisk_toast_failed)
+                                            resources.getString(R.string.settings_yukizygisk_toast_failed)
                                         )
                                     }
                                 }
@@ -561,7 +563,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                     context.startActivity(
                                         Intent.createChooser(
                                             shareIntent,
-                                            context.getString(R.string.send_log)
+                                            resources.getString(R.string.send_log)
                                         )
                                     )
 
@@ -945,13 +947,14 @@ fun UninstallItem(
     withLoading: suspend (suspend () -> Unit) -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val uninstallConfirmDialog = rememberConfirmDialog()
     val uninstallDialog = rememberUninstallDialog { uninstallType ->
         scope.launch {
             val result = uninstallConfirmDialog.awaitConfirm(
-                title = context.getString(uninstallType.title),
-                content = context.getString(uninstallType.message)
+                title = resources.getString(uninstallType.title),
+                content = resources.getString(uninstallType.message)
             )
             if (result == ConfirmResult.Confirmed) {
                 withLoading {

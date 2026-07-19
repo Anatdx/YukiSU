@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.YukiAlertDialog
 import com.anatdx.yukisu.ksu.KsuPaths
@@ -33,30 +34,28 @@ object ModuleModify {
         onConfirm: () -> Unit,
         onDismiss: () -> Unit
     ) {
-        val context = LocalContext.current
-
         if (showDialog) {
             YukiAlertDialog(
                 onDismissRequest = onDismiss,
                 title = {
                     Text(
-                        text = context.getString(R.string.restore_confirm_title)
+                        text = stringResource(R.string.restore_confirm_title)
                     )
                 },
                 text = {
                     Text(
-                        text = context.getString(R.string.restore_confirm_message),
+                        text = stringResource(R.string.restore_confirm_message),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = onConfirm) {
-                        Text(context.getString(R.string.confirm))
+                        Text(stringResource(R.string.confirm))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismiss) {
-                        Text(context.getString(R.string.cancel))
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             )
@@ -69,30 +68,28 @@ object ModuleModify {
         onConfirm: () -> Unit,
         onDismiss: () -> Unit
     ) {
-        val context = LocalContext.current
-
         if (showDialog) {
             YukiAlertDialog(
                 onDismissRequest = onDismiss,
                 title = {
                     Text(
-                        text = context.getString(R.string.allowlist_restore_confirm_title)
+                        text = stringResource(R.string.allowlist_restore_confirm_title)
                     )
                 },
                 text = {
                     Text(
-                        text = context.getString(R.string.allowlist_restore_confirm_message),
+                        text = stringResource(R.string.allowlist_restore_confirm_message),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = onConfirm) {
-                        Text(context.getString(R.string.confirm))
+                        Text(stringResource(R.string.confirm))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismiss) {
-                        Text(context.getString(R.string.cancel))
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             )

@@ -475,7 +475,6 @@ class SuperUserViewModel : ViewModel() {
         return if (profile.name in packageNames) profile else profile.copy(name = fallbackKey)
     }
     override fun onCleared() {
-        super.onCleared()
         try {
             stopKsuService()
             appProcessingThreadPool.close()

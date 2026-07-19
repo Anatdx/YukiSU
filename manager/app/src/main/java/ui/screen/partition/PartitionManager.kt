@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
@@ -57,6 +58,7 @@ private const val KEY_BACKUP_DIRECTORY = "backup_directory"
 @Composable
 fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbarHost = LocalSnackbarHost.current
     
@@ -83,12 +85,12 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
         val selectedPath = resolveBackupDirectoryPath(uri)
         scope.launch {
             if (selectedPath == null) {
-                snackbarHost.showSnackbar(context.getString(R.string.partition_backup_directory_picker_unsupported))
+                snackbarHost.showSnackbar(resources.getString(R.string.partition_backup_directory_picker_unsupported))
             } else {
                 backupDirectory = selectedPath
                 savePartitionBackupDirectory(context, selectedPath)
                 snackbarHost.showSnackbar(
-                    context.getString(R.string.partition_backup_directory_selected, selectedPath)
+                    resources.getString(R.string.partition_backup_directory_selected, selectedPath)
                 )
             }
         }
@@ -114,7 +116,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                     }
                     
                     if (cacheFile != null) {
-                        snackbarHost.showSnackbar(context.getString(R.string.partition_flashing, partition.name))
+                        snackbarHost.showSnackbar(resources.getString(R.string.partition_flashing, partition.name))
                         
                         withContext(Dispatchers.IO) {
                             val logs = mutableListOf<String>()
@@ -136,19 +138,19 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                             withContext(Dispatchers.Main) {
                                 cacheFile.delete()
                                 if (success) {
-                                    snackbarHost.showSnackbar(context.getString(R.string.partition_flash_success))
+                                    snackbarHost.showSnackbar(resources.getString(R.string.partition_flash_success))
                                 } else {
                                     val errorMsg = if (logs.isNotEmpty()) {
-                                        context.getString(R.string.partition_flash_failed, logs.lastOrNull() ?: context.getString(R.string.partition_unknown))
+                                        resources.getString(R.string.partition_flash_failed, logs.lastOrNull() ?: resources.getString(R.string.partition_unknown))
                                     } else {
-                                        context.getString(R.string.partition_flash_failed_check_log)
+                                        resources.getString(R.string.partition_flash_failed_check_log)
                                     }
                                     snackbarHost.showSnackbar(errorMsg)
                                 }
                             }
                         }
                     } else {
-                        snackbarHost.showSnackbar(context.getString(R.string.partition_cannot_read_file))
+                        snackbarHost.showSnackbar(resources.getString(R.string.partition_cannot_read_file))
                     }
                 }
             }
@@ -172,7 +174,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     
     val mapLogicalPartitions: suspend (String) -> Unit = { slot ->
         withContext(Dispatchers.Main) {
-            snackbarHost.showSnackbar(context.getString(R.string.partition_mapping, slot))
+            snackbarHost.showSnackbar(resources.getString(R.string.partition_mapping, slot))
         }
         
         withContext(Dispatchers.IO) {
@@ -192,13 +194,13 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
             
             withContext(Dispatchers.Main) {
                 if (success) {
-                    snackbarHost.showSnackbar(context.getString(R.string.partition_map_success))
+                    snackbarHost.showSnackbar(resources.getString(R.string.partition_map_success))
                     scope.launch {
                         refreshPartitions(selectedSlot)
                     }
                 } else {
-                    val errorMsg = logs.lastOrNull() ?: context.getString(R.string.partition_unknown)
-                    snackbarHost.showSnackbar(context.getString(R.string.partition_map_failed, errorMsg))
+                    val errorMsg = logs.lastOrNull() ?: resources.getString(R.string.partition_unknown)
+                    snackbarHost.showSnackbar(resources.getString(R.string.partition_map_failed, errorMsg))
                 }
             }
         }
@@ -228,7 +230,7 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
                     android.util.Log.e("PartitionManager", "Failed to load partition info", e)
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
-                        snackbarHost.showSnackbar(context.getString(R.string.partition_load_failed, e.message ?: ""))
+                        snackbarHost.showSnackbar(resources.getString(R.string.partition_load_failed, e.message ?: ""))
                     }
                 } finally {
                     isLoading = false
@@ -813,6 +815,7 @@ fun PartitionActionDialog(
     onFlash: () -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val confirmDialog = rememberConfirmDialog(
         onConfirm = onFlash
     )
@@ -893,18 +896,18 @@ fun PartitionActionDialog(
                 TextButton(
                     onClick = {
                         val warningMessage = if (partition.isDangerous) {
-                            context.getString(R.string.partition_dangerous_flash_warning, partition.name, partition.name)
+                            resources.getString(R.string.partition_dangerous_flash_warning, partition.name, partition.name)
                         } else {
-                            context.getString(R.string.partition_flash_warning, partition.name)
+                            resources.getString(R.string.partition_flash_warning, partition.name)
                         }
                         
                         confirmDialog.showConfirm(
-                            title = context.getString(
+                            title = resources.getString(
                                 if (partition.isDangerous) R.string.partition_dangerous_operation_warning 
                                 else R.string.partition_dangerous_operation
                             ),
                             content = warningMessage,
-                            confirm = context.getString(R.string.partition_confirm_flash)
+                            confirm = resources.getString(R.string.partition_confirm_flash)
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -945,11 +948,11 @@ data class PartitionInfo(
 fun formatSize(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     val kb = bytes / 1024.0
-    if (kb < 1024) return String.format("%.2f KB", kb)
+    if (kb < 1024) return String.format(Locale.US, "%.2f KB", kb)
     val mb = kb / 1024.0
-    if (mb < 1024) return String.format("%.2f MB", mb)
+    if (mb < 1024) return String.format(Locale.US, "%.2f MB", mb)
     val gb = mb / 1024.0
-    return String.format("%.2f GB", gb)
+    return String.format(Locale.US, "%.2f GB", gb)
 }
 
 suspend fun handlePartitionBackup(

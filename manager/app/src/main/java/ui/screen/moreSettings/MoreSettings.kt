@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -814,15 +815,16 @@ fun saveCardConfig(context: Context) {
 @Composable
 private fun LanguageSetting(state: MoreSettingsState) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val language = stringResource(id = R.string.settings_language)
 
     // Compute display name based on current app locale
-    val currentLanguageDisplay = remember(state.currentAppLocale) {
+    val currentLanguageDisplay = remember(state.currentAppLocale, resources.configuration) {
         val locale = state.currentAppLocale
         if (locale != null) {
             locale.getDisplayName(locale)
         } else {
-            context.getString(R.string.language_system_default)
+            resources.getString(R.string.language_system_default)
         }
     }
 

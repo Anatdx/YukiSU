@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,6 +57,7 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
     }
     val snackBarHost = LocalSnackbarHost.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val confirmDialog = rememberConfirmDialog()
 
@@ -146,12 +148,12 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
                                     withContext(Dispatchers.Main) {
                                         if (success) {
                                             snackBarHost.showSnackbar(
-                                                context.getString(R.string.umount_path_removed)
+                                                resources.getString(R.string.umount_path_removed)
                                             )
                                             loadPaths()
                                         } else {
                                             snackBarHost.showSnackbar(
-                                                context.getString(R.string.operation_failed)
+                                                resources.getString(R.string.operation_failed)
                                             )
                                         }
                                     }
@@ -175,20 +177,20 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
                                 onClick = {
                                     scope.launch {
                                         if (confirmDialog.awaitConfirm(
-                                                title = context.getString(R.string.confirm_action),
-                                                content = context.getString(R.string.confirm_clear_custom_paths)
+                                                title = resources.getString(R.string.confirm_action),
+                                                content = resources.getString(R.string.confirm_clear_custom_paths)
                                             ) == ConfirmResult.Confirmed) {
                                             withContext(Dispatchers.IO) {
                                                 val success = clearCustomUmountPaths()
                                                 withContext(Dispatchers.Main) {
                                                     if (success) {
                                                         snackBarHost.showSnackbar(
-                                                            context.getString(R.string.custom_paths_cleared)
+                                                            resources.getString(R.string.custom_paths_cleared)
                                                         )
                                                         loadPaths()
                                                     } else {
                                                         snackBarHost.showSnackbar(
-                                                            context.getString(R.string.operation_failed)
+                                                            resources.getString(R.string.operation_failed)
                                                         )
                                                     }
                                                 }
@@ -210,11 +212,11 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
                                         withContext(Dispatchers.Main) {
                                             if (success) {
                                                 snackBarHost.showSnackbar(
-                                                    context.getString(R.string.config_applied)
+                                                    resources.getString(R.string.config_applied)
                                                 )
                                             } else {
                                                 snackBarHost.showSnackbar(
-                                                    context.getString(R.string.operation_failed)
+                                                    resources.getString(R.string.operation_failed)
                                                 )
                                             }
                                         }
@@ -244,12 +246,12 @@ fun UmountManagerScreen(navigator: DestinationsNavigator) {
                             if (success) {
                                 saveUmountConfig()
                                 snackBarHost.showSnackbar(
-                                    context.getString(R.string.umount_path_added)
+                                    resources.getString(R.string.umount_path_added)
                                 )
                                 loadPaths()
                             } else {
                                 snackBarHost.showSnackbar(
-                                    context.getString(R.string.operation_failed)
+                                    resources.getString(R.string.operation_failed)
                                 )
                             }
                         }
@@ -320,6 +322,7 @@ fun UmountPathCard(
     val confirmDialog = rememberConfirmDialog()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -349,9 +352,9 @@ fun UmountPathCard(
                 Spacer(modifier = Modifier.height(SPACING_SMALL))
                 Text(
                     text = buildString {
-                        append(context.getString(R.string.flags))
+                        append(resources.getString(R.string.flags))
                         append(": ")
-                        append(entry.flags.toUmountFlagName(context))
+                        append(entry.flags.toUmountFlagName(resources))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -361,8 +364,8 @@ fun UmountPathCard(
                 onClick = {
                     scope.launch {
                         if (confirmDialog.awaitConfirm(
-                                title = context.getString(R.string.confirm_delete),
-                                content = context.getString(R.string.confirm_delete_umount_path, entry.path)
+                                title = resources.getString(R.string.confirm_delete),
+                                content = resources.getString(R.string.confirm_delete_umount_path, entry.path)
                             ) == ConfirmResult.Confirmed) {
                             onDelete()
                         }
@@ -451,9 +454,9 @@ private fun parseUmountPaths(output: String): List<UmountPathEntry> {
         .toList()
 }
 
-private fun Int.toUmountFlagName(context: Context): String {
+private fun Int.toUmountFlagName(resources: android.content.res.Resources): String {
     return when (this) {
-        2 -> context.getString(R.string.mnt_detach)
+        2 -> resources.getString(R.string.mnt_detach)
         else -> this.toString()
     }
 }

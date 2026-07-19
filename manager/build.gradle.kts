@@ -35,13 +35,19 @@ val androidMinSdkVersion = 26
 val androidTargetSdkVersion = 36
 val androidCompileSdkVersion = 37
 val androidBuildToolsVersion = "36.1.0"
-val androidCompileNdkVersion by extra(libs.versions.ndk.get())
-val androidCmakeVersion by extra("3.22.0+")
+val androidCompileNdkVersion = libs.versions.ndk.get()
+val androidCmakeVersion = "3.22.0+"
 val androidSourceCompatibility = JavaVersion.VERSION_17
 val androidTargetCompatibility = JavaVersion.VERSION_17
-val managerVersionCode by extra(10000 - 3135 + getGitCommitCount())
-val managerVersionName by extra(computeManagerVersionName())
-val ksudBundledVersion by extra(computeKsudBundledVersion())
+val managerVersionCode = 10000 - 3135 + getGitCommitCount()
+val managerVersionName = computeManagerVersionName()
+val ksudBundledVersion = computeKsudBundledVersion()
+
+extra.set("androidCompileNdkVersion", androidCompileNdkVersion)
+extra.set("androidCmakeVersion", androidCmakeVersion)
+extra.set("managerVersionCode", managerVersionCode)
+extra.set("managerVersionName", managerVersionName)
+extra.set("ksudBundledVersion", ksudBundledVersion)
 
 fun getGitCommitCount(): Int {
     return providers.exec {

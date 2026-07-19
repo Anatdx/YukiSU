@@ -20,7 +20,6 @@ plugins {
     alias(libs.plugins.agp.app)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.lsplugin.apksign)
     id("kotlin-parcelize")
 
 
@@ -55,42 +54,45 @@ abstract class CopyRenamedApkTask : DefaultTask() {
     }
 }
 
-val managerVersionCode: Int by rootProject.extra
-val managerVersionName: String by rootProject.extra
-val ksudBundledVersion: String by rootProject.extra
-val androidCmakeVersion: String by rootProject.extra
+val managerVersionCode = rootProject.extra["managerVersionCode"] as Int
+val managerVersionName = rootProject.extra["managerVersionName"] as String
+val ksudBundledVersion = rootProject.extra["ksudBundledVersion"] as String
+val androidCmakeVersion = rootProject.extra["androidCmakeVersion"] as String
 val ciRunId = System.getenv("GITHUB_RUN_ID")?.toLongOrNull() ?: 0L
 
-fun exposeSigningProperty(propertyName: String, envName: String) {
-    if (project.findProperty(propertyName) == null) {
-        val value = System.getenv(envName)?.takeIf { it.isNotBlank() } ?: return
-        project.extensions.extraProperties[propertyName] = value
-    }
+fun signingValue(propertyName: String, environmentName: String): String? {
+    return providers.gradleProperty(propertyName)
+        .orElse(providers.environmentVariable(environmentName))
+        .orNull
+        ?.takeIf(String::isNotBlank)
 }
 
-exposeSigningProperty("KEYSTORE_FILE", "YUKISU_KEYSTORE")
-exposeSigningProperty("KEYSTORE_PASSWORD", "YUKISU_KEYSTORE_PASSWORD")
-exposeSigningProperty("KEY_ALIAS", "YUKISU_KEY_ALIAS")
-exposeSigningProperty("KEY_PASSWORD", "YUKISU_KEY_PASSWORD")
-
-apksign {
-    storeFileProperty = "KEYSTORE_FILE"
-    storePasswordProperty = "KEYSTORE_PASSWORD"
-    keyAliasProperty = "KEY_ALIAS"
-    keyPasswordProperty = "KEY_PASSWORD"
+val signingStoreFile = signingValue("KEYSTORE_FILE", "YUKISU_KEYSTORE")
+val signingStorePassword = signingValue("KEYSTORE_PASSWORD", "YUKISU_KEYSTORE_PASSWORD")
+val signingKeyAlias = signingValue("KEY_ALIAS", "YUKISU_KEY_ALIAS")
+val signingKeyPassword = signingValue("KEY_PASSWORD", "YUKISU_KEY_PASSWORD")
+val signingValues = listOf(
+    signingStoreFile,
+    signingStorePassword,
+    signingKeyAlias,
+    signingKeyPassword,
+)
+val hasReleaseSigning = signingValues.all { it != null }
+check(signingValues.all { it == null } || hasReleaseSigning) {
+    "Release signing requires KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD"
 }
-
 
 android {
-
-    /**signingConfigs {
-        create("Debug") {
-            storeFile = file("D:\\other\\AndroidTool\\android_key\\keystore\\release-key.keystore")
-            storePassword = ""
-            keyAlias = ""
-            keyPassword = ""
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(signingStoreFile))
+                storePassword = requireNotNull(signingStorePassword)
+                keyAlias = requireNotNull(signingKeyAlias)
+                keyPassword = requireNotNull(signingKeyPassword)
+            }
         }
-    }**/
+    }
     namespace = "com.anatdx.yukisu"
 
     defaultConfig {
@@ -104,11 +106,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             vcsInfo.include = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        /**debug {
-            signingConfig = signingConfigs.named("Debug").get() as ApkSigningConfig
-        }**/
     }
 
     buildFeatures {
@@ -155,6 +157,12 @@ android {
     androidResources {
         generateLocaleConfig = true
     }
+
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
 }
 
 androidComponents {
@@ -178,6 +186,11 @@ androidComponents {
 
 ksp {
     arg("compose-destinations.defaultTransitions", "none")
+}
+
+composeCompiler {
+    // MMRL currently contains a method shape the optional mapping tokenizer cannot parse.
+    includeComposeMappingFile = false
 }
 
 dependencies {

@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -350,7 +351,7 @@ fun YukiZygiskScreen(navigator: DestinationsNavigator) {
         config = readYzConfig()
         injectionActive =
             ShellUtils.fastCmd(getRootShell(), "ksud feature get yukizygisk 2>/dev/null")
-                ?.contains("enabled", ignoreCase = true) == true
+                .contains("enabled", ignoreCase = true)
     }
 
     LaunchedEffect(Unit) {
@@ -689,7 +690,7 @@ private fun YukiZygiskTopBar(
 @Composable
 private fun ZygoteMonitorRow(zygote: ZygoteMonitorEntry, onStatusClick: () -> Unit) {
     ListItem(
-        modifier = monitorGroupModifier(),
+        modifier = Modifier.monitorGroup(),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             YukiIcon(
@@ -734,7 +735,7 @@ private fun ZygoteMonitorRow(zygote: ZygoteMonitorEntry, onStatusClick: () -> Un
 @Composable
 private fun NativeModuleMonitorRow(module: NativeModuleMonitorEntry, onStatusClick: () -> Unit) {
     ListItem(
-        modifier = monitorGroupModifier(),
+        modifier = Modifier.monitorGroup(),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             YukiIcon(
@@ -781,7 +782,7 @@ private fun NativeModuleMonitorRow(module: NativeModuleMonitorEntry, onStatusCli
 @Composable
 private fun NativeProcessMonitorRow(process: NativeProcessEntry, onStatusClick: () -> Unit) {
     ListItem(
-        modifier = monitorGroupModifier(),
+        modifier = Modifier.monitorGroup(),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             YukiIcon(
@@ -933,9 +934,9 @@ private fun zygoteDialog(zygote: ZygoteMonitorEntry): MonitorDialogState {
 
 @Composable
 private fun nativeProcessDialog(process: NativeProcessEntry): MonitorDialogState {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val modules = process.modules.joinToString("\n") {
-        context.getString(R.string.yukizygisk_native_process_module_line, it)
+        resources.getString(R.string.yukizygisk_native_process_module_line, it)
     }
     val base = when (process.state) {
         MonitorState.Injected -> stringResource(R.string.yukizygisk_native_process_injected_message)
@@ -949,9 +950,9 @@ private fun nativeProcessDialog(process: NativeProcessEntry): MonitorDialogState
 
 @Composable
 private fun nativeModuleDialog(module: NativeModuleMonitorEntry): MonitorDialogState {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val targets = module.targets.joinToString("\n") {
-        context.getString(
+        resources.getString(
             R.string.yukizygisk_native_target_line,
             it.process.ifEmpty { it.target },
             it.abi,
@@ -1020,8 +1021,8 @@ private fun StatusRow(label: String, value: String, index: Int, count: Int) {
 }
 
 @Composable
-private fun monitorGroupModifier(): Modifier = if (isExpressiveUi) {
-    Modifier
+private fun Modifier.monitorGroup(): Modifier = if (isExpressiveUi) {
+    this
         .fillMaxWidth()
         .padding(
             horizontal = 6.dp,
@@ -1033,7 +1034,7 @@ private fun monitorGroupModifier(): Modifier = if (isExpressiveUi) {
             MaterialTheme.colorScheme.surfaceContainer.copy(alpha = CardConfig.cardAlpha)
         )
 } else {
-    Modifier.fillMaxWidth()
+    fillMaxWidth()
 }
 
 @Composable

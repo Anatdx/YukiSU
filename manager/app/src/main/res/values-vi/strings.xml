@@ -145,7 +145,7 @@
     <string name="settings_restore_stock_image">Khôi phục phân vùng khởi động về mặc định</string>
     <string name="settings_uninstall_permanent_message">Gỡ cài đặt KernelSU (root và tất cả các mô-đun) một cách hoàn toàn và vĩnh viễn</string>
     <string name="settings_restore_stock_image_message">Khôi phục image gốc của nhà máy (nếu có bản sao lưu), thường được sử dụng trước OTA; nếu bạn cần gỡ cài đặt KernelSU, vui lòng sử dụng \"Gỡ cài đặt vĩnh viễn\"</string>
-    <string name="flashing">Đang Flash...</string>
+    <string name="flashing">Đang Flash…</string>
     <string name="flash_success">Flash thành công</string>
     <string name="flash_failed">Flash thất bại</string>
     <string name="selected_lkm">Đã chọn LKM: %s</string>

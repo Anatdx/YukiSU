@@ -530,6 +530,7 @@ class ModuleSizeCache(context: Context) {
 private fun JSONObject.getBooleanCompat(key: String, default: Boolean = false): Boolean {
     if (!has(key)) return default
     return when (val value = opt(key)) {
+        null -> default
         is Boolean -> value
         is String -> value.equals("true", ignoreCase = true) || value == "1"
         is Number -> value.toInt() != 0
@@ -540,6 +541,7 @@ private fun JSONObject.getBooleanCompat(key: String, default: Boolean = false): 
 private fun JSONObject.getIntCompat(key: String, default: Int = 0): Int {
     if (!has(key)) return default
     return when (val value = opt(key)) {
+        null -> default
         is Int -> value
         is Number -> value.toInt()
         is String -> value.toIntOrNull() ?: default

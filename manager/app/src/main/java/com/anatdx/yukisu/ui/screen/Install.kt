@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -96,16 +97,17 @@ fun InstallScreen(
     navigator: DestinationsNavigator
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val coroutineScope = rememberCoroutineScope()
     val loadingDialog = rememberLoadingDialog()
     var installMethod by remember { mutableStateOf<InstallMethod?>(null) }
     var lkmSelection by remember { mutableStateOf<LkmSelection>(LkmSelection.KmiNone) }
     var showRebootDialog by remember { mutableStateOf(false) }
 
-    val seLinuxStatus by produceState(initialValue = context.getString(R.string.selinux_status_unknown)) {
+    val seLinuxStatus by produceState(initialValue = resources.getString(R.string.selinux_status_unknown)) {
         value = withContext(Dispatchers.IO) {
             runCatching { getSELinuxStatus(context) }
-                .getOrDefault(context.getString(R.string.selinux_status_unknown))
+                .getOrDefault(resources.getString(R.string.selinux_status_unknown))
         }
     }
     val isManager by produceState(initialValue = false) {
@@ -118,7 +120,7 @@ fun InstallScreen(
             runCatching { rootAvailable() }.getOrDefault(false)
         }
     }
-    val isSelinuxPermissive = seLinuxStatus == context.getString(R.string.selinux_status_permissive)
+    val isSelinuxPermissive = seLinuxStatus == resources.getString(R.string.selinux_status_permissive)
     val canJailbreakInstall = !isManager && isSelinuxPermissive
     val onJailbreakInstall: () -> Unit = {
         loadingDialog.show()
@@ -227,7 +229,7 @@ fun InstallScreen(
                     lkmSelection = LkmSelection.KmiNone
                     Toast.makeText(
                         context,
-                        context.getString(R.string.install_only_support_ko_file),
+                        resources.getString(R.string.install_only_support_ko_file),
                         Toast.LENGTH_SHORT
                     ).show()
                 }

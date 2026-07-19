@@ -10,12 +10,12 @@
     <string name="home_kernel">Kernel version</string>
     <string name="home_manager_version">Manager version</string>
     <string name="home_selinux_status">SELinux status</string>
-    <string name="home_seccomp_status">Seccomp status</string>
-    <string name="seccomp_status_not_supported">Not supported</string>
-    <string name="seccomp_status_disabled">Disabled</string>
-    <string name="seccomp_status_strict">Strict</string>
-    <string name="seccomp_status_filter">Filter</string>
-    <string name="seccomp_status_unknown">Unknown</string>
+    <string name="home_seccomp_status" tools:ignore="MissingTranslation">Seccomp status</string>
+    <string name="seccomp_status_not_supported" tools:ignore="MissingTranslation">Not supported</string>
+    <string name="seccomp_status_disabled" tools:ignore="MissingTranslation">Disabled</string>
+    <string name="seccomp_status_strict" tools:ignore="MissingTranslation">Strict</string>
+    <string name="seccomp_status_filter" tools:ignore="MissingTranslation">Filter</string>
+    <string name="seccomp_status_unknown" tools:ignore="MissingTranslation">Unknown</string>
     <string name="selinux_status_disabled">Disabled</string>
     <string name="selinux_status_enforcing">Enforcing</string>
     <string name="selinux_status_permissive">Permissive</string>
@@ -61,7 +61,7 @@
     <string name="home_support_title">Support Development</string>
     <string name="home_support_content">KernelSU will remain free and open source; donate to official KernelSU developers to show your support.</string>
     <string name="about_source_code"><![CDATA[View source code at %1$s<br/>Join our %2$s channel]]></string>
-    <string name="profile" translatable="false">App Profile</string>
+    <string name="profile" tools:ignore="MissingTranslation">App Profile</string>
     <string name="profile_default">Default</string>
     <string name="profile_template">Template</string>
     <string name="profile_custom">Custom</string>
@@ -70,8 +70,8 @@
     <string name="profile_capabilities">Capabilities</string>
     <string name="profile_selinux_context">SELinux context</string>
     <string name="profile_umount_modules">Umount modules</string>
-    <string name="profile_no_new_privs">No new privileges</string>
-    <string name="profile_no_new_privs_summary">Prevent processes escalated with this profile (and their children) from re-escalating via KernelSU, e.g. running su again or calling GRANT_ROOT. Recommended.</string>
+    <string name="profile_no_new_privs" tools:ignore="MissingTranslation">No new privileges</string>
+    <string name="profile_no_new_privs_summary" tools:ignore="MissingTranslation">Prevent processes escalated with this profile (and their children) from re-escalating via KernelSU, e.g. running su again or calling GRANT_ROOT. Recommended.</string>
     <string name="failed_to_update_app_profile">Failed to update App Profile for %s</string>
     <string name="set_as_dynamic_manager">Set as dynamic manager</string>
     <string name="set_as_dynamic_manager_summary">Persist this app signature and trust it as a dynamic manager</string>
@@ -81,16 +81,16 @@
     <string name="allow_any_dynamic_manager">Allow any app as dynamic manager</string>
     <string name="allow_any_dynamic_manager_summary">Experimental. Show the dynamic manager switch for every app instead of only preset manager signatures.</string>
     <string name="require_kernel_version" formatted="false">The current KernelSU version %s is too low for the manager to work properly. Please upgrade to version %s or higher!</string>
-    <string name="uapi_mismatch">The manager (UAPI %1$d) and kernel (UAPI %2$d) are out of sync. Please update both the kernel and the manager to matching versions.</string>
+    <string name="uapi_mismatch" tools:ignore="MissingTranslation">The manager (UAPI %1$d) and kernel (UAPI %2$d) are out of sync. Please update both the kernel and the manager to matching versions.</string>
     <string name="settings_umount_modules_default">Umount modules by default</string>
     <string name="settings_umount_modules_default_summary">Umount modules for apps without their own profile. Off by default.</string>
-    <string name="settings_default_no_new_privs">Default anti-escape (no-new-privs)</string>
-    <string name="settings_default_no_new_privs_summary">Default root profile (manager and shell included) blocks re-escalation. Off by default.</string>
-    <string name="settings_yukizygisk">YukiZygisk</string>
-    <string name="settings_yukizygisk_summary">Experimental. Built-in kernel-level Zygisk injector with ZN module compatibility.</string>
-    <string name="settings_yukizygisk_toast_on">Enabled; reboot required</string>
-    <string name="settings_yukizygisk_toast_off">Disabled; reboot required</string>
-    <string name="settings_yukizygisk_toast_failed">Toggle failed</string>
+    <string name="settings_default_no_new_privs" tools:ignore="MissingTranslation">Default anti-escape (no-new-privs)</string>
+    <string name="settings_default_no_new_privs_summary" tools:ignore="MissingTranslation">Default root profile (manager and shell included) blocks re-escalation. Off by default.</string>
+    <string name="settings_yukizygisk" tools:ignore="MissingTranslation">YukiZygisk</string>
+    <string name="settings_yukizygisk_summary" tools:ignore="MissingTranslation">Experimental. Built-in kernel-level Zygisk injector with ZN module compatibility.</string>
+    <string name="settings_yukizygisk_toast_on" tools:ignore="MissingTranslation">Enabled; reboot required</string>
+    <string name="settings_yukizygisk_toast_off" tools:ignore="MissingTranslation">Disabled; reboot required</string>
+    <string name="settings_yukizygisk_toast_failed" tools:ignore="MissingTranslation">Toggle failed</string>
     <string name="profile_umount_modules_summary">Enabling this option will allow KernelSU to restore any modified files by the modules for this app</string>
     <string name="profile_selinux_domain">Domain</string>
     <string name="profile_selinux_rules">Rules</string>
@@ -165,8 +165,8 @@
     <string name="allow_shell_summary">Always allow adb shell to call su. Do not enable this unless absolutely necessary.</string>
     <string name="enable_adb">Force enable adb on boot</string>
     <string name="enable_adb_summary">Force enable USB debugging and disable adb authentication. Do not enable this unless absolutely necessary.</string>
-    <string name="install_force_backup">Back up as stock image</string>
-    <string name="install_force_backup_summary">Make sure the selected boot image is an unmodified stock image.</string>
+    <string name="install_force_backup" tools:ignore="MissingTranslation">Back up as stock image</string>
+    <string name="install_force_backup_summary" tools:ignore="MissingTranslation">Make sure the selected boot image is an unmodified stock image.</string>
     <string name="install_upload_lkm_file">Use local LKM file</string>
     <string name="install_only_support_ko_file">Only .ko files are supported</string>
     <string name="select_file_tip">%1$s partition image is recommended</string>
@@ -241,7 +241,7 @@
     <string name="settings_selinux_hide_summary">Hide KernelSU SELinux policy changes from app-facing probes</string>
     <string name="feature_status_unsupported_summary">Kernel does not support this feature</string>
     <string name="feature_status_managed_summary">This feature is managed by a module</string>
-    <string name="module_install_multiple_confirm_with_names">Sure you want to install the following %1$d modules? \n\n%2$s</string>
+    <string name="module_install_multiple_confirm_with_names" tools:ignore="PluralsCandidate">Sure you want to install the following %1$d modules? \n\n%2$s</string>
     <string name="more_settings">More settings</string>
     <string name="selinux">SELinux</string>
     <string name="selinux_enabled">Enabled</string>
@@ -252,8 +252,8 @@
     <string name="hide_kernel_kernelsu_version_summary">Hide kernel version</string>
     <string name="hide_other_info">Hide other info</string>
     <string name="hide_other_info_summary">Hides Red dot about the number of super users and modules on the navigation bar page</string>
-    <string name="hide_seccomp_status">Hide Seccomp status</string>
-    <string name="hide_seccomp_status_summary">Hides the Seccomp status info on the home screen</string>
+    <string name="hide_seccomp_status" tools:ignore="MissingTranslation">Hide Seccomp status</string>
+    <string name="hide_seccomp_status_summary" tools:ignore="MissingTranslation">Hides the Seccomp status info on the home screen</string>
     <string name="hide_zygisk_implement">Hide Zygisk status</string>
     <string name="hide_zygisk_implement_summary">Hide Zygisk implementation information on the home page</string>
     <string name="hide_meta_module_implement">Hide Meta Module status</string>
@@ -263,9 +263,9 @@
     <string name="hide_tag_card">Hide module label rows</string>
     <string name="hide_tag_card_summary">Hide folder name,size,metamodule notice labels in module cards</string>
     <string name="theme_mode">Theme</string>
-    <string name="ui_style">Interface style</string>
-    <string name="ui_style_classic">Material 3</string>
-    <string name="ui_style_expressive">Material 3 Expressive</string>
+    <string name="ui_style" tools:ignore="MissingTranslation">Interface style</string>
+    <string name="ui_style_classic" tools:ignore="MissingTranslation">Material 3</string>
+    <string name="ui_style_expressive" tools:ignore="MissingTranslation">Material 3 Expressive</string>
     <string name="theme_follow_system">Follow system</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
@@ -340,7 +340,7 @@
     <string name="error_code">error code</string>
     <string name="check_log">Please check the log</string>
     <string name="installing_module">Module being installed %1$d/%2$d</string>
-    <string name="module_failed_count">%d Failed to install a new module</string>
+    <string name="module_failed_count" tools:ignore="PluralsCandidate">%d Failed to install a new module</string>
     <string name="module_download_error">Module download failed</string>
     <string name="warning_of_meta_module_title">Require Meta module</string>
     <string name="warning_of_meta_module_summary">This module want to mount /system, meta module will handle that. Otherwise, it might not work</string>
@@ -379,13 +379,13 @@
     <string name="kernel_simple_kernel">Kernel Version Concise Mode</string>
     <string name="kernel_simple_kernel_summary">Enable or disable the clean mode displayed by the YukiSU kernel version</string>
     <string name="home_zygisk_implement">Zygisk implement</string>
-    <string name="module_disabled_by_yukizygisk">YukiZygisk is enabled; this module is disabled to prevent conflicts</string>
-    <string name="module_disabled_standalone_yukizygisk">You are already using YukiSU. Why not use the built-in version instead? :(</string>
+    <string name="module_disabled_by_yukizygisk" tools:ignore="MissingTranslation">YukiZygisk is enabled; this module is disabled to prevent conflicts</string>
+    <string name="module_disabled_standalone_yukizygisk" tools:ignore="MissingTranslation">You are already using YukiSU. Why not use the built-in version instead? :(</string>
     <string name="home_meta_module_implement">Meta Module implement</string>
     <string name="home_hook_type">Hook type</string>
     <!-- 确认安装相关字符串 -->
     <string name="confirm_installation">Confirm Installation</string>
-    <string name="confirm_multiple_installation">Confirm Installation (%d files)</string>
+    <string name="confirm_multiple_installation" tools:ignore="PluralsCandidate">Confirm Installation (%d files)</string>
     <string name="install_confirm">Install</string>
     <string name="module_package">Module</string>
     <string name="unknown_package">Unknown</string>
@@ -405,7 +405,7 @@
     <string name="log_viewer_log_deleted">Log file deleted successfully</string>
     <string name="log_viewer_filter_type">Filter by Type</string>
     <string name="log_viewer_all_types">All Types</string>
-    <string name="log_viewer_showing_entries">Showing %1$d of %2$d entries</string>
+    <string name="log_viewer_showing_entries" tools:ignore="PluralsCandidate">Showing %1$d of %2$d entries</string>
     <string name="log_viewer_no_logs">No logs found</string>
     <string name="log_viewer_no_matching_logs">No matching logs found</string>
     <string name="log_viewer_refresh">Refresh</string>
@@ -426,7 +426,7 @@
     <string name="log_viewer_filter_options">Filter Options</string>
     <string name="log_viewer_filter_summary">Type: %1$s</string>
     <string name="log_viewer_exclude_summary">Exclude: %1$s</string>
-    <string name="log_viewer_too_many_logs">Too many logs, showing only the latest %1$d entries</string>
+    <string name="log_viewer_too_many_logs" tools:ignore="PluralsCandidate">Too many logs, showing only the latest %1$d entries</string>
     <string name="log_viewer_load_more">Load More Logs</string>
     <string name="log_viewer_all_logs_loaded">All logs displayed</string>
     <string name="incompatible_kernel_msg">
@@ -452,7 +452,7 @@
     <string name="apply_config">Apply Configuration</string>
     <string name="config_applied">Configuration applied to kernel</string>
     <string name="mnt_detach">MNT_DETACH</string>
-    <string name="group_contains_apps">Contains %d apps</string>
+    <string name="group_contains_apps" tools:ignore="PluralsCandidate">Contains %d apps</string>
     <string name="settings_disable_sulog">Superuser logging</string>
     <string name="settings_disable_sulog_summary">Log KernelSU superuser access</string>
 
@@ -486,7 +486,7 @@
     <string name="partition_other_slot">Other Slot</string>
     <string name="partition_show_all">Show All</string>
     <string name="partition_collapse">Collapse</string>
-    <string name="partition_selected_count">Selected %d partitions</string>
+    <string name="partition_selected_count" tools:ignore="PluralsCandidate">Selected %d partitions</string>
     <string name="partition_filter_all">All Partitions</string>
     <string name="partition_filter_physical">Physical Only</string>
     <string name="partition_filter_logical">Logical Only</string>
@@ -534,10 +534,10 @@
     <string name="partition_ab_device">A/B Device</string>
     <string name="partition_a_only_device">A-only Device</string>
     <string name="partition_unknown">Unknown</string>
-    <string name="partition_batch_backup_start">Starting batch backup of %d partitions…</string>
+    <string name="partition_batch_backup_start" tools:ignore="PluralsCandidate">Starting batch backup of %d partitions…</string>
     <string name="partition_batch_backup_progress">Backing up (%1$d/%2$d): %3$s</string>
-    <string name="partition_batch_backup_complete">Batch backup complete! Total %1$d partitions\nSaved in: %2$s</string>
-    <string name="partition_batch_backup_partial">Backup complete: %1$d succeeded, %2$d failed\nFailed: %3$s</string>
+    <string name="partition_batch_backup_complete" tools:ignore="PluralsCandidate">Batch backup complete! Total %1$d partitions\nSaved in: %2$s</string>
+    <string name="partition_batch_backup_partial" tools:ignore="PluralsCandidate">Backup complete: %1$d succeeded, %2$d failed\nFailed: %3$s</string>
     <string name="partition_no_selection">No partition selected</string>
     <string name="partition_back">Back</string>
     
@@ -564,57 +564,54 @@
     <string name="su_request_deny_hide">Deny &amp; hide</string>
     <string name="magisk_compat_title">Magisk-style su prompt</string>
     <string name="magisk_compat_summary">Show a visible su to apps and ask for authorization on first use, instead of su silently failing for apps that are not in the allowlist.</string>
-    <string name="yukizygisk_injection_status">Injection status</string>
-    <string name="yukizygisk_kernel_injection">Kernel injection</string>
-    <string name="yukizygisk_status_active">Active</string>
-    <string name="yukizygisk_status_off">Off</string>
-    <string name="yukizygisk_status_safe_mode">Safe mode</string>
-    <string name="yukizygisk_module_loader">Module loader</string>
-    <string name="yukizygisk_loader_anon">yukilinker (anonymous)</string>
-    <string name="yukizygisk_loader_system">System dlopen</string>
-    <string name="yukizygisk_denylist_behaviour">Denylist behaviour</string>
-    <string name="yukizygisk_denylist_force_long">Force unmount + no inject</string>
-    <string name="yukizygisk_denylist_restore_long">Inject + unmount only</string>
-    <string name="yukizygisk_injections_session">Injections this session</string>
-    <string name="yukizygisk_zygote_crashes">Zygote crashes</string>
-    <string name="yukizygisk_injected_zygotes">Zygote monitor</string>
-    <string name="yukizygisk_no_zygotes">No Zygote</string>
-    <string name="yukizygisk_zygote_detail">%1$s · pid %2$d</string>
-    <string name="yukizygisk_native_modules">Native modules</string>
-    <string name="yukizygisk_no_native_modules">No Native modules</string>
-    <string name="yukizygisk_native_module_detail">%1$s=%2$s · %3$s</string>
-    <string name="yukizygisk_native_companion">companion</string>
-    <string name="yukizygisk_native_no_companion">no companion</string>
-    <string name="yukizygisk_native_injections">Native injection monitor</string>
-    <string name="yukizygisk_no_native_injections">No injections</string>
-    <string name="yukizygisk_native_injection_detail">%1$s · %2$s · pid %3$d</string>
-    <string name="yukizygisk_native_mode_module">By module</string>
-    <string name="yukizygisk_native_mode_process">By process</string>
-    <string name="yukizygisk_native_process_detail">%1$s · pid %2$d</string>
-    <string name="yukizygisk_zygote_injected_message">Zygisk injected.</string>
-    <string name="yukizygisk_zygote_unsupported_message">32-bit Zygote is not supported.</string>
-    <string name="yukizygisk_zygote_crashed_message">Zygote crashed repeatedly; safe mode stopped injection for this boot.</string>
-    <string name="yukizygisk_zygote_failed_message">Safe mode enabled; not injected.</string>
-    <string name="yukizygisk_native_process_injected_message">Native modules injected.</string>
-    <string name="yukizygisk_native_process_unsupported_message">32-bit Native process is not supported.</string>
-    <string name="yukizygisk_native_process_failed_message">Safe mode enabled; not injected.</string>
-    <string name="yukizygisk_native_process_module_line">Module %1$s</string>
-    <string name="yukizygisk_native_module_injected_message">Injected into target process.</string>
-    <string name="yukizygisk_native_module_unsupported_message">32-bit Native module is not supported.</string>
-    <string name="yukizygisk_native_module_failed_message">Safe mode enabled; some targets skipped.</string>
-    <string name="yukizygisk_native_target_line">%1$s · %2$s · pid %3$d</string>
-    <string name="yukizygisk_module_loading">Module loading</string>
-    <string name="yukizygisk_anon_loading_title">Anonymous loading (yukilinker)</string>
-    <string name="yukizygisk_anon_loading_summary">yukilinker loading.</string>
-    <string name="yukizygisk_loaded_modules_count">Loaded Zygisk modules: %1$d</string>
-    <string name="yukizygisk_denylist_desc">Denylist mode.</string>
-    <string name="yukizygisk_denylist_off">Off</string>
-    <string name="yukizygisk_denylist_force">Force</string>
-    <string name="yukizygisk_denylist_restore">Restore</string>
-    <string name="yukizygisk_log_dmesg_title">Log to dmesg</string>
-    <string name="yukizygisk_log_dmesg_summary">Write to dmesg.</string>
-    <string name="yukizygisk_uid_fallback">uid %1$d</string>
-    <string name="module_zygisk_loaded">Loaded</string>
-    <string name="module_zygisk_module">Zygisk module</string>
-    <string name="module_zn_module">ZN module</string>
+    <string name="yukizygisk_injection_status" tools:ignore="MissingTranslation">Injection status</string>
+    <string name="yukizygisk_kernel_injection" tools:ignore="MissingTranslation">Kernel injection</string>
+    <string name="yukizygisk_status_active" tools:ignore="MissingTranslation">Active</string>
+    <string name="yukizygisk_status_off" tools:ignore="MissingTranslation">Off</string>
+    <string name="yukizygisk_status_safe_mode" tools:ignore="MissingTranslation">Safe mode</string>
+    <string name="yukizygisk_module_loader" tools:ignore="MissingTranslation">Module loader</string>
+    <string name="yukizygisk_loader_anon" tools:ignore="MissingTranslation">yukilinker (anonymous)</string>
+    <string name="yukizygisk_loader_system" tools:ignore="MissingTranslation">System dlopen</string>
+    <string name="yukizygisk_denylist_behaviour" tools:ignore="MissingTranslation">Denylist behaviour</string>
+    <string name="yukizygisk_denylist_force_long" tools:ignore="MissingTranslation">Force unmount + no inject</string>
+    <string name="yukizygisk_denylist_restore_long" tools:ignore="MissingTranslation">Inject + unmount only</string>
+    <string name="yukizygisk_injections_session" tools:ignore="MissingTranslation">Injections this session</string>
+    <string name="yukizygisk_zygote_crashes" tools:ignore="MissingTranslation">Zygote crashes</string>
+    <string name="yukizygisk_injected_zygotes" tools:ignore="MissingTranslation">Zygote monitor</string>
+    <string name="yukizygisk_no_zygotes" tools:ignore="MissingTranslation">No Zygote</string>
+    <string name="yukizygisk_zygote_detail" tools:ignore="MissingTranslation">%1$s · pid %2$d</string>
+    <string name="yukizygisk_no_native_modules" tools:ignore="MissingTranslation">No Native modules</string>
+    <string name="yukizygisk_native_module_detail" tools:ignore="MissingTranslation">%1$s=%2$s · %3$s</string>
+    <string name="yukizygisk_native_companion" tools:ignore="MissingTranslation">companion</string>
+    <string name="yukizygisk_native_no_companion" tools:ignore="MissingTranslation">no companion</string>
+    <string name="yukizygisk_native_injections" tools:ignore="MissingTranslation">Native injection monitor</string>
+    <string name="yukizygisk_no_native_injections" tools:ignore="MissingTranslation">No injections</string>
+    <string name="yukizygisk_native_mode_module" tools:ignore="MissingTranslation">By module</string>
+    <string name="yukizygisk_native_mode_process" tools:ignore="MissingTranslation">By process</string>
+    <string name="yukizygisk_native_process_detail" tools:ignore="MissingTranslation">%1$s · pid %2$d</string>
+    <string name="yukizygisk_zygote_injected_message" tools:ignore="MissingTranslation">Zygisk injected.</string>
+    <string name="yukizygisk_zygote_unsupported_message" tools:ignore="MissingTranslation">32-bit Zygote is not supported.</string>
+    <string name="yukizygisk_zygote_crashed_message" tools:ignore="MissingTranslation">Zygote crashed repeatedly; safe mode stopped injection for this boot.</string>
+    <string name="yukizygisk_zygote_failed_message" tools:ignore="MissingTranslation">Safe mode enabled; not injected.</string>
+    <string name="yukizygisk_native_process_injected_message" tools:ignore="MissingTranslation">Native modules injected.</string>
+    <string name="yukizygisk_native_process_unsupported_message" tools:ignore="MissingTranslation">32-bit Native process is not supported.</string>
+    <string name="yukizygisk_native_process_failed_message" tools:ignore="MissingTranslation">Safe mode enabled; not injected.</string>
+    <string name="yukizygisk_native_process_module_line" tools:ignore="MissingTranslation">Module %1$s</string>
+    <string name="yukizygisk_native_module_injected_message" tools:ignore="MissingTranslation">Injected into target process.</string>
+    <string name="yukizygisk_native_module_unsupported_message" tools:ignore="MissingTranslation">32-bit Native module is not supported.</string>
+    <string name="yukizygisk_native_module_failed_message" tools:ignore="MissingTranslation">Safe mode enabled; some targets skipped.</string>
+    <string name="yukizygisk_native_target_line" tools:ignore="MissingTranslation">%1$s · %2$s · pid %3$d</string>
+    <string name="yukizygisk_module_loading" tools:ignore="MissingTranslation">Module loading</string>
+    <string name="yukizygisk_anon_loading_title" tools:ignore="MissingTranslation">Anonymous loading (yukilinker)</string>
+    <string name="yukizygisk_anon_loading_summary" tools:ignore="MissingTranslation">yukilinker loading.</string>
+    <string name="yukizygisk_loaded_modules_count" tools:ignore="MissingTranslation">Loaded Zygisk modules: %1$d</string>
+    <string name="yukizygisk_denylist_desc" tools:ignore="MissingTranslation">Denylist mode.</string>
+    <string name="yukizygisk_denylist_off" tools:ignore="MissingTranslation">Off</string>
+    <string name="yukizygisk_denylist_force" tools:ignore="MissingTranslation">Force</string>
+    <string name="yukizygisk_denylist_restore" tools:ignore="MissingTranslation">Restore</string>
+    <string name="yukizygisk_log_dmesg_title" tools:ignore="MissingTranslation">Log to dmesg</string>
+    <string name="yukizygisk_log_dmesg_summary" tools:ignore="MissingTranslation">Write to dmesg.</string>
+    <string name="module_zygisk_loaded" tools:ignore="MissingTranslation">Loaded</string>
+    <string name="module_zygisk_module" tools:ignore="MissingTranslation">Zygisk module</string>
+    <string name="module_zn_module" tools:ignore="MissingTranslation">ZN module</string>
 </resources>

@@ -12,6 +12,12 @@ include_directories(${REPO_ROOT})
 
 project("kernelsu")
 
+# Supplied by the cmaker plugin for release symbol collection. Referencing the
+# value here keeps CMake's command-line variable validation accurate.
+if(DEFINED DEBUG_SYMBOLS_PATH)
+    message(VERBOSE "Native debug symbols path: ${DEBUG_SYMBOLS_PATH}")
+endif()
+
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" OR
    NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR "YukiSU Manager supports Android arm64-v8a only")

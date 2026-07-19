@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +62,7 @@ fun AppProfileTemplateScreen(
 ) {
     val viewModel = viewModel<TemplateViewModel>()
     val scope = rememberCoroutineScope()
+    val resources = LocalResources.current
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = if (isExpressiveUi) {
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
@@ -99,13 +101,13 @@ fun AppProfileTemplateScreen(
                     scope.launch {
                         val clipboardText = clipboardManager?.primaryClip?.getItemAt(0)?.text?.toString()
                         if (clipboardText.isNullOrEmpty()) {
-                            showToast(context.getString(R.string.app_profile_template_import_empty))
+                            showToast(resources.getString(R.string.app_profile_template_import_empty))
                             return@launch
                         }
                         viewModel.importTemplates(
                             clipboardText,
                             {
-                                showToast(context.getString(R.string.app_profile_template_import_success))
+                                showToast(resources.getString(R.string.app_profile_template_import_success))
                                 viewModel.fetchTemplates(false)
                             },
                             showToast
@@ -116,7 +118,7 @@ fun AppProfileTemplateScreen(
                     scope.launch {
                         viewModel.exportTemplates(
                             {
-                                showToast(context.getString(R.string.app_profile_template_export_empty))
+                                showToast(resources.getString(R.string.app_profile_template_export_empty))
                             }
                         ) { text ->
                             clipboardManager?.setPrimaryClip(ClipData.newPlainText("", text))

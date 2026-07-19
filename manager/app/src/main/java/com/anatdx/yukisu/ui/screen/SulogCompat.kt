@@ -189,7 +189,7 @@ fun parseSulogEntries(logContent: String, useCurrentClockFallback: Boolean): Lis
             preferredAnchor != null &&
                 (sessionAnchor?.bootId == null ||
                     preferredAnchor.bootId == null ||
-                    sessionAnchor?.bootId == preferredAnchor.bootId) -> preferredAnchor
+                    sessionAnchor.bootId == preferredAnchor.bootId) -> preferredAnchor
             else -> sessionAnchor
         }
         parseUpstreamSulogLine(
@@ -398,9 +398,7 @@ private fun isCurrentManagerSulogCommand(fields: Map<String, String>): Boolean {
 private fun containsManagerAppReference(value: String?): Boolean {
     val text = value.orEmpty()
     if (text.isBlank()) return false
-    return text.contains(BuildConfig.APPLICATION_ID) ||
-        text.contains("/data/user/0/${BuildConfig.APPLICATION_ID}/") ||
-        text.contains("/data/data/${BuildConfig.APPLICATION_ID}/")
+    return text.contains(BuildConfig.APPLICATION_ID)
 }
 
 private fun parseQuotedSulogValue(line: String, startIndex: Int): Pair<String, Int> {
