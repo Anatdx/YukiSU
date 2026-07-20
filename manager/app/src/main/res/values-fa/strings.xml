@@ -196,6 +196,8 @@
     <string name="restore_allowlist">بازیابی فهرست مجاز</string>
     <string name="settings_custom_background">پس‌زمینه سفارشی برنامه</string>
     <string name="settings_custom_background_summary">یک تصویر به‌عنوان پس‌زمینه انتخاب کنید</string>
+    <string name="settings_change_background">تغییر تصویر پس‌زمینه</string>
+    <string name="settings_change_background_summary">تصویر جدیدی انتخاب کنید و تنظیمات شفافیت کارت و تیرگی پس‌زمینه را حفظ کنید</string>
     <string name="settings_card_alpha">شفافیت نوار ناوبری</string>
     <string name="home_android_version">نسخه Android</string>
     <string name="home_device_model">مدل دستگاه</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU یک شاخه KSU بسیار تهاجمی و مستقل است، اما ما همچنان از پروژه رسمی KernelSU، SukiSU، Magisk، APatch، و دیگران به خاطر مشارکتشان تشکر می کنیم.</string>
     <string name="custom_settings">تنظیمات سفارشی</string>
     <string name="theme_color">رنگ پوسته</string>
-    <string name="image_editor_hint">برای بزرگ‌نمایی تصویر از دو انگشت و برای کشیدن آن جهت تنظیم موقعیت از یک انگشت استفاده کنید</string>
-    <string name="reprovision">تطبیق تصویر با صفحه نمایش</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">تعمیر/نصب LKM</string>

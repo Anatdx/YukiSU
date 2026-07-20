@@ -230,6 +230,8 @@
     <string name="restore_allowlist">Restore Allowlist</string>
     <string name="settings_custom_background">Custom App Background</string>
     <string name="settings_custom_background_summary">Select an image as background</string>
+    <string name="settings_change_background">Change background image</string>
+    <string name="settings_change_background_summary">Choose a new image while keeping card opacity and dim settings</string>
     <string name="settings_card_alpha">Navigation bar transparency</string>
     <string name="home_android_version">Android version</string>
     <string name="home_device_model">Device model</string>
@@ -291,8 +293,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU is an extremely aggressive and independent KSU branch, but we still thank official KernelSU, SukiSU, Magisk, APatch and others for their contributions.</string>
     <string name="custom_settings">Custom settings</string>
     <string name="theme_color">Theme Color</string>
-    <string name="image_editor_hint">Use two fingers to zoom the image, and one finger to drag it to adjust the position</string>
-    <string name="reprovision">Fit image to screen</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repair/installation</string>

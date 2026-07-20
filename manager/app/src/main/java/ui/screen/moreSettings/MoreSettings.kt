@@ -1,9 +1,11 @@
 package ui.screen.moreSettings
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
-import android.net.Uri
 import android.os.Build
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -33,12 +37,12 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import ui.screen.moreSettings.util.LocaleHelper
 import com.anatdx.yukisu.R
-import com.anatdx.yukisu.ui.theme.component.ImageEditorDialog
 import com.anatdx.yukisu.ui.component.KsuIsValid
+import com.anatdx.yukisu.ui.component.YukiIcon
 import com.anatdx.yukisu.ui.theme.*
 import com.anatdx.yukisu.ui.util.getFeatureStatus
+import com.yalantis.ucrop.UCrop
 import androidx.compose.material.icons.rounded.EnhancedEncryption
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,8 +56,8 @@ import ui.screen.moreSettings.component.SettingsCard
 import ui.screen.moreSettings.component.SettingsControlGroup
 import ui.screen.moreSettings.component.SettingsDivider
 import ui.screen.moreSettings.component.SwitchSettingItem
-import com.anatdx.yukisu.ui.component.YukiIcon
 import ui.screen.moreSettings.state.MoreSettingsState
+import ui.screen.moreSettings.util.LocaleHelper
 import kotlin.math.roundToInt
 
 @SuppressLint("LocalContextConfigurationRead", "LocalContextResourcesRead", "ObsoleteSdkInt")
@@ -76,41 +80,63 @@ fun MoreSettingsScreen(
     val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     val systemIsDark = isSystemInDarkTheme()
 
-
     val settingsState = remember { MoreSettingsState(context, prefs, systemIsDark) }
     val settingsHandlers = remember { MoreSettingsHandlers(context, prefs, settingsState) }
+    val cropToolbarColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val cropToolbarWidgetColor = MaterialTheme.colorScheme.onSurface
+    val cropAccentColor = MaterialTheme.colorScheme.primary
+    val cropToolbarTitle = stringResource(R.string.settings_custom_background)
 
+    val cropImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        when (result.resultCode) {
+            Activity.RESULT_OK -> {
+                val croppedUri = result.data?.let(UCrop::getOutput)
+                if (croppedUri != null) {
+                    settingsHandlers.handleCustomBackground(croppedUri)
+                } else {
+                    Log.e("WallpaperCropper", "Crop completed without an output Uri")
+                    Toast.makeText(context, R.string.operation_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
 
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            settingsState.selectedImageUri = it
-            settingsState.showImageEditor = true
+            UCrop.RESULT_ERROR -> {
+                val error = result.data?.let(UCrop::getError)
+                Log.e("WallpaperCropper", "Failed to crop custom background", error)
+                Toast.makeText(context, R.string.operation_failed, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                cropImageLauncher.launch(
+                    createWallpaperCropIntent(
+                        context = context,
+                        sourceUri = it,
+                        toolbarTitle = cropToolbarTitle,
+                        style = WallpaperCropStyle(
+                            toolbarColor = cropToolbarColor.toArgb(),
+                            toolbarWidgetColor = cropToolbarWidgetColor.toArgb(),
+                            accentColor = cropAccentColor.toArgb(),
+                            lightStatusBar = cropToolbarColor.luminance() > 0.5f,
+                        ),
+                    )
+                )
+            } catch (error: Exception) {
+                Log.e("WallpaperCropper", "Failed to launch custom background cropper", error)
+                Toast.makeText(context, R.string.operation_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         settingsHandlers.initializeSettings()
     }
-
-
-    if (settingsState.showImageEditor && settingsState.selectedImageUri != null) {
-        ImageEditorDialog(
-            imageUri = settingsState.selectedImageUri!!,
-            onDismiss = {
-                settingsState.showImageEditor = false
-                settingsState.selectedImageUri = null
-            },
-            onConfirm = { transformedUri ->
-                settingsHandlers.handleCustomBackground(transformedUri)
-                settingsState.showImageEditor = false
-                settingsState.selectedImageUri = null
-            }
-        )
-    }
-
 
     MoreSettingsDialogs(
         state = settingsState,
@@ -681,11 +707,21 @@ private fun CustomBackgroundSettings(
         enter = fadeIn() + slideInVertically(),
         exit = fadeOut() + slideOutVertically()
     ) {
-        BackgroundAdjustmentControls(
-            state = state,
-            handlers = handlers,
-            coroutineScope = coroutineScope
-        )
+        Column {
+            SettingItem(
+                icon = Icons.Filled.Image,
+                title = stringResource(R.string.settings_change_background),
+                subtitle = stringResource(R.string.settings_change_background_summary),
+                groupPosition = MoreSettingsItemPosition.Middle,
+                onClick = { pickImageLauncher.launch("image/*") }
+            )
+
+            BackgroundAdjustmentControls(
+                state = state,
+                handlers = handlers,
+                coroutineScope = coroutineScope
+            )
+        }
     }
 }
 

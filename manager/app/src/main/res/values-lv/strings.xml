@@ -198,6 +198,8 @@
     <string name="restore_allowlist">Atjaunot atļauto sarakstu</string>
     <string name="settings_custom_background">Pielāgots lietotnes fons</string>
     <string name="settings_custom_background_summary">Izvēlieties attēlu kā fonu</string>
+    <string name="settings_change_background">Mainīt fona attēlu</string>
+    <string name="settings_change_background_summary">Izvēlieties jaunu attēlu, saglabājot kartīšu necaurredzamības un fona aptumšošanas iestatījumus</string>
     <string name="settings_card_alpha">Navigācijas joslas caurspīdīgums</string>
     <string name="home_android_version">Android versija</string>
     <string name="home_device_model">Ierīces modelis</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU ir ārkārtīgi agresīva un neatkarīga KSU nozare, taču mēs joprojām pateicamies oficiālajam KernelSU projektam, SukiSU, Magisk, APatch un citiem par viņu ieguldījumu.</string>
     <string name="custom_settings">Pielāgoti iestatījumi</string>
     <string name="theme_color">Motīva krāsa</string>
-    <string name="image_editor_hint">Izmantojiet divus pirkstus, lai tuvinātu attēlu, un vienu pirkstu, lai to vilktu un pielāgotu pozīciju</string>
-    <string name="reprovision">Pielāgot attēlu ekrānam</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM labošana/instalēšana</string>

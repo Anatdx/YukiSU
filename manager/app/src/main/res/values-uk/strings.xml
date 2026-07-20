@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Відновити білий список</string>
     <string name="settings_custom_background">Власний фон додатку</string>
     <string name="settings_custom_background_summary">Вибрати зображення як фон</string>
+    <string name="settings_change_background">Змінити фонове зображення</string>
+    <string name="settings_change_background_summary">Виберіть нове зображення, зберігши непрозорість карток і налаштування затемнення</string>
     <string name="settings_card_alpha">Прозорість панелі навігації</string>
     <string name="home_android_version">Версія Android</string>
     <string name="home_device_model">Модель пристрою</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU є надзвичайно агресивною та незалежною гілкою KSU, але ми все одно дякуємо офіційному проекту KernelSU, SukiSU, Magisk, APatch та іншим за їхній внесок.</string>
     <string name="custom_settings">Власні налаштування</string>
     <string name="theme_color">Колір теми</string>
-    <string name="image_editor_hint">Використовуйте два пальці для масштабування зображення та один палець для перетягування, щоб налаштувати положення</string>
-    <string name="reprovision">Припасувати зображення до екрана</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Відновлення/встановлення LKM</string>

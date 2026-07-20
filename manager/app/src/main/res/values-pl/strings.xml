@@ -198,6 +198,8 @@
     <string name="restore_allowlist">Przywróć listę dozwolonych</string>
     <string name="settings_custom_background">Niestandardowe tło aplikacji</string>
     <string name="settings_custom_background_summary">Wybierz obraz jako tło</string>
+    <string name="settings_change_background">Zmień obraz tła</string>
+    <string name="settings_change_background_summary">Wybierz nowy obraz, zachowując krycie kart i ustawienia przyciemnienia tła</string>
     <string name="settings_card_alpha">Przezroczystość paska nawigacji</string>
     <string name="home_android_version">Wersja Androida</string>
     <string name="home_device_model">Model urządzenia</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU jest niezwykle agresywną i niezależną gałęzią KSU, ale mimo to dziękujemy oficjalnemu projektowi KernelSU, SukiSU, Magisk, APatch i innym za ich wkład.</string>
     <string name="custom_settings">Ustawienia niestandardowe</string>
     <string name="theme_color">Kolor motywu</string>
-    <string name="image_editor_hint">Użyj dwóch palców, aby przybliżyć obraz, i jednego palca, aby przeciągnąć go i dostosować położenie</string>
-    <string name="reprovision">Dopasuj obraz do ekranu</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Naprawa/instalacja LKM</string>

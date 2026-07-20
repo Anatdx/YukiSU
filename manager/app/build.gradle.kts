@@ -209,6 +209,10 @@ dependencies {
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.androidx.transition)
+    implementation(libs.okhttp)
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
@@ -249,5 +253,6 @@ dependencies {
     implementation(libs.mmrl.ui)
 
     implementation(libs.accompanist.drawablepainter)
+    implementation(libs.ucrop)
 
 }

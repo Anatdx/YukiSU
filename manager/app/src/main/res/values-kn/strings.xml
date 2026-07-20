@@ -196,6 +196,8 @@
     <string name="restore_allowlist">ಅನುಮತಿ ಪಟ್ಟಿ ಮರುಸ್ಥಾಪಿಸಿ</string>
     <string name="settings_custom_background">ಕಸ್ಟಮ್ ಆ್ಯಪ್ ಹಿನ್ನೆಲೆ</string>
     <string name="settings_custom_background_summary">ಹಿನ್ನೆಲೆಯಾಗಿ ಚಿತ್ರವನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="settings_change_background">ಹಿನ್ನೆಲೆ ಚಿತ್ರವನ್ನು ಬದಲಾಯಿಸಿ</string>
+    <string name="settings_change_background_summary">ಕಾರ್ಡ್ ಅಪಾರದರ್ಶಕತೆ ಮತ್ತು ಹಿನ್ನೆಲೆ ಮಬ್ಬಾಗಿಸುವ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಿಕೊಂಡು ಹೊಸ ಚಿತ್ರವನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
     <string name="settings_card_alpha">ನ್ಯಾವಿಗೇಶನ್ ಬಾರ್ ಪಾರದರ್ಶಕತೆ</string>
     <string name="home_android_version">Android ಆವೃತ್ತಿ</string>
     <string name="home_device_model">ಸಾಧನ ಮಾದರಿ</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU ಅತ್ಯಂತ ಆಕ್ರಮಣಕಾರಿ ಮತ್ತು ಸ್ವತಂತ್ರ KSU ಶಾಖೆಯಾಗಿದೆ, ಆದರೆ ನಾವು ಇನ್ನೂ ಅಧಿಕೃತ KernelSU ಯೋಜನೆ, SukiSU, Magisk, APatch, ಮತ್ತು ಅವರ ಕೊಡುಗೆಗಳಿಗಾಗಿ ಧನ್ಯವಾದಗಳನ್ನು ನೀಡುತ್ತೇವೆ.</string>
     <string name="custom_settings">ಕಸ್ಟಮ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು</string>
     <string name="theme_color">ಥೀಮ್ ಬಣ್ಣ</string>
-    <string name="image_editor_hint">ಚಿತ್ರವನ್ನು ಜೂಮ್ ಮಾಡಲು ಎರಡು ಬೆರಳುಗಳನ್ನು ಬಳಸಿ, ಮತ್ತು ಸ್ಥಾನ ಸರಿಹೊಂದಿಸಲು ಅದನ್ನು ಎಳೆಯಲು ಒಂದು ಬೆರಳನ್ನು ಬಳಸಿ</string>
-    <string name="reprovision">ಚಿತ್ರವನ್ನು ಪರದೆಗೆ ಹೊಂದಿಸಿ</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM ದುರಸ್ತಿ/ಸ್ಥಾಪನೆ</string>

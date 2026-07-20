@@ -196,6 +196,8 @@
     <string name="restore_allowlist">परवानगी यादी पुनर्संचयित करा</string>
     <string name="settings_custom_background">कस्टम अॅप पार्श्वभूमी</string>
     <string name="settings_custom_background_summary">पार्श्वभूमी म्हणून प्रतिमा निवडा</string>
+    <string name="settings_change_background">पार्श्वभूमी प्रतिमा बदला</string>
+    <string name="settings_change_background_summary">कार्ड अपारदर्शकता आणि पार्श्वभूमी मंद करण्याची सेटिंग्ज राखून नवीन प्रतिमा निवडा</string>
     <string name="settings_card_alpha">नेव्हिगेशन बार पारदर्शकता</string>
     <string name="home_android_version">Android आवृत्ती</string>
     <string name="home_device_model">डिव्हाइस मॉडेल</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU ही अत्यंत आक्रमक आणि स्वतंत्र KSU शाखा आहे, परंतु तरीही आम्ही अधिकृत KernelSU प्रकल्प, SukiSU, Magisk, APatch आणि इतरांना त्यांच्या योगदानाबद्दल धन्यवाद देतो.</string>
     <string name="custom_settings">कस्टम सेटिंग्ज</string>
     <string name="theme_color">थीम रंग</string>
-    <string name="image_editor_hint">प्रतिमा झूम करण्यासाठी दोन बोटे वापरा, आणि स्थिती समायोजित करण्यासाठी ती ओढण्यासाठी एक बोट वापरा</string>
-    <string name="reprovision">स्क्रीनवर प्रतिमा फिट करा</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM दुरुस्ती/इंस्टॉलेशन</string>

@@ -31,8 +31,6 @@ import androidx.core.net.toUri
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import com.anatdx.yukisu.ui.component.clickHapticFeedback
-import com.anatdx.yukisu.ui.theme.util.BackgroundTransformation
-import com.anatdx.yukisu.ui.theme.util.saveTransformedBackground
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.launch
 import java.io.File
@@ -191,14 +189,9 @@ object BackgroundManager {
     fun saveAndApplyCustomBackground(
         context: Context,
         uri: Uri,
-        transformation: BackgroundTransformation? = null
     ) {
         try {
-            val finalUri = if (transformation != null) {
-                context.saveTransformedBackground(uri, transformation)
-            } else {
-                copyImageToInternalStorage(context, uri)
-            }
+            val finalUri = copyImageToInternalStorage(context, uri)
 
             saveBackgroundUri(context, finalUri)
             ThemeConfig.customBackgroundUri = finalUri
@@ -620,11 +613,10 @@ private fun createLightColorScheme() = lightColorScheme(
     surfaceContainerHighest = ThemeConfig.currentTheme.surfaceContainerHighestLight,
 )
 
-// 向后兼容
 @OptIn(DelicateCoroutinesApi::class)
-fun Context.saveAndApplyCustomBackground(uri: Uri, transformation: BackgroundTransformation? = null) {
+fun Context.saveAndApplyCustomBackground(uri: Uri) {
     kotlinx.coroutines.GlobalScope.launch {
-        BackgroundManager.saveAndApplyCustomBackground(this@saveAndApplyCustomBackground, uri, transformation)
+        BackgroundManager.saveAndApplyCustomBackground(this@saveAndApplyCustomBackground, uri)
     }
 }
 

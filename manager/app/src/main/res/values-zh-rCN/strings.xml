@@ -226,6 +226,8 @@
     <string name="restore_allowlist">还原应用列表</string>
     <string name="settings_custom_background">自定义背景</string>
     <string name="settings_custom_background_summary">选择一张图片作为应用背景</string>
+    <string name="settings_change_background">更换背景图片</string>
+    <string name="settings_change_background_summary">选择新图片，并保留卡片不透明度和背景压暗等设置</string>
     <string name="settings_card_alpha">卡片不透明度</string>
     <string name="home_android_version">Android 版本</string>
     <string name="home_device_model">设备型号</string>
@@ -287,8 +289,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU 是一个极其激进且特立独行的 KSU 分支，但仍然感谢 KernelSU 官方项目以及 SukiSU、Magisk、APatch 等作出的贡献。</string>
     <string name="custom_settings">个性化设置</string>
     <string name="theme_color">主题颜色</string>
-    <string name="image_editor_hint">使用双指缩放图片，单指拖动调整位置</string>
-    <string name="reprovision">使图像适应屏幕</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 修补/安装</string>

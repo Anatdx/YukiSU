@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Ibalik ang Allowlist</string>
     <string name="settings_custom_background">Background ng Custom na App</string>
     <string name="settings_custom_background_summary">Pumili ng image bilang background</string>
+    <string name="settings_change_background">Palitan ang larawan sa background</string>
+    <string name="settings_change_background_summary">Pumili ng bagong larawan habang pinapanatili ang opacity ng card at mga setting ng pagdidilim</string>
     <string name="settings_card_alpha">Transparency ng navigation bar</string>
     <string name="home_android_version">Bersyon ng Android</string>
     <string name="home_device_model">Modelo ng device</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">Ang YukiSU ay isang napaka-agresibo at independiyenteng sangay ng KSU, ngunit nagpapasalamat pa rin kami sa opisyal na KernelSU na proyekto, SukiSU, Magisk, APatch, at iba pa para sa kanilang mga kontribusyon.</string>
     <string name="custom_settings">Mga custom na setting</string>
     <string name="theme_color">Kulay ng Tema</string>
-    <string name="image_editor_hint">Gumamit ng dalawang daliri para i-zoom ang image, at isang daliri para i-drag ito at iayos ang posisyon</string>
-    <string name="reprovision">Pagkasyahin ang larawan sa screen</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Pag-aayos/pag-install ng LKM</string>

@@ -198,6 +198,8 @@
     <string name="restore_allowlist">Toegestane lijst herstellen</string>
     <string name="settings_custom_background">Aangepaste app-achtergrond</string>
     <string name="settings_custom_background_summary">Selecteer een afbeelding als achtergrond</string>
+    <string name="settings_change_background">Achtergrondafbeelding wijzigen</string>
+    <string name="settings_change_background_summary">Kies een nieuwe afbeelding en behoud de dekking van kaarten en de diminstellingen</string>
     <string name="settings_card_alpha">Transparantie van de navigatiebalk</string>
     <string name="home_android_version">Android-versie</string>
     <string name="home_device_model">Apparaatmodel</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU is een uiterst agressieve en onafhankelijke KSU-tak, maar we danken nog steeds het officiële KernelSU-project, SukiSU, Magisk, APatch en anderen voor hun bijdragen.</string>
     <string name="custom_settings">Aangepaste instellingen</string>
     <string name="theme_color">Themakleur</string>
-    <string name="image_editor_hint">Gebruik twee vingers om de afbeelding te zoomen en één vinger om die te slepen en de positie aan te passen</string>
-    <string name="reprovision">Afbeelding passend maken voor scherm</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM repareren/installeren</string>

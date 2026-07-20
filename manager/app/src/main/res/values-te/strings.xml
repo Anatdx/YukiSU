@@ -196,6 +196,8 @@
     <string name="restore_allowlist">అనుమతి జాబితాను పునరుద్ధరించండి</string>
     <string name="settings_custom_background">కస్టమ్ యాప్ నేపథ్యం</string>
     <string name="settings_custom_background_summary">నేపథ్యంగా చిత్రాన్ని ఎంచుకోండి</string>
+    <string name="settings_change_background">నేపథ్య చిత్రాన్ని మార్చండి</string>
+    <string name="settings_change_background_summary">కార్డ్ అస్పష్టత మరియు నేపథ్యాన్ని మసకబార్చే సెట్టింగ్‌లను ఉంచుతూ కొత్త చిత్రాన్ని ఎంచుకోండి</string>
     <string name="settings_card_alpha">నావిగేషన్ బార్ పారదర్శకత</string>
     <string name="home_android_version">Android వెర్షన్</string>
     <string name="home_device_model">పరికర మోడల్</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU అనేది చాలా దూకుడు మరియు స్వతంత్ర KSU శాఖ, అయితే మేము ఇప్పటికీ అధికారిక KernelSU ప్రాజెక్ట్, SukiSU, Magisk, APatch మరియు ఇతరుల సహకారం కోసం వారికి ధన్యవాదాలు తెలియజేస్తున్నాము.</string>
     <string name="custom_settings">కస్టమ్ సెట్టింగ్‌లు</string>
     <string name="theme_color">థీమ్ రంగు</string>
-    <string name="image_editor_hint">చిత్రాన్ని జూమ్ చేయడానికి రెండు వేళ్లను ఉపయోగించండి, మరియు స్థానాన్ని సర్దుబాటు చేయడానికి దాన్ని లాగడానికి ఒక వేలును ఉపయోగించండి</string>
-    <string name="reprovision">చిత్రాన్ని స్క్రీన్‌కి అమర్చండి</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM మరమ్మతు/ఇన్‌స్టాలేషన్</string>

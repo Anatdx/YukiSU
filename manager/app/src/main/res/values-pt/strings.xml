@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Restaurar Allowlist</string>
     <string name="settings_custom_background">Fundo personalizado do App</string>
     <string name="settings_custom_background_summary">Selecione uma imagem como plano de fundo</string>
+    <string name="settings_change_background">Alterar imagem de fundo</string>
+    <string name="settings_change_background_summary">Escolha uma nova imagem mantendo a opacidade dos cartões e as definições de escurecimento</string>
     <string name="settings_card_alpha">Transparência da barra de navegação</string>
     <string name="home_android_version">Android Version： </string>
     <string name="home_device_model">Modelo do aparelho</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">O YukiSU é um ramo KSU extremamente agressivo e independente, mas continuamos a agradecer ao projeto oficial KernelSU, ao SukiSU, ao Magisk, ao APatch e a outros pelos seus contributos.</string>
     <string name="custom_settings">Configurações personalizadas</string>
     <string name="theme_color">Cor do tema</string>
-    <string name="image_editor_hint">Use dois dedos para ampliar a imagem e um dedo para arrastá-la para ajustar a posição</string>
-    <string name="reprovision">Ajustar imagem ao ecrã</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM reparo/instalação</string>

@@ -196,6 +196,8 @@
     <string name="restore_allowlist">İzin verilen listesini geri yükle</string>
     <string name="settings_custom_background">Özel Uygulama Arka Planı</string>
     <string name="settings_custom_background_summary">Bir görüntü seçin ve arka plan olarak ayarlayın</string>
+    <string name="settings_change_background">Arka plan resmini değiştir</string>
+    <string name="settings_change_background_summary">Kart opaklığı ve arka plan karartma ayarlarını koruyarak yeni bir resim seçin</string>
     <string name="settings_card_alpha">Geçiş çubuğu şeffaflığı</string>
     <string name="home_android_version">Android sürümü</string>
     <string name="home_device_model">Cihaz modeli</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU son derece agresif ve bağımsız bir KSU şubesidir, ancak yine de resmi KernelSU projesine, SukiSU, Magisk, APatch ve diğerlerine katkılarından dolayı teşekkür ederiz.</string>
     <string name="custom_settings">Özel ayarlar</string>
     <string name="theme_color">Tema Rengi</string>
-    <string name="image_editor_hint">Görüntüyü yaklaştırmak için iki parmağınızı kullanın ve bir parmağınızla sürükleyerek konumu ayarlayın</string>
-    <string name="reprovision">Görüntüyü ekrana sığdır</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM onarımı/yükle</string>

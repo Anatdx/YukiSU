@@ -198,6 +198,8 @@ Lanjutkan?</string>
     <string name="restore_allowlist">Pulihkan Daftar Izin</string>
     <string name="settings_custom_background">Latar Belakang Aplikasi Khusus</string>
     <string name="settings_custom_background_summary">Pilih gambar sebagai latar belakang</string>
+    <string name="settings_change_background">Ganti gambar latar belakang</string>
+    <string name="settings_change_background_summary">Pilih gambar baru tanpa mengubah opasitas kartu dan pengaturan peredupan latar belakang</string>
     <string name="settings_card_alpha">Transparansi Panel Navigasi</string>
     <string name="home_android_version">Versi Android</string>
     <string name="home_device_model">Model Perangkat</string>
@@ -255,8 +257,6 @@ Lanjutkan?</string>
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU adalah cabang KSU yang sangat agresif dan independen, namun kami tetap berterima kasih kepada proyek resmi KernelSU, SukiSU, Magisk, APatch, dan lainnya atas kontribusinya.</string>
     <string name="custom_settings">Pengaturan Khusus</string>
     <string name="theme_color">Warna Tema</string>
-    <string name="image_editor_hint">Gunakan dua jari untuk memperbesar gambar dan satu jari untuk menyeret, untuk menyesuaikan posisi</string>
-    <string name="reprovision">Paskan gambar ke layar</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Pemulihan/Pemasangan LKM</string>

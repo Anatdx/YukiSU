@@ -198,6 +198,8 @@
     <string name="restore_allowlist">Восстановить список</string>
     <string name="settings_custom_background">Пользовательский фон приложения</string>
     <string name="settings_custom_background_summary">Выберите изображение в качестве фона</string>
+    <string name="settings_change_background">Изменить фоновое изображение</string>
+    <string name="settings_change_background_summary">Выберите новое изображение, сохранив непрозрачность карточек и настройки затемнения</string>
     <string name="settings_card_alpha">Прозрачность панели навигации</string>
     <string name="home_android_version">Версия Android</string>
     <string name="home_device_model">Модель устройства</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU — чрезвычайно агрессивная и независимая ветвь KSU, но мы по-прежнему благодарим официальный проект KernelSU, SukiSU, Magisk, APatch и других за их вклад.</string>
     <string name="custom_settings">Персонализация</string>
     <string name="theme_color">Цвет темы</string>
-    <string name="image_editor_hint">Используйте два пальца для увеличения изображения, и один палец для изменения положения</string>
-    <string name="reprovision">Подогнать изображение по размеру экрана</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Починить/установить LKM</string>

@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Obnovi seznam dovoljenih</string>
     <string name="settings_custom_background">Lastno ozadje aplikacije</string>
     <string name="settings_custom_background_summary">Izberite sliko kot ozadje</string>
+    <string name="settings_change_background">Zamenjaj sliko ozadja</string>
+    <string name="settings_change_background_summary">Izberite novo sliko in ohranite neprosojnost kartic ter nastavitve zatemnitve</string>
     <string name="settings_card_alpha">Prosojnost navigacijske vrstice</string>
     <string name="home_android_version">Različica Android</string>
     <string name="home_device_model">Model naprave</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU je izjemno agresivna in neodvisna veja KSU, vendar se vseeno zahvaljujemo uradnemu projektu KernelSU, SukiSU, Magisk, APatch in drugim za njihove prispevke.</string>
     <string name="custom_settings">Lastne nastavitve</string>
     <string name="theme_color">Barva teme</string>
-    <string name="image_editor_hint">Uporabite dva prsta za povečavo slike in en prst za vlečenje ter prilagoditev položaja</string>
-    <string name="reprovision">Prilagodi sliko zaslonu</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Popravilo/namestitev LKM</string>

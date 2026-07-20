@@ -196,6 +196,8 @@
     <string name="restore_allowlist">שחזר רשימת היתר</string>
     <string name="settings_custom_background">רקע אפליקציה מותאם אישית</string>
     <string name="settings_custom_background_summary">בחר תמונה כרקע</string>
+    <string name="settings_change_background">החלפת תמונת הרקע</string>
+    <string name="settings_change_background_summary">בחרו תמונה חדשה תוך שמירה על אטימות הכרטיסים והגדרות העמעום</string>
     <string name="settings_card_alpha">שקיפות סרגל הניווט</string>
     <string name="home_android_version">גרסת Android</string>
     <string name="home_device_model">דגם המכשיר</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU הוא סניף KSU אגרסיבי ועצמאי ביותר, אך אנו עדיין מודים לפרויקט הרשמי של KernelSU, SukiSU, Magisk, APatch ואחרים על תרומתם.</string>
     <string name="custom_settings">הגדרות מותאמות אישית</string>
     <string name="theme_color">צבע ערכת הנושא</string>
-    <string name="image_editor_hint">השתמש בשתי אצבעות כדי לשנות את זום התמונה, ובאצבע אחת כדי לגרור אותה ולכוונן את המיקום</string>
-    <string name="reprovision">התאם תמונה למסך</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">תיקון/התקנה של LKM</string>

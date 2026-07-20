@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Gendan tilladelsesliste</string>
     <string name="settings_custom_background">Brugerdefineret app-baggrund</string>
     <string name="settings_custom_background_summary">Vælg et billede som baggrund</string>
+    <string name="settings_change_background">Skift baggrundsbillede</string>
+    <string name="settings_change_background_summary">Vælg et nyt billede, og behold kortenes gennemsigtighed og dæmpningsindstillinger</string>
     <string name="settings_card_alpha">Gennemsigtighed af navigationslinje</string>
     <string name="home_android_version">Android-version</string>
     <string name="home_device_model">Enhedsmodel</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU er en ekstremt aggressiv og uafhængig KSU afdeling, men vi takker stadig det officielle KernelSU projekt, SukiSU, Magisk, APatch og andre for deres bidrag.</string>
     <string name="custom_settings">Brugerdefinerede indstillinger</string>
     <string name="theme_color">Temafarve</string>
-    <string name="image_editor_hint">Brug to fingre til at zoome billedet, og en finger til at trække det for at justere positionen</string>
-    <string name="reprovision">Tilpas billedet til skærmen</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM-reparation/installation</string>

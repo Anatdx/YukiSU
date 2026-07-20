@@ -26,6 +26,11 @@ mmrl = "2bb00b3c2b"
 ndk = "29.0.14206865"
 foundation = "1.11.4"
 bouncycastle = "1.85"
+ucrop = "2.2.11"
+appcompat = "1.7.1"
+exifinterface = "1.4.1"
+transition = "1.6.0"
+okhttp = "4.12.0"
 
 [plugins]
 agp-app = { id = "com.android.application", version.ref = "agp" }
@@ -83,6 +88,10 @@ markdown = { group = "io.noties.markwon", name = "core", version.ref = "markdown
 
 lsposed-cxx = { module = "org.lsposed.libcxx:libcxx", version.ref = "ndk" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+androidx-transition = { group = "androidx.transition", name = "transition", version.ref = "transition" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
 
 mmrl-webui = { group = "com.github.MMRLApp.MMRL", name = "webui", version.ref = "mmrl" }
@@ -92,3 +101,4 @@ mmrl-hidden-api = { group = "com.github.MMRLApp.MMRL", name = "hidden-api", vers
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 bouncycastle-bcpg = { group = "org.bouncycastle", name = "bcpg-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+ucrop = { module = "com.github.yalantis:ucrop", version.ref = "ucrop" }

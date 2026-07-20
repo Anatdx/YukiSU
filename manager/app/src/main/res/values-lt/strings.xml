@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Atkurti leidžiamųjų sąrašą</string>
     <string name="settings_custom_background">Pasirinktinis programos fonas</string>
     <string name="settings_custom_background_summary">Pasirinkite vaizdą kaip foną</string>
+    <string name="settings_change_background">Keisti fono vaizdą</string>
+    <string name="settings_change_background_summary">Pasirinkite naują vaizdą išsaugodami kortelių nepermatomumo ir fono pritemdymo nustatymus</string>
     <string name="settings_card_alpha">Naršymo juostos skaidrumas</string>
     <string name="home_android_version">Android versija</string>
     <string name="home_device_model">Įrenginio modelis</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU yra itin agresyvi ir nepriklausoma KSU šaka, bet vis tiek dėkojame oficialiam KernelSU projektui, SukiSU, Magisk, APatch ir kitiems už jų indėlį.</string>
     <string name="custom_settings">Pasirinktiniai parametrai</string>
     <string name="theme_color">Temos spalva</string>
-    <string name="image_editor_hint">Naudokite du pirštus vaizdui priartinti ir vieną pirštą jam vilkti bei padėčiai reguliuoti</string>
-    <string name="reprovision">Pritaikyti vaizdą prie ekrano</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM taisymas/diegimas</string>

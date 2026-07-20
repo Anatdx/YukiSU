@@ -198,6 +198,8 @@
     <string name="restore_allowlist">กู้คืนรายการที่อนุญาต</string>
     <string name="settings_custom_background">พื้นหลังแอปแบบกำหนดเอง</string>
     <string name="settings_custom_background_summary">เลือกรูปภาพเป็นพื้นหลัง</string>
+    <string name="settings_change_background">เปลี่ยนภาพพื้นหลัง</string>
+    <string name="settings_change_background_summary">เลือกภาพใหม่โดยคงการตั้งค่าความทึบของการ์ดและการหรี่พื้นหลังไว้</string>
     <string name="settings_card_alpha">ความโปร่งใสของแถบนำทาง</string>
     <string name="home_android_version">เวอร์ชัน Android</string>
     <string name="home_device_model">รุ่นอุปกรณ์</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU เป็นสาขา KSU ที่ก้าวร้าวและเป็นอิสระอย่างยิ่ง แต่เรายังคงขอขอบคุณโครงการ KernelSU อย่างเป็นทางการ SukiSU, Magisk, APatch และอื่นๆ สำหรับการมีส่วนร่วมของพวกเขา</string>
     <string name="custom_settings">การตั้งค่าแบบกำหนดเอง</string>
     <string name="theme_color">สีธีม</string>
-    <string name="image_editor_hint">ใช้สองนิ้วเพื่อซูมรูปภาพ และนิ้วเดียวเพื่อลากปรับตำแหน่ง</string>
-    <string name="reprovision">ปรับภาพให้พอดีกับหน้าจอ</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">ซ่อมแซม/ติดตั้ง LKM</string>

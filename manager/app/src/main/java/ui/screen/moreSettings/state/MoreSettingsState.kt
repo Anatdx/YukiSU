@@ -2,7 +2,6 @@ package ui.screen.moreSettings.state
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -43,7 +42,6 @@ class MoreSettingsState(
     var showUiStyleDialog by mutableStateOf(false)
     var showThemeColorDialog by mutableStateOf(false)
     var showDpiConfirmDialog by mutableStateOf(false)
-    var showImageEditor by mutableStateOf(false)
 
     var isSimpleMode by mutableStateOf(prefs.getBoolean("is_simple_mode", false))
     var isHideVersion by mutableStateOf(prefs.getBoolean("is_hide_version", false))
@@ -71,8 +69,6 @@ class MoreSettingsState(
     var cardAlpha by mutableFloatStateOf(CardConfig.cardAlpha)
     var cardDim by mutableFloatStateOf(CardConfig.cardDim)
     var isCustomBackgroundEnabled by mutableStateOf(ThemeConfig.customBackgroundUri != null)
-
-    var selectedImageUri by mutableStateOf<Uri?>(null)
 
     val systemDpi = context.resources.displayMetrics.densityDpi
     var currentDpi by mutableIntStateOf(prefs.getInt("app_dpi", systemDpi))

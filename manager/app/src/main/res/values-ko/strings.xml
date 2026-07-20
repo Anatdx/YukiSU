@@ -196,6 +196,8 @@
     <string name="restore_allowlist">허용 목록 복원</string>
     <string name="settings_custom_background">사용자 지정 앱 배경</string>
     <string name="settings_custom_background_summary">배경으로 사용할 이미지를 선택하세요</string>
+    <string name="settings_change_background">배경 이미지 변경</string>
+    <string name="settings_change_background_summary">카드 불투명도와 배경 어둡게 설정을 유지하면서 새 이미지를 선택하세요</string>
     <string name="settings_card_alpha">탐색 모음 투명도</string>
     <string name="home_android_version">Android 버전</string>
     <string name="home_device_model">기기 모델</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU는 매우 공격적이고 독립적인 KSU 브랜치이지만 공식 KernelSU 프로젝트, SukiSU, Magisk, APatch 및 기타 기여에 감사드립니다.</string>
     <string name="custom_settings">사용자 지정 설정</string>
     <string name="theme_color">테마 색상</string>
-    <string name="image_editor_hint">두 손가락으로 이미지를 확대하고, 한 손가락으로 드래그하여 위치를 조정하세요</string>
-    <string name="reprovision">이미지를 화면에 맞추기</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM 복구/설치</string>

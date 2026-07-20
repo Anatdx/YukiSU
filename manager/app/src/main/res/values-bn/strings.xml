@@ -196,6 +196,8 @@
     <string name="restore_allowlist">অনুমতি তালিকা পুনরুদ্ধার করুন</string>
     <string name="settings_custom_background">কাস্টম অ্যাপ পটভূমি</string>
     <string name="settings_custom_background_summary">পটভূমি হিসেবে একটি ইমেজ নির্বাচন করুন</string>
+    <string name="settings_change_background">পটভূমির ছবি পরিবর্তন করুন</string>
+    <string name="settings_change_background_summary">কার্ডের অস্বচ্ছতা ও পটভূমি ম্লান করার সেটিংস রেখে নতুন ছবি বেছে নিন</string>
     <string name="settings_card_alpha">নেভিগেশন বার স্বচ্ছতা</string>
     <string name="home_android_version">Android সংস্করণ</string>
     <string name="home_device_model">ডিভাইস মডেল</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU একটি অত্যন্ত আক্রমণাত্মক এবং স্বাধীন KSU শাখা, কিন্তু আমরা এখনও তাদের অবদানের জন্য অফিসিয়াল KernelSU প্রকল্প, SukiSU, Magisk, APatch এবং অন্যান্যদের ধন্যবাদ জানাই।</string>
     <string name="custom_settings">কাস্টম সেটিংস</string>
     <string name="theme_color">থিম রঙ</string>
-    <string name="image_editor_hint">ইমেজ জুম করতে দুটি আঙুল ব্যবহার করুন, এবং অবস্থান সমন্বয় করতে এটি টেনে আনতে একটি আঙুল ব্যবহার করুন</string>
-    <string name="reprovision">স্ক্রীনে ইমেজ ফিট করুন</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM মেরামত/ইনস্টলেশন</string>

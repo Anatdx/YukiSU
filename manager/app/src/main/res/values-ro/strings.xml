@@ -198,6 +198,8 @@
     <string name="restore_allowlist">Restaurează lista de permisiuni</string>
     <string name="settings_custom_background">Fundal personalizat al aplicației</string>
     <string name="settings_custom_background_summary">Selectați o imagine ca fundal</string>
+    <string name="settings_change_background">Schimbă imaginea de fundal</string>
+    <string name="settings_change_background_summary">Alegeți o imagine nouă păstrând opacitatea cardurilor și setările de întunecare</string>
     <string name="settings_card_alpha">Transparența barei de navigare</string>
     <string name="home_android_version">Versiune Android</string>
     <string name="home_device_model">Modelul dispozitivului</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU este o ramură KSU extrem de agresivă și independentă, dar totuși mulțumim proiectului oficial KernelSU, SukiSU, Magisk, APatch și altora pentru contribuțiile lor.</string>
     <string name="custom_settings">Setări personalizate</string>
     <string name="theme_color">Culoarea temei</string>
-    <string name="image_editor_hint">Folosiți două degete pentru a mări imaginea și un deget pentru a o trage și ajusta poziția</string>
-    <string name="reprovision">Potriviți imaginea pe ecran</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Reparare/instalare LKM</string>

@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Khôi phục danh sách cho phép</string>
     <string name="settings_custom_background">Tuỳ chỉnh nền ứng dụng</string>
     <string name="settings_custom_background_summary">Chọn một hình ảnh làm hình nền</string>
+    <string name="settings_change_background">Thay đổi ảnh nền</string>
+    <string name="settings_change_background_summary">Chọn ảnh mới và giữ nguyên độ mờ của thẻ cùng cài đặt làm tối nền</string>
     <string name="settings_card_alpha">Độ trong suốt của thanh điều hướng</string>
     <string name="home_android_version">Phiên bản Android</string>
     <string name="home_device_model">Mẫu thiết bị</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU là một chi nhánh KSU cực kỳ tích cực và độc lập, nhưng chúng tôi vẫn cảm ơn dự án KernelSU chính thức, SukiSU, Magisk, APatch và những dự án khác vì những đóng góp của họ.</string>
     <string name="custom_settings">Cài đặt tùy chỉnh</string>
     <string name="theme_color">Màu chủ đề</string>
-    <string name="image_editor_hint">Sử dụng hai ngón tay để phóng to hình ảnh và một ngón tay kéo thả để điều chỉnh vị trí</string>
-    <string name="reprovision">Điều chỉnh ảnh vừa màn hình</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">Sửa chữa/cài đặt LKM</string>

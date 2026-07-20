@@ -196,6 +196,8 @@
     <string name="restore_allowlist">İcazə siyahısını bərpa et</string>
     <string name="settings_custom_background">Fərdi Tətbiq Fonu</string>
     <string name="settings_custom_background_summary">Fon olaraq bir görüntü seçin</string>
+    <string name="settings_change_background">Fon şəklini dəyişdirin</string>
+    <string name="settings_change_background_summary">Kart şəffaflığı və fon qaraltma ayarlarını saxlayaraq yeni şəkil seçin</string>
     <string name="settings_card_alpha">Naviqasiya panelinin şəffaflığı</string>
     <string name="home_android_version">Android versiyası</string>
     <string name="home_device_model">Cihaz modeli</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU son dərəcə aqressiv və müstəqil KSU filialıdır, lakin biz yenə də rəsmi KernelSU layihəsinə, SukiSU, Magisk, APatch və digərlərinə töhfələrinə görə təşəkkür edirik.</string>
     <string name="custom_settings">Fərdi ayarlar</string>
     <string name="theme_color">Tema Rəngi</string>
-    <string name="image_editor_hint">Görüntünü yaxınlaşdırmaq üçün iki barmağınızı, mövqeyini tənzimləmək üçün isə bir barmağınızla sürükləyin</string>
-    <string name="reprovision">Şəkli ekrana uyğunlaşdırın</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM bərpası/quraşdırılması</string>

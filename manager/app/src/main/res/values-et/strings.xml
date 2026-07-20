@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Taasta lubatud loend</string>
     <string name="settings_custom_background">Kohandatud rakenduse taust</string>
     <string name="settings_custom_background_summary">Vali pilt taustaks</string>
+    <string name="settings_change_background">Muuda taustapilti</string>
+    <string name="settings_change_background_summary">Vali uus pilt, säilitades kaartide läbipaistmatuse ja tausta tumendamise seaded</string>
     <string name="settings_card_alpha">Navigeerimisriba läbipaistvus</string>
     <string name="home_android_version">Androidi versioon</string>
     <string name="home_device_model">Seadme mudel</string>
@@ -252,8 +254,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU on äärmiselt agressiivne ja iseseisev KSU haru, kuid siiski täname ametlikku KernelSU projekti, SukiSU, Magisk, APatch ja teisi panuse eest.</string>
     <string name="custom_settings">Kohandatud seaded</string>
     <string name="theme_color">Teema värv</string>
-    <string name="image_editor_hint">Kasutage pildi suurendamiseks kahte sõrme ja asukoha reguleerimiseks ühe sõrmega lohistamist</string>
-    <string name="reprovision">Sobitage pilt ekraanile</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM parandamine/installimine</string>

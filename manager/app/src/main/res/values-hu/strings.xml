@@ -196,6 +196,8 @@
     <string name="restore_allowlist">Engedélyezési lista visszaállítása</string>
     <string name="settings_custom_background">Egyéni alkalmazás háttér</string>
     <string name="settings_custom_background_summary">Válasszon egy képet háttérként</string>
+    <string name="settings_change_background">Háttérkép cseréje</string>
+    <string name="settings_change_background_summary">Válasszon új képet a kártyák átlátszatlanságának és a háttér sötétítésének megtartásával</string>
     <string name="settings_card_alpha">Navigációs sáv átlátszósága</string>
     <string name="home_android_version">Android verzió</string>
     <string name="home_device_model">Eszköz modellje</string>
@@ -253,8 +255,6 @@ A</string>
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU egy rendkívül agresszív és független KSU-s ág, de továbbra is köszönjük a hivatalos KernelSU projektnek, SukiSU-nak, Magisk-nak, APatch-nak és másoknak a közreműködést.</string>
     <string name="custom_settings">Egyéni beállítások</string>
     <string name="theme_color">Témaszín</string>
-    <string name="image_editor_hint">Használjon két ujjat a kép nagyításához, és egy ujjat a húzáshoz a pozíció beállításához</string>
-    <string name="reprovision">Kép illesztése a képernyőhöz</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">LKM javítás/telepítés</string>

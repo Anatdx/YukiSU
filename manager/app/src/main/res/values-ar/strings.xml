@@ -198,6 +198,8 @@
     <string name="restore_allowlist">استعادة قائمة المسموح بها</string>
     <string name="settings_custom_background">خلفية التطبيق المخصصة</string>
     <string name="settings_custom_background_summary">حدد صورة كخلفية</string>
+    <string name="settings_change_background">تغيير صورة الخلفية</string>
+    <string name="settings_change_background_summary">اختر صورة جديدة مع الاحتفاظ بإعدادات عتامة البطاقات وتعتيم الخلفية</string>
     <string name="settings_card_alpha">شفافية شريط التنقل</string>
     <string name="home_android_version">‏إصدار Android</string>
     <string name="home_device_model">نوع الجهاز</string>
@@ -254,8 +256,6 @@
     <string name="home_click_to_ContributionCard_kernelsu">YukiSU فرع KSU شديد الجرأة ومستقل، ومع ذلك نشكر مشروع KernelSU الرسمي وSukiSU وMagisk وAPatch وغيرهم على مساهماتهم.</string>
     <string name="custom_settings">الإعدادات المُخصصة</string>
     <string name="theme_color">ألوان المظهر</string>
-    <string name="image_editor_hint">استخدم إصبعين لتكبير الصورة، وأصبع واحد لسحبها لضبط الموضع</string>
-    <string name="reprovision">ملاءمة الصورة للشاشة</string>
     <!-- Error Messages -->
     <!-- lkm/gki install -->
     <string name="Lkm_install_methods">إصلاح/تثبيت LKM</string>

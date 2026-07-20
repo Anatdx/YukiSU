@@ -89,6 +89,11 @@
             android:taskAffinity=""
             android:theme="@style/Theme.KernelSU.Floating" />
 
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:exported="false"
+            android:theme="@style/Theme.YukiSU.ImageCropper" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
