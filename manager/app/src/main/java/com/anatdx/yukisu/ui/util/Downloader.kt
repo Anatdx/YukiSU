@@ -1,244 +1,174 @@
 package com.anatdx.yukisu.ui.util
 
-import android.annotation.SuppressLint
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
+import androidx.core.content.FileProvider
+import com.anatdx.yukisu.ksuApp
 import com.anatdx.yukisu.ui.util.module.LatestVersionInfo
+import okhttp3.CacheControl
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Request
+import okhttp3.Response
 import java.io.File
-import java.util.concurrent.TimeUnit
+import java.io.IOException
 
 private const val TAG = "DownloadUtil"
-private val CUSTOM_USER_AGENT = "YukiSU/2.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-private const val MAX_RETRY_COUNT = 3
-private const val RETRY_DELAY_MS = 3000L
+private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+
+data class DownloadProgress(
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long? = null,
+) {
+    val fraction: Float?
+        get() = totalBytes?.takeIf { it > 0L }
+            ?.let { (downloadedBytes.toDouble() / it.toDouble()).toFloat().coerceIn(0f, 1f) }
+}
+
+fun interface DownloadHandle {
+    fun cancel()
+}
 
 /**
  * @author weishu
  * @date 2023/6/22.
  */
-@SuppressLint("Range")
 fun download(
     context: Context,
     url: String,
     fileName: String,
     description: String,
     onDownloaded: (Uri) -> Unit = {},
-    onDownloading: () -> Unit = {},
+    onProgress: (DownloadProgress) -> Unit = {},
     onError: (String) -> Unit = {}
-) {
+): DownloadHandle {
     Log.d(TAG, "Start Download: $url")
-    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val appContext = context.applicationContext
+    val request = Request.Builder()
+        .url(url)
+        .cacheControl(CacheControl.Builder().noStore().build())
+        .header("Accept", "application/zip, application/octet-stream")
+        .build()
+    val call = ksuApp.okhttpClient.newCall(request)
 
-    val query = DownloadManager.Query()
-    query.setFilterByStatus(DownloadManager.STATUS_RUNNING or DownloadManager.STATUS_PAUSED or DownloadManager.STATUS_PENDING)
-    downloadManager.query(query).use { cursor ->
-        while (cursor.moveToNext()) {
-            val uri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_URI))
-            val localUri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
-            val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
-            val columnTitle = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_TITLE))
-            if (url == uri || fileName == columnTitle) {
-                if (status == DownloadManager.STATUS_RUNNING || status == DownloadManager.STATUS_PENDING) {
-                    onDownloading()
-                    return
-                } else if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    onDownloaded(localUri.toUri())
-                    return
+    call.enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            if (!call.isCanceled()) deliverDownloadError(url, e, onError)
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            var partialFile: File? = null
+            try {
+                response.use {
+                    check(response.isSuccessful) { "HTTP ${response.code} for $url" }
+                    val body = checkNotNull(response.body) { "Empty response body for $url" }
+                    val downloadDir = File(appContext.cacheDir, "module_downloads")
+                    check(downloadDir.isDirectory || downloadDir.mkdirs()) {
+                        "Cannot create the module download cache"
+                    }
+                    val targetFile = File(downloadDir, safeDownloadFileName(fileName))
+                    val temporaryFile = File(
+                        downloadDir,
+                        ".${targetFile.name}.${System.nanoTime()}.part",
+                    )
+                    partialFile = temporaryFile
+                    val contentLength = body.contentLength().takeIf { it >= 0L }
+                    body.byteStream().use { input ->
+                        temporaryFile.outputStream().buffered().use { output ->
+                            copyDownloadWithProgress(
+                                input = input,
+                                output = output,
+                                contentLength = contentLength,
+                                onProgress = onProgress,
+                            )
+                        }
+                    }
+                    if (targetFile.exists()) {
+                        check(targetFile.delete()) { "Cannot replace ${targetFile.name}" }
+                    }
+                    check(temporaryFile.renameTo(targetFile)) { "Cannot finalize ${targetFile.name}" }
+                    partialFile = null
+
+                    val uri = FileProvider.getUriForFile(
+                        appContext,
+                        "${appContext.packageName}.fileprovider",
+                        targetFile,
+                    )
+                    Log.d(TAG, "Downloaded $description to ${targetFile.absolutePath}")
+                    mainHandler.post { onDownloaded(uri) }
                 }
+            } catch (error: Exception) {
+                if (!call.isCanceled()) deliverDownloadError(url, error, onError)
+            } finally {
+                partialFile?.delete()
             }
         }
-    }
-    var downloadFile = File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        fileName
-    )
-    val dotIndex = fileName.lastIndexOf('.')
-    val baseName = if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
-    val extension = if (dotIndex > 0) fileName.substring(dotIndex) else ""
-    var index = 1
-    while (downloadFile.exists()) {
-        downloadFile = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "$baseName ($index)$extension"
-        )
-        index++
-    }
-    val targetFileName = downloadFile.name
-
-    val request = DownloadManager.Request(url.toUri())
-        .setDestinationInExternalPublicDir(
-            Environment.DIRECTORY_DOWNLOADS,
-            targetFileName
-        )
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setMimeType("application/zip")
-        .setTitle(targetFileName)
-        .setDescription(description)
-        .addRequestHeader("User-Agent", CUSTOM_USER_AGENT)
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-        .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
-
-    try {
-        val downloadId = downloadManager.enqueue(request)
-        Log.d(TAG, "Successful launch of the download，ID: $downloadId")
-        monitorDownload(context, downloadManager, downloadId, url, targetFileName, description, onDownloaded, onDownloading, onError)
-    } catch (e: Exception) {
-        Log.e(TAG, "Download startup failure", e)
-        onError("Download startup failure: ${e.message}")
-    }
+    })
+    return DownloadHandle(call::cancel)
 }
 
-private fun monitorDownload(
-    context: Context,
-    downloadManager: DownloadManager,
-    downloadId: Long,
-    url: String,
-    fileName: String,
-    description: String,
-    onDownloaded: (Uri) -> Unit,
-    onDownloading: () -> Unit,
-    onError: (String) -> Unit,
-    retryCount: Int = 0
+internal fun safeDownloadFileName(fileName: String): String {
+    val candidate = File(fileName).name
+        .replace(Regex("[^A-Za-z0-9._() -]"), "_")
+        .trim()
+    return candidate.takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "module.zip"
+}
+
+private fun deliverDownloadError(url: String, error: Exception, onError: (String) -> Unit) {
+    Log.e(TAG, "Failed to download $url", error)
+    val detail = error.message?.takeIf(String::isNotBlank) ?: error.javaClass.simpleName
+    mainHandler.post { onError(detail) }
+}
+
+private fun copyDownloadWithProgress(
+    input: java.io.InputStream,
+    output: java.io.OutputStream,
+    contentLength: Long?,
+    onProgress: (DownloadProgress) -> Unit,
 ) {
-    val handler = Handler(Looper.getMainLooper())
-    val query = DownloadManager.Query().setFilterById(downloadId)
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var downloaded = 0L
+    var lastPercent = -1
+    var lastUnknownLengthUpdate = 0L
 
-    var lastProgress = -1
-    var stuckCounter = 0
-
-    val runnable = object : Runnable {
-        override fun run() {
-            downloadManager.query(query).use { cursor ->
-                if (cursor != null && cursor.moveToFirst()) {
-                    @SuppressLint("Range")
-                    val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
-
-                    when (status) {
-                        DownloadManager.STATUS_SUCCESSFUL -> {
-                            @SuppressLint("Range")
-                            val localUri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
-                            Log.d(TAG, "Download Successfully: $localUri")
-                            onDownloaded(localUri.toUri())
-                            return
-                        }
-                        DownloadManager.STATUS_FAILED -> {
-                            @SuppressLint("Range")
-                            val reason = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_REASON))
-                            Log.d(TAG, "Download failed with reason code: $reason")
-
-                            if (retryCount < MAX_RETRY_COUNT) {
-                                Log.d(TAG, "Attempts to re download, number of retries: ${retryCount + 1}")
-                                handler.postDelayed({
-                                    downloadManager.remove(downloadId)
-                                    download(context, url, fileName, description, onDownloaded, onDownloading, onError)
-                                }, RETRY_DELAY_MS)
-                            } else {
-                                onError("Download failed, please check network connection or storage space")
-                            }
-                            return
-                        }
-                        DownloadManager.STATUS_RUNNING, DownloadManager.STATUS_PENDING, DownloadManager.STATUS_PAUSED -> {
-                            @SuppressLint("Range")
-                            val totalBytes = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                            @SuppressLint("Range")
-                            val downloadedBytes = cursor.getLong(cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-
-                            if (totalBytes > 0) {
-                                val progress = (downloadedBytes * 100 / totalBytes).toInt()
-                                if (progress == lastProgress) {
-                                    stuckCounter++
-                                    if (stuckCounter > 30) {
-                                        if (retryCount < MAX_RETRY_COUNT) {
-                                            Log.d(TAG, "Download stalled and restarted")
-                                            downloadManager.remove(downloadId)
-                                            download(context, url, fileName, description, onDownloaded, onDownloading, onError)
-                                            return
-                                        }
-                                    }
-                                } else {
-                                    lastProgress = progress
-                                    stuckCounter = 0
-                                    Log.d(TAG, "Download progress: $progress% ($downloadedBytes/$totalBytes)")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            handler.postDelayed(this, 1000)
+    fun report(force: Boolean = false) {
+        val percent = contentLength?.takeIf { it > 0L }
+            ?.let { ((downloaded * 100L) / it).toInt().coerceIn(0, 100) }
+        val now = System.nanoTime()
+        val shouldReport = force || if (percent == null) {
+            now - lastUnknownLengthUpdate >= 250_000_000L
+        } else {
+            percent != lastPercent
         }
-    }
-    handler.post(runnable)
-
-    val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1
-            if (id == downloadId) {
-                handler.removeCallbacks(runnable)
-
-                val query = DownloadManager.Query().setFilterById(downloadId)
-                downloadManager.query(query).use { cursor ->
-                    if (cursor != null && cursor.moveToFirst()) {
-                        @SuppressLint("Range")
-                        val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
-
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            @SuppressLint("Range")
-                            val localUri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
-                            onDownloaded(localUri.toUri())
-                        } else {
-                            if (retryCount < MAX_RETRY_COUNT) {
-                                download(context!!, url, fileName, description, onDownloaded, onDownloading, onError)
-                            } else {
-                                onError("Download failed, please try again later")
-                            }
-                        }
-                    }
-                }
-
-                context?.unregisterReceiver(this)
-            }
-        }
+        if (!shouldReport) return
+        if (percent == null) lastUnknownLengthUpdate = now else lastPercent = percent
+        val progress = DownloadProgress(downloaded, contentLength)
+        mainHandler.post { onProgress(progress) }
     }
 
-    ContextCompat.registerReceiver(
-        context,
-        receiver,
-        IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-        ContextCompat.RECEIVER_EXPORTED
-    )
+    report(force = true)
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        output.write(buffer, 0, count)
+        downloaded += count
+        report()
+    }
+    report(force = true)
 }
 
 fun checkNewVersion(): LatestVersionInfo {
     val url = "https://api.github.com/repos/Anatdx/YukiSU/releases/latest"
     val defaultValue = LatestVersionInfo()
     return runCatching {
-        val client = okhttp3.OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .build()
-
-        val request = okhttp3.Request.Builder()
+        val request = Request.Builder()
             .url(url)
-            .header("User-Agent", CUSTOM_USER_AGENT)
             .build()
 
-        client.newCall(request).execute().use { response ->
+        ksuApp.okhttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 Log.d("CheckUpdate", "Network request failed: ${response.message}")
                 return defaultValue
@@ -285,44 +215,4 @@ fun checkNewVersion(): LatestVersionInfo {
             defaultValue
         }
     }.getOrDefault(defaultValue)
-}
-
-@Composable
-fun DownloadListener(context: Context, onDownloaded: (Uri) -> Unit) {
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            @SuppressLint("Range")
-            override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
-                    val id = intent.getLongExtra(
-                        DownloadManager.EXTRA_DOWNLOAD_ID, -1
-                    )
-                    val query = DownloadManager.Query().setFilterById(id)
-                    val downloadManager =
-                        context?.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                    val cursor = downloadManager.query(query)
-                    if (cursor.moveToFirst()) {
-                        val status = cursor.getInt(
-                            cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                        )
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            val uri = cursor.getString(
-                                cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-                            )
-                            onDownloaded(uri.toUri())
-                        }
-                    }
-                }
-            }
-        }
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_EXPORTED
-        )
-        onDispose {
-            context.unregisterReceiver(receiver)
-        }
-    }
 }

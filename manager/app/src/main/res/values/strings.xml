@@ -619,4 +619,56 @@
     <string name="module_zygisk_loaded" tools:ignore="MissingTranslation">Loaded</string>
     <string name="module_zygisk_module" tools:ignore="MissingTranslation">Zygisk module</string>
     <string name="module_zn_module" tools:ignore="MissingTranslation">ZN module</string>
+
+    <!-- Multi-source module repositories -->
+    <string name="module_repositories" tools:ignore="MissingTranslation">Module repositories</string>
+    <string name="repository_sources" tools:ignore="MissingTranslation">Repository sources</string>
+    <string name="repository_all_sources" tools:ignore="MissingTranslation">All sources</string>
+    <string name="repository_installed_version" tools:ignore="MissingTranslation">Installed %1$s</string>
+    <string name="repository_removed_source" tools:ignore="MissingTranslation">Removed source</string>
+    <string name="repository_source_count" tools:ignore="MissingTranslation,PluralsCandidate">%1$d sources</string>
+    <string name="repository_bound_source" tools:ignore="MissingTranslation">Bound source</string>
+    <string name="repository_incompatible" tools:ignore="MissingTranslation">Not compatible with this device</string>
+    <string name="repository_empty" tools:ignore="MissingTranslation">No modules are available from enabled sources</string>
+    <string name="repository_manage_sources" tools:ignore="MissingTranslation">Manage sources</string>
+    <string name="repository_add_source" tools:ignore="MissingTranslation">Add source</string>
+    <string name="repository_last_sync" tools:ignore="MissingTranslation">Last sync: %1$s</string>
+    <string name="delete" tools:ignore="MissingTranslation">Delete</string>
+    <string name="repository_remove_source" tools:ignore="MissingTranslation">Remove source</string>
+    <string name="repository_remove_source_confirm" tools:ignore="MissingTranslation">Remove %1$s? Installed modules will keep their source history.</string>
+    <string name="repository_unverified_warning" tools:ignore="MissingTranslation">Modules downloaded from custom repositories are not verified by YukiSU. Confirm that you trust the source and accept the consequences before installing.</string>
+    <string name="repository_source_name_optional" tools:ignore="MissingTranslation">Name (optional)</string>
+    <string name="repository_source_url" tools:ignore="MissingTranslation">Repository URL</string>
+    <string name="repository_add" tools:ignore="MissingTranslation">Add</string>
+    <string name="repository_module_missing" tools:ignore="MissingTranslation">This module is no longer available from the selected source.</string>
+    <string name="repository_bound_to" tools:ignore="MissingTranslation">Installed source: %1$s</string>
+    <string name="repository_pin_version" tools:ignore="MissingTranslation">Pin installed version</string>
+    <string name="repository_unpin_version" tools:ignore="MissingTranslation">Unpin version</string>
+    <string name="repository_inconsistent_index" tools:ignore="MissingTranslation">Repository version data is inconsistent</string>
+    <string name="repository_inconsistent_index_description" tools:ignore="MissingTranslation">The repository declares %1$s (%2$d), but no matching artifact exists. YukiSU will not guess which historical version is current.</string>
+    <string name="repository_dependencies" tools:ignore="MissingTranslation">Dependencies</string>
+    <string name="repository_other_sources" tools:ignore="MissingTranslation">Other sources with the same module ID</string>
+    <string name="repository_homepage" tools:ignore="MissingTranslation">Homepage</string>
+    <string name="repository_source_code" tools:ignore="MissingTranslation">Source code</string>
+    <string name="repository_support" tools:ignore="MissingTranslation">Support</string>
+    <string name="repository_versions" tools:ignore="MissingTranslation">Versions</string>
+    <string name="repository_install_version_confirm" tools:ignore="MissingTranslation">Install version %1$s (versionCode %2$d)?</string>
+    <string name="repository_switch_source_warning" tools:ignore="MissingTranslation">This module is currently bound to another source. Continuing will explicitly switch its source.</string>
+    <string name="repository_current_release" tools:ignore="MissingTranslation">Current</string>
+    <string name="repository_installed" tools:ignore="MissingTranslation">Installed</string>
+    <string name="repository_reinstall" tools:ignore="MissingTranslation">Reinstall</string>
+    <string name="repository_update_available" tools:ignore="MissingTranslation">Update available</string>
+    <string name="repository_pinned" tools:ignore="MissingTranslation">Pinned</string>
+    <string name="repository_bind_existing" tools:ignore="MissingTranslation">Use this source for the installed module</string>
+    <string name="repository_missing_dependencies" tools:ignore="MissingTranslation">Missing dependencies</string>
+    <string name="repository_my_sources" tools:ignore="MissingTranslation">My sources</string>
+    <string name="repository_mmrl_directory" tools:ignore="MissingTranslation">MMRL</string>
+    <string name="repository_mmrl_directory_description" tools:ignore="MissingTranslation">MMRL’s central directory currently lists %1$d recognized repositories. None are added or enabled by default; explicitly add only the repositories you want as sources.</string>
+    <string name="repository_mmrl_search" tools:ignore="MissingTranslation">Search MMRL repositories</string>
+    <string name="repository_mmrl_no_results" tools:ignore="MissingTranslation">No matching MMRL repositories</string>
+    <string name="repository_mmrl_module_count" tools:ignore="MissingTranslation,PluralsCandidate">%1$d modules</string>
+    <string name="repository_mmrl_updated" tools:ignore="MissingTranslation">Directory update: %1$s</string>
+    <string name="repository_mmrl_added" tools:ignore="MissingTranslation">Added</string>
+    <string name="repository_mmrl_added_disabled" tools:ignore="MissingTranslation">Added · disabled</string>
+    <string name="repository_retry" tools:ignore="MissingTranslation">Retry</string>
 </resources>

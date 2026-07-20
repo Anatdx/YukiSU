@@ -84,6 +84,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.ExecuteModuleActionScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.ModuleRepositoryScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.anatdx.yukisu.BuildConfig
@@ -111,6 +112,12 @@ data class ModuleBottomSheetMenuItem(
     val icon: ImageVector,
     val titleRes: Int,
     val onClick: () -> Unit
+)
+
+private data class ModuleDownloadUiState(
+    val moduleName: String,
+    val fileName: String,
+    val progress: DownloadProgress = DownloadProgress(),
 )
 
 private enum class ShortcutType {
@@ -386,6 +393,14 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                 onSearchTextChange = { viewModel.search = it },
                 onClearClick = { viewModel.search = "" },
                 dropdownContent = {
+                    IconButton(
+                        onClick = { navigator.navigate(ModuleRepositoryScreenDestination) },
+                    ) {
+                        YukiIcon(
+                            imageVector = Icons.Outlined.Inventory2,
+                            contentDescription = stringResource(R.string.module_repositories),
+                        )
+                    }
                     IconButton(
                         onClick = { showBottomSheet = true },
                     ) {
@@ -948,6 +963,8 @@ private fun ModuleList(
     val loadingDialog = rememberLoadingDialog()
     val confirmDialog = rememberConfirmDialog()
     var lastRebootSnackbarTime by remember { mutableLongStateOf(0L) }
+    var activeDownload by remember { mutableStateOf<ModuleDownloadUiState?>(null) }
+    var downloadHandle by remember { mutableStateOf<DownloadHandle?>(null) }
 
     suspend fun onModuleUpdate(
         module: ModuleViewModel.ModuleInfo,
@@ -1002,30 +1019,27 @@ private fun ModuleList(
             return
         }
 
-        showToast(startDownloadingText.format(module.name))
-
         val downloading = downloadingText.format(module.name)
-        withContext(Dispatchers.IO) {
-            download(
-                context,
-                downloadUrl,
-                fileName,
-                downloading,
-                onDownloaded = { uri ->
-                    onUpdateModule(uri)
-                },
-                onDownloading = {
-                    launch(Dispatchers.Main) {
-                        Toast.makeText(context, downloading, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onError = { errorMsg ->
-                    launch(Dispatchers.Main) {
-                        Toast.makeText(context, "$downloadErrorText: $errorMsg", Toast.LENGTH_LONG).show()
-                    }
-                }
-            )
-        }
+        activeDownload = ModuleDownloadUiState(module.name, fileName)
+        downloadHandle = download(
+            context,
+            downloadUrl,
+            fileName,
+            downloading,
+            onDownloaded = { uri ->
+                activeDownload = null
+                downloadHandle = null
+                onUpdateModule(uri)
+            },
+            onProgress = { progress ->
+                activeDownload = activeDownload?.copy(progress = progress)
+            },
+            onError = { errorMsg ->
+                activeDownload = null
+                downloadHandle = null
+                Toast.makeText(context, "$downloadErrorText: $errorMsg", Toast.LENGTH_LONG).show()
+            },
+        )
     }
 
     suspend fun onModuleUninstallClicked(module: ModuleViewModel.ModuleInfo) {
@@ -1197,11 +1211,19 @@ private fun ModuleList(
         }
         }
 
-        DownloadListener(context, onInstallModule)
-
-
-
-}
+        activeDownload?.let { state ->
+            DownloadProgressDialog(
+                title = downloadingText.format(state.moduleName),
+                message = startDownloadingText.format(state.fileName),
+                progress = state.progress,
+                onCancel = {
+                    downloadHandle?.cancel()
+                    downloadHandle = null
+                    activeDownload = null
+                },
+            )
+        }
+    }
 
 @Composable
 fun ModuleItem(

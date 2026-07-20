@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.os.Parcelable
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -42,6 +43,7 @@ import com.ramcosta.composedestinations.generated.destinations.ModuleScreenDesti
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import com.anatdx.yukisu.R
+import com.anatdx.yukisu.data.repository.ModuleRepositoryProvider
 import com.anatdx.yukisu.superkey.SuperKeyHelper
 import com.anatdx.yukisu.ui.component.KeyEventBlocker
 import com.anatdx.yukisu.ui.component.YukiIcon
@@ -249,6 +251,11 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                 } else {
                     setFlashingStatus(FlashingStatus.SUCCESS)
                     viewModel.markNeedRefresh()
+                    scope.launch(Dispatchers.IO) {
+                        getModuleIdFromUri(context, flashIt.uri)?.let { moduleId ->
+                            ModuleRepositoryProvider.get(context).clearInstalledBinding(moduleId)
+                        }
+                    }
                 }
                 if (showReboot) {
                     text += "\n\n\n"
@@ -333,6 +340,46 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                     }
                     setFlashingStatus(FlashingStatus.SUCCESS)
                     viewModel.markNeedRefresh()
+                    if (flashIt is FlashIt.FlashModule &&
+                        flashIt.repositorySourceId != null &&
+                        flashIt.repositoryModuleId != null &&
+                        flashIt.repositoryVersionCode != null &&
+                        flashIt.repositoryVersionName != null
+                    ) {
+                        scope.launch(Dispatchers.IO) {
+                            val actualModuleId = getModuleIdFromUri(context, flashIt.uri)
+                            if (actualModuleId == flashIt.repositoryModuleId) {
+                                ModuleRepositoryProvider.get(context).recordInstalledBinding(
+                                    moduleId = actualModuleId,
+                                    sourceId = flashIt.repositorySourceId,
+                                    version = flashIt.repositoryVersionName,
+                                    versionCode = flashIt.repositoryVersionCode,
+                                )
+                            } else {
+                                actualModuleId?.let {
+                                    ModuleRepositoryProvider.get(context).clearInstalledBinding(it)
+                                }
+                                Log.w(
+                                    "FlashScreen",
+                                    "Repository module id ${flashIt.repositoryModuleId} does not match archive id $actualModuleId; source binding skipped"
+                                )
+                            }
+                        }
+                    } else {
+                        val installedUri = when (flashIt) {
+                            is FlashIt.FlashModule -> flashIt.uri
+                            is FlashIt.FlashModules -> flashIt.uris.getOrNull(flashIt.currentIndex)
+                            else -> null
+                        }
+                        if (installedUri != null) {
+                            scope.launch(Dispatchers.IO) {
+                                getModuleIdFromUri(context, installedUri)?.let { moduleId ->
+                                    ModuleRepositoryProvider.get(context)
+                                        .clearInstalledBinding(moduleId)
+                                }
+                            }
+                        }
+                    }
                 }
                 if (showReboot) {
                     text += "\n\n\n"
@@ -815,7 +862,13 @@ sealed class FlashIt : Parcelable {
         val superKey: String? = null,
         val signatureBypass: Boolean = false
     ) : FlashIt()
-    data class FlashModule(val uri: Uri) : FlashIt()
+    data class FlashModule(
+        val uri: Uri,
+        val repositorySourceId: String? = null,
+        val repositoryModuleId: String? = null,
+        val repositoryVersionCode: Long? = null,
+        val repositoryVersionName: String? = null,
+    ) : FlashIt()
     data class FlashModules(val uris: List<Uri>, val currentIndex: Int = 0) : FlashIt()
     data class FlashModuleUpdate(val uri: Uri) : FlashIt() // ????
     data object FlashRestore : FlashIt()
