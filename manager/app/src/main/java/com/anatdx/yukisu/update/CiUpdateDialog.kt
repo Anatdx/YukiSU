@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +35,7 @@ import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.YukiAlertDialog
 import com.anatdx.yukisu.ui.screen.WarningCard
+import com.anatdx.yukisu.ui.theme.isExpressiveUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -213,22 +215,21 @@ fun CiUpdateCard() {
                     CiUpdateStage.READY -> Unit
                     CiUpdateStage.DOWNLOADING -> {
                         Spacer(Modifier.height(16.dp))
-                        LinearProgressIndicator(
+                        CiUpdateProgressIndicator(
                             progress = { progress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(stringResource(R.string.ci_update_downloading, progress))
                     }
                     CiUpdateStage.VERIFYING -> {
                         Spacer(Modifier.height(16.dp))
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        CiUpdateProgressIndicator()
                         Spacer(Modifier.height(8.dp))
                         Text(stringResource(R.string.ci_update_verifying))
                     }
                     CiUpdateStage.INSTALLING -> {
                         Spacer(Modifier.height(16.dp))
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        CiUpdateProgressIndicator()
                         Spacer(Modifier.height(8.dp))
                         Text(stringResource(R.string.ci_update_installing))
                     }
@@ -262,4 +263,20 @@ fun CiUpdateCard() {
             dismissOnClickOutside = !busy,
         ),
     )
+}
+
+@Composable
+private fun CiUpdateProgressIndicator(progress: (() -> Float)? = null) {
+    val modifier = Modifier.fillMaxWidth()
+    if (isExpressiveUi) {
+        if (progress == null) {
+            LinearWavyProgressIndicator(modifier = modifier)
+        } else {
+            LinearWavyProgressIndicator(progress = progress, modifier = modifier)
+        }
+    } else if (progress == null) {
+        LinearProgressIndicator(modifier = modifier)
+    } else {
+        LinearProgressIndicator(progress = progress, modifier = modifier)
+    }
 }

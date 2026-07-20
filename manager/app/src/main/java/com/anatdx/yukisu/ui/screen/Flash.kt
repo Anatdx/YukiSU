@@ -7,7 +7,6 @@ import android.os.Environment
 import android.os.Parcelable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -526,11 +525,6 @@ fun ModuleInstallProgressBar(
         FlashingStatus.FAILED -> MaterialTheme.colorScheme.error
     }
 
-    val progress = animateFloatAsState(
-        targetValue = currentIndex.toFloat() / totalCount.toFloat(),
-        label = "InstallProgress"
-    )
-
     FlashProgressSurface {
             // ???????
             Row(
@@ -554,20 +548,36 @@ fun ModuleInstallProgressBar(
 
             // ???
             if (isExpressiveUi) {
-                LinearWavyProgressIndicator(
-                    progress = { progress.value },
-                    modifier = Modifier.fillMaxWidth(),
+                if (status == FlashingStatus.FLASHING) {
+                    LinearWavyProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = progressColor,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                } else {
+                    LinearWavyProgressIndicator(
+                        progress = { 1f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = progressColor,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                }
+            } else if (status == FlashingStatus.FLASHING) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
                     color = progressColor,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             } else {
                 LinearProgressIndicator(
-                    progress = { progress.value },
+                    progress = { 1f },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp),
                     color = progressColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
 

@@ -5,7 +5,6 @@ import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -30,7 +28,6 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.KeyEventBlocker
 import com.anatdx.yukisu.ui.component.YukiIcon
-import com.anatdx.yukisu.ui.theme.CardConfig.cardAlpha
 import com.anatdx.yukisu.ui.theme.isExpressiveUi
 import com.anatdx.yukisu.ui.util.LocalSnackbarHost
 import com.anatdx.yukisu.ui.util.runModuleAction
@@ -152,18 +149,6 @@ fun ExecuteModuleActionScreen(navigator: DestinationsNavigator, moduleId: String
                 .fillMaxSize(1f)
                 .padding(innerPadding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .then(
-                    if (isExpressiveUi) {
-                        Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .clip(MaterialTheme.shapes.large)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceContainer.copy(alpha = cardAlpha)
-                            )
-                    } else {
-                        Modifier
-                    }
-                )
                 .verticalScroll(scrollState),
         ) {
             LaunchedEffect(text) {
