@@ -310,6 +310,7 @@ jobs:
             mv -- "${APKS[0]}" app-release.apk
           fi
           gpg --detach-sign --local-user 'C09CE484EEA3F2D88E9CDCC8EBDB0D663D7AB2F6!' \
+            --digest-algo SHA512 \
             --batch --yes --pinentry-mode loopback \
             --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
             --output app-release.sig app-release.apk
@@ -397,6 +398,7 @@ jobs:
           )
           PY
           gpg --detach-sign --local-user 'C09CE484EEA3F2D88E9CDCC8EBDB0D663D7AB2F6!' \
+            --digest-algo SHA512 \
             --batch --yes --pinentry-mode loopback \
             --passphrase "$GPG_PASSPHRASE" \
             --output update-metadata/ci-update.sig update-metadata/ci-update.json

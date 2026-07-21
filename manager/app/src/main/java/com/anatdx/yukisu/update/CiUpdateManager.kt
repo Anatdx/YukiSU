@@ -38,7 +38,6 @@ import org.bouncycastle.openpgp.PGPSignature
 import org.bouncycastle.openpgp.PGPSignatureList
 import org.bouncycastle.openpgp.PGPUtil
 import org.bouncycastle.openpgp.operator.bc.BcKeyFingerprintCalculator
-import org.bouncycastle.openpgp.operator.bc.BcPGPContentVerifierBuilderProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -560,7 +559,7 @@ object CiUpdateManager {
         checkSignatureTime(signingKey, signature.creationTime)
 
         signature.init(
-            BcPGPContentVerifierBuilderProvider(),
+            Ed25519PgpContentVerifierProvider,
             signingKey,
         )
         apk.inputStream().buffered().use { input ->

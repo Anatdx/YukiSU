@@ -100,5 +100,4 @@ mmrl-ui = { group = "com.github.MMRLApp.MMRL", name = "ui", version.ref = "mmrl"
 mmrl-hidden-api = { group = "com.github.MMRLApp.MMRL", name = "hidden-api", version.ref = "mmrl" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 bouncycastle-bcpg = { group = "org.bouncycastle", name = "bcpg-jdk18on", version.ref = "bouncycastle" }
-bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 ucrop = { module = "com.github.yalantis:ucrop", version.ref = "ucrop" }

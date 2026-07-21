@@ -134,6 +134,14 @@ android {
             excludes += "DebugProbesKt.bin"
             // https://issueantenna.com/repo/kotlin/kotlinx.coroutines/issues/3158
             excludes += "kotlin-tooling-metadata.json"
+            // Bouncy Castle bundles Picnic parameter tables and X.509 reviewer
+            // messages as Java resources. CI update verification only uses
+            // OpenPGP Ed25519 signatures, so none of these resources are read.
+            excludes += "org/bouncycastle/pqc/legacy/picnic/lowmcL1.bin.properties"
+            excludes += "org/bouncycastle/pqc/legacy/picnic/lowmcL3.bin.properties"
+            excludes += "org/bouncycastle/pqc/legacy/picnic/lowmcL5.bin.properties"
+            excludes += "org/bouncycastle/x509/CertPathReviewerMessages.properties"
+            excludes += "org/bouncycastle/x509/CertPathReviewerMessages_de.properties"
         }
     }
 
@@ -195,7 +203,6 @@ composeCompiler {
 
 dependencies {
     implementation(libs.bouncycastle.bcpg)
-    implementation(libs.bouncycastle.bcprov)
     implementation(libs.gson)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
