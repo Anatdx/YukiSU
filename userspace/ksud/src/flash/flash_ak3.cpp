@@ -804,7 +804,8 @@ int flash_ak3_package(const Ak3FlashConfig& config) {
             emit_line(log_file, "A slot was selected on a non-A/B device", true);
             return 1;
         }
-        relative_slot = target == current ? "active" : "inactive";
+        const std::string selected_relative_slot = target == current ? "active" : "inactive";
+        relative_slot = selected_relative_slot;
         if (!package.package_slot_policy.empty()) {
             std::string package_policy = trim_copy(package.package_slot_policy);
             std::transform(
@@ -817,7 +818,7 @@ int flash_ak3_package(const Ak3FlashConfig& config) {
                           true);
                 return 1;
             }
-            if (package_policy != *relative_slot) {
+            if (package_policy != selected_relative_slot) {
                 emit_line(log_file,
                           "Selected slot conflicts with the package SLOT_SELECT=" +
                               package.package_slot_policy,
@@ -825,7 +826,7 @@ int flash_ak3_package(const Ak3FlashConfig& config) {
                 return 1;
             }
         }
-        emit_line(log_file, "Target slot: " + target + " (" + *relative_slot + ")");
+        emit_line(log_file, "Target slot: " + target + " (" + selected_relative_slot + ")");
     } else {
         emit_line(log_file, "Target slot: AnyKernel3 package default");
     }
