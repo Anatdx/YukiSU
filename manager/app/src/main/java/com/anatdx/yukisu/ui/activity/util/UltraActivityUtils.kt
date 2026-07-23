@@ -25,6 +25,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.anatdx.yukisu.ui.component.ZipFileDetector
 import com.anatdx.yukisu.ui.component.ZipFileInfo
 import com.anatdx.yukisu.ui.component.ZipType
+import com.anatdx.yukisu.ui.component.Ak3FlashOptions
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.anatdx.yukisu.ui.screen.FlashIt
 import kotlinx.coroutines.withContext
@@ -60,12 +61,24 @@ object UltraActivityUtils {
     fun navigateToFlashScreen(
         activity: MainActivity,
         zipFiles: List<ZipFileInfo>,
+        ak3Options: Ak3FlashOptions?,
         navigator: DestinationsNavigator
     ) {
         activity.lifecycleScope.launch {
             val moduleUris = zipFiles.filter { it.type == ZipType.MODULE }.map { it.uri }
+            val kernelFile = zipFiles.singleOrNull { it.type == ZipType.KERNEL }
 
-            if (moduleUris.isNotEmpty()) {
+            if (kernelFile != null && moduleUris.isEmpty() && ak3Options != null) {
+                navigator.navigate(
+                    FlashScreenDestination(
+                        FlashIt.FlashAk3(
+                            zipPath = kernelFile.stagedPath,
+                            targetSlot = ak3Options.targetSlot,
+                            useMkbootfs = ak3Options.useMkbootfs,
+                        )
+                    )
+                )
+            } else if (moduleUris.isNotEmpty() && kernelFile == null) {
                 navigator.navigate(
                     FlashScreenDestination(
                         FlashIt.FlashModules(ArrayList(moduleUris))

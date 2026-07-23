@@ -53,6 +53,7 @@ import com.anatdx.yukisu.ui.activity.util.ThemeChangeContentObserver
 import com.anatdx.yukisu.ui.activity.util.ThemeUtils
 import com.anatdx.yukisu.ui.activity.util.UltraActivityUtils
 import com.anatdx.yukisu.ui.component.InstallConfirmationDialog
+import com.anatdx.yukisu.ui.component.ZipFileDetector
 import com.anatdx.yukisu.ui.component.ZipFileInfo
 import com.anatdx.yukisu.ui.screen.BottomBarDestination
 import com.anatdx.yukisu.ui.theme.KernelSUTheme
@@ -115,39 +116,6 @@ class MainActivity : ComponentActivity() {
                 isInitialized = true
             }
 
-            // Check if launched with a ZIP file
-            val zipUri: ArrayList<Uri>? = when (intent?.action) {
-                Intent.ACTION_SEND -> {
-                    val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                    }
-                    uri?.let { arrayListOf(it) }
-                }
-
-                Intent.ACTION_SEND_MULTIPLE -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
-                    }
-                }
-
-                else -> when {
-                    intent?.data != null -> arrayListOf(intent.data!!)
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
-                        intent.getParcelableArrayListExtra("uris", Uri::class.java)
-                    }
-                    else -> {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableArrayListExtra("uris")
-                    }
-                }
-            }
-
             setContent {
                 KernelSUTheme {
                     val navController = rememberNavController()
@@ -159,6 +127,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val navigator = navController.rememberDestinationsNavigator()
+                    val intentStateValue by intentState.collectAsState()
 
                     ShortcutIntentHandler(
                         intentState = intentState,
@@ -175,21 +144,36 @@ class MainActivity : ComponentActivity() {
                     InstallConfirmationDialog(
                         show = showConfirmationDialog.value,
                         zipFiles = pendingZipFiles.value,
-                        onConfirm = { confirmedFiles ->
+                        onConfirm = { confirmedFiles, ak3Options ->
                             showConfirmationDialog.value = false
-                            UltraActivityUtils.navigateToFlashScreen(this, confirmedFiles, navigator)
+                            pendingZipFiles.value = emptyList()
+                            UltraActivityUtils.navigateToFlashScreen(
+                                this,
+                                confirmedFiles,
+                                ak3Options,
+                                navigator,
+                            )
                         },
                         onDismiss = {
                             showConfirmationDialog.value = false
+                            ZipFileDetector.cleanupStagedFiles(pendingZipFiles.value)
                             pendingZipFiles.value = emptyList()
                             finish()
                         }
                     )
 
-                    LaunchedEffect(zipUri) {
+                    LaunchedEffect(intentStateValue) {
+                        val zipUri = extractZipUris(intent)
                         if (!zipUri.isNullOrEmpty()) {
+                            ZipFileDetector.cleanupStagedFiles(pendingZipFiles.value)
+                            pendingZipFiles.value = emptyList()
+                            showConfirmationDialog.value = false
                             lifecycleScope.launch {
                                 UltraActivityUtils.detectZipTypeAndShowConfirmation(this@MainActivity, zipUri) { infos ->
+                                    if (intentState.value != intentStateValue) {
+                                        ZipFileDetector.cleanupStagedFiles(infos)
+                                        return@detectZipTypeAndShowConfirmation
+                                    }
                                     if (infos.isNotEmpty()) {
                                         pendingZipFiles.value = infos
                                         showConfirmationDialog.value = true
@@ -347,6 +331,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         try {
+            if (isFinishing) {
+                ZipFileDetector.cleanupStagedFiles(pendingZipFiles.value)
+            }
             ThemeUtils.unregisterThemeChangeObserver(this, themeChangeObserver)
             super.onDestroy()
         } catch (e: Exception) {
@@ -358,6 +345,41 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intentState.value++
+    }
+
+    private fun extractZipUris(intent: Intent?): ArrayList<Uri>? {
+        return when (intent?.action) {
+            Intent.ACTION_SEND -> {
+                val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                }
+                uri?.let(::arrayListOf)
+            }
+
+            Intent.ACTION_SEND_MULTIPLE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                }
+            }
+
+            else -> when {
+                intent?.data != null -> arrayListOf(intent.data!!)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                    intent?.getParcelableArrayListExtra("uris", Uri::class.java)
+                }
+
+                else -> {
+                    @Suppress("DEPRECATION")
+                    intent?.getParcelableArrayListExtra("uris")
+                }
+            }
+        }
     }
 }
 
