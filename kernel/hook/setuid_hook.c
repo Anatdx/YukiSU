@@ -93,7 +93,12 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
 		return 0;
 	}
 
-	if (ksu_get_manager_appid() == new_uid % PER_USER_RANGE) {
+	/*
+	 * Match the specialization target directly. ksu_get_manager_appid()
+	 * prioritizes the globally authenticated SuperKey UID, which must not
+	 * prevent another trusted dynamic manager from receiving its driver fd.
+	 */
+	if (ksu_is_uid_manager(new_uid)) {
 		spin_lock_irq(&current->sighand->siglock);
 		ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
 		ksu_set_task_tracepoint_flag(current);
