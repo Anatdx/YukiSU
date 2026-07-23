@@ -324,34 +324,6 @@ jobs:
           name: Manager-arm64-v8a
           path: dist/
 
-      - name: Restore APK filename for Telegram
-        if: steps.gpg_check.outputs.available == 'true'
-        run: |
-          test -n "$TG_APK_NAME"
-          if [[ "$TG_APK_NAME" != 'app-release.apk' ]]; then
-            mv -- dist/app-release.apk "dist/$TG_APK_NAME"
-          fi
-
-      - name: Upload to telegram
-        if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
-        env:
-          CHAT_ID: ${{ vars.CHAT_ID }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          MESSAGE_THREAD_ID: ${{ steps.determine.outputs.topicid }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-          COMMIT_URL: ${{ github.event.head_commit.url }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TITLE: ${{ steps.determine.outputs.title }}
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          if [ -n "$BOT_TOKEN" ]; then
-            export VERSION
-            VERSION=$(git rev-list --count HEAD)
-            mapfile -t APKS < <(find ./dist -name "*.apk")
-            pip3 install telethon
-            python3 "$GITHUB_WORKSPACE/scripts/ksubot.py" "${APKS[@]}"
-          fi
-
       - name: Sign CI update metadata with GPG
         if: steps.gpg_check.outputs.available == 'true' && github.ref_name == 'main'
         env:
@@ -467,3 +439,31 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy pages-payload --project-name=yukisuupdates --branch=main
+
+      - name: Restore APK filename for Telegram
+        if: steps.gpg_check.outputs.available == 'true'
+        run: |
+          test -n "$TG_APK_NAME"
+          if [[ "$TG_APK_NAME" != 'app-release.apk' ]]; then
+            mv -- dist/app-release.apk "dist/$TG_APK_NAME"
+          fi
+
+      - name: Upload to telegram
+        if: github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'feat/')) && steps.need_upload.outputs.UPLOAD == 'true' && steps.determine.outputs.SKIP != 'true'
+        env:
+          CHAT_ID: ${{ vars.CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          MESSAGE_THREAD_ID: ${{ steps.determine.outputs.topicid }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: ${{ steps.determine.outputs.title }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ -n "$BOT_TOKEN" ]; then
+            export VERSION
+            VERSION=$(git rev-list --count HEAD)
+            mapfile -t APKS < <(find ./dist -name "*.apk")
+            pip3 install telethon
+            python3 "$GITHUB_WORKSPACE/scripts/ksubot.py" "${APKS[@]}"
+          fi
