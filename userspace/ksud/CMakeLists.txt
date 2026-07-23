@@ -278,6 +278,7 @@ set(KSUD_OUR_SOURCES
     src/magica/adb_client.cpp
     src/magica/magica.cpp
     src/core/hide_bootloader.cpp
+    src/flash/flash_ak3.cpp
     src/flash/flash_partition.cpp
 )
 

@@ -8,6 +8,7 @@
 #include "debug.hpp"
 #include "defs.hpp"
 #include "dynamic_manager.hpp"
+#include "flash/flash_ak3.hpp"
 #include "flash/flash_partition.hpp"
 #include "init_event.hpp"
 #include "late_load.hpp"
@@ -573,6 +574,8 @@ int cmd_flash_new(const std::vector<std::string>& args) {
     if (args.empty()) {
         printf("USAGE: ksud flash <SUBCOMMAND> [OPTIONS]\n\n");
         printf("SUBCOMMANDS:\n");
+        printf("  ak3 <ZIP>                  Flash an AnyKernel3 package\n");
+        printf("  ak3-info <ZIP>             Inspect an AnyKernel3 package\n");
         printf("  image <IMAGE> <PARTITION>  Flash image to partition\n");
         printf("  backup <PARTITION> <OUT>   Backup partition to file\n");
         printf("  list [--slot SLOT] [--all] List available partitions\n");
@@ -586,9 +589,11 @@ int cmd_flash_new(const std::vector<std::string>& args) {
         printf("\nOPTIONS:\n");
         printf("  --slot <a|b|_a|_b>         Target specific slot (for A/B devices)\n");
         printf("                             Default: current active slot\n");
+        printf("  --use-mkbootfs             Let AK3 use ksud's built-in mkbootfs\n");
         printf("  --all                      List all partitions (not just common ones)\n");
         printf("\nEXAMPLES:\n");
         printf("  ksud flash image boot.img boot\n");
+        printf("  ksud flash ak3 kernel.zip --slot _b\n");
         printf("  ksud flash image boot.img boot --slot _b\n");
         printf("  ksud flash backup boot /sdcard/boot-backup.img --slot _a\n");
         printf("  ksud flash list\n");
@@ -598,6 +603,52 @@ int cmd_flash_new(const std::vector<std::string>& args) {
     }
 
     const std::string& subcmd = args[0];
+
+    if (subcmd == "ak3-info") {
+        if (args.size() != 2) {
+            (void)fprintf(stderr, "USAGE: ksud flash ak3-info <ZIP>\n");
+            return 1;
+        }
+        const auto info = inspect_ak3_package(args[1]);
+        if (!info.valid) {
+            (void)fprintf(stderr, "Invalid AnyKernel3 package: %s\n", info.error.c_str());
+            return 1;
+        }
+        printf("valid=1\n");
+        printf("kernel=%s\n", info.kernel_name.c_str());
+        printf("devices=");
+        for (size_t i = 0; i < info.devices.size(); ++i) {
+            if (i != 0)
+                printf("|");
+            printf("%s", info.devices[i].c_str());
+        }
+        printf("\n");
+        printf("slot_policy=%s\n", info.package_slot_policy.c_str());
+        return 0;
+    }
+
+    if (subcmd == "ak3") {
+        if (args.size() < 2) {
+            (void)fprintf(stderr, "USAGE: ksud flash ak3 <ZIP> [--slot <a|b|_a|_b>] [--log <FILE>] "
+                                  "[--use-mkbootfs]\n");
+            return 1;
+        }
+        Ak3FlashConfig config;
+        config.zip_path = args[1];
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i] == "--slot" && i + 1 < args.size()) {
+                config.target_slot = args[++i];
+            } else if (args[i] == "--log" && i + 1 < args.size()) {
+                config.log_path = args[++i];
+            } else if (args[i] == "--use-mkbootfs") {
+                config.use_mkbootfs = true;
+            } else if (args[i] != "-v" && args[i] != "--verbose") {
+                (void)fprintf(stderr, "Unknown AnyKernel3 option: %s\n", args[i].c_str());
+                return 1;
+            }
+        }
+        return flash_ak3_package(config);
+    }
 
     // Parse common options
     std::string target_slot;
