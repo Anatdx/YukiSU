@@ -128,10 +128,10 @@ set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
 set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)  # avoid -Werror vs -fno-semantic-interposition on Apple Clang
 FetchContent_Declare(
     mbedtls
-    GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
-    GIT_TAG v3.6.2
-    GIT_SHALLOW TRUE
-    GIT_SUBMODULES "framework"
+    # The official release archive includes the framework submodule and generated files.
+    # GitHub's automatic source archives and a plain shallow clone do not.
+    URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+    URL_HASH SHA256=8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
 )
 FetchContent_MakeAvailable(mbedtls)
 
@@ -430,12 +430,20 @@ if(KSUD_UPX)
     endif()
 endif()
 
-# Report final binary size
-add_custom_command(TARGET ksud POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "-- ksud final size:"
-    COMMAND ls -lh $<TARGET_FILE:ksud>
-    COMMENT "Reporting final binary size..."
-)
+# Report the final artifact. `ls` is not guaranteed to exist for a native
+# Windows/Ninja build, while it remains useful for the Unix build script.
+if(CMAKE_HOST_WIN32)
+    add_custom_command(TARGET ksud POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "-- ksud built: $<TARGET_FILE:ksud>"
+        COMMENT "Reporting final ksud artifact..."
+    )
+else()
+    add_custom_command(TARGET ksud POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "-- ksud final size:"
+        COMMAND ls -lh $<TARGET_FILE:ksud>
+        COMMENT "Reporting final binary size..."
+    )
+endif()
 
 # Install
 install(TARGETS ksud DESTINATION bin)
