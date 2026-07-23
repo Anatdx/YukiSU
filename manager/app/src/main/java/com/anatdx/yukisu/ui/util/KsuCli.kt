@@ -20,7 +20,6 @@ import com.anatdx.yukisu.BuildConfig
 import com.anatdx.yukisu.Natives
 import com.anatdx.yukisu.ksu.KsuPaths
 import com.anatdx.yukisu.ksuApp
-import com.anatdx.yukisu.utils.AssetsUtil
 import com.topjohnwu.superuser.io.SuFile
 import org.json.JSONArray
 import org.json.JSONObject
@@ -279,14 +278,15 @@ object KsuCli {
             // Ensure directories
             "mkdir -p ${KsuPaths.KSU_BIN_DIR}",
             "mkdir -p ${KsuPaths.KSU_LOG_DIR}",
-            // Copy new daemon binary (multi-call: ksud + magiskboot via argv0)
+            // Copy new daemon binary (multi-call tools dispatch via argv0)
             "cp -f ${ksudSo.absolutePath} ${KsuPaths.KSUD_BIN}",
             "chmod 0755 ${KsuPaths.KSUD_BIN}",
-            // Symlinks in ksu/bin: ksud, magiskboot, bootctl, resetprop all point to the same binary (multi-call)
+            // Tool symlinks all point to the same multi-call binary.
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/ksud",
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/magiskboot",
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/bootctl",
             "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/resetprop",
+            "ln -sf ${KsuPaths.KSUD_BIN} ${KsuPaths.KSU_BIN_DIR}/mkbootfs",
             // Fix SELinux contexts (ignore errors on non-SEAndroid systems)
             "restorecon ${KsuPaths.KSUD_BIN} || true",
             "restorecon -R ${KsuPaths.KSU_ROOT} || true",
@@ -608,18 +608,6 @@ fun installBoot(
 
     val ksudPath = getKsuDaemonPath()
     var cmd = "boot-patch --magiskboot $ksudPath"
-
-    // Extract kernel-version-specific mkbootfs tools for 5.10/5.15+ ramdisk format compatibility
-    val mkbootfsDir = File(ksuApp.cacheDir, "mkbootfs").apply { mkdirs() }
-    try {
-        AssetsUtil.exportFiles(ksuApp, "5_10-mkbootfs", File(mkbootfsDir, "5_10-mkbootfs").absolutePath)
-        AssetsUtil.exportFiles(ksuApp, "5_15+-mkbootfs", File(mkbootfsDir, "5_15+-mkbootfs").absolutePath)
-        File(mkbootfsDir, "5_10-mkbootfs").setExecutable(true, false)
-        File(mkbootfsDir, "5_15+-mkbootfs").setExecutable(true, false)
-        cmd += " --mkbootfs-dir ${mkbootfsDir.absolutePath}"
-    } catch (e: Exception) {
-        Log.w(TAG, "Failed to extract mkbootfs assets, using built-in magiskboot only", e)
-    }
 
     cmd += if (bootFile == null) {
         // no boot.img, use -f to force install

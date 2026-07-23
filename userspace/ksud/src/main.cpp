@@ -10,6 +10,9 @@ extern "C" int bootctl_main(int argc, char** argv);
 #if defined(RESETPROP_ALONE_AVAILABLE) && RESETPROP_ALONE_AVAILABLE
 extern "C" int resetprop_main(int argc, char** argv);
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+#if defined(MKBOOTFS_ALONE_AVAILABLE) && MKBOOTFS_ALONE_AVAILABLE
+#include <mkbootfs/mkbootfs.h>
+#endif  // #if defined(MKBOOTFS_ALONE_AVAILABLE) ...
 #if defined(NDK_BUSYBOX_AVAILABLE) && NDK_BUSYBOX_AVAILABLE
 extern "C" int busybox_main(int argc, char** argv);
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...
@@ -66,6 +69,13 @@ int main(int argc, char** argv) {
             return r;
     }
 #endif  // #if defined(RESETPROP_ALONE_AVAILABLE) ...
+#if defined(MKBOOTFS_ALONE_AVAILABLE) && MKBOOTFS_ALONE_AVAILABLE
+    {
+        const int r = dispatch("mkbootfs", mkbootfs_main);
+        if (r >= 0)
+            return r;
+    }
+#endif  // #if defined(MKBOOTFS_ALONE_AVAILABLE) ...
 #if defined(ZYGISKD_AVAILABLE) && ZYGISKD_AVAILABLE
     {
         const int r = dispatch("zygiskd", zygiskd_main);
@@ -84,8 +94,8 @@ int main(int argc, char** argv) {
     // Exclude "su": sucompat hijacks root shell to ksud; must not be delegated to busybox.
     if (base && base[0] && std::strcmp(base, "ksud") != 0 && std::strcmp(base, "magiskboot") != 0 &&
         std::strcmp(base, "bootctl") != 0 && std::strcmp(base, "resetprop") != 0 &&
-        std::strcmp(base, "su") != 0 && std::strcmp(base, "zygiskd") != 0 &&
-        std::strstr(base, ".so") == nullptr) {
+        std::strcmp(base, "mkbootfs") != 0 && std::strcmp(base, "su") != 0 &&
+        std::strcmp(base, "zygiskd") != 0 && std::strstr(base, ".so") == nullptr) {
         return busybox_main(argc, argv);
     }
 #endif  // #if defined(NDK_BUSYBOX_AVAILABLE) && N...

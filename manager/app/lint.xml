@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <lint>
-    <!-- These executables must be assets because they are extracted for boot image tooling. -->
-    <issue id="UnsafeNativeCodeLocation">
-        <ignore path="src/main/assets/5_10-mkbootfs" />
-        <ignore path="src/main/assets/5_15+-mkbootfs" />
-    </issue>
-
     <!-- The pinned MMRL revision predates its upstream 16 KB linker fix. -->
     <issue id="Aligned16KB">
         <ignore regexp=".*libmmrl-file-manager.so.*" />

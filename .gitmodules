@@ -13,3 +13,6 @@
 [submodule "userspace/zygisk/third_party/lsplt"]
 	path = userspace/zygisk/third_party/lsplt
 	url = https://github.com/Anatdx/LSPlt.git
+[submodule "userspace/ksud/third_party/mkbootfsAlone"]
+	path = userspace/ksud/third_party/mkbootfsAlone
+	url = https://github.com/Anatdx/mkbootfsAlone.git

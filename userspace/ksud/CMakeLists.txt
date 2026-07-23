@@ -191,7 +191,7 @@ add_custom_command(
     COMMENT "Generating embedded assets..."
 )
 
-# third_party (MagiskbootAlone, bootctlAlone, resetpropAlone, ndk-busybox): compile into ksud for multi-call
+# third_party tools: compile into ksud for multi-call
 set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party)
 set(MAGISKBOOT_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/MagiskbootAlone)
 set(MAGISKBOOT_SOURCES
@@ -216,6 +216,7 @@ endif()
 
 set(BOOTCTL_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/bootctlAlone)
 set(RESETPROP_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/resetpropAlone)
+set(MKBOOTFS_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/mkbootfsAlone)
 set(RESETPROP_ALONE_SOURCES)
 if(EXISTS ${BOOTCTL_ALONE_DIR}/src/main.cpp)
     set(BOOTCTL_ALONE_AVAILABLE 1)
@@ -227,6 +228,10 @@ if(EXISTS ${RESETPROP_ALONE_DIR}/src/main.cpp)
     )
     set(RESETPROP_ALONE_AVAILABLE 1)
     message(STATUS "resetpropAlone: building resetprop into ksud (multi-call)")
+endif()
+if(EXISTS ${MKBOOTFS_ALONE_DIR}/src/mkbootfs.cpp)
+    set(MKBOOTFS_ALONE_AVAILABLE 1)
+    message(STATUS "mkbootfsAlone: building mkbootfs into ksud (multi-call)")
 endif()
 
 # ndk-busybox: build as static lib and link into ksud for multi-call (argv0 "busybox")
@@ -276,7 +281,7 @@ set(KSUD_OUR_SOURCES
     src/flash/flash_partition.cpp
 )
 
-# Third-party sources (no clang-tidy: MagiskbootAlone, bootctl, resetprop)
+# Third-party sources (no clang-tidy)
 set(KSUD_THIRDPARTY_SOURCES)
 if(MAGISKBOOT_ALONE_AVAILABLE)
     list(APPEND KSUD_THIRDPARTY_SOURCES ${MAGISKBOOT_SOURCES})
@@ -286,6 +291,9 @@ if(BOOTCTL_ALONE_AVAILABLE)
 endif()
 if(RESETPROP_ALONE_AVAILABLE)
     list(APPEND KSUD_THIRDPARTY_SOURCES ${RESETPROP_ALONE_SOURCES})
+endif()
+if(MKBOOTFS_ALONE_AVAILABLE)
+    list(APPEND KSUD_THIRDPARTY_SOURCES ${MKBOOTFS_ALONE_DIR}/src/mkbootfs.cpp)
 endif()
 
 get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
@@ -305,6 +313,7 @@ set(KSUD_INCLUDE_DIRS
     ${miniz_SOURCE_DIR}
     ${miniz_BINARY_DIR}
     ${LZ4_LIB_DIR}
+    ${MKBOOTFS_ALONE_DIR}/include
     ${GENERATED_DIR}
     ${REPO_ROOT}  # uapi/ kernel headers for userspace
 )
@@ -320,6 +329,13 @@ if(BOOTCTL_ALONE_AVAILABLE)
 endif()
 if(RESETPROP_ALONE_AVAILABLE)
     list(APPEND KSUD_DEFINES RESETPROP_ALONE_AVAILABLE=1)
+endif()
+if(MKBOOTFS_ALONE_AVAILABLE)
+    list(APPEND KSUD_DEFINES
+        MKBOOTFS_ALONE_AVAILABLE=1
+        MKBOOTFS_ALONE_VERSION="1.0.0"
+        MKBOOTFS_AOSP_REVISION="a3b721a32242006b59cb12bd62c9133632af3a2d"
+    )
 endif()
 if(NDK_BUSYBOX_AVAILABLE)
     list(APPEND KSUD_DEFINES NDK_BUSYBOX_AVAILABLE=1)
