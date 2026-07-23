@@ -92,12 +92,27 @@ object KsuCli {
         try {
             val apkKsudVersion = getApkKsudVersion()
             val installedKsudVersion = getInstalledKsudVersion()
+            val binaryMatches = installedKsudVersion != null && isInstalledKsudBinaryCurrent()
             
-            Log.i(TAG, "checkAndInstallKsud: apk=$apkKsudVersion, installed=$installedKsudVersion")
+            Log.i(
+                TAG,
+                "checkAndInstallKsud: apk=$apkKsudVersion, installed=$installedKsudVersion, " +
+                    "binaryMatches=$binaryMatches"
+            )
             
-            // Install if: ksud not installed, or version mismatch
-            if (installedKsudVersion == null || apkKsudVersion != installedKsudVersion) {
-                Log.i(TAG, "Installing/updating ksud daemon only: apk=$apkKsudVersion, installed=$installedKsudVersion")
+            // Version-only checks miss local/reproducible builds made from the same
+            // commit. Compare the actual ELF so the installed daemon always carries
+            // the exact assets and fixes bundled by this APK.
+            if (
+                installedKsudVersion == null ||
+                apkKsudVersion != installedKsudVersion ||
+                !binaryMatches
+            ) {
+                Log.i(
+                    TAG,
+                    "Installing/updating ksud daemon: apk=$apkKsudVersion, " +
+                        "installed=$installedKsudVersion, binaryMatches=$binaryMatches"
+                )
                 installOrUpdateKsudDaemon()
             } else {
                 Log.d(TAG, "ksud is up-to-date: $installedKsudVersion")
@@ -157,6 +172,19 @@ object KsuCli {
             Log.w(TAG, "Failed to get installed ksud version", e)
             null
         }
+    }
+
+    private fun isInstalledKsudBinaryCurrent(): Boolean {
+        if (!SHELL.isRoot) return false
+        val apkKsud = File(ksuApp.applicationInfo.nativeLibraryDir, "libksud.so")
+        if (!apkKsud.isFile) return false
+        return SHELL.newJob()
+            .add(
+                "cmp -s ${shellQuoteArgument(apkKsud.absolutePath)} " +
+                    shellQuoteArgument(KsuPaths.KSUD_BIN)
+            )
+            .exec()
+            .isSuccess
     }
 
     /**
@@ -499,6 +527,49 @@ private fun flashWithIO(
     return withNewRootShell {
         newJob().add(cmdWithEnv).to(stdoutCallback, stderrCallback).exec()
     }
+}
+
+private fun shellQuoteArgument(value: String): String =
+    "'${value.replace("'", "'\\''")}'"
+
+fun flashAnyKernel3(
+    zipPath: String,
+    targetSlot: String?,
+    useMkbootfs: Boolean,
+    onFinish: (Boolean, Int) -> Unit,
+    onStdout: (String) -> Unit,
+    onStderr: (String) -> Unit,
+): Boolean {
+    var success = false
+    var exitCode = 1
+    try {
+        val command = buildString {
+            append("flash ak3 ")
+            append(shellQuoteArgument(zipPath))
+            targetSlot?.let {
+                append(" --slot ")
+                append(shellQuoteArgument(it))
+            }
+            if (useMkbootfs) {
+                append(" --use-mkbootfs")
+            }
+        }
+        val result = flashWithIO(
+            ksudCmd(command),
+            onStdout = { output -> output.lineSequence().forEach(onStdout) },
+            onStderr = { output -> output.lineSequence().forEach(onStderr) },
+        )
+        success = result.isSuccess
+        exitCode = result.code
+        Log.i(TAG, "AnyKernel3 flash result: success=$success, code=$exitCode")
+    } catch (error: Exception) {
+        Log.e(TAG, "Failed to flash AnyKernel3 package", error)
+        onStderr(error.message ?: "Unknown AnyKernel3 error")
+    } finally {
+        File(zipPath).delete()
+        onFinish(success, exitCode)
+    }
+    return success
 }
 
 fun flashModule(

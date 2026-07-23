@@ -545,6 +545,57 @@
     <string name="partition_batch_backup_partial" tools:ignore="PluralsCandidate">Backup complete: %1$d succeeded, %2$d failed\nFailed: %3$s</string>
     <string name="partition_no_selection">No partition selected</string>
     <string name="partition_back">Back</string>
+    <!-- New partition-manager strings intentionally fall back to English until each
+         community locale catches up; Simplified Chinese is translated alongside them. -->
+    <string name="partition_refresh" tools:ignore="MissingTranslation">Refresh partition data</string>
+    <string name="partition_select" tools:ignore="MissingTranslation">Select partitions</string>
+    <string name="partition_done" tools:ignore="MissingTranslation">Done</string>
+    <string name="partition_preparing_image" tools:ignore="MissingTranslation">Preparing and checking image…</string>
+    <string name="partition_image_empty" tools:ignore="MissingTranslation">The selected image is empty</string>
+    <string name="partition_image_too_large" tools:ignore="MissingTranslation">Image is too large: %1$s; partition capacity: %2$s</string>
+    <string name="partition_insufficient_cache_space" tools:ignore="MissingTranslation">Not enough app cache space to stage the image. Required: %1$s; available: %2$s</string>
+    <string name="partition_cannot_read_file_detail" tools:ignore="MissingTranslation">Cannot read file: %s</string>
+    <string name="partition_insufficient_space" tools:ignore="MissingTranslation">Not enough backup space. Required: %1$s; available: %2$s</string>
+    <string name="partition_backup_size_mismatch" tools:ignore="MissingTranslation">Backup size verification failed. Expected: %1$s; actual: %2$s. The incomplete file was removed.</string>
+    <string name="partition_overview" tools:ignore="MissingTranslation">Storage overview</string>
+    <string name="partition_count" tools:ignore="MissingTranslation">Partitions</string>
+    <string name="partition_type_summary" tools:ignore="MissingTranslation">Types</string>
+    <string name="partition_type_summary_value" tools:ignore="MissingTranslation,PluralsCandidate">%1$d physical · %2$d logical</string>
+    <string name="partition_total_size" tools:ignore="MissingTranslation">Combined size</string>
+    <string name="partition_free_space" tools:ignore="MissingTranslation">Backup space available</string>
+    <string name="partition_search_hint" tools:ignore="MissingTranslation">Search partitions</string>
+    <string name="partition_clear_selection" tools:ignore="MissingTranslation">Clear</string>
+    <string name="partition_select_visible" tools:ignore="MissingTranslation">Select visible</string>
+    <string name="partition_select_boot_set" tools:ignore="MissingTranslation">Boot-critical set</string>
+    <string name="partition_manifest_hint" tools:ignore="MissingTranslation">Every batch backup includes a manifest.tsv inventory with expected and actual sizes.</string>
+    <string name="partition_batch_excluded" tools:ignore="MissingTranslation">This large data partition is excluded from batch backup. Open it to back up individually.</string>
+    <string name="partition_current_slot_value" tools:ignore="MissingTranslation">Current · %s</string>
+    <string name="partition_other_slot_value" tools:ignore="MissingTranslation">Inactive · %s</string>
+    <string name="partition_type_and_size" tools:ignore="MissingTranslation">%1$s · %2$s</string>
+    <string name="partition_empty_result" tools:ignore="MissingTranslation">No partitions match the current search and filters.</string>
+    <string name="partition_resolving" tools:ignore="MissingTranslation">Resolving…</string>
+    <string name="partition_flash_preflight" tools:ignore="MissingTranslation">Review flash operation</string>
+    <string name="partition_flash_preflight_desc" tools:ignore="MissingTranslation">Verify the exact image, target partition, slot, and capacity before writing.</string>
+    <string name="partition_image_file" tools:ignore="MissingTranslation">Image</string>
+    <string name="partition_image_size" tools:ignore="MissingTranslation">Image size</string>
+    <string name="partition_target" tools:ignore="MissingTranslation">Target partition</string>
+    <string name="partition_capacity" tools:ignore="MissingTranslation">Partition capacity</string>
+    <string name="partition_flash_ak3">Flash AnyKernel3 Package</string>
+    <string name="partition_ak3_inspecting" tools:ignore="MissingTranslation">Copying and inspecting AnyKernel3 package…</string>
+    <string name="partition_ak3_invalid" tools:ignore="MissingTranslation">Invalid AnyKernel3 package: %s</string>
+    <string name="partition_ak3_preflight" tools:ignore="MissingTranslation">Review AnyKernel3 flash</string>
+    <string name="partition_ak3_package" tools:ignore="MissingTranslation">Package</string>
+    <string name="partition_ak3_kernel" tools:ignore="MissingTranslation">Kernel</string>
+    <string name="partition_ak3_devices" tools:ignore="MissingTranslation">Declared devices</string>
+    <string name="partition_ak3_not_declared" tools:ignore="MissingTranslation">Not declared</string>
+    <string name="partition_ak3_package_slot_policy" tools:ignore="MissingTranslation">Package slot policy</string>
+    <string name="partition_ak3_target_slot" tools:ignore="MissingTranslation">Target slot</string>
+    <string name="partition_ak3_current_slot" tools:ignore="MissingTranslation">%s (current)</string>
+    <string name="partition_ak3_slot_conflict" tools:ignore="MissingTranslation">The selected slot conflicts with the package policy SLOT_SELECT=%s. Choose a compatible slot.</string>
+    <string name="partition_ak3_use_mkbootfs">Use ksud built-in mkbootfs</string>
+    <string name="partition_ak3_use_mkbootfs_summary">Temporarily replace the package\'s mkbootfs for this flash. When disabled, keep the tools and fallback behavior supplied by the AnyKernel3 package.</string>
+    <string name="partition_ak3_trust_warning" tools:ignore="MissingTranslation">AnyKernel3 packages execute their own shell code as root and may write boot-critical partitions. Flash only a package you trust and verify the selected slot.</string>
+    <string name="partition_ak3_flash_now" tools:ignore="MissingTranslation">Flash package</string>
     
     <!-- Advanced Tools -->
     <string name="install_advanced_tools">Advanced Tools</string>

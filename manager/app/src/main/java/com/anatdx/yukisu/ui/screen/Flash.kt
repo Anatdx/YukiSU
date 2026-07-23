@@ -121,14 +121,13 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     // ??????????????
     val isExternalInstall = remember {
         when (flashIt) {
-            is FlashIt.FlashModule -> {
+            is FlashIt.FlashModule,
+            is FlashIt.FlashModules,
+            is FlashIt.FlashAk3 -> {
                 (context as? ComponentActivity)?.intent?.let { intent ->
-                    intent.action == Intent.ACTION_VIEW || intent.action == Intent.ACTION_SEND
-                } ?: false
-            }
-            is FlashIt.FlashModules -> {
-                (context as? ComponentActivity)?.intent?.let { intent ->
-                    intent.action == Intent.ACTION_VIEW || intent.action == Intent.ACTION_SEND
+                    intent.action == Intent.ACTION_VIEW ||
+                        intent.action == Intent.ACTION_SEND ||
+                        intent.action == Intent.ACTION_SEND_MULTIPLE
                 } ?: false
             }
             else -> false
@@ -438,6 +437,9 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                 }
                 logContent.append(it).append("\n")
             }, onStderr = {
+                if (flashIt is FlashIt.FlashAk3) {
+                    text += "$it\n"
+                }
                 logContent.append(it).append("\n")
             })
         }
@@ -530,16 +532,33 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
                 .padding(innerPadding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
         ) {
-            if (flashIt is FlashIt.FlashModules) {
-                ModuleInstallProgressBar(
-                    currentIndex = flashIt.currentIndex + 1,
-                    totalCount = flashIt.uris.size,
-                    currentModuleName = currentStatus.currentModuleName,
-                    status = currentFlashingStatus.value,
-                    failedModules = currentStatus.failedModules
-                )
+            when (flashIt) {
+                is FlashIt.FlashModules -> {
+                    ModuleInstallProgressBar(
+                        currentIndex = flashIt.currentIndex + 1,
+                        totalCount = flashIt.uris.size,
+                        currentModuleName = currentStatus.currentModuleName,
+                        status = currentFlashingStatus.value,
+                        failedModules = currentStatus.failedModules
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                is FlashIt.FlashAk3 -> {
+                    val ak3ProgressTitle = when (currentFlashingStatus.value) {
+                        FlashingStatus.FLASHING ->
+                            stringResource(R.string.partition_flashing, "AnyKernel3")
+                        FlashingStatus.SUCCESS -> stringResource(R.string.flash_success)
+                        FlashingStatus.FAILED -> stringResource(R.string.flash_failed)
+                    }
+                    FlashOperationProgressBar(
+                        title = ak3ProgressTitle,
+                        status = currentFlashingStatus.value,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                else -> Unit
             }
 
             Box(
@@ -563,6 +582,22 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt) {
     }
 }
 
+@Composable
+private fun FlashOperationProgressBar(
+    title: String,
+    status: FlashingStatus,
+) {
+    FlashProgressSurface {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        FlashStatusProgressIndicator(status)
+    }
+}
+
 // ????????????
 @Composable
 fun ModuleInstallProgressBar(
@@ -572,12 +607,6 @@ fun ModuleInstallProgressBar(
     status: FlashingStatus,
     failedModules: List<String>
 ) {
-    val progressColor = when(status) {
-        FlashingStatus.FLASHING -> MaterialTheme.colorScheme.primary
-        FlashingStatus.SUCCESS -> MaterialTheme.colorScheme.tertiary
-        FlashingStatus.FAILED -> MaterialTheme.colorScheme.error
-    }
-
     FlashProgressSurface {
             // ???????
             Row(
@@ -599,40 +628,7 @@ fun ModuleInstallProgressBar(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ???
-            if (isExpressiveUi) {
-                if (status == FlashingStatus.FLASHING) {
-                    LinearWavyProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = progressColor,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                } else {
-                    LinearWavyProgressIndicator(
-                        progress = { 1f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = progressColor,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                }
-            } else if (status == FlashingStatus.FLASHING) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp),
-                    color = progressColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = { 1f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp),
-                    color = progressColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            }
+            FlashStatusProgressIndicator(status)
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -684,6 +680,49 @@ fun ModuleInstallProgressBar(
                     }
                 }
             }
+    }
+}
+
+@Composable
+private fun FlashStatusProgressIndicator(status: FlashingStatus) {
+    val progressColor = when (status) {
+        FlashingStatus.FLASHING -> MaterialTheme.colorScheme.primary
+        FlashingStatus.SUCCESS -> MaterialTheme.colorScheme.tertiary
+        FlashingStatus.FAILED -> MaterialTheme.colorScheme.error
+    }
+
+    if (isExpressiveUi) {
+        if (status == FlashingStatus.FLASHING) {
+            LinearWavyProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+        } else {
+            LinearWavyProgressIndicator(
+                progress = { 1f },
+                modifier = Modifier.fillMaxWidth(),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+        }
+    } else if (status == FlashingStatus.FLASHING) {
+        LinearProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp),
+            color = progressColor,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    } else {
+        LinearProgressIndicator(
+            progress = { 1f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp),
+            color = progressColor,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
     }
 }
 
@@ -871,6 +910,11 @@ sealed class FlashIt : Parcelable {
     ) : FlashIt()
     data class FlashModules(val uris: List<Uri>, val currentIndex: Int = 0) : FlashIt()
     data class FlashModuleUpdate(val uri: Uri) : FlashIt() // ????
+    data class FlashAk3(
+        val zipPath: String,
+        val targetSlot: String?,
+        val useMkbootfs: Boolean,
+    ) : FlashIt()
     data object FlashRestore : FlashIt()
     data object FlashUninstall : FlashIt()
 }
@@ -921,6 +965,14 @@ fun flashIt(
         is FlashIt.FlashModuleUpdate -> {
             onFinish(false, 0)
         }
+        is FlashIt.FlashAk3 -> flashAnyKernel3(
+            flashIt.zipPath,
+            flashIt.targetSlot,
+            flashIt.useMkbootfs,
+            onFinish,
+            onStdout,
+            onStderr,
+        )
         FlashIt.FlashRestore -> restoreBoot(onFinish, onStdout, onStderr)
         FlashIt.FlashUninstall -> uninstallPermanently(onFinish, onStdout, onStderr)
     }

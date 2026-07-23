@@ -39,6 +39,7 @@ fun SearchAppBar(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
     onClearClick: () -> Unit,
+    placeholder: @Composable (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     dropdownContent: @Composable (() -> Unit)? = null,
@@ -139,6 +140,7 @@ fun SearchAppBar(
                 },
             value = searchText,
             onValueChange = onSearchTextChange,
+            placeholder = placeholder,
             trailingIcon = {
                 IconButton(
                     onClick = {

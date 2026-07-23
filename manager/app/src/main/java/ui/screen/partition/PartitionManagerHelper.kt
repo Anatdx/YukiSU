@@ -4,10 +4,10 @@ import android.content.Context
 import android.util.Log
 import com.anatdx.yukisu.ui.util.getRootShell
 import com.anatdx.yukisu.ui.util.ksudCmd
-import com.anatdx.yukisu.ui.util.ksudReadLines
 import com.topjohnwu.superuser.CallbackList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 object PartitionManagerHelper {
     private const val TAG = "PartitionManagerHelper"
@@ -15,74 +15,121 @@ object PartitionManagerHelper {
     private fun shellQuote(value: String): String =
         "'${value.replace("'", "'\\''")}'"
 
-    suspend fun getSlotInfo(context: Context): SlotInfo? = withContext(Dispatchers.IO) {
-        try {
-            val lines = ksudReadLines("flash slots")
-            if (lines.isEmpty()) {
-                return@withContext SlotInfo(isAbDevice = false, currentSlot = null, otherSlot = null)
-            }
-            var isAbDevice = true
-            var currentSlot: String? = null
-            var otherSlot: String? = null
-            lines.forEach { line ->
-                when {
-                    "This device is not A/B partitioned" in line -> isAbDevice = false
-                    "Current slot:" in line -> currentSlot = line.substringAfter("Current slot:").trim()
-                    "Other slot:" in line -> otherSlot = line.substringAfter("Other slot:").trim()
-                }
-            }
-            SlotInfo(isAbDevice, currentSlot, otherSlot)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get slot info", e)
-            null
+    private fun runKsudLines(args: String): List<String> {
+        val stdout = ArrayList<String>()
+        val stderr = ArrayList<String>()
+        val result = getRootShell()
+            .newJob()
+            .add(ksudCmd(args))
+            .to(stdout, stderr)
+            .exec()
+        if (!result.isSuccess) {
+            throw IOException(
+                stderr.lastOrNull()
+                    ?: stdout.lastOrNull()
+                    ?: "ksud exited with code ${result.code}"
+            )
         }
+        return stdout.filter { it.isNotBlank() }.map { it.trim() }
+    }
+
+    suspend fun getSlotInfo(context: Context): SlotInfo? = withContext(Dispatchers.IO) {
+        val lines = runKsudLines("flash slots")
+        if (lines.isEmpty()) {
+            return@withContext SlotInfo(isAbDevice = false, currentSlot = null, otherSlot = null)
+        }
+        var isAbDevice = true
+        var currentSlot: String? = null
+        var otherSlot: String? = null
+        lines.forEach { line ->
+            when {
+                "This device is not A/B partitioned" in line -> isAbDevice = false
+                "Current slot:" in line -> currentSlot = line.substringAfter("Current slot:").trim()
+                "Other slot:" in line -> otherSlot = line.substringAfter("Other slot:").trim()
+            }
+        }
+        SlotInfo(isAbDevice, currentSlot, otherSlot)
     }
 
     suspend fun getPartitionList(context: Context, slot: String?, scanAll: Boolean = false): List<PartitionInfo> = withContext(Dispatchers.IO) {
-        try {
-            val args = buildString {
-                append("flash list")
-                if (slot != null) append(" --slot $slot")
-                if (scanAll) append(" --all")
-            }
-            val lines = ksudReadLines(args)
-            val typeRegex = Regex("\\[(.*?),\\s*(\\d+)\\s*bytes\\]")
-            lines.mapNotNull { line ->
-                // Sample line: "  boot                 [logical, 67108864 bytes] [DANGEROUS]"
-                if (line.startsWith("[") || "partitions" in line) return@mapNotNull null
-                val parts = line.split(Regex("\\s+"), limit = 2)
-                if (parts.size < 2) return@mapNotNull null
-                val name = parts[0]
-                val info = parts[1]
-                val typeMatch = typeRegex.find(info) ?: return@mapNotNull null
-                val type = typeMatch.groupValues[1]
-                val size = typeMatch.groupValues[2].toLongOrNull() ?: 0L
-                PartitionInfo(
-                    name = name,
-                    blockDevice = getPartitionBlockDevice(name, slot),
-                    type = type,
-                    size = size,
-                    isLogical = type == "logical",
-                    isDangerous = "[DANGEROUS]" in info,
-                    // userdata/data are excluded from batch backup; logical filtering happens in UI
-                    excludeFromBatch = name == "userdata" || name == "data",
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get partition list", e)
-            emptyList()
+        val args = buildString {
+            append("flash list")
+            if (slot != null) append(" --slot ${shellQuote(slot)}")
+            if (scanAll) append(" --all")
         }
+        parsePartitionList(runKsudLines(args))
     }
 
-    private fun getPartitionBlockDevice(partition: String, slot: String?): String {
-        val args = if (slot != null) "flash info $partition --slot $slot" else "flash info $partition"
-        return ksudReadLines(args)
+    /**
+     * Resolve the block device lazily. Resolving it for every list row used to
+     * launch one extra root command per partition and made "Show all" painfully slow.
+     */
+    suspend fun getPartitionBlockDevice(
+        context: Context,
+        partition: String,
+        slot: String?
+    ): String = withContext(Dispatchers.IO) {
+        val args = buildString {
+            append("flash info ${shellQuote(partition)}")
+            if (slot != null) append(" --slot ${shellQuote(slot)}")
+        }
+        runKsudLines(args)
             .firstOrNull { "Block device:" in it }
             ?.substringAfter("Block device:")
             ?.trim()
             .orEmpty()
     }
-    
+
+    internal fun parsePartitionList(lines: List<String>): List<PartitionInfo> {
+        val typeRegex = Regex("\\[([^,]+),\\s*(\\d+)\\s*bytes\\]")
+        return lines.mapNotNull { rawLine ->
+            // Sample line: "boot                 [logical, 67108864 bytes] [DANGEROUS]"
+            val line = rawLine.trim()
+            if (line.startsWith("[") || line.contains("partitions", ignoreCase = true)) {
+                return@mapNotNull null
+            }
+            val typeMatch = typeRegex.find(line) ?: return@mapNotNull null
+            val name = line.substring(0, typeMatch.range.first).trim()
+            if (name.isEmpty()) return@mapNotNull null
+            val type = typeMatch.groupValues[1].trim()
+            val size = typeMatch.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+            PartitionInfo(
+                name = name,
+                blockDevice = "",
+                type = type,
+                size = size,
+                isLogical = type.equals("logical", ignoreCase = true),
+                isDangerous = "[DANGEROUS]" in line,
+                excludeFromBatch = name == "userdata" || name == "data",
+            )
+        }.distinctBy { it.name }
+    }
+
+    internal suspend fun inspectAk3Package(
+        context: Context,
+        zipPath: String,
+    ): Ak3PackageInfo = withContext(Dispatchers.IO) {
+        val values = runKsudLines("flash ak3-info ${shellQuote(zipPath)}")
+            .mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0) null else {
+                    line.substring(0, separator) to line.substring(separator + 1)
+                }
+            }
+            .toMap()
+        if (values["valid"] != "1") {
+            throw IOException("ksud did not recognize this AnyKernel3 package")
+        }
+        Ak3PackageInfo(
+            kernelName = values["kernel"].orEmpty(),
+            devices = values["devices"]
+                .orEmpty()
+                .split('|')
+                .filter(String::isNotBlank),
+            packageSlotPolicy = values["slot_policy"]?.takeIf(String::isNotBlank),
+        )
+    }
+
     suspend fun backupPartition(
         context: Context,
         partition: String,
@@ -191,7 +238,7 @@ object PartitionManagerHelper {
         try {
             val shell = getRootShell()
             
-            val cmd = ksudCmd("flash map $slot")
+            val cmd = ksudCmd("flash map ${shellQuote(slot)}")
             
             Log.d(TAG, "Executing map command: $cmd")
             
