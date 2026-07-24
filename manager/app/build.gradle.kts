@@ -261,5 +261,6 @@ dependencies {
 
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.ucrop)
+    implementation(libs.yukifb)
 
 }

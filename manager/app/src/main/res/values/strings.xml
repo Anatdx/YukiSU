@@ -513,7 +513,47 @@
     <string name="partition_info_slot">Slot</string>
     <string name="partition_available_operations">Available Operations</string>
     <string name="partition_backup_to_file">Backup to File</string>
+    <string name="partition_edit_ramdisk" tools:ignore="MissingTranslation">Edit Ramdisk</string>
     <string name="partition_flash_image">Flash Image</string>
+    <string name="ramdisk_editor_title" tools:ignore="MissingTranslation">%s Ramdisk</string>
+    <string name="ramdisk_editor_preparing" tools:ignore="MissingTranslation">Backing up the partition and opening its Ramdisk…</string>
+    <string name="ramdisk_editor_import_fallback_name" tools:ignore="MissingTranslation">imported_file</string>
+    <string name="ramdisk_editor_document_open_failed" tools:ignore="MissingTranslation">The selected document cannot be opened</string>
+    <string name="ramdisk_editor_import_failed" tools:ignore="MissingTranslation">Import failed: %s</string>
+    <string name="ramdisk_editor_export_success" tools:ignore="MissingTranslation">Rebuilt image exported</string>
+    <string name="ramdisk_editor_export_failed" tools:ignore="MissingTranslation">Export failed: %s</string>
+    <string name="ramdisk_editor_file_export_success" tools:ignore="MissingTranslation">%s exported</string>
+    <string name="ramdisk_editor_file_export_failed" tools:ignore="MissingTranslation">File export failed: %s</string>
+    <string name="ramdisk_editor_regular_files_only" tools:ignore="MissingTranslation">Only regular files can be opened in the text editor</string>
+    <string name="ramdisk_editor_text_too_large" tools:ignore="MissingTranslation">This file is too large for the text editor</string>
+    <string name="ramdisk_editor_open_failed" tools:ignore="MissingTranslation">Cannot open file: %s</string>
+    <string name="ramdisk_editor_text_save_failed" tools:ignore="MissingTranslation">Cannot save file: %s</string>
+    <string name="ramdisk_editor_export_image" tools:ignore="MissingTranslation">Export rebuilt image</string>
+    <string name="ramdisk_editor_rebuild_success" tools:ignore="MissingTranslation">Boot image rebuilt in app cache</string>
+    <string name="ramdisk_editor_rebuild_failed" tools:ignore="MissingTranslation">Cannot rebuild image: %s</string>
+    <string name="ramdisk_editor_rebuild_image" tools:ignore="MissingTranslation">Rebuild boot image</string>
+    <string name="ramdisk_editor_discard_archive_title" tools:ignore="MissingTranslation">Unsaved changes</string>
+    <string name="ramdisk_editor_discard_archive_message" tools:ignore="MissingTranslation">There are unsaved changes. Are you sure you want to exit?</string>
+    <string name="ramdisk_editor_discard_text_title" tools:ignore="MissingTranslation">Discard text changes?</string>
+    <string name="ramdisk_editor_discard_text_message" tools:ignore="MissingTranslation">Unsaved changes to this file will be lost.</string>
+    <string name="ramdisk_editor_continue_editing" tools:ignore="MissingTranslation">Continue editing</string>
+    <string name="ramdisk_editor_discard" tools:ignore="MissingTranslation">Discard</string>
+    <string name="ramdisk_editor_cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <string name="ramdisk_editor_confirm" tools:ignore="MissingTranslation">Confirm</string>
+    <string name="ramdisk_editor_press_back_again" tools:ignore="MissingTranslation">Press back again to exit</string>
+    <string name="ramdisk_editor_partition_backup_failed" tools:ignore="MissingTranslation">Failed to back up the selected partition</string>
+    <string name="ramdisk_editor_root_name" tools:ignore="MissingTranslation">%s Ramdisk</string>
+    <string name="ramdisk_editor_back" tools:ignore="MissingTranslation">Back</string>
+    <string name="ramdisk_editor_retry" tools:ignore="MissingTranslation">Retry</string>
+    <string name="ramdisk_editor_fragments_title" tools:ignore="MissingTranslation">%s ramdisks</string>
+    <string name="ramdisk_editor_fragments_description" tools:ignore="MissingTranslation">This vendor boot image contains multiple independent ramdisk fragments. Changes to every fragment are kept in the same session and rebuilt together.</string>
+    <string name="ramdisk_editor_fragment_fallback" tools:ignore="MissingTranslation">Ramdisk fragment %d</string>
+    <string name="ramdisk_editor_fragment_summary" tools:ignore="MissingTranslation">%1$s · %2$s · %3$s packed</string>
+    <string name="ramdisk_editor_fragment_board_id" tools:ignore="MissingTranslation">Board ID: %s</string>
+    <string name="ramdisk_editor_fragment_type_none" tools:ignore="MissingTranslation">Unspecified</string>
+    <string name="ramdisk_editor_fragment_type_platform" tools:ignore="MissingTranslation">Platform</string>
+    <string name="ramdisk_editor_fragment_type_recovery" tools:ignore="MissingTranslation">Recovery</string>
+    <string name="ramdisk_editor_fragment_type_dlkm" tools:ignore="MissingTranslation">DLKM</string>
     <string name="partition_dangerous_operation">Dangerous Operation</string>
     <string name="partition_dangerous_operation_warning">⚠️ Dangerous Operation Warning</string>
     <string name="partition_flash_warning">Flashing partition may cause device unable to boot!\n\nAre you sure you want to flash %s partition?</string>
@@ -580,7 +620,7 @@
     <string name="partition_image_size" tools:ignore="MissingTranslation">Image size</string>
     <string name="partition_target" tools:ignore="MissingTranslation">Target partition</string>
     <string name="partition_capacity" tools:ignore="MissingTranslation">Partition capacity</string>
-    <string name="partition_flash_ak3">Flash AnyKernel3 Package</string>
+    <string name="partition_flash_ak3" tools:ignore="MissingTranslation">Flash AnyKernel3 Package</string>
     <string name="partition_ak3_inspecting" tools:ignore="MissingTranslation">Copying and inspecting AnyKernel3 package…</string>
     <string name="partition_ak3_invalid" tools:ignore="MissingTranslation">Invalid AnyKernel3 package: %s</string>
     <string name="partition_ak3_preflight" tools:ignore="MissingTranslation">Review AnyKernel3 flash</string>
@@ -592,8 +632,8 @@
     <string name="partition_ak3_target_slot" tools:ignore="MissingTranslation">Target slot</string>
     <string name="partition_ak3_current_slot" tools:ignore="MissingTranslation">%s (current)</string>
     <string name="partition_ak3_slot_conflict" tools:ignore="MissingTranslation">The selected slot conflicts with the package policy SLOT_SELECT=%s. Choose a compatible slot.</string>
-    <string name="partition_ak3_use_mkbootfs">Use ksud built-in mkbootfs</string>
-    <string name="partition_ak3_use_mkbootfs_summary">Temporarily replace the package\'s mkbootfs for this flash. When disabled, keep the tools and fallback behavior supplied by the AnyKernel3 package.</string>
+    <string name="partition_ak3_use_mkbootfs" tools:ignore="MissingTranslation">Use ksud built-in mkbootfs</string>
+    <string name="partition_ak3_use_mkbootfs_summary" tools:ignore="MissingTranslation">Temporarily replace the package\'s mkbootfs for this flash. When disabled, keep the tools and fallback behavior supplied by the AnyKernel3 package.</string>
     <string name="partition_ak3_trust_warning" tools:ignore="MissingTranslation">AnyKernel3 packages execute their own shell code as root and may write boot-critical partitions. Flash only a package you trust and verify the selected slot.</string>
     <string name="partition_ak3_flash_now" tools:ignore="MissingTranslation">Flash package</string>
     
