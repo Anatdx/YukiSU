@@ -1,6 +1,7 @@
 #include "cli.hpp"
 #include "assets.hpp"
 #include "boot/boot_patch.hpp"
+#include "boot/ramdisk_editor.hpp"
 #include "core/feature.hpp"
 #include "core/hide_bootloader.hpp"
 #include "core/ksucalls.hpp"
@@ -160,6 +161,8 @@ void print_usage() {
     printf("  boot-patch     Patch boot image\n");
     printf("  boot-restore   Restore boot image\n");
     printf("  boot-info      Show boot information\n");
+    printf("  ramdisk-editor Run a persistent ramdisk CPIO editor session\n");
+    printf("  boot-ramdisk-editor Edit a boot/init_boot ramdisk without unpacked shards\n");
     printf("  flash          Flash partition images\n");
     printf("  umount         Manage umount paths\n");
     printf("  kernel         Kernel interface\n");
@@ -566,6 +569,34 @@ int cmd_boot_info(const std::vector<std::string>& args) {
 
     printf("Unknown boot-info subcommand: %s\n", subcmd.c_str());
     return 1;
+}
+
+int cmd_ramdisk_editor(const std::vector<std::string>& args, bool boot_image) {
+    const std::size_t expected_args = boot_image ? 2U : 1U;
+    if (args.size() != expected_args) {
+        (void)fprintf(stderr,
+                      boot_image
+                          ? "USAGE: ksud boot-ramdisk-editor <SOURCE.IMG> <OUTPUT.IMG>\n"
+                          : "USAGE: ksud ramdisk-editor <RAMDISK.CPIO>\n");
+        return 1;
+    }
+
+    if (fflush(stdout) != 0) {
+        return 1;
+    }
+    const int protocol_output = dup(STDOUT_FILENO);
+    if (protocol_output < 0 || dup2(STDERR_FILENO, STDOUT_FILENO) < 0) {
+        if (protocol_output >= 0) {
+            close(protocol_output);
+        }
+        return 1;
+    }
+    const int result = boot_image
+                           ? run_boot_ramdisk_editor(args[0], args[1], STDIN_FILENO,
+                                                     protocol_output)
+                           : run_ramdisk_editor(args[0], STDIN_FILENO, protocol_output);
+    close(protocol_output);
+    return result;
 }
 
 int cmd_flash_new(const std::vector<std::string>& args) {
@@ -1009,6 +1040,10 @@ int cli_run(int argc, char** argv) {
         return boot_restore(args);
     } else if (cmd == "boot-info") {
         return cmd_boot_info(args);
+    } else if (cmd == "ramdisk-editor") {
+        return cmd_ramdisk_editor(args, false);
+    } else if (cmd == "boot-ramdisk-editor") {
+        return cmd_ramdisk_editor(args, true);
     } else if (cmd == "umount") {
         return cmd_umount(args);
     } else if (cmd == "kernel") {

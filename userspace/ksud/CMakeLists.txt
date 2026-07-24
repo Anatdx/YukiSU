@@ -196,6 +196,7 @@ set(MAGISKTOOLS_ALONE_DIR ${CMAKE_SOURCE_DIR}/third_party)
 set(MAGISKBOOT_ALONE_DIR ${MAGISKTOOLS_ALONE_DIR}/MagiskbootAlone)
 set(MAGISKBOOT_SOURCES
     ${MAGISKBOOT_ALONE_DIR}/src/base_host.cpp
+    ${MAGISKBOOT_ALONE_DIR}/src/boot_ramdisk.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/bootimg.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/boot_crypto.cpp
     ${MAGISKBOOT_ALONE_DIR}/src/cpio.cpp
@@ -206,7 +207,6 @@ set(MAGISKBOOT_SOURCES
     ${LZ4_LIB_DIR}/xxhash.c
 )
 if(EXISTS ${MAGISKBOOT_ALONE_DIR}/src/magiskboot_main.cpp)
-    set_source_files_properties(${MAGISKBOOT_SOURCES} PROPERTIES CXX_STANDARD 20)
     include_directories(${MAGISKBOOT_ALONE_DIR}/src ${LZ4_LIB_DIR})
     set(MAGISKBOOT_ALONE_AVAILABLE 1)
     message(STATUS "MagiskbootAlone: building magiskboot into ksud (multi-call)")
@@ -260,6 +260,7 @@ set(KSUD_OUR_SOURCES
     src/module/module_config.cpp
     src/module/metamodule.cpp
     src/boot/boot_patch.cpp
+    src/boot/ramdisk_editor.cpp
     src/boot/tools.cpp
     src/boot/apk_sign.cpp
     src/profile/profile.cpp
@@ -378,7 +379,7 @@ add_library(ksud_thirdparty_objs OBJECT ${KSUD_THIRDPARTY_SOURCES})
 target_include_directories(ksud_thirdparty_objs PRIVATE ${KSUD_INCLUDE_DIRS})
 target_compile_definitions(ksud_thirdparty_objs PRIVATE ${KSUD_DEFINES})
 if(MAGISKBOOT_ALONE_AVAILABLE)
-    target_compile_features(ksud_thirdparty_objs PUBLIC cxx_std_20)
+    target_compile_features(ksud_thirdparty_objs PUBLIC cxx_std_17)
 endif()
 
 # Executable: link object libs
