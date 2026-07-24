@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
@@ -112,6 +113,7 @@ import com.anatdx.yukisu.ui.util.LocalSnackbarHost
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.RamdiskEditorScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -658,10 +660,19 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
     }
 
     selectedPartition?.let { partition ->
+        val partitionName = partition.name.removeSuffix("_a").removeSuffix("_b")
+        val hasInitBoot = allPartitionList.any {
+            it.name.removeSuffix("_a").removeSuffix("_b") == "init_boot"
+        }
         PartitionActionDialog(
             partition = partition,
             targetSlot = selectedSlot,
             enabled = !isBusy,
+            showRamdiskEditor = when (partitionName) {
+                "boot" -> !hasInitBoot
+                "init_boot", "vendor_boot" -> true
+                else -> false
+            },
             onDismiss = { selectedPartition = null },
             onBackup = {
                 selectedPartition = null
@@ -687,6 +698,15 @@ fun PartitionManagerScreen(navigator: DestinationsNavigator) {
             onFlashAk3 = {
                 selectedPartition = null
                 ak3PickerLauncher.launch("application/zip")
+            },
+            onEditRamdisk = {
+                selectedPartition = null
+                navigator.navigate(
+                    RamdiskEditorScreenDestination(
+                        partitionName = partition.name,
+                        targetSlot = selectedSlot,
+                    )
+                )
             },
             onFlash = { resolvedBlockDevice ->
                 selectedPartition = null
@@ -1500,8 +1520,10 @@ private fun PartitionActionDialog(
     partition: PartitionInfo,
     targetSlot: String?,
     enabled: Boolean,
+    showRamdiskEditor: Boolean,
     onDismiss: () -> Unit,
     onBackup: () -> Unit,
+    onEditRamdisk: () -> Unit,
     onFlashAk3: () -> Unit,
     onFlash: (resolvedBlockDevice: String) -> Unit,
 ) {
@@ -1602,6 +1624,17 @@ private fun PartitionActionDialog(
                     YukiIcon(Icons.Filled.Upload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.partition_backup_to_file))
+                }
+                if (showRamdiskEditor) {
+                    TextButton(
+                        onClick = onEditRamdisk,
+                        enabled = enabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        YukiIcon(Icons.Filled.Edit, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.partition_edit_ramdisk))
+                    }
                 }
                 if (partition.name.removeSuffix("_a").removeSuffix("_b") == "boot") {
                     TextButton(
