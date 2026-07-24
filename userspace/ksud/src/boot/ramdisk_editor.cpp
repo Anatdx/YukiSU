@@ -22,7 +22,7 @@ namespace ksud {
 namespace {
 
 constexpr std::array<std::uint8_t, 4> kProtocolMagic = {'Y', 'R', 'C', 'P'};
-constexpr std::uint16_t kProtocolVersion = 1;
+constexpr std::uint16_t kProtocolVersion = 2;
 constexpr std::uint16_t kResponseFlag = 0x8000U;
 constexpr std::size_t kFrameHeaderSize = 20;
 constexpr std::size_t kMaximumControlPayload = std::size_t{16} * 1024U * 1024U;
@@ -42,11 +42,16 @@ constexpr std::uint32_t kCapabilityUpdateMetadata = 1U << 9U;
 constexpr std::uint32_t kCapabilityAtomicDump = 1U << 10U;
 constexpr std::uint32_t kCapabilityRangedRead = 1U << 11U;
 constexpr std::uint32_t kCapabilityImplicitDirectories = 1U << 12U;
+constexpr std::uint32_t kCapabilityMultipleRamdisks = 1U << 13U;
 constexpr std::uint32_t kCapabilities =
     kCapabilityRead | kCapabilityReplace | kCapabilityCreateFile | kCapabilityCreateDirectory |
     kCapabilityCreateSymbolicLink | kCapabilityCreateHardLink | kCapabilityCopy | kCapabilityMove |
     kCapabilityRemove | kCapabilityUpdateMetadata | kCapabilityAtomicDump | kCapabilityRangedRead |
-    kCapabilityImplicitDirectories;
+    kCapabilityImplicitDirectories | kCapabilityMultipleRamdisks;
+constexpr unsigned kDocumentIdShift = 48U;
+constexpr std::uint64_t kLocalNodeIdMask = (std::uint64_t{1} << kDocumentIdShift) - 1U;
+constexpr std::size_t kMaximumDocumentCount =
+    std::numeric_limits<std::uint16_t>::max() - 1U;
 
 enum class Opcode : std::uint8_t {
     HELLO = 1,
@@ -64,6 +69,7 @@ enum class Opcode : std::uint8_t {
     UPDATE_METADATA = 13,
     DUMP = 14,
     CLOSE = 15,
+    LIST_RAMDISKS = 16,
 };
 
 enum class Status : std::uint8_t {
@@ -90,6 +96,60 @@ struct FrameHeader {
 };
 
 using DumpAction = std::function<bool()>;
+
+struct SessionDocument {
+    CpioDocument* document = nullptr;
+    std::string name;
+    std::uint32_t vendor_type = 0;
+    std::array<std::uint32_t, 16> board_id{};
+    std::uint64_t packed_size = 0;
+    FileFormat compression = FileFormat::UNKNOWN;
+    bool is_vendor = false;
+};
+
+struct ResolvedNode {
+    CpioDocument* document = nullptr;
+    std::size_t document_index = 0;
+    CpioNodeId local_id = kCpioRootNodeId;
+};
+
+std::optional<std::uint64_t> encode_node_id(std::size_t document_index, CpioNodeId local_id) {
+    if (document_index >= kMaximumDocumentCount || local_id > kLocalNodeIdMask) {
+        return std::nullopt;
+    }
+    return (static_cast<std::uint64_t>(document_index + 1U) << kDocumentIdShift) | local_id;
+}
+
+std::optional<ResolvedNode> resolve_node(std::vector<SessionDocument>& documents,
+                                         std::uint64_t encoded_id) {
+    const std::uint64_t encoded_document = encoded_id >> kDocumentIdShift;
+    if (encoded_document == 0 || encoded_document > documents.size()) {
+        return std::nullopt;
+    }
+    const std::size_t index = static_cast<std::size_t>(encoded_document - 1U);
+    return ResolvedNode{documents[index].document, index, encoded_id & kLocalNodeIdMask};
+}
+
+const char* compression_name(FileFormat format) {
+    switch (format) {
+    case FileFormat::GZIP:
+        return "gzip";
+    case FileFormat::ZOPFLI:
+        return "zopfli";
+    case FileFormat::XZ:
+        return "xz";
+    case FileFormat::LZ4:
+        return "lz4";
+    case FileFormat::LZ4_LEGACY:
+        return "lz4_legacy";
+    case FileFormat::LZ4_LG:
+        return "lz4_lg";
+    case FileFormat::UNKNOWN:
+        return "none";
+    default:
+        return "unsupported";
+    }
+}
 
 bool read_all(int fd, void* output, std::size_t size) {
     auto* bytes = static_cast<std::uint8_t*>(output);
@@ -293,6 +353,16 @@ void append_u64(std::vector<std::uint8_t>& output, std::uint64_t value) {
     encode_u64(output.data() + offset, value);
 }
 
+bool append_node_id(std::vector<std::uint8_t>& output, std::size_t document_index,
+                    CpioNodeId local_id) {
+    const auto encoded_id = encode_node_id(document_index, local_id);
+    if (!encoded_id) {
+        return false;
+    }
+    append_u64(output, *encoded_id);
+    return true;
+}
+
 bool append_string(std::vector<std::uint8_t>& output, const std::string& value) {
     if (value.size() > std::numeric_limits<std::uint32_t>::max()) {
         return false;
@@ -311,9 +381,15 @@ bool append_optional_string(std::vector<std::uint8_t>& output,
     return append_string(output, *value);
 }
 
-bool append_node(std::vector<std::uint8_t>& output, const CpioNodeInfo& node) {
-    append_u64(output, node.id);
-    append_u64(output, node.parent_id);
+bool append_node(std::vector<std::uint8_t>& output, const CpioNodeInfo& node,
+                 std::size_t document_index) {
+    const auto id = encode_node_id(document_index, node.id);
+    const auto parent_id = encode_node_id(document_index, node.parent_id);
+    if (!id || !parent_id) {
+        return false;
+    }
+    append_u64(output, *id);
+    append_u64(output, *parent_id);
     append_u64(output, node.size);
     append_u32(output, node.ino);
     append_u32(output, node.mode);
@@ -359,16 +435,20 @@ bool send_invalid_response(PayloadReader& reader, int output_fd, const FrameHead
     return reader.drain() && send_response(output_fd, request, Status::INVALID_REQUEST);
 }
 
-bool handle_read(CpioDocument& document, PayloadReader& reader, int output_fd,
+bool handle_read(std::vector<SessionDocument>& documents, PayloadReader& reader, int output_fd,
                  const FrameHeader& request) {
-    std::uint64_t id = 0;
+    std::uint64_t encoded_id = 0;
     std::uint64_t offset = 0;
     std::uint64_t requested_length = 0;
-    if (!reader.read_u64(id) || !reader.read_u64(offset) || !reader.read_u64(requested_length) ||
-        !require_empty(reader)) {
+    if (!reader.read_u64(encoded_id) || !reader.read_u64(offset) ||
+        !reader.read_u64(requested_length) || !require_empty(reader)) {
         return send_invalid_response(reader, output_fd, request);
     }
-    const auto node = document.stat(id);
+    const auto resolved = resolve_node(documents, encoded_id);
+    if (!resolved) {
+        return send_response(output_fd, request, Status::NOT_FOUND);
+    }
+    const auto node = resolved->document->stat(resolved->local_id);
     if (!node) {
         return send_response(output_fd, request, Status::NOT_FOUND);
     }
@@ -385,17 +465,18 @@ bool handle_read(CpioDocument& document, PayloadReader& reader, int output_fd,
     if (!write_all(output_fd, status_bytes.data(), status_bytes.size())) {
         return false;
     }
-    return document.read_content(id, offset, length,
-                                 [&](const std::uint8_t* data, std::size_t size) {
-                                     return write_all(output_fd, data, size);
-                                 });
+    return resolved->document->read_content(
+        resolved->local_id, offset, length, [&](const std::uint8_t* data, std::size_t size) {
+            return write_all(output_fd, data, size);
+        });
 }
 
-bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool& dirty,
+bool handle_request(std::vector<SessionDocument>& documents, const DumpAction& dump_action,
+                    bool& dirty,
                     bool& should_close, PayloadReader& reader, int output_fd,
                     const FrameHeader& request) {
     if (request.opcode < static_cast<std::uint16_t>(Opcode::HELLO) ||
-        request.opcode > static_cast<std::uint16_t>(Opcode::CLOSE)) {
+        request.opcode > static_cast<std::uint16_t>(Opcode::LIST_RAMDISKS)) {
         return send_invalid_response(reader, output_fd, request);
     }
     const auto opcode = static_cast<Opcode>(request.opcode);
@@ -406,8 +487,13 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
         if (!require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        if (documents.empty()) {
+            return send_response(output_fd, request, Status::OPERATION_FAILED);
+        }
         append_u32(body, kProtocolVersion);
-        append_u64(body, kCpioRootNodeId);
+        if (!append_node_id(body, 0, kCpioRootNodeId)) {
+            return send_response(output_fd, request, Status::OPERATION_FAILED);
+        }
         append_u64(body, kCpioDefaultMaxContentSize);
         append_u64(body, kCpioMaxEntryCount);
         append_u32(body, kCapabilities);
@@ -419,11 +505,15 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
         if (!reader.read_u64(id) || !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
-        const auto node = document.stat(id);
+        const auto resolved = resolve_node(documents, id);
+        if (!resolved) {
+            return send_response(output_fd, request, Status::NOT_FOUND);
+        }
+        const auto node = resolved->document->stat(resolved->local_id);
         if (!node) {
             return send_response(output_fd, request, Status::NOT_FOUND);
         }
-        if (!append_node(body, *node)) {
+        if (!append_node(body, *node, resolved->document_index)) {
             return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, Status::OK, body);
@@ -434,17 +524,21 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
         if (!reader.read_u64(id) || !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
-        const auto directory = document.stat(id);
+        const auto resolved = resolve_node(documents, id);
+        if (!resolved) {
+            return send_response(output_fd, request, Status::NOT_FOUND);
+        }
+        const auto directory = resolved->document->stat(resolved->local_id);
         if (!directory) {
             return send_response(output_fd, request, Status::NOT_FOUND);
         }
         if ((directory->mode & S_IFMT) != S_IFDIR) {
             return send_invalid_response(reader, output_fd, request);
         }
-        const auto entries = document.list(id);
+        const auto entries = resolved->document->list(resolved->local_id);
         append_u32(body, static_cast<std::uint32_t>(entries.size()));
         for (const auto& entry : entries) {
-            if (!append_node(body, entry)) {
+            if (!append_node(body, entry, resolved->document_index)) {
                 return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
             }
         }
@@ -452,15 +546,17 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
     }
 
     case Opcode::READ:
-        return handle_read(document, reader, output_fd, request);
+        return handle_read(documents, reader, output_fd, request);
 
     case Opcode::REPLACE: {
         std::uint64_t id = 0;
         if (!reader.read_u64(id)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto resolved = resolve_node(documents, id);
         const bool success =
-            document.replace_content(id, [&](std::uint8_t* output, std::size_t capacity) {
+            resolved && resolved->document->replace_content(
+                            resolved->local_id, [&](std::uint8_t* output, std::size_t capacity) {
                 return reader.read_some(output, capacity);
             });
         if (!reader.drain()) {
@@ -480,19 +576,22 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             !reader.read_u32(gid) || !reader.read_string(name)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto parent = resolve_node(documents, parent_id);
         CpioNodeId created_id = kCpioRootNodeId;
-        const bool success = document.create_file(
-            parent_id, name, permissions, uid, gid,
-            [&](std::uint8_t* output, std::size_t capacity) {
-                return reader.read_some(output, capacity);
-            },
-            &created_id);
+        const bool success =
+            parent &&
+            parent->document->create_file(
+                parent->local_id, name, permissions, uid, gid,
+                [&](std::uint8_t* output, std::size_t capacity) {
+                    return reader.read_some(output, capacity);
+                },
+                &created_id);
         if (!reader.drain()) {
             return false;
         }
         dirty = dirty || success;
-        if (success) {
-            append_u64(body, created_id);
+        if (success && !append_node_id(body, parent->document_index, created_id)) {
+            return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, mutation_status(success), body);
     }
@@ -507,12 +606,14 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             !reader.read_u32(gid) || !reader.read_string(name) || !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto parent = resolve_node(documents, parent_id);
         CpioNodeId created_id = kCpioRootNodeId;
         const bool success =
-            document.create_directory(parent_id, name, permissions, uid, gid, &created_id);
+            parent && parent->document->create_directory(parent->local_id, name, permissions, uid,
+                                                         gid, &created_id);
         dirty = dirty || success;
-        if (success) {
-            append_u64(body, created_id);
+        if (success && !append_node_id(body, parent->document_index, created_id)) {
+            return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, mutation_status(success), body);
     }
@@ -527,12 +628,14 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             !reader.read_string(name) || !reader.read_string(target) || !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto parent = resolve_node(documents, parent_id);
         CpioNodeId created_id = kCpioRootNodeId;
         const bool success =
-            document.create_symbolic_link(parent_id, name, target, uid, gid, &created_id);
+            parent && parent->document->create_symbolic_link(parent->local_id, name, target, uid,
+                                                             gid, &created_id);
         dirty = dirty || success;
-        if (success) {
-            append_u64(body, created_id);
+        if (success && !append_node_id(body, parent->document_index, created_id)) {
+            return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, mutation_status(success), body);
     }
@@ -545,11 +648,16 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             !reader.read_string(name) || !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto parent = resolve_node(documents, parent_id);
+        const auto target = resolve_node(documents, target_id);
         CpioNodeId created_id = kCpioRootNodeId;
-        const bool success = document.create_hard_link(parent_id, name, target_id, &created_id);
+        const bool success =
+            parent && target && parent->document_index == target->document_index &&
+            parent->document->create_hard_link(parent->local_id, name, target->local_id,
+                                               &created_id);
         dirty = dirty || success;
-        if (success) {
-            append_u64(body, created_id);
+        if (success && !append_node_id(body, parent->document_index, created_id)) {
+            return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, mutation_status(success), body);
     }
@@ -563,13 +671,18 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             !require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
+        const auto source = resolve_node(documents, id);
+        const auto destination = resolve_node(documents, destination_id);
         CpioNodeId created_id = kCpioRootNodeId;
-        const bool success = opcode == Opcode::COPY
-                                 ? document.copy(id, destination_id, name, &created_id)
-                                 : document.move(id, destination_id, name);
+        const bool success =
+            source && destination && source->document_index == destination->document_index &&
+            (opcode == Opcode::COPY
+                 ? source->document->copy(source->local_id, destination->local_id, name, &created_id)
+                 : source->document->move(source->local_id, destination->local_id, name));
         dirty = dirty || success;
-        if (success && opcode == Opcode::COPY) {
-            append_u64(body, created_id);
+        if (success && opcode == Opcode::COPY &&
+            !append_node_id(body, source->document_index, created_id)) {
+            return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
         }
         return send_response(output_fd, request, mutation_status(success), body);
     }
@@ -581,7 +694,9 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
             recursive > 1) {
             return send_invalid_response(reader, output_fd, request);
         }
-        const bool success = document.remove(id, recursive != 0);
+        const auto resolved = resolve_node(documents, id);
+        const bool success =
+            resolved && resolved->document->remove(resolved->local_id, recursive != 0);
         dirty = dirty || success;
         return send_response(output_fd, request, mutation_status(success));
     }
@@ -621,7 +736,9 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
         if (!require_empty(reader)) {
             return send_invalid_response(reader, output_fd, request);
         }
-        const bool success = document.update_metadata(id, patch);
+        const auto resolved = resolve_node(documents, id);
+        const bool success =
+            resolved && resolved->document->update_metadata(resolved->local_id, patch);
         dirty = dirty || success;
         return send_response(output_fd, request, mutation_status(success));
     }
@@ -643,13 +760,47 @@ bool handle_request(CpioDocument& document, const DumpAction& dump_action, bool&
         }
         should_close = true;
         return send_response(output_fd, request, Status::OK);
+
+    case Opcode::LIST_RAMDISKS:
+        if (!require_empty(reader)) {
+            return send_invalid_response(reader, output_fd, request);
+        }
+        append_u32(body, static_cast<std::uint32_t>(documents.size()));
+        for (std::size_t index = 0; index < documents.size(); ++index) {
+            const auto& ramdisk = documents[index];
+            const auto root_id = encode_node_id(index, kCpioRootNodeId);
+            if (!root_id) {
+                return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
+            }
+            append_u32(body, static_cast<std::uint32_t>(index));
+            append_u64(body, *root_id);
+            append_u64(body, ramdisk.packed_size);
+            append_u32(body, ramdisk.vendor_type);
+            append_u8(body, ramdisk.is_vendor ? 1U : 0U);
+            if (!append_string(body, ramdisk.name) ||
+                !append_string(body, compression_name(ramdisk.compression))) {
+                return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
+            }
+            for (const std::uint32_t value : ramdisk.board_id) {
+                append_u32(body, value);
+            }
+            if (body.size() > kMaximumControlPayload) {
+                return send_response(output_fd, request, Status::LIMIT_EXCEEDED);
+            }
+        }
+        return send_response(output_fd, request, Status::OK, body);
     }
 
     return send_invalid_response(reader, output_fd, request);
 }
 
-int run_document_session(CpioDocument& document, const DumpAction& dump_action, int input_fd,
-                         int output_fd) {
+int run_document_session(std::vector<SessionDocument> documents, const DumpAction& dump_action,
+                         int input_fd, int output_fd) {
+    if (documents.empty() || documents.size() > kMaximumDocumentCount ||
+        std::any_of(documents.begin(), documents.end(),
+                    [](const SessionDocument& item) { return item.document == nullptr; })) {
+        return 1;
+    }
     bool dirty = false;
     bool should_close = false;
     while (!should_close) {
@@ -679,8 +830,8 @@ int run_document_session(CpioDocument& document, const DumpAction& dump_action, 
         }
 
         PayloadReader reader(input_fd, request.payload_size);
-        const bool response_sent =
-            handle_request(document, dump_action, dirty, should_close, reader, output_fd, request);
+        const bool response_sent = handle_request(documents, dump_action, dirty, should_close,
+                                                  reader, output_fd, request);
         if (!reader.drain() || !response_sent) {
             return 1;
         }
@@ -695,9 +846,12 @@ int run_ramdisk_editor(const std::string& archive_path, int input_fd, int output
     if (!document.load(archive_path)) {
         return 1;
     }
+    std::vector<SessionDocument> documents = {
+        SessionDocument{&document, "ramdisk", 0, {}, 0, FileFormat::UNKNOWN, false},
+    };
     return run_document_session(
-        document, [&document, &archive_path]() { return document.dump(archive_path); }, input_fd,
-        output_fd);
+        std::move(documents), [&document, &archive_path]() { return document.dump(archive_path); },
+        input_fd, output_fd);
 }
 
 int run_boot_ramdisk_editor(const std::string& source_image_path,
@@ -707,9 +861,18 @@ int run_boot_ramdisk_editor(const std::string& source_image_path,
         LOGE("Failed to open boot ramdisk: %s\n", image.last_error().c_str());
         return 1;
     }
+    std::vector<SessionDocument> documents;
+    documents.reserve(image.ramdisk_count());
+    for (std::size_t index = 0; index < image.ramdisk_count(); ++index) {
+        const auto& info = image.ramdisk_info(index);
+        documents.push_back(SessionDocument{&image.ramdisk(index), info.name, info.vendor_type,
+                                            info.board_id, info.packed_size, info.compression,
+                                            info.is_vendor});
+    }
     return run_document_session(
-        image.ramdisk(), [&image, &output_image_path]() { return image.dump(output_image_path); },
-        input_fd, output_fd);
+        std::move(documents),
+        [&image, &output_image_path]() { return image.dump(output_image_path); }, input_fd,
+        output_fd);
 }
 
 }  // namespace ksud
