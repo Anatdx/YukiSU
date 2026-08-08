@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -96,7 +96,7 @@ jobs:
         fi
 
     - name: Upload kernelsu.ko artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.kmi }}-lkm
         path: |

@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -153,20 +153,20 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Build with Gradle
         if: ${{ steps.determine.outputs.SKIP != 'true' }}
         run: ./gradlew assembleRelease --build-cache --no-daemon -PABI=arm64-v8a
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Manager-gradle-arm64-v8a
           path: manager/app/build/outputs/renamed_apk/release/
 
       - name: Upload mappings
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: "${{ steps.determine.outputs.title }}-mappings-arm64-v8a"
           path: "manager/app/build/outputs/mapping/release/"
@@ -177,7 +177,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -219,16 +219,16 @@ jobs:
           exit 1
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Download manager APK
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: Manager-gradle-arm64-v8a
           path: artifacts/manager-gradle
 
       - name: Download ksud
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ksud-aarch64-linux-android
           path: artifacts/ksud-aarch64-linux-android
@@ -318,7 +318,7 @@ jobs:
 
       - name: Upload build artifact
         if: steps.gpg_check.outputs.available == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Manager-arm64-v8a
           path: dist/
@@ -383,7 +383,7 @@ jobs:
 
       - name: Upload CI update metadata
         if: steps.gpg_check.outputs.available == 'true' && github.ref_name == 'main'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Manager-update-metadata
           path: update-metadata/
@@ -438,7 +438,7 @@ jobs:
 
       - name: Deploy CI update payload to Cloudflare Pages
         if: steps.gpg_check.outputs.available == 'true' && github.ref_name == 'main'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
