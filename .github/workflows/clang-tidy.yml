@@ -2,7 +2,7 @@ name: Userspace Clang-Tidy
 
 on:
   push:
-    branches: [ "main", "dev", "feat/yukizygisk" ]
+    branches: [ "main", "dev", "feat/*" ]
     paths:
       - '.clang-tidy'
       - '.github/workflows/clang-tidy.yml'

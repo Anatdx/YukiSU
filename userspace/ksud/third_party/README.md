@@ -38,6 +38,13 @@ ksud uses **git submodules** in this directory (`userspace/ksud/third_party/`) a
 
 ## FetchContent (auto-downloaded)
 
+### Lua
+
+- **License**: MIT (see `lua.LICENSE`)
+- **Source**: https://www.lua.org/ftp/
+- **Version**: 5.5.1 (managed by FetchContent in CMakeLists.txt)
+- **Purpose**: Embedded runtime and native-module ABI for ksud plugins
+
 ### PicoSHA2
 
 - **License**: MIT

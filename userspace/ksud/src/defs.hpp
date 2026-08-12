@@ -106,6 +106,15 @@ constexpr const char* METAMODULE_MOUNT_SCRIPT = "metamount.sh";
 constexpr const char* METAMODULE_METAINSTALL_SCRIPT = "metainstall.sh";
 constexpr const char* METAMODULE_METAUNINSTALL_SCRIPT = "metauninstall.sh";
 
+// Plugin system
+constexpr const char* PLUGIN_DIR = "/data/adb/plugins/";
+constexpr const char* PLUGIN_STAGE_DIR = "/data/adb/ksu/plugin_stage/";
+constexpr const char* PLUGIN_LOCK_DIR = "/data/adb/ksu/plugin_locks/";
+constexpr const char* PLUGIN_MANIFEST = "plugin.json";
+constexpr const char* PLUGIN_ENTRY = "main.lua";
+constexpr const char* PLUGIN_OUTPUT_LOG = "last_output.log";
+constexpr const char* PLUGIN_CONFIG_FILE = "config.json";
+
 // Backup
 constexpr const char* KSU_BACKUP_DIR = "/data/adb/ksu/";
 constexpr const char* KSU_BACKUP_FILE_PREFIX = "ksu_backup_";

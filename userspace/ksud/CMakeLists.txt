@@ -121,6 +121,79 @@ add_compile_definitions(
 # Fetch third-party dependencies
 include(FetchContent)
 
+# Embed upstream Lua 5.5 and expose its native module ABI.
+FetchContent_Declare(
+    lua
+    URL https://www.lua.org/ftp/lua-5.5.1.tar.gz
+    URL_HASH SHA256=1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(lua)
+
+# Lua uses C++ exceptions when compiled as C++, but its public API must retain C linkage.
+set(LUA_CONFIG_HEADER "${lua_SOURCE_DIR}/src/luaconf.h")
+file(READ "${LUA_CONFIG_HEADER}" LUA_CONFIG_CONTENT)
+string(FIND "${LUA_CONFIG_CONTENT}" "YUKISU_LUA_CXX_ABI" LUA_CONFIG_PATCHED)
+if(LUA_CONFIG_PATCHED EQUAL -1)
+    set(LUA_CONFIG_ORIGINAL "${LUA_CONFIG_CONTENT}")
+    set(LUA_CXX_API_DECL
+        "#if defined(__cplusplus)\n#define LUA_API extern \"C\" /* YUKISU_LUA_CXX_ABI */\n#else\n#define LUA_API extern\n#endif"
+    )
+    string(REGEX REPLACE "#define LUA_API[ \t]+extern" "${LUA_CXX_API_DECL}"
+        LUA_CONFIG_CONTENT "${LUA_CONFIG_CONTENT}")
+    if(LUA_CONFIG_CONTENT STREQUAL LUA_CONFIG_ORIGINAL)
+        message(FATAL_ERROR "Unable to preserve the Lua C ABI")
+    endif()
+    file(WRITE "${LUA_CONFIG_HEADER}" "${LUA_CONFIG_CONTENT}")
+endif()
+
+set(LUA_SOURCES
+    ${lua_SOURCE_DIR}/src/lapi.c
+    ${lua_SOURCE_DIR}/src/lcode.c
+    ${lua_SOURCE_DIR}/src/lctype.c
+    ${lua_SOURCE_DIR}/src/ldebug.c
+    ${lua_SOURCE_DIR}/src/ldo.c
+    ${lua_SOURCE_DIR}/src/ldump.c
+    ${lua_SOURCE_DIR}/src/lfunc.c
+    ${lua_SOURCE_DIR}/src/lgc.c
+    ${lua_SOURCE_DIR}/src/llex.c
+    ${lua_SOURCE_DIR}/src/lmem.c
+    ${lua_SOURCE_DIR}/src/lobject.c
+    ${lua_SOURCE_DIR}/src/lopcodes.c
+    ${lua_SOURCE_DIR}/src/lparser.c
+    ${lua_SOURCE_DIR}/src/lstate.c
+    ${lua_SOURCE_DIR}/src/lstring.c
+    ${lua_SOURCE_DIR}/src/ltable.c
+    ${lua_SOURCE_DIR}/src/ltm.c
+    ${lua_SOURCE_DIR}/src/lundump.c
+    ${lua_SOURCE_DIR}/src/lvm.c
+    ${lua_SOURCE_DIR}/src/lzio.c
+    ${lua_SOURCE_DIR}/src/lauxlib.c
+    ${lua_SOURCE_DIR}/src/lbaselib.c
+    ${lua_SOURCE_DIR}/src/lcorolib.c
+    ${lua_SOURCE_DIR}/src/ldblib.c
+    ${lua_SOURCE_DIR}/src/liolib.c
+    ${lua_SOURCE_DIR}/src/lmathlib.c
+    ${lua_SOURCE_DIR}/src/loslib.c
+    ${lua_SOURCE_DIR}/src/lstrlib.c
+    ${lua_SOURCE_DIR}/src/ltablib.c
+    ${lua_SOURCE_DIR}/src/lutf8lib.c
+    ${lua_SOURCE_DIR}/src/loadlib.c
+    ${lua_SOURCE_DIR}/src/linit.c
+)
+
+set_source_files_properties(${LUA_SOURCES} PROPERTIES LANGUAGE CXX)
+add_library(lua OBJECT ${LUA_SOURCES})
+target_include_directories(lua PUBLIC ${lua_SOURCE_DIR}/src)
+target_compile_definitions(lua PRIVATE LUA_USE_POSIX LUA_USE_DLOPEN)
+target_compile_options(lua PRIVATE -fvisibility=default -Wno-deprecated)
+if(ANDROID)
+    target_link_libraries(lua PRIVATE dl m)
+endif()
+if(NOT ANDROID)
+    target_link_libraries(lua PRIVATE pthread m)
+endif()
+
 # mbedTLS - SHA1/SHA256 + X.509/RSA/ECDSA (for MagiskbootAlone AVB and flash_partition SHA256)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
@@ -302,6 +375,8 @@ set(KSUD_OUR_SOURCES
     src/core/hide_bootloader.cpp
     src/flash/flash_ak3.cpp
     src/flash/flash_partition.cpp
+    src/plugin/lua_engine.cpp
+    src/plugin/plugin.cpp
 )
 
 # Third-party sources (no clang-tidy)
@@ -324,6 +399,7 @@ get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
 # Include directories (for both object libs and ksud)
 set(KSUD_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src
+    ${lua_SOURCE_DIR}/src
     ${mbedtls_SOURCE_DIR}/include
     ${miniz_SOURCE_DIR}
     ${miniz_BINARY_DIR}
@@ -409,7 +485,14 @@ if(NOT ANDROID)
     target_link_libraries(ksud PRIVATE pthread)
 endif()
 
-target_link_libraries(ksud PRIVATE z miniz mbedx509 mbedcrypto dl)
+target_link_libraries(ksud PRIVATE lua z miniz mbedx509 mbedcrypto dl m)
+if(ANDROID)
+    target_link_options(ksud PRIVATE
+        "-Wl,--export-dynamic-symbol=lua_*"
+        "-Wl,--export-dynamic-symbol=luaL_*"
+        "-Wl,--export-dynamic-symbol=luaopen_*"
+    )
+endif()
 
 # ============================================================================
 # Post-build Size Compression

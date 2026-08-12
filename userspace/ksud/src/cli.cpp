@@ -20,6 +20,7 @@
 #include "magisk_compat/su_mount.hpp"
 #include "module/module.hpp"
 #include "module/module_config.hpp"
+#include "plugin/plugin.hpp"
 #include "profile/profile.hpp"
 #include "sepolicy/sepolicy.hpp"
 #include "su.hpp"
@@ -144,6 +145,7 @@ void print_usage() {
     printf("USAGE: ksud <COMMAND>\n\n");
     printf("COMMANDS:\n");
     printf("  module         Manage KernelSU modules\n");
+    printf("  plugin         Manage Lua plugins\n");
     printf("  insmod         Load a kernel module with kallsyms access\n");
     printf("  late-load      Load kernelsu.ko and execute late-load stage scripts\n");
     printf("  post-fs-data   Trigger post-fs-data event\n");
@@ -942,7 +944,14 @@ int cli_run(int argc, char** argv) {
         args.push_back(argv[i]);
     }
 
+    const bool plugin_command = cmd == "plugin";
+    const bool plugin_callback_command =
+        plugin_command && !args.empty() && (args[0] == "action" || args[0] == "run");
+    if (plugin_command)
+        log_set_stderr_enabled(false);
     LOGI("command: %s", cmd.c_str());
+    if (plugin_command && !plugin_callback_command)
+        log_set_stderr_enabled(true);
 
     // Dispatch commands
     if (cmd == "help" || cmd == "-h" || cmd == "--help") {
@@ -968,6 +977,8 @@ int cli_run(int argc, char** argv) {
         return 0;
     } else if (cmd == "module") {
         return cmd_module(args);
+    } else if (cmd == "plugin") {
+        return plugin_handle(args);
     } else if (cmd == "install") {
         std::optional<std::string> magiskboot;
         std::optional<std::string> libadbroot;

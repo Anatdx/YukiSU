@@ -27,6 +27,49 @@
     <string name="module_failed_to_disable">Failed to disable module: %s</string>
     <string name="module_empty">No module installed</string>
     <string name="module">Module</string>
+    <string name="plugin" tools:ignore="MissingTranslation">Plugin</string>
+    <string name="plugin_install" tools:ignore="MissingTranslation">Install plugin</string>
+    <string name="plugin_install_success" tools:ignore="MissingTranslation">Plugin installed</string>
+    <string name="plugin_install_failed" tools:ignore="MissingTranslation">Plugin installation failed</string>
+    <string name="plugin_install_failed_reason" tools:ignore="MissingTranslation">Plugin installation failed: %1$s</string>
+    <string name="plugin_load_failed" tools:ignore="MissingTranslation">Failed to load plugins</string>
+    <string name="plugin_invalid_manifest" tools:ignore="MissingTranslation">Invalid plugin manifest</string>
+    <string name="plugin_error" tools:ignore="MissingTranslation">Plugin error: %1$s</string>
+    <string name="plugin_empty" tools:ignore="MissingTranslation">No plugins installed</string>
+    <string name="plugin_empty_hint" tools:ignore="MissingTranslation">Install a plugin ZIP to add a Lua plugin to ksud.</string>
+    <string name="plugin_no_results" tools:ignore="MissingTranslation">No matching plugins</string>
+    <string name="plugin_sort_options" tools:ignore="MissingTranslation">Plugin sorting</string>
+    <string name="plugin_enabled_first" tools:ignore="MissingTranslation">Enabled first</string>
+    <string name="plugin_state_enabled" tools:ignore="MissingTranslation">Plugin enabled</string>
+    <string name="plugin_state_disabled" tools:ignore="MissingTranslation">Plugin disabled</string>
+    <string name="plugin_toggle_failed" tools:ignore="MissingTranslation">Failed to change plugin state</string>
+    <string name="plugin_action" tools:ignore="MissingTranslation">Run action</string>
+    <string name="plugin_action_success" tools:ignore="MissingTranslation">Action completed</string>
+    <string name="plugin_action_failed" tools:ignore="MissingTranslation">Action failed</string>
+    <string name="plugin_quick_action_success" tools:ignore="MissingTranslation">Quick action completed</string>
+    <string name="plugin_quick_action_failed" tools:ignore="MissingTranslation">Quick action failed</string>
+    <string name="plugin_config" tools:ignore="MissingTranslation">Configure</string>
+    <string name="plugin_config_title" tools:ignore="MissingTranslation">Configure %1$s</string>
+    <string name="plugin_config_load_failed" tools:ignore="MissingTranslation">Failed to load plugin configuration</string>
+    <string name="plugin_config_saved" tools:ignore="MissingTranslation">Configuration saved</string>
+    <string name="plugin_config_save_failed" tools:ignore="MissingTranslation">Failed to save configuration</string>
+    <string name="plugin_save" tools:ignore="MissingTranslation">Save</string>
+    <string name="plugin_log_title" tools:ignore="MissingTranslation">%1$s log</string>
+    <string name="plugin_log_view" tools:ignore="MissingTranslation">View log</string>
+    <string name="plugin_log_empty" tools:ignore="MissingTranslation">No plugin log yet</string>
+    <string name="plugin_log_load_failed" tools:ignore="MissingTranslation">Failed to load plugin log</string>
+    <string name="plugin_log_clear" tools:ignore="MissingTranslation">Clear log</string>
+    <string name="plugin_log_cleared" tools:ignore="MissingTranslation">Plugin log cleared</string>
+    <string name="plugin_log_clear_failed" tools:ignore="MissingTranslation">Failed to clear plugin log</string>
+    <string name="plugin_uninstall_title" tools:ignore="MissingTranslation">Uninstall plugin</string>
+    <string name="plugin_uninstall" tools:ignore="MissingTranslation">Uninstall</string>
+    <string name="plugin_uninstall_confirm" tools:ignore="MissingTranslation">Uninstall the %1$s plugin?</string>
+    <string name="plugin_uninstall_success" tools:ignore="MissingTranslation">Plugin uninstalled</string>
+    <string name="plugin_uninstall_failed" tools:ignore="MissingTranslation">Failed to uninstall plugin</string>
+    <string name="plugin_dependencies" tools:ignore="MissingTranslation">Dependencies: %1$s</string>
+    <string name="plugin_version" tools:ignore="MissingTranslation">v%1$s</string>
+    <string name="plugin_author" tools:ignore="MissingTranslation">by %1$s</string>
+    <string name="plugin_more_options" tools:ignore="MissingTranslation">More plugin options</string>
     <string name="module_sort_action_first">Sort (Action first)</string>
     <string name="module_sort_enabled_first">Sort (Enabled first)</string>
     <string name="uninstall">Uninstall</string>

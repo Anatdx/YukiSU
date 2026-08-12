@@ -1656,3 +1656,108 @@ fun applyUmountConfigToKernel(): Boolean {
     Log.i(TAG, "apply umount config to kernel result: $result")
     return result
 }
+
+data class PluginCommandResult(
+    val exitCode: Int,
+    val stdout: String,
+    val stderr: String,
+) {
+    val isSuccess: Boolean
+        get() = exitCode == 0
+
+    val output: String
+        get() = listOf(stdout, stderr).filter { it.isNotBlank() }.joinToString("\n")
+}
+
+private fun runPluginCommand(args: String, newShell: Boolean = false): PluginCommandResult =
+    runCatching {
+        val stdout = ArrayList<String>()
+        val stderr = ArrayList<String>()
+        val result = if (newShell) {
+            withNewRootShell {
+                newJob().add(ksudCmd(args)).to(stdout, stderr).exec()
+            }
+        } else {
+            getRootShell().newJob().add(ksudCmd(args)).to(stdout, stderr).exec()
+        }
+        PluginCommandResult(
+            exitCode = result.code,
+            stdout = stdout.joinToString("\n"),
+            stderr = stderr.joinToString("\n"),
+        )
+    }.getOrElse { error ->
+        Log.e(TAG, "Plugin command failed", error)
+        PluginCommandResult(-1, "", error.message.orEmpty())
+    }
+
+fun listPlugins(): PluginCommandResult = runPluginCommand("plugin list")
+
+fun togglePlugin(id: String, enable: Boolean): Boolean {
+    val operation = if (enable) "enable" else "disable"
+    return runPluginCommand(
+        "plugin $operation ${shellQuoteArgument(id)}",
+        newShell = true,
+    ).isSuccess
+}
+
+fun uninstallPlugin(id: String): Boolean =
+    runPluginCommand(
+        "plugin uninstall ${shellQuoteArgument(id)}",
+        newShell = true,
+    ).isSuccess
+
+fun runPluginCallback(id: String, function: String): PluginCommandResult =
+    runPluginCommand(
+        "plugin run ${shellQuoteArgument(id)} ${shellQuoteArgument(function)}",
+        newShell = true,
+    )
+
+fun runPluginAction(id: String): PluginCommandResult =
+    runPluginCommand(
+        "plugin action ${shellQuoteArgument(id)}",
+        newShell = true,
+    )
+
+fun getPluginLog(id: String): PluginCommandResult =
+    runPluginCommand("plugin log ${shellQuoteArgument(id)}")
+
+fun clearPluginLog(id: String): Boolean =
+    runPluginCommand(
+        "plugin clear-log ${shellQuoteArgument(id)}",
+        newShell = true,
+    ).isSuccess
+
+fun getPluginConfig(id: String, key: String): PluginCommandResult =
+    runPluginCommand(
+        "plugin config --id ${shellQuoteArgument(id)} get ${shellQuoteArgument(key)}",
+    )
+
+fun savePluginConfig(id: String, key: String, value: String): Boolean =
+    runPluginCommand(
+        "plugin config --id ${shellQuoteArgument(id)} set " +
+            "${shellQuoteArgument(key)} ${shellQuoteArgument(value)}",
+        newShell = true,
+    ).isSuccess
+
+fun deletePluginConfig(id: String, key: String): Boolean =
+    runPluginCommand(
+        "plugin config --id ${shellQuoteArgument(id)} delete ${shellQuoteArgument(key)}",
+        newShell = true,
+    ).isSuccess
+
+fun listPluginConfig(id: String): PluginCommandResult =
+    runPluginCommand("plugin config --id ${shellQuoteArgument(id)} list")
+
+fun installPluginZip(zipPath: String): PluginCommandResult {
+    val zipFile = File(zipPath)
+    return try {
+        runPluginCommand(
+            "plugin install ${shellQuoteArgument(zipPath)}",
+            newShell = true,
+        )
+    } finally {
+        if (!zipFile.delete() && zipFile.exists()) {
+            Log.w(TAG, "Failed to delete plugin installation cache file")
+        }
+    }
+}

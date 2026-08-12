@@ -17,6 +17,7 @@ namespace {
 constexpr size_t kLogTagSize = 32U;
 
 LogLevel g_log_level = LogLevel::INFO;
+bool g_log_stderr_enabled = true;
 std::array<char, kLogTagSize> g_log_tag = {"KernelSU"};
 
 void log_write(LogLevel level, const char* fmt, va_list args) {
@@ -64,6 +65,9 @@ void log_write(LogLevel level, const char* fmt, va_list args) {
         (void)written;
     }
 
+    if (!g_log_stderr_enabled)
+        return;
+
     const time_t now = time(nullptr);
     const struct tm* tm_info = localtime(&now);
     std::array<char, 32> time_buf{};
@@ -87,6 +91,10 @@ void log_init(const char* tag) {
 
 void log_set_level(LogLevel level) {
     g_log_level = level;
+}
+
+void log_set_stderr_enabled(bool enabled) {
+    g_log_stderr_enabled = enabled;
 }
 
 void log_flush() {
