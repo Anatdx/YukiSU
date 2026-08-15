@@ -41,6 +41,8 @@ fun download(
     url: String,
     fileName: String,
     description: String,
+    maxBytes: Long? = null,
+    requireSecureTransport: Boolean = false,
     onDownloaded: (Uri) -> Unit = {},
     onProgress: (DownloadProgress) -> Unit = {},
     onError: (String) -> Unit = {}
@@ -64,6 +66,12 @@ fun download(
             try {
                 response.use {
                     check(response.isSuccessful) { "HTTP ${response.code} for $url" }
+                    val finalUrl = response.request.url
+                    val loopbackHttp = finalUrl.scheme == "http" &&
+                        finalUrl.host in setOf("127.0.0.1", "0.0.0.0", "::1", "[::1]")
+                    check(!requireSecureTransport || finalUrl.isHttps || loopbackHttp) {
+                        "Download redirected to an insecure URL"
+                    }
                     val body = checkNotNull(response.body) { "Empty response body for $url" }
                     val downloadDir = File(appContext.cacheDir, "module_downloads")
                     check(downloadDir.isDirectory || downloadDir.mkdirs()) {
@@ -76,12 +84,16 @@ fun download(
                     )
                     partialFile = temporaryFile
                     val contentLength = body.contentLength().takeIf { it >= 0L }
+                    check(maxBytes == null || contentLength == null || contentLength <= maxBytes) {
+                        "Download exceeds the size limit"
+                    }
                     body.byteStream().use { input ->
                         temporaryFile.outputStream().buffered().use { output ->
                             copyDownloadWithProgress(
                                 input = input,
                                 output = output,
                                 contentLength = contentLength,
+                                maxBytes = maxBytes,
                                 onProgress = onProgress,
                             )
                         }
@@ -127,6 +139,7 @@ private fun copyDownloadWithProgress(
     input: java.io.InputStream,
     output: java.io.OutputStream,
     contentLength: Long?,
+    maxBytes: Long?,
     onProgress: (DownloadProgress) -> Unit,
 ) {
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -153,6 +166,9 @@ private fun copyDownloadWithProgress(
     while (true) {
         val count = input.read(buffer)
         if (count < 0) break
+        check(maxBytes == null || downloaded + count <= maxBytes) {
+            "Download exceeds the size limit"
+        }
         output.write(buffer, 0, count)
         downloaded += count
         report()

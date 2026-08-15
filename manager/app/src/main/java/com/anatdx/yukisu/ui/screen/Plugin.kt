@@ -28,14 +28,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
@@ -86,43 +85,29 @@ import com.anatdx.yukisu.R
 import com.anatdx.yukisu.ui.component.AnimatedFab
 import com.anatdx.yukisu.ui.component.ConfirmResult
 import com.anatdx.yukisu.ui.component.SearchAppBar
+import com.anatdx.yukisu.ui.component.YukiIcon
+import com.anatdx.yukisu.ui.component.YukiPullToRefreshBox
 import com.anatdx.yukisu.ui.component.YukiSwitch
 import com.anatdx.yukisu.ui.component.rememberConfirmDialog
 import com.anatdx.yukisu.ui.component.rememberFabVisibilityState
 import com.anatdx.yukisu.ui.theme.isExpressiveUi
 import com.anatdx.yukisu.ui.util.PluginCommandResult
+import com.anatdx.yukisu.ui.util.copyPluginPackageTo
 import com.anatdx.yukisu.ui.viewmodel.PluginConfigField
 import com.anatdx.yukisu.ui.viewmodel.PluginInfo
 import com.anatdx.yukisu.ui.viewmodel.PluginQuickAction
 import com.anatdx.yukisu.ui.viewmodel.PluginViewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.PluginRepositoryScreenDestination
+import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
 import java.util.Locale
 
 private const val TAG = "PluginScreen"
-private const val MAX_PLUGIN_PACKAGE_BYTES = 272L * 1024 * 1024
-
-private fun InputStream.copyPluginPackageTo(output: OutputStream) {
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    var copied = 0L
-    while (true) {
-        val read = read(buffer)
-        if (read < 0) return
-        if (copied + read > MAX_PLUGIN_PACKAGE_BYTES) {
-            throw IOException("Plugin package exceeds the size limit")
-        }
-        output.write(buffer, 0, read)
-        copied += read
-    }
-}
-
 private data class PluginLogState(
     val id: String,
     val name: String,
@@ -132,7 +117,7 @@ private data class PluginLogState(
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
-fun PluginScreen() {
+fun PluginScreen(navigator: DestinationsNavigator) {
     val viewModel = viewModel<PluginViewModel>()
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -271,15 +256,15 @@ fun PluginScreen() {
                 onSearchTextChange = { searchQuery = it },
                 onClearClick = { searchQuery = "" },
                 dropdownContent = {
-                    IconButton(onClick = { viewModel.fetchPlugins() }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Refresh,
-                            contentDescription = stringResource(R.string.refresh),
+                    IconButton(onClick = { navigator.navigate(PluginRepositoryScreenDestination) }) {
+                        YukiIcon(
+                            imageVector = Icons.Outlined.Inventory2,
+                            contentDescription = stringResource(R.string.plugin_repositories),
                         )
                     }
                     IconButton(onClick = { showSortSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.FilterList,
+                        YukiIcon(
+                            imageVector = Icons.Filled.MoreVert,
                             contentDescription = stringResource(R.string.plugin_sort_options),
                         )
                     }
@@ -328,160 +313,166 @@ fun PluginScreen() {
             }
 
             else -> {
-                LazyColumn(
-                    state = listState,
+                YukiPullToRefreshBox(
                     modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        top = 12.dp,
-                        end = 16.dp,
-                        bottom = 96.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    onRefresh = viewModel::fetchPlugins,
+                    isRefreshing = viewModel.isRefreshing,
                 ) {
-                    items(filteredPlugins, key = { it.id }) { plugin ->
-                        PluginCard(
-                            plugin = plugin,
-                            locale = locale,
-                            operationInProgress = pendingPluginOperations[plugin.id] == true,
-                            onToggle = { enabled ->
-                                if (beginPluginOperation(plugin.id)) {
-                                    scope.launch {
-                                        try {
-                                            val success = viewModel.setPluginEnabled(plugin.id, enabled)
-                                            val message = when {
-                                                !success -> R.string.plugin_toggle_failed
-                                                enabled -> R.string.plugin_state_enabled
-                                                else -> R.string.plugin_state_disabled
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            top = 12.dp,
+                            end = 16.dp,
+                            bottom = 96.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(filteredPlugins, key = { it.id }) { plugin ->
+                            PluginCard(
+                                plugin = plugin,
+                                locale = locale,
+                                operationInProgress = pendingPluginOperations[plugin.id] == true,
+                                onToggle = { enabled ->
+                                    if (beginPluginOperation(plugin.id)) {
+                                        scope.launch {
+                                            try {
+                                                val success = viewModel.setPluginEnabled(plugin.id, enabled)
+                                                val message = when {
+                                                    !success -> R.string.plugin_toggle_failed
+                                                    enabled -> R.string.plugin_state_enabled
+                                                    else -> R.string.plugin_state_disabled
+                                                }
+                                                postSnackbar(resources.getString(message))
+                                            } finally {
+                                                finishPluginOperation(plugin.id)
                                             }
-                                            postSnackbar(resources.getString(message))
-                                        } finally {
-                                            finishPluginOperation(plugin.id)
                                         }
                                     }
-                                }
-                            },
-                            onAction = {
-                                val canRun = plugin.enabled && plugin.hasManifest && plugin.error.isBlank()
-                                if (canRun && beginPluginOperation(plugin.id)) {
-                                    scope.launch {
-                                        try {
-                                            presentCommandResult(
-                                                plugin = plugin,
-                                                result = viewModel.runAction(plugin.id),
-                                                successMessage = R.string.plugin_action_success,
-                                                failureMessage = R.string.plugin_action_failed,
-                                            )
-                                        } finally {
-                                            finishPluginOperation(plugin.id)
-                                        }
-                                    }
-                                }
-                            },
-                            onQuickAction = {
-                                val canRun = plugin.enabled && plugin.hasManifest && plugin.error.isBlank()
-                                plugin.quickAction?.function?.takeIf {
-                                    canRun && beginPluginOperation(plugin.id)
-                                }?.let { function ->
-                                    scope.launch {
-                                        try {
-                                            presentCommandResult(
-                                                plugin = plugin,
-                                                result = viewModel.runCallback(plugin.id, function),
-                                                successMessage = R.string.plugin_quick_action_success,
-                                                failureMessage = R.string.plugin_quick_action_failed,
-                                            )
-                                        } finally {
-                                            finishPluginOperation(plugin.id)
-                                        }
-                                    }
-                                }
-                            },
-                            onConfig = {
-                                if (!isLoadingConfig) {
-                                    isLoadingConfig = true
-                                    scope.launch {
-                                        try {
-                                            val values = viewModel.loadConfigValues(plugin)
-                                            if (values == null) {
-                                                postSnackbar(
-                                                    resources.getString(R.string.plugin_config_load_failed)
+                                },
+                                onAction = {
+                                    val canRun = plugin.enabled && plugin.hasManifest && plugin.error.isBlank()
+                                    if (canRun && beginPluginOperation(plugin.id)) {
+                                        scope.launch {
+                                            try {
+                                                presentCommandResult(
+                                                    plugin = plugin,
+                                                    result = viewModel.runAction(plugin.id),
+                                                    successMessage = R.string.plugin_action_success,
+                                                    failureMessage = R.string.plugin_action_failed,
                                                 )
-                                            } else {
-                                                configValues = values
-                                                configPlugin = plugin
+                                            } finally {
+                                                finishPluginOperation(plugin.id)
                                             }
-                                        } finally {
-                                            isLoadingConfig = false
                                         }
                                     }
-                                }
-                            },
-                            onViewLog = {
-                                scope.launch {
-                                    val result = viewModel.fetchLog(plugin.id)
-                                    if (result.isSuccess) {
-                                        logState = PluginLogState(
-                                            id = plugin.id,
-                                            name = plugin.name.ifBlank { plugin.id },
-                                            output = result.stdout.ifBlank {
-                                                resources.getString(R.string.plugin_log_empty)
-                                            },
-                                        )
-                                    } else {
-                                        postSnackbar(
-                                            resources.getString(R.string.plugin_log_load_failed)
-                                        )
-                                    }
-                                }
-                            },
-                            onClearLog = {
-                                scope.launch {
-                                    val success = viewModel.clearLog(plugin.id)
-                                    postSnackbar(
-                                        resources.getString(
-                                            if (success) {
-                                                R.string.plugin_log_cleared
-                                            } else {
-                                                R.string.plugin_log_clear_failed
+                                },
+                                onQuickAction = {
+                                    val canRun = plugin.enabled && plugin.hasManifest && plugin.error.isBlank()
+                                    plugin.quickAction?.function?.takeIf {
+                                        canRun && beginPluginOperation(plugin.id)
+                                    }?.let { function ->
+                                        scope.launch {
+                                            try {
+                                                presentCommandResult(
+                                                    plugin = plugin,
+                                                    result = viewModel.runCallback(plugin.id, function),
+                                                    successMessage = R.string.plugin_quick_action_success,
+                                                    failureMessage = R.string.plugin_quick_action_failed,
+                                                )
+                                            } finally {
+                                                finishPluginOperation(plugin.id)
                                             }
-                                        )
-                                    )
-                                }
-                            },
-                            onUninstall = {
-                                if (beginPluginOperation(plugin.id)) {
+                                        }
+                                    }
+                                },
+                                onConfig = {
+                                    if (!isLoadingConfig) {
+                                        isLoadingConfig = true
+                                        scope.launch {
+                                            try {
+                                                val values = viewModel.loadConfigValues(plugin)
+                                                if (values == null) {
+                                                    postSnackbar(
+                                                        resources.getString(R.string.plugin_config_load_failed)
+                                                    )
+                                                } else {
+                                                    configValues = values
+                                                    configPlugin = plugin
+                                                }
+                                            } finally {
+                                                isLoadingConfig = false
+                                            }
+                                        }
+                                    }
+                                },
+                                onViewLog = {
                                     scope.launch {
-                                        try {
-                                            val displayName = plugin.name.ifBlank { plugin.id }
-                                            val confirmation = confirmDialog.awaitConfirm(
-                                                title = resources.getString(R.string.plugin_uninstall_title),
-                                                content = resources.getString(
-                                                    R.string.plugin_uninstall_confirm,
-                                                    displayName,
-                                                ),
-                                                confirm = resources.getString(R.string.plugin_uninstall),
-                                                dismiss = resources.getString(R.string.cancel),
+                                        val result = viewModel.fetchLog(plugin.id)
+                                        if (result.isSuccess) {
+                                            logState = PluginLogState(
+                                                id = plugin.id,
+                                                name = plugin.name.ifBlank { plugin.id },
+                                                output = result.stdout.ifBlank {
+                                                    resources.getString(R.string.plugin_log_empty)
+                                                },
                                             )
-                                            if (confirmation != ConfirmResult.Confirmed) return@launch
-
-                                            val success = viewModel.removePlugin(plugin.id)
+                                        } else {
                                             postSnackbar(
-                                                resources.getString(
-                                                    if (success) {
-                                                        R.string.plugin_uninstall_success
-                                                    } else {
-                                                        R.string.plugin_uninstall_failed
-                                                    }
-                                                )
+                                                resources.getString(R.string.plugin_log_load_failed)
                                             )
-                                        } finally {
-                                            finishPluginOperation(plugin.id)
                                         }
                                     }
-                                }
-                            },
-                        )
+                                },
+                                onClearLog = {
+                                    scope.launch {
+                                        val success = viewModel.clearLog(plugin.id)
+                                        postSnackbar(
+                                            resources.getString(
+                                                if (success) {
+                                                    R.string.plugin_log_cleared
+                                                } else {
+                                                    R.string.plugin_log_clear_failed
+                                                }
+                                            )
+                                        )
+                                    }
+                                },
+                                onUninstall = {
+                                    if (beginPluginOperation(plugin.id)) {
+                                        scope.launch {
+                                            try {
+                                                val displayName = plugin.name.ifBlank { plugin.id }
+                                                val confirmation = confirmDialog.awaitConfirm(
+                                                    title = resources.getString(R.string.plugin_uninstall_title),
+                                                    content = resources.getString(
+                                                        R.string.plugin_uninstall_confirm,
+                                                        displayName,
+                                                    ),
+                                                    confirm = resources.getString(R.string.plugin_uninstall),
+                                                    dismiss = resources.getString(R.string.cancel),
+                                                )
+                                                if (confirmation != ConfirmResult.Confirmed) return@launch
+
+                                                val success = viewModel.removePlugin(plugin.id)
+                                                postSnackbar(
+                                                    resources.getString(
+                                                        if (success) {
+                                                            R.string.plugin_uninstall_success
+                                                        } else {
+                                                            R.string.plugin_uninstall_failed
+                                                        }
+                                                    )
+                                                )
+                                            } finally {
+                                                finishPluginOperation(plugin.id)
+                                            }
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -1004,7 +995,7 @@ private fun quickActionLabel(action: PluginQuickAction, locale: Locale): String 
 private fun configFieldLabel(field: PluginConfigField, locale: Locale): String =
     localizedText(field.labels, locale, field.label.ifBlank { field.key })
 
-private fun localizedText(
+internal fun localizedText(
     translations: Map<String, String>,
     locale: Locale,
     fallback: String,

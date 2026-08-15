@@ -70,6 +70,19 @@
     <string name="plugin_version" tools:ignore="MissingTranslation">v%1$s</string>
     <string name="plugin_author" tools:ignore="MissingTranslation">by %1$s</string>
     <string name="plugin_more_options" tools:ignore="MissingTranslation">More plugin options</string>
+    <string name="plugin_repositories" tools:ignore="MissingTranslation">Plugin repositories</string>
+    <string name="plugin_repository_install_title" tools:ignore="MissingTranslation">Install repository plugin</string>
+    <string name="plugin_repository_install_confirm" tools:ignore="MissingTranslation">Install %1$s %2$s?</string>
+    <string name="plugin_repository_unverified_warning" tools:ignore="MissingTranslation">Repository plugins are not verified by YukiSU. Install only packages from sources you trust.</string>
+    <string name="plugin_repository_downloading" tools:ignore="MissingTranslation">Downloading %1$s</string>
+    <string name="plugin_repository_download_message" tools:ignore="MissingTranslation">Version %1$s</string>
+    <string name="plugin_repository_download_failed_reason" tools:ignore="MissingTranslation">Plugin download failed: %1$s</string>
+    <string name="plugin_repository_empty" tools:ignore="MissingTranslation">No plugins are available from enabled sources</string>
+    <string name="plugin_repository_plugin_count" tools:ignore="MissingTranslation,PluralsCandidate">%1$d plugins</string>
+    <string name="plugin_repository_update" tools:ignore="MissingTranslation">Update</string>
+    <string name="repository_source_added" tools:ignore="MissingTranslation">Repository source added</string>
+    <string name="repository_source_add_failed" tools:ignore="MissingTranslation">Failed to add repository source</string>
+    <string name="repository_remove_source_failed" tools:ignore="MissingTranslation">Failed to remove repository source</string>
     <string name="module_sort_action_first">Sort (Action first)</string>
     <string name="module_sort_enabled_first">Sort (Enabled first)</string>
     <string name="uninstall">Uninstall</string>
